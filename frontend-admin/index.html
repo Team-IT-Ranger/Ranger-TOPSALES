@@ -413,19 +413,33 @@
           </div>
         </section>
 
-        <!-- ═══ PRODUCTS (รายการ — คลิกแถวเพื่อแก้ไข, คลิกหัวคอลัมน์เพื่อเรียง) ═══ -->
+        <!-- ═══ PRODUCTS (รายการ — คลิกแถวเพื่อแก้ไข, คลิกหัวคอลัมน์เพื่อเรียง)
+             หน้าต่างอื่น (หน่วยขาย/กลุ่มสินค้า) อยู่หลังปุ่มรอกด ไม่แสดงพร้อมกันทั้งหมดในหน้าเดียว
+             ตามแบบ Hippo Village (ดู inventory-app-blueprint.md — หน้าจอละหนึ่งเรื่อง คลิกเข้าไปดู) ═══ -->
         <section class="view" id="view-products">
           <div class="view-head">
             <div><h1>สินค้าและราคา</h1><p>ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — คลิกแถวเพื่อแก้ไข คลิกหัวคอลัมน์เพื่อเรียง</p></div>
-            <button class="btn btn-primary" onclick="openProductForm()">+ เพิ่มสินค้า</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-sm" onclick="openProductUnitsPage()">หน่วยขายเพิ่มเติม</button>
+              <button class="btn btn-sm" onclick="openProductGroupsPage()">กลุ่มสินค้า</button>
+              <button class="btn btn-primary" onclick="openProductForm()">+ เพิ่มสินค้า</button>
+            </div>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr id="products-thead-row"><th>รูป</th></tr></thead>
+            <thead><tr id="products-thead-row"></tr></thead>
             <tbody id="products-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
           </table></div>
+        </section>
 
+        <!-- ═══ หน่วยขายเพิ่มเติม (หน้าเต็ม) ═══ -->
+        <section class="view" id="view-productunits">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="closeProductUnitsPage()">← กลับ</button>
+              <div><h1>หน่วยขายเพิ่มเติม (แพ็ค / ลัง)</h1></div>
+            </div>
+          </div>
           <div class="form-card">
-            <h3>หน่วยขายเพิ่มเติม (แพ็ค / ลัง)</h3>
             <p class="form-hint">เลือกสินค้าเพื่อดู/เพิ่มหน่วยขายอื่นนอกจากหน่วยฐาน — แต่ละหน่วยมีบาร์โค้ด "ชุด" ของตัวเอง unique เฉพาะสินค้า+หน่วยนี้</p>
             <div class="form-grid g2">
               <div class="field span2"><label>สินค้า</label><select id="u-product" onchange="loadProductUnitsUI()"><option value="">— เลือกสินค้า —</option></select></div>
@@ -443,9 +457,17 @@
             </div>
             <div class="form-actions"><button class="btn btn-primary" onclick="addProductUnitUI()">+ เพิ่มหน่วยขาย</button></div>
           </div>
+        </section>
 
+        <!-- ═══ กลุ่มสินค้า (หน้าเต็ม) ═══ -->
+        <section class="view" id="view-productgroups">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="closeProductGroupsPage()">← กลับ</button>
+              <div><h1>กลุ่มสินค้า</h1></div>
+            </div>
+          </div>
           <div class="form-card">
-            <h3>กลุ่มสินค้า</h3>
             <div class="table-wrap"><table>
               <thead><tr><th>ชื่อกลุ่ม</th><th>คำอธิบาย</th></tr></thead>
               <tbody id="pgroups-body"><tr class="empty-row"><td colspan="2">กำลังโหลด...</td></tr></tbody>
@@ -1157,7 +1179,10 @@ const PRODUCT_FIELDS = [
   { key:'groupBarcode', dataKey:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', type:'text', placeholder:'ไม่บังคับ', hint:'(ซ้ำกับสินค้าอื่นได้ ถ้าเป็นของชิ้นเดียวกันจริง)' }
 ];
 // คอลัมน์ตาราง (แยกจาก PRODUCT_FIELDS เพราะตารางมีคอลัมน์ที่ไม่ใช่ฟิลด์ฟอร์มตรงๆ เช่น "กลุ่ม" ที่โชว์ชื่อไม่ใช่ id)
+// ลำดับคอลัมน์ตามหลัก Hippo Village: รหัสสินค้าขึ้นก่อนเสมอ ตามด้วยชื่อ แล้วค่อยข้อมูลอื่น
+// รูปไม่โหลด thumbnail ในตารางรายการ (โชว์แค่ป้ายว่ามีรูปหรือยัง) — ตารางยาวๆ โหลดรูปทุกแถวพร้อมกันหนักเปล่าๆ
 const PRODUCT_TABLE_COLS = [
+  { key:'external_code', label:'รหัสสินค้า', sortVal:p=>p.external_code, cls:'mono-data' },
   { key:'name', label:'ชื่อ', sortVal:p=>p.name },
   { key:'base_price', label:'ราคาฐาน', numeric:true, sortVal:p=>parseFloat(p.base_price)||0, render:p=>'฿'+baht(p.base_price), cls:'mono-data' },
   { key:'cost_price', label:'ราคาทุน', numeric:true, sortVal:p=>(p.cost_price?parseFloat(p.cost_price):null), render:p=>(p.cost_price?'฿'+baht(p.cost_price):'-'), cls:'mono-data' },
@@ -1166,7 +1191,7 @@ const PRODUCT_TABLE_COLS = [
   { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
   { key:'barcode', label:'บาร์โค้ด (ชุด)', sortVal:p=>p.barcode, cls:'mono-data' },
   { key:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', sortVal:p=>p.group_barcode, cls:'mono-data' },
-  { key:'external_code', label:'รหัสอ้างอิง', sortVal:p=>p.external_code, cls:'mono-data' },
+  { key:'image', label:'รูป', numeric:true, sortVal:p=>p.image_url?1:0 },
   { key:'status', label:'สถานะ', numeric:true, sortVal:p=>isOn(p.is_active)?1:0 }
 ];
 let editingProductId = null;
@@ -1192,13 +1217,13 @@ function renderProductsTable(){
   const uProd = document.getElementById('u-product');
   uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p => '<option value="'+p.record_id+'">'+esc(p.name)+'</option>').join('');
 
-  document.getElementById('products-thead-row').innerHTML = '<th>รูป</th>' + PRODUCT_TABLE_COLS.map(col => {
+  document.getElementById('products-thead-row').innerHTML = PRODUCT_TABLE_COLS.map(col => {
     const on = PRODUCT_SORT && PRODUCT_SORT.key === col.key;
     const arrow = on ? (PRODUCT_SORT.dir === 'asc' ? ' ▲' : ' ▼') : '';
     return '<th class="th-sortable'+(on?' is-sorted':'')+'" onclick="sortProductsTable(\''+col.key+'\')">'+esc(col.label)+arrow+'</th>';
   }).join('') + '<th></th>';
 
-  if (!productsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="'+(PRODUCT_TABLE_COLS.length+2)+'">ยังไม่มีสินค้า</td></tr>'; return; }
+  if (!productsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="'+(PRODUCT_TABLE_COLS.length+1)+'">ยังไม่มีสินค้า</td></tr>'; return; }
 
   let rows = productsCache.slice();
   if (PRODUCT_SORT) {
@@ -1207,16 +1232,14 @@ function renderProductsTable(){
   }
 
   body.innerHTML = rows.map(p => {
-    const imgCell = '<td>' + (p.image_url
-      ? '<img src="'+esc(p.image_url)+'" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:var(--surface-2)">'
-      : '<span style="color:var(--ink-faint);font-size:11px">ไม่มีรูป</span>') + '</td>';
     const cells = PRODUCT_TABLE_COLS.map(col => {
       if (col.key === 'status') return '<td><span class="pill '+(isOn(p.is_active)?'ok':'off')+'">'+(isOn(p.is_active)?'ใช้งาน':'ปิด')+'</span></td>';
+      if (col.key === 'image') return '<td>'+(p.image_url ? '<span class="pill ok">มีรูป</span>' : '<span style="color:var(--ink-faint)">—</span>')+'</td>';
       const val = col.render ? col.render(p) : (col.sortVal(p) || '-');
       return '<td'+(col.cls?' class="'+col.cls+'"':'')+'>'+esc(val)+'</td>';
     }).join('');
     const actionCell = '<td onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td>';
-    return '<tr class="clickable-row" onclick="openProductForm(\''+esc(p.record_id)+'\')">'+imgCell+cells+actionCell+'</tr>';
+    return '<tr class="clickable-row" onclick="openProductForm(\''+esc(p.record_id)+'\')">'+cells+actionCell+'</tr>';
   }).join('');
 }
 async function loadProducts(){
@@ -1295,15 +1318,23 @@ function openProductForm(id){
   document.getElementById('view-productform').classList.add('active');
   document.getElementById('crumb-current').textContent = row ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่';
 }
-function closeProductForm(){
-  // กลับหน้ารายการโดยวาดจาก cache ตรงๆ ไม่ผ่าน gotoView('products') เพราะนั่นจะไปเรียก loadProducts()
-  // ที่ยิง API โหลดใหม่ทั้งชุด ทั้งที่ cache ในเครื่องอัปเดตล่าสุดอยู่แล้ว (จาก saveProductForm/toggle)
+// สลับ view ตรงๆ โดยไม่ผ่าน gotoView() — กันไม่ให้ไปเรียก LOADERS['products'] (loadProducts, ยิง API
+// โหลดใหม่ทั้งชุด) ทุกครั้งที่แค่ "กลับ" จากหน้าต่างย่อย ทั้งที่ cache ในเครื่องล่าสุดอยู่แล้ว
+function _switchProductView(viewId, crumbText){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-products').classList.add('active');
-  document.getElementById('crumb-current').textContent = 'สินค้าและราคา';
+  document.getElementById(viewId).classList.add('active');
+  document.getElementById('crumb-current').textContent = crumbText;
+}
+function closeProductForm(){
+  _switchProductView('view-products', 'สินค้าและราคา');
   document.querySelectorAll('.sb-action, .sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === 'products'));
   renderProductsTable();
 }
+// หน้าต่างย่อย (หน่วยขายเพิ่มเติม / กลุ่มสินค้า) — อยู่หลังปุ่มรอกด ไม่โผล่พร้อมกันในหน้ารายการหลัก
+function openProductUnitsPage(){ _switchProductView('view-productunits', 'หน่วยขายเพิ่มเติม'); }
+function closeProductUnitsPage(){ _switchProductView('view-products', 'สินค้าและราคา'); }
+function openProductGroupsPage(){ _switchProductView('view-productgroups', 'กลุ่มสินค้า'); }
+function closeProductGroupsPage(){ _switchProductView('view-products', 'สินค้าและราคา'); }
 async function saveProductForm(){
   const payload = readProductFormFields();
   if (!payload.name) { toast('กรุณากรอกชื่อสินค้า', true); return; }
