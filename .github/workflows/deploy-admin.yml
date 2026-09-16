@@ -48,6 +48,10 @@ jobs:
           <p><a href="./admin/">Admin — Production (main)</a></p>
           <p><a href="./admin-uat/">Admin — UAT</a></p>
           HTML
+          # ไม่มีไฟล์นี้ GitHub Pages จะรัน Jekyll ทับ index.html ของเราด้วยหน้า
+          # default ที่สร้างจาก README.md เอง (อาการที่เจอ: root ขึ้นหน้า Jekyll
+          # ทั้งที่ artifact อัปโหลดถูกไฟล์แล้ว) .nojekyll ปิดพฤติกรรมนี้ทั้งหมด
+          touch site/.nojekyll
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
