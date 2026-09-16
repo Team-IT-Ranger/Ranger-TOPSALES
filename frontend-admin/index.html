@@ -1172,7 +1172,8 @@ const PRODUCT_FIELDS = [
   { key:'externalCode', dataKey:'external_code', label:'รหัสอ้างอิง (นำเข้า Express)', type:'text', hint:'(คนละความหมายกับรหัสสินค้า — ใช้จับคู่ตอนนำเข้าไฟล์เท่านั้น)' },
   { key:'basePrice', dataKey:'base_price', label:'ราคาฐาน (ราคาขาย)', type:'number', placeholder:'0.00' },
   { key:'costPrice', dataKey:'cost_price', label:'ราคาทุน', type:'number', placeholder:'0.00', hint:'(ไม่แสดงในแอปมือถือ)' },
-  { key:'unit', dataKey:'unit', label:'หน่วยฐาน', type:'text', placeholder:'ชิ้น', default:'ชิ้น' },
+  { key:'unit', dataKey:'unit', label:'หน่วยฐาน (ไทย)', type:'text', placeholder:'ชิ้น', default:'ชิ้น' },
+  { key:'unitCode', dataKey:'unit_code', label:'รหัสหน่วยฐาน (อังกฤษ)', type:'text', placeholder:'pcs', default:'pcs', hint:'(เช่นเดียวกับรหัสหน่วยในหน่วยขายเพิ่มเติม)' },
   { key:'groupId', dataKey:'group_id', label:'กลุ่มสินค้า', type:'select', optionsFrom:'productGroups', parseType:'int' },
   { key:'vatType', dataKey:'vat_type', label:'VAT', type:'select', default:'none', options:[
     {value:'none',label:'ไม่มี VAT'}, {value:'included',label:'รวม VAT (7%)'}, {value:'excluded',label:'แยก VAT (7%)'}
@@ -1189,7 +1190,8 @@ const PRODUCT_TABLE_COLS = [
   { key:'base_price', label:'ราคาฐาน', numeric:true, sortVal:p=>parseFloat(p.base_price)||0, render:p=>'฿'+baht(p.base_price), cls:'mono-data' },
   { key:'cost_price', label:'ราคาทุน', numeric:true, sortVal:p=>(p.cost_price?parseFloat(p.cost_price):null), render:p=>(p.cost_price?'฿'+baht(p.cost_price):'-'), cls:'mono-data' },
   { key:'vat_type', label:'VAT', sortVal:p=>VAT_TYPE_LABEL[p.vat_type]||'', render:p=>VAT_TYPE_LABEL[p.vat_type]||'-' },
-  { key:'unit', label:'หน่วยฐาน', sortVal:p=>p.unit },
+  { key:'unit', label:'หน่วยฐาน (ไทย)', sortVal:p=>p.unit },
+  { key:'unit_code', label:'รหัสหน่วย (Eng)', sortVal:p=>p.unit_code, cls:'mono-data' },
   { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
   { key:'barcode', label:'บาร์โค้ด (ชุด)', sortVal:p=>p.barcode, cls:'mono-data' },
   { key:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', sortVal:p=>p.group_barcode, cls:'mono-data' },
@@ -1363,7 +1365,7 @@ async function saveProductForm(){
   }
 
   const fields = { product_code:payload.productCode, name:payload.name, base_price:payload.basePrice, cost_price:payload.costPrice,
-    vat_type:payload.vatType, unit:payload.unit, group_id:payload.groupId,
+    vat_type:payload.vatType, unit:payload.unit, unit_code:payload.unitCode, group_id:payload.groupId,
     external_code:payload.externalCode, barcode:payload.barcode, group_barcode:payload.groupBarcode };
   if (isEditing) {
     const p = productsCache.find(x => String(x.record_id) === String(productId));

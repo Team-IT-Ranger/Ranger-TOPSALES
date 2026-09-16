@@ -15,10 +15,13 @@ var CENTRAL_SHEETS = {
   //   ใช้จับคู่ตอน import เท่านั้น อาจไม่ unique เพราะมาจากระบบภายนอก) — แนวคิดจาก item_code ของ Hippo Village
   // has_transactions: 'TRUE' เมื่อสินค้านี้เคยถูกขายจริงอย่างน้อยหนึ่งครั้ง (recordSale ใน 07_sales.gs เป็นคนเซ็ต)
   //   ใช้ล็อกไม่ให้เปลี่ยน product_code อีก กันเอกสาร/รายงานย้อนหลังอ้างรหัสผิดของ — เซ็ตครั้งเดียวไม่มีวันเคลียร์คืน
+  // unit = ชื่อหน่วยฐาน (ไทย, default 'ชิ้น') / unit_code = รหัสหน่วยฐาน (อังกฤษ, default 'pcs')
+  //   คู่กันแบบเดียวกับ unit_label/unit_code ใน product_units (หน่วยขายเพิ่มเติม) ด้านล่าง — ถ้าไม่ตั้งมาใช้ default,
+  //   ถ้าตั้งมาแล้วใช้ค่าที่ตั้งเสมอ (บังคับ default ที่ addProduct/updateProduct ใน 10_master_data.gs)
   // barcode: บาร์โค้ด "ชุด" ของหน่วยฐาน unique เฉพาะสินค้า+หน่วยนี้เท่านั้น
   // group_barcode: บาร์โค้ด "กลุ่ม" ของหน่วยฐาน — ตั้งใจให้ซ้ำกันได้ข้ามหลาย record (สินค้าเดียวกันจริงแต่คนละรหัสสินค้า)
   // vat_type: 'none' | 'included' | 'excluded' (VAT ใช้อัตรา 7% คงที่ตามกฎหมายไทย ไม่ต้องเก็บอัตราแยกรายสินค้า)
-  products: ['record_id','product_code','name','base_price','unit','group_id','is_active','external_code',
+  products: ['record_id','product_code','name','base_price','unit','unit_code','group_id','is_active','external_code',
     'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions'],
   product_groups: ['record_id','name','description'],
   // หน่วยขายเพิ่มเติมของสินค้า นอกเหนือจากหน่วยฐาน (products.unit/base_price)
