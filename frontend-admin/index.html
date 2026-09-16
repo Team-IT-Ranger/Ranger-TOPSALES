@@ -183,6 +183,11 @@
   .table-wrap{ overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
   table{ width:100%; border-collapse:collapse; font-size:13px; }
   th{ text-align:left; background:var(--surface-2); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); padding:9px 12px; white-space:nowrap; }
+  th.th-sortable{ cursor:pointer; user-select:none; transition:color .12s,background .12s; }
+  th.th-sortable:hover{ color:var(--blue); background:var(--blue-pale); }
+  th.is-sorted{ color:var(--blue); }
+  tr.clickable-row{ cursor:pointer; }
+  tr.clickable-row:hover td{ background:var(--blue-pale); }
   td{ padding:9px 12px; border-top:1px solid var(--border); white-space:nowrap; }
   td.wrap{ white-space:normal; }
   .empty-row td{ color:var(--ink-soft); text-align:center; padding:18px; }
@@ -408,39 +413,16 @@
           </div>
         </section>
 
-        <!-- ═══ PRODUCTS ═══ -->
+        <!-- ═══ PRODUCTS (รายการ — คลิกแถวเพื่อแก้ไข, คลิกหัวคอลัมน์เพื่อเรียง) ═══ -->
         <section class="view" id="view-products">
-          <div class="view-head"><div><h1>สินค้าและราคา</h1><p>ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย</p></div></div>
+          <div class="view-head">
+            <div><h1>สินค้าและราคา</h1><p>ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — คลิกแถวเพื่อแก้ไข คลิกหัวคอลัมน์เพื่อเรียง</p></div>
+            <button class="btn btn-primary" onclick="openProductForm()">+ เพิ่มสินค้า</button>
+          </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รูป</th><th>ชื่อ</th><th>ราคาฐาน</th><th>ราคาทุน</th><th>VAT</th><th>หน่วยฐาน</th><th>กลุ่ม</th>
-              <th>บาร์โค้ด (ชุด)</th><th>บาร์โค้ด (กลุ่ม)</th><th>รหัสอ้างอิง</th><th>สถานะ</th><th></th></tr></thead>
+            <thead><tr id="products-thead-row"><th>รูป</th></tr></thead>
             <tbody id="products-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
           </table></div>
-          <div class="form-card" id="product-form-card">
-            <h3 id="product-form-title">เพิ่มสินค้าใหม่</h3>
-            <p class="form-hint">อัปโหลดรูปสินค้าได้หลังบันทึก — จากช่อง "รูป" ในตารางด้านบน</p>
-            <div class="form-grid">
-              <div class="field span2"><label>ชื่อสินค้า</label><input id="p-name" placeholder="เช่น น้ำดื่มตราภูเขา 600ml"></div>
-              <div class="field"><label>รหัสอ้างอิง (Express)</label><input id="p-extcode"></div>
-              <div class="field"><label>ราคาฐาน (ราคาขาย)</label><input id="p-price" type="number" placeholder="0.00"></div>
-              <div class="field"><label>ราคาทุน <span class="unit">(ไม่แสดงในแอปมือถือ)</span></label><input id="p-cost" type="number" placeholder="0.00"></div>
-              <div class="field"><label>หน่วยฐาน</label><input id="p-unit" placeholder="ชิ้น" value="ชิ้น"></div>
-              <div class="field"><label>กลุ่มสินค้า</label><select id="p-group"><option value="0">— ไม่ระบุ —</option></select></div>
-              <div class="field"><label>VAT</label>
-                <select id="p-vat">
-                  <option value="none">ไม่มี VAT</option>
-                  <option value="included">รวม VAT (7%)</option>
-                  <option value="excluded">แยก VAT (7%)</option>
-                </select>
-              </div>
-              <div class="field"><label>บาร์โค้ด (ชุด) <span class="unit">unique เฉพาะสินค้า+หน่วยนี้</span></label><input id="p-barcode" placeholder="สแกน/พิมพ์บาร์โค้ด"></div>
-              <div class="field"><label>บาร์โค้ด (กลุ่ม) <span class="unit">ซ้ำกับสินค้าอื่นได้ ถ้าเป็นของชิ้นเดียวกันจริง</span></label><input id="p-groupbarcode" placeholder="ไม่บังคับ"></div>
-            </div>
-            <div class="form-actions">
-              <button class="btn btn-primary" id="product-save-btn" onclick="saveProductUI()">+ เพิ่มสินค้า</button>
-              <button class="btn btn-sm" id="product-cancel-btn" style="display:none" onclick="cancelEditProductUI()">ยกเลิก</button>
-            </div>
-          </div>
 
           <div class="form-card">
             <h3>หน่วยขายเพิ่มเติม (แพ็ค / ลัง)</h3>
@@ -473,6 +455,31 @@
               <div class="field"><label>คำอธิบาย</label><input id="pg-desc"></div>
             </div>
             <div class="form-actions"><button class="btn btn-primary" onclick="addProductGroupUI()">+ เพิ่มกลุ่ม</button></div>
+          </div>
+        </section>
+
+        <!-- ═══ PRODUCT FORM (หน้าเต็ม เพิ่ม/แก้ไขสินค้า 1 รายการ — ใช้ร่วมกันทั้งสองโหมด) ═══ -->
+        <section class="view" id="view-productform">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="closeProductForm()">← กลับ</button>
+              <div><h1 id="pf-title">เพิ่มสินค้าใหม่</h1></div>
+            </div>
+            <button class="btn btn-sm" id="pf-toggle-btn" style="display:none" onclick="toggleProductActiveFromForm()">ปิดใช้งาน</button>
+          </div>
+          <div class="form-card">
+            <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex-shrink:0">
+                <img id="pf-img-preview" src="" alt="รูปสินค้า" style="width:96px;height:96px;object-fit:contain;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;display:none">
+                <div id="pf-img-empty" style="width:96px;height:96px;background:var(--surface-2);border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-size:11px;text-align:center">ยังไม่มีรูป</div>
+                <input type="file" id="pf-img-file" accept="image/*" style="margin-top:8px;font-size:11px;width:120px" onchange="pfPickImage(this)">
+              </div>
+              <div class="form-grid" id="pf-fields" style="flex:1;min-width:280px"></div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="saveProductForm()">บันทึก</button>
+              <button class="btn btn-sm" onclick="closeProductForm()">ยกเลิก</button>
+            </div>
           </div>
         </section>
 
@@ -1130,32 +1137,87 @@ async function saveDocSeriesUI(){
 }
 
 /* ══════════════ PRODUCTS + UNITS + GROUPS ══════════════ */
+/* ══════════════ PRODUCTS — สถาปัตยกรรมแบบ "field config ขับเคลื่อนฟอร์ม" + ตาราง sort ได้
+   คัดลอกแนวคิดมาจากระบบ Item Master ของ Hippo Village (ITEM_FIELDS / renderItemTable / _itemCmp /
+   openItemModal / submitItemForm) ปรับให้เข้ากับ backend ของ TOPSHOP เอง (Drive แทน base64,
+   มีแค่ประเภทเดียวคือ "สินค้า" ไม่ต้องมีระบบแท็บหลายประเภทแบบต้นฉบับ) ══════════════ */
 const VAT_TYPE_LABEL = { none:'ไม่มี VAT', included:'รวม VAT', excluded:'แยก VAT' };
+// key = ชื่อ field ในฟอร์ม/payload (camelCase ตามที่ backend รับ), dataKey = ชื่อคอลัมน์จริงใน Sheet (snake_case)
+const PRODUCT_FIELDS = [
+  { key:'name', dataKey:'name', label:'ชื่อสินค้า', type:'text', required:true, wide:true, placeholder:'เช่น น้ำดื่มตราภูเขา 600ml' },
+  { key:'externalCode', dataKey:'external_code', label:'รหัสอ้างอิง (Express)', type:'text' },
+  { key:'basePrice', dataKey:'base_price', label:'ราคาฐาน (ราคาขาย)', type:'number', placeholder:'0.00' },
+  { key:'costPrice', dataKey:'cost_price', label:'ราคาทุน', type:'number', placeholder:'0.00', hint:'(ไม่แสดงในแอปมือถือ)' },
+  { key:'unit', dataKey:'unit', label:'หน่วยฐาน', type:'text', placeholder:'ชิ้น', default:'ชิ้น' },
+  { key:'groupId', dataKey:'group_id', label:'กลุ่มสินค้า', type:'select', optionsFrom:'productGroups', parseType:'int' },
+  { key:'vatType', dataKey:'vat_type', label:'VAT', type:'select', default:'none', options:[
+    {value:'none',label:'ไม่มี VAT'}, {value:'included',label:'รวม VAT (7%)'}, {value:'excluded',label:'แยก VAT (7%)'}
+  ] },
+  { key:'barcode', dataKey:'barcode', label:'บาร์โค้ด (ชุด)', type:'text', placeholder:'สแกน/พิมพ์บาร์โค้ด', hint:'(unique เฉพาะสินค้า+หน่วยนี้)' },
+  { key:'groupBarcode', dataKey:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', type:'text', placeholder:'ไม่บังคับ', hint:'(ซ้ำกับสินค้าอื่นได้ ถ้าเป็นของชิ้นเดียวกันจริง)' }
+];
+// คอลัมน์ตาราง (แยกจาก PRODUCT_FIELDS เพราะตารางมีคอลัมน์ที่ไม่ใช่ฟิลด์ฟอร์มตรงๆ เช่น "กลุ่ม" ที่โชว์ชื่อไม่ใช่ id)
+const PRODUCT_TABLE_COLS = [
+  { key:'name', label:'ชื่อ', sortVal:p=>p.name },
+  { key:'base_price', label:'ราคาฐาน', numeric:true, sortVal:p=>parseFloat(p.base_price)||0, render:p=>'฿'+baht(p.base_price), cls:'mono-data' },
+  { key:'cost_price', label:'ราคาทุน', numeric:true, sortVal:p=>(p.cost_price?parseFloat(p.cost_price):null), render:p=>(p.cost_price?'฿'+baht(p.cost_price):'-'), cls:'mono-data' },
+  { key:'vat_type', label:'VAT', sortVal:p=>VAT_TYPE_LABEL[p.vat_type]||'', render:p=>VAT_TYPE_LABEL[p.vat_type]||'-' },
+  { key:'unit', label:'หน่วยฐาน', sortVal:p=>p.unit },
+  { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
+  { key:'barcode', label:'บาร์โค้ด (ชุด)', sortVal:p=>p.barcode, cls:'mono-data' },
+  { key:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', sortVal:p=>p.group_barcode, cls:'mono-data' },
+  { key:'external_code', label:'รหัสอ้างอิง', sortVal:p=>p.external_code, cls:'mono-data' },
+  { key:'status', label:'สถานะ', numeric:true, sortVal:p=>isOn(p.is_active)?1:0 }
+];
 let editingProductId = null;
+let pfPickedFile = null; // ไฟล์รูปที่เพิ่งเลือกในฟอร์มแต่ยังไม่อัปโหลด — อัปโหลดจริงตอนกด "บันทึก" เท่านั้น
+let PRODUCT_SORT = null;
+
+function _productCmp(a, b, col, dir){
+  const x = col.sortVal(a), y = col.sortVal(b);
+  const ex = (x===null||x===undefined||x===''), ey = (y===null||y===undefined||y==='');
+  if (ex && ey) return 0;
+  if (ex) return 1;   // ค่าว่างไปท้ายเสมอ ไม่ว่าเรียงขึ้นหรือลง
+  if (ey) return -1;
+  const c = col.numeric ? (x - y) : String(x).localeCompare(String(y), 'th', { numeric:true, sensitivity:'base' });
+  return dir === 'desc' ? -c : c;
+}
+function sortProductsTable(key){
+  PRODUCT_SORT = (PRODUCT_SORT && PRODUCT_SORT.key === key)
+    ? { key, dir: PRODUCT_SORT.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
+  renderProductsTable();
+}
 function renderProductsTable(){
   const body = document.getElementById('products-body');
-  const gName = {}; productGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
   const uProd = document.getElementById('u-product');
   uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p => '<option value="'+p.record_id+'">'+esc(p.name)+'</option>').join('');
 
-  if (!productsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="12">ยังไม่มีสินค้า</td></tr>'; return; }
-  body.innerHTML = productsCache.map(p =>
-    '<tr><td>' +
-      (p.image_url ? '<img src="'+esc(p.image_url)+'" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:var(--surface-2)">' : '<span style="color:var(--ink-faint);font-size:11px">ไม่มีรูป</span>') +
-      '<input type="file" accept="image/*" style="display:block;width:70px;font-size:9.5px;margin-top:3px" onchange="uploadProductImageUI(this,'+p.record_id+')">' +
-    '</td>' +
-    '<td>'+esc(p.name)+'</td><td class="mono-data">฿'+baht(p.base_price)+'</td>' +
-    '<td class="mono-data">'+(p.cost_price ? '฿'+baht(p.cost_price) : '-')+'</td>' +
-    '<td>'+(VAT_TYPE_LABEL[p.vat_type]||'-')+'</td>' +
-    '<td>'+esc(p.unit)+'</td>' +
-    '<td>'+esc(gName[String(p.group_id)]||'-')+'</td>' +
-    '<td class="mono-data">'+esc(p.barcode||'-')+'</td>' +
-    '<td class="mono-data">'+esc(p.group_barcode||'-')+'</td>' +
-    '<td class="mono-data">'+esc(p.external_code||'-')+'</td>' +
-    '<td><span class="pill '+(isOn(p.is_active)?'ok':'off')+'">'+(isOn(p.is_active)?'ใช้งาน':'ปิด')+'</span></td>' +
-    '<td><button class="btn btn-sm" onclick="editProductUI(\''+esc(p.record_id)+'\')">แก้ไข</button> ' +
-      '<button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td></tr>'
-  ).join('');
+  document.getElementById('products-thead-row').innerHTML = '<th>รูป</th>' + PRODUCT_TABLE_COLS.map(col => {
+    const on = PRODUCT_SORT && PRODUCT_SORT.key === col.key;
+    const arrow = on ? (PRODUCT_SORT.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    return '<th class="th-sortable'+(on?' is-sorted':'')+'" onclick="sortProductsTable(\''+col.key+'\')">'+esc(col.label)+arrow+'</th>';
+  }).join('') + '<th></th>';
+
+  if (!productsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="'+(PRODUCT_TABLE_COLS.length+2)+'">ยังไม่มีสินค้า</td></tr>'; return; }
+
+  let rows = productsCache.slice();
+  if (PRODUCT_SORT) {
+    const col = PRODUCT_TABLE_COLS.find(c => c.key === PRODUCT_SORT.key);
+    if (col) rows.sort((a,b) => _productCmp(a, b, col, PRODUCT_SORT.dir));
+  }
+
+  body.innerHTML = rows.map(p => {
+    const imgCell = '<td>' + (p.image_url
+      ? '<img src="'+esc(p.image_url)+'" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:var(--surface-2)">'
+      : '<span style="color:var(--ink-faint);font-size:11px">ไม่มีรูป</span>') + '</td>';
+    const cells = PRODUCT_TABLE_COLS.map(col => {
+      if (col.key === 'status') return '<td><span class="pill '+(isOn(p.is_active)?'ok':'off')+'">'+(isOn(p.is_active)?'ใช้งาน':'ปิด')+'</span></td>';
+      const val = col.render ? col.render(p) : (col.sortVal(p) || '-');
+      return '<td'+(col.cls?' class="'+col.cls+'"':'')+'>'+esc(val)+'</td>';
+    }).join('');
+    const actionCell = '<td onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td>';
+    return '<tr class="clickable-row" onclick="openProductForm(\''+esc(p.record_id)+'\')">'+imgCell+cells+actionCell+'</tr>';
+  }).join('');
 }
 async function loadProducts(){
   const body = document.getElementById('products-body');
@@ -1166,68 +1228,115 @@ async function loadProducts(){
   productsCache = r.data;
   renderProductsTable();
 }
-function editProductUI(id){
-  const p = productsCache.find(x => String(x.record_id) === String(id));
-  if (!p) { toast('ไม่พบสินค้านี้ในรายการ ลองโหลดหน้าใหม่', true); return; }
-  editingProductId = id;
-  document.getElementById('product-form-title').textContent = 'แก้ไขสินค้า: ' + p.name;
-  document.getElementById('p-name').value = p.name || '';
-  document.getElementById('p-extcode').value = p.external_code || '';
-  document.getElementById('p-price').value = p.base_price || '';
-  document.getElementById('p-cost').value = p.cost_price || '';
-  document.getElementById('p-unit').value = p.unit || 'ชิ้น';
-  document.getElementById('p-group').value = p.group_id || '0';
-  document.getElementById('p-vat').value = p.vat_type || 'none';
-  document.getElementById('p-barcode').value = p.barcode || '';
-  document.getElementById('p-groupbarcode').value = p.group_barcode || '';
-  document.getElementById('product-save-btn').textContent = 'บันทึกการแก้ไข';
-  document.getElementById('product-cancel-btn').style.display = '';
-  document.getElementById('product-form-card').scrollIntoView({behavior:'smooth', block:'center'});
+
+/* ── หน้าเต็ม เพิ่ม/แก้ไขสินค้า 1 รายการ ── */
+function _pfFieldHtml(f, val){
+  const cls = 'field' + (f.wide ? ' span2' : '');
+  const lbl = '<label>'+esc(f.label)+(f.required?' <span style="color:var(--red)">*</span>':'')+(f.hint?' <span class="unit">'+esc(f.hint)+'</span>':'')+'</label>';
+  if (f.type === 'select') {
+    let opts;
+    if (f.optionsFrom === 'productGroups') {
+      opts = '<option value="0">— ไม่ระบุ —</option>' + productGroupsCache.map(g =>
+        '<option value="'+g.record_id+'"'+(String(g.record_id)===String(val)?' selected':'')+'>'+esc(g.name)+'</option>').join('');
+    } else {
+      opts = (f.options||[]).map(o => '<option value="'+o.value+'"'+(o.value===val?' selected':'')+'>'+esc(o.label)+'</option>').join('');
+    }
+    return '<div class="'+cls+'">'+lbl+'<select data-key="'+f.key+'">'+opts+'</select></div>';
+  }
+  return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'" placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'"></div>';
 }
-function cancelEditProductUI(){
-  editingProductId = null;
-  document.getElementById('product-form-title').textContent = 'เพิ่มสินค้าใหม่';
-  ['p-name','p-extcode','p-price','p-cost','p-barcode','p-groupbarcode'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('p-unit').value = 'ชิ้น';
-  document.getElementById('p-group').value = '0';
-  document.getElementById('p-vat').value = 'none';
-  document.getElementById('product-save-btn').textContent = '+ เพิ่มสินค้า';
-  document.getElementById('product-cancel-btn').style.display = 'none';
+function renderProductFormFields(row){
+  document.getElementById('pf-fields').innerHTML = PRODUCT_FIELDS.map(f => {
+    const raw = row ? row[f.dataKey] : undefined;
+    const val = (raw !== undefined && raw !== null && raw !== '') ? raw : (f.default !== undefined ? f.default : '');
+    return _pfFieldHtml(f, val);
+  }).join('');
 }
-async function saveProductUI(){
-  const name = document.getElementById('p-name').value.trim();
-  if (!name) { toast('กรุณากรอกชื่อสินค้า', true); return; }
-  const payload = {
-    name, basePrice: parseFloat(document.getElementById('p-price').value) || 0,
-    costPrice: parseFloat(document.getElementById('p-cost').value) || 0,
-    vatType: document.getElementById('p-vat').value,
-    unit: document.getElementById('p-unit').value.trim() || 'ชิ้น',
-    groupId: parseInt(document.getElementById('p-group').value) || 0,
-    externalCode: document.getElementById('p-extcode').value.trim(),
-    barcode: document.getElementById('p-barcode').value.trim(),
-    groupBarcode: document.getElementById('p-groupbarcode').value.trim()
-  };
+function readProductFormFields(){
+  const payload = {};
+  PRODUCT_FIELDS.forEach(f => {
+    const el = document.querySelector('#pf-fields [data-key="'+f.key+'"]');
+    let v = el.value;
+    if (f.parseType === 'int') v = parseInt(v) || 0;
+    else if (f.type === 'number') v = parseFloat(v) || 0;
+    else v = String(v).trim();
+    payload[f.key] = v;
+  });
+  return payload;
+}
+function setProductFormImagePreview(url){
+  const img = document.getElementById('pf-img-preview');
+  const empty = document.getElementById('pf-img-empty');
+  if (url) { img.src = url; img.style.display = 'block'; empty.style.display = 'none'; }
+  else { img.style.display = 'none'; empty.style.display = 'flex'; }
+}
+function pfPickImage(input){
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('ไฟล์ใหญ่เกินไป (ไม่เกิน 2MB)', true); input.value = ''; return; }
+  pfPickedFile = file;
+  const reader = new FileReader();
+  reader.onload = () => setProductFormImagePreview(reader.result);
+  reader.readAsDataURL(file);
+}
+function openProductForm(id){
+  const row = id ? productsCache.find(x => String(x.record_id) === String(id)) : null;
+  if (id && !row) { toast('ไม่พบสินค้านี้ในรายการ ลองโหลดหน้าใหม่', true); return; }
+  editingProductId = id || null;
+  pfPickedFile = null;
+  document.getElementById('pf-title').textContent = row ? ('แก้ไขสินค้า: ' + row.name) : 'เพิ่มสินค้าใหม่';
+  renderProductFormFields(row);
+  setProductFormImagePreview(row ? row.image_url : '');
+  document.getElementById('pf-img-file').value = '';
+  const toggleBtn = document.getElementById('pf-toggle-btn');
+  if (row) { toggleBtn.style.display = ''; toggleBtn.textContent = isOn(row.is_active) ? 'ปิดใช้งาน' : 'เปิดใช้งาน'; }
+  else toggleBtn.style.display = 'none';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-productform').classList.add('active');
+  document.getElementById('crumb-current').textContent = row ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่';
+}
+function closeProductForm(){
+  // กลับหน้ารายการโดยวาดจาก cache ตรงๆ ไม่ผ่าน gotoView('products') เพราะนั่นจะไปเรียก loadProducts()
+  // ที่ยิง API โหลดใหม่ทั้งชุด ทั้งที่ cache ในเครื่องอัปเดตล่าสุดอยู่แล้ว (จาก saveProductForm/toggle)
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-products').classList.add('active');
+  document.getElementById('crumb-current').textContent = 'สินค้าและราคา';
+  document.querySelectorAll('.sb-action, .sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === 'products'));
+  renderProductsTable();
+}
+async function saveProductForm(){
+  const payload = readProductFormFields();
+  if (!payload.name) { toast('กรุณากรอกชื่อสินค้า', true); return; }
   const isEditing = !!editingProductId;
   let r;
   if (isEditing) { payload.id = editingProductId; r = await callApi('updateProduct', payload); }
   else r = await callApi('addProduct', payload);
   if (!r.success) { toast(r.message, true); return; }
-  toast(isEditing ? 'บันทึกการแก้ไขสำเร็จ' : 'เพิ่มสินค้าสำเร็จ');
-  if (isEditing) {
-    // แก้ของเดิม รู้ค่าใหม่ครบอยู่แล้วจาก payload — อัปเดต cacheในเครื่องแล้ว render ใหม่ ไม่ต้องยิง API โหลดซ้ำ
-    const p = productsCache.find(x => String(x.record_id) === String(editingProductId));
-    if (p) {
-      p.name = payload.name; p.base_price = payload.basePrice; p.cost_price = payload.costPrice;
-      p.vat_type = payload.vatType; p.unit = payload.unit; p.group_id = payload.groupId;
-      p.external_code = payload.externalCode; p.barcode = payload.barcode; p.group_barcode = payload.groupBarcode;
-    }
-    cancelEditProductUI();
-    renderProductsTable();
-  } else {
-    // สินค้าใหม่ยังไม่รู้ record_id ที่ backend สร้างให้ (API ไม่ได้ส่งกลับมา) จำเป็นต้องโหลดครั้งเดียวตอนนี้
-    cancelEditProductUI();
-    loadProducts();
+  const productId = isEditing ? editingProductId : r.id;
+
+  let imageUrl;
+  if (pfPickedFile) {
+    const base64 = await fileToBase64(pfPickedFile);
+    const ir = await callApi('uploadProductImage', { productId, base64, mimeType: pfPickedFile.type });
+    if (ir.success) imageUrl = ir.imageUrl; else toast(ir.message, true);
   }
+
+  const fields = { name:payload.name, base_price:payload.basePrice, cost_price:payload.costPrice,
+    vat_type:payload.vatType, unit:payload.unit, group_id:payload.groupId,
+    external_code:payload.externalCode, barcode:payload.barcode, group_barcode:payload.groupBarcode };
+  if (isEditing) {
+    const p = productsCache.find(x => String(x.record_id) === String(productId));
+    if (p) { Object.assign(p, fields); if (imageUrl) p.image_url = imageUrl; }
+  } else {
+    productsCache.push(Object.assign({ record_id: productId, is_active: 'TRUE', image_url: imageUrl || '' }, fields));
+  }
+  toast(isEditing ? 'บันทึกการแก้ไขสำเร็จ' : 'เพิ่มสินค้าสำเร็จ');
+  closeProductForm();
+}
+async function toggleProductActiveFromForm(){
+  if (!editingProductId) return;
+  await toggleProductStatusUI(editingProductId, isOn((productsCache.find(x => String(x.record_id) === String(editingProductId))||{}).is_active));
+  closeProductForm();
 }
 async function toggleProductStatusUI(id, isCurrentlyOn){
   const newActive = isCurrentlyOn ? 'FALSE' : 'TRUE';
@@ -1238,24 +1347,11 @@ async function toggleProductStatusUI(id, isCurrentlyOn){
   renderProductsTable();
   toast('อัปเดตสถานะสำเร็จ');
 }
-async function uploadProductImageUI(input, productId){
-  const file = input.files[0];
-  if (!file) return;
-  if (file.size > 2 * 1024 * 1024) { toast('ไฟล์ใหญ่เกินไป (ไม่เกิน 2MB)', true); input.value = ''; return; }
-  toast('กำลังอัปโหลดรูปสินค้า...');
-  const base64 = await fileToBase64(file);
-  const r = await callApi('uploadProductImage', { productId, base64, mimeType: file.type });
-  if (!r.success) { toast(r.message, true); return; }
-  toast('อัปโหลดรูปสินค้าสำเร็จ');
-  const p = productsCache.find(x => String(x.record_id) === String(productId));
-  if (p) p.image_url = r.imageUrl;
-  renderProductsTable();
-}
 async function ensureProductGroups(){
   const r = await callApi('listProductGroups', {});
   if (r.success) productGroupsCache = r.data;
   const opts = productGroupsCache.map(g => '<option value="'+g.record_id+'">'+esc(g.name)+'</option>').join('');
-  ['p-group','pr-group'].forEach(id => { const el = document.getElementById(id); el.innerHTML = el.innerHTML.split('</option>')[0] + '</option>' + opts; });
+  ['pr-group'].forEach(id => { const el = document.getElementById(id); el.innerHTML = el.innerHTML.split('</option>')[0] + '</option>' + opts; });
   const pgBody = document.getElementById('pgroups-body');
   pgBody.innerHTML = productGroupsCache.length
     ? productGroupsCache.map(g => '<tr><td>'+esc(g.name)+'</td><td>'+esc(g.description||'-')+'</td></tr>').join('')
