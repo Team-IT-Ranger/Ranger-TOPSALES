@@ -218,7 +218,7 @@
 <!-- ══════════ LOGIN ══════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="mascot-sr1.png" alt="SalesRanger" class="login-mascot">
+    <img src="mascot-sr1.png?v=2" alt="SalesRanger" class="login-mascot">
     <h1>SalesRanger TOPSHOP</h1>
     <p>เข้าสู่ระบบ Admin App</p>
     <div class="err" id="login-err"></div>
@@ -250,7 +250,7 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="sb-header">
-        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png" alt="SR"></span><span class="sb-logo-txt">TOPSHOP</span></div>
+        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png?v=2" alt="SR"></span><span class="sb-logo-txt">TOPSHOP</span></div>
         <button class="sb-ctrl-btn" id="pinBtn" title="ปักหมุดเมนูไว้" onclick="togglePin()">📌</button>
       </div>
       <div class="sb-company">
@@ -974,23 +974,34 @@ function kpi(lbl, val, sub){ return '<div class="kpi"><div class="lbl">'+esc(lbl
 function activityRow(left, right){ return '<div class="activity-row"><span>'+left+'</span><span class="amt mono-data">'+right+'</span></div>'; }
 
 /* ══════════════ STAFF ══════════════ */
-async function loadStaff(){
+let staffCache = [];
+function renderStaffTable(){
   const body = document.getElementById('staff-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
-  const r = await callApi('listStaffAdmin', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีพนักงานลงทะเบียน</td></tr>'; return; }
-  body.innerHTML = r.data.map(u =>
+  if (!staffCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีพนักงานลงทะเบียน</td></tr>'; return; }
+  body.innerHTML = staffCache.map(u =>
     '<tr><td>'+esc(u.displayName)+'</td><td>'+esc(u.role)+'</td>' +
     '<td><span class="pill '+(u.status==='Yes'?'ok':'wait')+'">'+(u.status==='Yes'?'อนุมัติแล้ว':'รออนุมัติ')+'</span></td>' +
     '<td class="mono-data">'+esc(u.lastLogin||'-')+'</td>' +
     '<td><button class="btn btn-sm" onclick="toggleStaffStatus(\''+u.lineUserId+'\',\''+u.status+'\')">'+(u.status==='Yes'?'ระงับ':'อนุมัติ')+'</button></td></tr>'
   ).join('');
 }
+async function loadStaff(){
+  const body = document.getElementById('staff-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  const r = await callApi('listStaffAdmin', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  staffCache = r.data;
+  renderStaffTable();
+}
 async function toggleStaffStatus(lineUserId, currentStatus){
-  const r = await callApi('updateStaffAdmin', { lineUserId, status: currentStatus === 'Yes' ? 'No' : 'Yes' });
+  const newStatus = currentStatus === 'Yes' ? 'No' : 'Yes';
+  const r = await callApi('updateStaffAdmin', { lineUserId, status: newStatus });
   if (!r.success) { toast(r.message, true); return; }
-  toast('อัปเดตสถานะสำเร็จ'); loadStaff(); loadDashboard();
+  const u = staffCache.find(x => x.lineUserId === lineUserId);
+  if (u) u.status = newStatus;
+  renderStaffTable();
+  toast('อัปเดตสถานะสำเร็จ');
+  loadDashboard();
 }
 
 /* ══════════════ CUSTOMERS ══════════════ */
@@ -1121,19 +1132,14 @@ async function saveDocSeriesUI(){
 /* ══════════════ PRODUCTS + UNITS + GROUPS ══════════════ */
 const VAT_TYPE_LABEL = { none:'ไม่มี VAT', included:'รวม VAT', excluded:'แยก VAT' };
 let editingProductId = null;
-async function loadProducts(){
+function renderProductsTable(){
   const body = document.getElementById('products-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr>';
-  await ensureProductGroups();
-  const r = await callApi('listProductsAdmin', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
-  productsCache = r.data;
   const gName = {}; productGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
   const uProd = document.getElementById('u-product');
   uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p => '<option value="'+p.record_id+'">'+esc(p.name)+'</option>').join('');
 
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="12">ยังไม่มีสินค้า</td></tr>'; return; }
-  body.innerHTML = r.data.map(p =>
+  if (!productsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="12">ยังไม่มีสินค้า</td></tr>'; return; }
+  body.innerHTML = productsCache.map(p =>
     '<tr><td>' +
       (p.image_url ? '<img src="'+esc(p.image_url)+'" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:var(--surface-2)">' : '<span style="color:var(--ink-faint);font-size:11px">ไม่มีรูป</span>') +
       '<input type="file" accept="image/*" style="display:block;width:70px;font-size:9.5px;margin-top:3px" onchange="uploadProductImageUI(this,'+p.record_id+')">' +
@@ -1150,6 +1156,15 @@ async function loadProducts(){
     '<td><button class="btn btn-sm" onclick="editProductUI(\''+esc(p.record_id)+'\')">แก้ไข</button> ' +
       '<button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td></tr>'
   ).join('');
+}
+async function loadProducts(){
+  const body = document.getElementById('products-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr>';
+  await ensureProductGroups();
+  const r = await callApi('listProductsAdmin', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
+  productsCache = r.data;
+  renderProductsTable();
 }
 function editProductUI(id){
   const p = productsCache.find(x => String(x.record_id) === String(id));
@@ -1198,14 +1213,30 @@ async function saveProductUI(){
   else r = await callApi('addProduct', payload);
   if (!r.success) { toast(r.message, true); return; }
   toast(isEditing ? 'บันทึกการแก้ไขสำเร็จ' : 'เพิ่มสินค้าสำเร็จ');
-  cancelEditProductUI();
-  loadProducts();
+  if (isEditing) {
+    // แก้ของเดิม รู้ค่าใหม่ครบอยู่แล้วจาก payload — อัปเดต cacheในเครื่องแล้ว render ใหม่ ไม่ต้องยิง API โหลดซ้ำ
+    const p = productsCache.find(x => String(x.record_id) === String(editingProductId));
+    if (p) {
+      p.name = payload.name; p.base_price = payload.basePrice; p.cost_price = payload.costPrice;
+      p.vat_type = payload.vatType; p.unit = payload.unit; p.group_id = payload.groupId;
+      p.external_code = payload.externalCode; p.barcode = payload.barcode; p.group_barcode = payload.groupBarcode;
+    }
+    cancelEditProductUI();
+    renderProductsTable();
+  } else {
+    // สินค้าใหม่ยังไม่รู้ record_id ที่ backend สร้างให้ (API ไม่ได้ส่งกลับมา) จำเป็นต้องโหลดครั้งเดียวตอนนี้
+    cancelEditProductUI();
+    loadProducts();
+  }
 }
 async function toggleProductStatusUI(id, isCurrentlyOn){
-  const r = await callApi('updateProduct', { id, isActive: isCurrentlyOn ? 'FALSE' : 'TRUE' });
+  const newActive = isCurrentlyOn ? 'FALSE' : 'TRUE';
+  const r = await callApi('updateProduct', { id, isActive: newActive });
   if (!r.success) { toast(r.message, true); return; }
+  const p = productsCache.find(x => String(x.record_id) === String(id));
+  if (p) p.is_active = newActive;
+  renderProductsTable();
   toast('อัปเดตสถานะสำเร็จ');
-  loadProducts();
 }
 async function uploadProductImageUI(input, productId){
   const file = input.files[0];
@@ -1216,7 +1247,9 @@ async function uploadProductImageUI(input, productId){
   const r = await callApi('uploadProductImage', { productId, base64, mimeType: file.type });
   if (!r.success) { toast(r.message, true); return; }
   toast('อัปโหลดรูปสินค้าสำเร็จ');
-  loadProducts();
+  const p = productsCache.find(x => String(x.record_id) === String(productId));
+  if (p) p.image_url = r.imageUrl;
+  renderProductsTable();
 }
 async function ensureProductGroups(){
   const r = await callApi('listProductGroups', {});
@@ -1275,23 +1308,29 @@ function onPromoTypeChange(){
   document.getElementById('pr-freeprod-wrap').style.display = t === 'free_goods' ? '' : 'none';
   document.getElementById('pr-freeqty-wrap').style.display = t === 'free_goods' ? '' : 'none';
 }
-async function loadPromotions(){
+let promotionsCache = [];
+function renderPromotionsTable(){
   const body = document.getElementById('promotions-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
-  await ensureProductGroups(); await ensureCustomerGroups();
-  const r = await callApi('listPromotions', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีโปรโมชั่น</td></tr>'; return; }
-  body.innerHTML = r.data.map(p => {
+  if (!promotionsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีโปรโมชั่น</td></tr>'; return; }
+  body.innerHTML = promotionsCache.map(p => {
     const period = (p.date_start || p.date_end) ? (esc(p.date_start||'…') + ' – ' + esc(p.date_end||'…')) : 'ไม่มีกำหนด';
     const val = p.type === 'free_goods' ? ('แถมสินค้า #'+p.free_product_id+' ×'+p.free_qty)
       : p.type === 'percent' ? (p.value + '%')
       : '฿' + baht(p.value);
     return '<tr><td>'+esc(p.name)+'</td><td>'+(PROMO_TYPE_LABEL[p.type]||p.type)+'</td><td class="mono-data">'+val+'</td>' +
       '<td class="mono-data">'+period+'</td>' +
-      '<td><span class="pill '+(String(p.is_active)==='TRUE'?'ok':'off')+'">'+(String(p.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td>' +
-      '<td>'+(String(p.is_active)==='TRUE' ? '<button class="btn btn-sm" onclick="deactivatePromotionUI('+p.record_id+')">ปิดใช้งาน</button>' : '')+'</td></tr>';
+      '<td><span class="pill '+(isOn(p.is_active)?'ok':'off')+'">'+(isOn(p.is_active)?'ใช้งาน':'ปิด')+'</span></td>' +
+      '<td>'+(isOn(p.is_active) ? '<button class="btn btn-sm" onclick="deactivatePromotionUI('+p.record_id+')">ปิดใช้งาน</button>' : '')+'</td></tr>';
   }).join('');
+}
+async function loadPromotions(){
+  const body = document.getElementById('promotions-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  await ensureProductGroups(); await ensureCustomerGroups();
+  const r = await callApi('listPromotions', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  promotionsCache = r.data;
+  renderPromotionsTable();
 }
 async function addPromotionUI(){
   const name = document.getElementById('pr-name').value.trim();
@@ -1327,7 +1366,10 @@ async function addPromotionUI(){
 async function deactivatePromotionUI(id){
   const r = await callApi('deactivatePromotion', { id });
   if (!r.success) { toast(r.message, true); return; }
-  toast('ปิดใช้งานโปรโมชั่นแล้ว'); loadPromotions();
+  const p = promotionsCache.find(x => String(x.record_id) === String(id));
+  if (p) p.is_active = 'FALSE';
+  renderPromotionsTable();
+  toast('ปิดใช้งานโปรโมชั่นแล้ว');
 }
 
 /* ══════════════ TENANTS ══════════════ */
@@ -1430,6 +1472,20 @@ function onAdminRoleChange(){
   document.getElementById('au-tenant-wrap').style.display = isTenantAdmin ? '' : 'none';
   if (isTenantAdmin) ensureTenantsForDropdown();
 }
+let adminUsersCache = [];
+const ADMIN_ROLE_LABEL = { super_admin:'ผู้ดูแลระบบสูงสุด', owner_admin:'แอดมินบริษัท', tenant_admin:'แอดมินตัวแทน' };
+function renderAdminUsersTable(){
+  const body = document.getElementById('adminusers-body');
+  if (!adminUsersCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีผู้ใช้งาน</td></tr>'; return; }
+  body.innerHTML = adminUsersCache.map(u =>
+    '<tr><td class="mono-data">'+esc(u.username)+'</td><td>'+esc(u.displayName)+'</td><td>'+(ADMIN_ROLE_LABEL[u.roleCode]||u.roleCode)+'</td>' +
+    '<td class="mono-data">'+esc(u.tenantId||'-')+'</td>' +
+    '<td><span class="pill '+(u.status==='active'?'ok':'off')+'">'+(u.status==='active'?'ใช้งาน':'ปิด')+'</span></td>' +
+    '<td>' + (u.roleCode === 'super_admin' ? '<span style="color:var(--ink-faint);font-size:11.5px">แก้ผ่าน Editor</span>' :
+      '<button class="btn btn-sm" onclick="toggleAdminUserStatusUI(\''+u.id+'\',\''+u.status+'\')">'+(u.status==='active'?'ปิดใช้งาน':'เปิดใช้งาน')+'</button> ' +
+      '<button class="btn btn-sm" onclick="resetAdminUserPasswordUI(\''+u.id+'\',\''+esc(u.username)+'\')">รีเซ็ตรหัสผ่าน</button>') + '</td></tr>'
+  ).join('');
+}
 async function loadAdminUsers(){
   const body = document.getElementById('adminusers-body');
   body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
@@ -1440,16 +1496,8 @@ async function loadAdminUsers(){
 
   const r = await callApi('listAdminUsers', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีผู้ใช้งาน</td></tr>'; return; }
-  const roleLabel = { super_admin:'ผู้ดูแลระบบสูงสุด', owner_admin:'แอดมินบริษัท', tenant_admin:'แอดมินตัวแทน' };
-  body.innerHTML = r.data.map(u =>
-    '<tr><td class="mono-data">'+esc(u.username)+'</td><td>'+esc(u.displayName)+'</td><td>'+(roleLabel[u.roleCode]||u.roleCode)+'</td>' +
-    '<td class="mono-data">'+esc(u.tenantId||'-')+'</td>' +
-    '<td><span class="pill '+(u.status==='active'?'ok':'off')+'">'+(u.status==='active'?'ใช้งาน':'ปิด')+'</span></td>' +
-    '<td>' + (u.roleCode === 'super_admin' ? '<span style="color:var(--ink-faint);font-size:11.5px">แก้ผ่าน Editor</span>' :
-      '<button class="btn btn-sm" onclick="toggleAdminUserStatusUI(\''+u.id+'\',\''+u.status+'\')">'+(u.status==='active'?'ปิดใช้งาน':'เปิดใช้งาน')+'</button> ' +
-      '<button class="btn btn-sm" onclick="resetAdminUserPasswordUI(\''+u.id+'\',\''+esc(u.username)+'\')">รีเซ็ตรหัสผ่าน</button>') + '</td></tr>'
-  ).join('');
+  adminUsersCache = r.data;
+  renderAdminUsersTable();
 }
 async function createAdminUserUI(){
   const username = document.getElementById('au-username').value.trim();
@@ -1469,9 +1517,13 @@ async function createAdminUserUI(){
   loadAdminUsers();
 }
 async function toggleAdminUserStatusUI(id, currentStatus){
-  const r = await callApi('updateAdminUser', { id, status: currentStatus === 'active' ? 'suspended' : 'active' });
+  const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+  const r = await callApi('updateAdminUser', { id, status: newStatus });
   if (!r.success) { toast(r.message, true); return; }
-  toast('อัปเดตสถานะสำเร็จ'); loadAdminUsers();
+  const u = adminUsersCache.find(x => String(x.id) === String(id));
+  if (u) u.status = newStatus;
+  renderAdminUsersTable();
+  toast('อัปเดตสถานะสำเร็จ');
 }
 async function resetAdminUserPasswordUI(id, username){
   const newPassword = prompt('ตั้งรหัสผ่านใหม่ให้ ' + username + ' (อย่างน้อย 8 ตัวอักษร)');
