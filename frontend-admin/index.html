@@ -1166,8 +1166,10 @@ async function saveDocSeriesUI(){
 const VAT_TYPE_LABEL = { none:'ไม่มี VAT', included:'รวม VAT', excluded:'แยก VAT' };
 // key = ชื่อ field ในฟอร์ม/payload (camelCase ตามที่ backend รับ), dataKey = ชื่อคอลัมน์จริงใน Sheet (snake_case)
 const PRODUCT_FIELDS = [
+  // product_code = เลขประจำตัวสินค้า สำคัญอันดับ 1, unique ทั้งระบบ (บังคับฝั่ง backend) — อยู่ฟิลด์แรกเสมอ
+  { key:'productCode', dataKey:'product_code', label:'รหัสสินค้า', type:'text', required:true, placeholder:'เช่น FG-0001', hint:'(เลขประจำตัวสินค้า unique ห้ามซ้ำ)' },
   { key:'name', dataKey:'name', label:'ชื่อสินค้า', type:'text', required:true, wide:true, placeholder:'เช่น น้ำดื่มตราภูเขา 600ml' },
-  { key:'externalCode', dataKey:'external_code', label:'รหัสอ้างอิง (Express)', type:'text' },
+  { key:'externalCode', dataKey:'external_code', label:'รหัสอ้างอิง (นำเข้า Express)', type:'text', hint:'(คนละความหมายกับรหัสสินค้า — ใช้จับคู่ตอนนำเข้าไฟล์เท่านั้น)' },
   { key:'basePrice', dataKey:'base_price', label:'ราคาฐาน (ราคาขาย)', type:'number', placeholder:'0.00' },
   { key:'costPrice', dataKey:'cost_price', label:'ราคาทุน', type:'number', placeholder:'0.00', hint:'(ไม่แสดงในแอปมือถือ)' },
   { key:'unit', dataKey:'unit', label:'หน่วยฐาน', type:'text', placeholder:'ชิ้น', default:'ชิ้น' },
@@ -1182,7 +1184,7 @@ const PRODUCT_FIELDS = [
 // ลำดับคอลัมน์ตามหลัก Hippo Village: รหัสสินค้าขึ้นก่อนเสมอ ตามด้วยชื่อ แล้วค่อยข้อมูลอื่น
 // รูปไม่โหลด thumbnail ในตารางรายการ (โชว์แค่ป้ายว่ามีรูปหรือยัง) — ตารางยาวๆ โหลดรูปทุกแถวพร้อมกันหนักเปล่าๆ
 const PRODUCT_TABLE_COLS = [
-  { key:'external_code', label:'รหัสสินค้า', sortVal:p=>p.external_code, cls:'mono-data' },
+  { key:'product_code', label:'รหัสสินค้า', sortVal:p=>p.product_code, cls:'mono-data' },
   { key:'name', label:'ชื่อ', sortVal:p=>p.name },
   { key:'base_price', label:'ราคาฐาน', numeric:true, sortVal:p=>parseFloat(p.base_price)||0, render:p=>'฿'+baht(p.base_price), cls:'mono-data' },
   { key:'cost_price', label:'ราคาทุน', numeric:true, sortVal:p=>(p.cost_price?parseFloat(p.cost_price):null), render:p=>(p.cost_price?'฿'+baht(p.cost_price):'-'), cls:'mono-data' },
@@ -1191,6 +1193,7 @@ const PRODUCT_TABLE_COLS = [
   { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
   { key:'barcode', label:'บาร์โค้ด (ชุด)', sortVal:p=>p.barcode, cls:'mono-data' },
   { key:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', sortVal:p=>p.group_barcode, cls:'mono-data' },
+  { key:'external_code', label:'รหัสอ้างอิง (Express)', sortVal:p=>p.external_code, cls:'mono-data' },
   { key:'image', label:'รูป', numeric:true, sortVal:p=>p.image_url?1:0 },
   { key:'status', label:'สถานะ', numeric:true, sortVal:p=>isOn(p.is_active)?1:0 }
 ];
@@ -1214,8 +1217,10 @@ function sortProductsTable(key){
 }
 function renderProductsTable(){
   const body = document.getElementById('products-body');
+  // dropdown เลือกสินค้า โชว์ [รหัสสินค้า] ชื่อ ตามหลัก Hippo Village — หารายการง่ายขึ้นเมื่อแคตาล็อกใหญ่
   const uProd = document.getElementById('u-product');
-  uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p => '<option value="'+p.record_id+'">'+esc(p.name)+'</option>').join('');
+  uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p =>
+    '<option value="'+p.record_id+'">'+(p.product_code?'['+esc(p.product_code)+'] ':'')+esc(p.name)+'</option>').join('');
 
   document.getElementById('products-thead-row').innerHTML = PRODUCT_TABLE_COLS.map(col => {
     const on = PRODUCT_SORT && PRODUCT_SORT.key === col.key;
@@ -1307,7 +1312,7 @@ function openProductForm(id){
   if (id && !row) { toast('ไม่พบสินค้านี้ในรายการ ลองโหลดหน้าใหม่', true); return; }
   editingProductId = id || null;
   pfPickedFile = null;
-  document.getElementById('pf-title').textContent = row ? ('แก้ไขสินค้า: ' + row.name) : 'เพิ่มสินค้าใหม่';
+  document.getElementById('pf-title').textContent = row ? ('แก้ไขสินค้า: ' + (row.product_code?'['+row.product_code+'] ':'') + row.name) : 'เพิ่มสินค้าใหม่';
   renderProductFormFields(row);
   setProductFormImagePreview(row ? row.image_url : '');
   document.getElementById('pf-img-file').value = '';
@@ -1337,7 +1342,8 @@ function openProductGroupsPage(){ _switchProductView('view-productgroups', 'ก�
 function closeProductGroupsPage(){ _switchProductView('view-products', 'สินค้าและราคา'); }
 async function saveProductForm(){
   const payload = readProductFormFields();
-  if (!payload.name) { toast('กรุณากรอกชื่อสินค้า', true); return; }
+  const missing = PRODUCT_FIELDS.find(f => f.required && !payload[f.key]);
+  if (missing) { toast('กรุณากรอก'+missing.label, true); return; }
   const isEditing = !!editingProductId;
   let r;
   if (isEditing) { payload.id = editingProductId; r = await callApi('updateProduct', payload); }
@@ -1352,7 +1358,7 @@ async function saveProductForm(){
     if (ir.success) imageUrl = ir.imageUrl; else toast(ir.message, true);
   }
 
-  const fields = { name:payload.name, base_price:payload.basePrice, cost_price:payload.costPrice,
+  const fields = { product_code:payload.productCode, name:payload.name, base_price:payload.basePrice, cost_price:payload.costPrice,
     vat_type:payload.vatType, unit:payload.unit, group_id:payload.groupId,
     external_code:payload.externalCode, barcode:payload.barcode, group_barcode:payload.groupBarcode };
   if (isEditing) {
