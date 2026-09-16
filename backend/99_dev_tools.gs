@@ -90,6 +90,32 @@ function resetAdminPasswordDev() {
   Logger.log('ไม่พบ username: ' + username + ' — ลองรัน listAdminUsernamesForRecovery() ดูชื่อที่มีอยู่ก่อน');
 }
 
+// สินค้าที่สร้างไว้ก่อนมีฟิลด์ product_code (เพิ่มเข้ามาทีหลัง) จะไม่มีรหัส — ช่อง "รหัสสินค้า" ในตาราง
+// ขึ้น "-" ว่างเปล่า รันตัวนี้ครั้งเดียวเพื่อตั้งรหัสอัตโนมัติให้ทุกแถวที่ยังไม่มี (รูปแบบ P0001, P0002, ...
+// เรียงตาม record_id) กันไม่ให้ว่างเฉยๆ เท่านั้น — อยากได้รหัสที่มีความหมายกว่านี้ ไปแก้เองทีหลังได้
+// ผ่านหน้า "แก้ไขสินค้า" ในแอป (ระบบเช็ค unique ให้อัตโนมัติ กันตั้งชนกัน)
+function backfillMissingProductCodes() {
+  var sh = centralSheet('products');
+  var data = sh.getDataRange().getValues();
+  var headers = data[0];
+  var codeCol = headers.indexOf('product_code');
+  var idCol = headers.indexOf('record_id');
+  if (codeCol === -1) { Logger.log('ยังไม่มีคอลัมน์ product_code ใน Sheet — รัน setupCentralSheet() ก่อน แล้วค่อยรันตัวนี้'); return; }
+
+  var filled = 0;
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][idCol] === '' || data[i][idCol] === null) continue; // ข้ามแถวว่างสนิท
+    if (String(data[i][codeCol] || '').trim() !== '') continue;     // มีรหัสอยู่แล้ว ไม่แตะ
+    var code = 'P' + ('0000' + data[i][idCol]).slice(-4);
+    sh.getRange(i + 1, codeCol + 1).setValue(code);
+    filled++;
+    Logger.log('ตั้งรหัส ' + code + ' ให้สินค้า record_id=' + data[i][idCol]);
+  }
+  Logger.log(filled
+    ? ('✅ ตั้งรหัสอัตโนมัติให้ ' + filled + ' รายการ — เข้าไปแก้เป็นรหัสที่มีความหมายทีหลังได้ผ่านหน้าแก้ไขสินค้าในแอป')
+    : 'ไม่มีสินค้ารายการไหนขาดรหัส — ไม่ต้องทำอะไรเพิ่ม');
+}
+
 // เรียกทดสอบว่าเชื่อม Central Sheet ได้ปกติหรือไม่
 function testCentralConnection() {
   var sheet = centralSheet('liff_users');
