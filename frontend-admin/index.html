@@ -15,9 +15,10 @@
     --green:#3E8F68; --green-soft:#DCF1E6;
     --red:#B5544C; --red-soft:#FBE2DF;
     --grey-soft:#E8ECEA;
-    --sb-w:264px; --sb-cw:60px; --sb-dur:.5s; --sb-ease:cubic-bezier(.33,.02,.2,1);
-    --sg-open-dur:.42s; --sg-close-dur:.6s;
-    --fly-in-dur:.16s; --fly-out-dur:.12s;
+    /* ยืดหด sidebar/กลุ่มเมนู — จงใจให้ช้านุ่มนวลแบบ "ชวนฝัน" ตามที่ขอ ไม่ใช่ transition ปกติทั่วไป */
+    --sb-w:264px; --sb-cw:60px; --sb-dur:1.1s; --sb-ease:cubic-bezier(.19,1,.22,1);
+    --sg-open-dur:.9s; --sg-close-dur:1.1s; --sg-ease:cubic-bezier(.19,1,.22,1);
+    --fly-in-dur:.55s; --fly-out-dur:.45s;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--ground);color:var(--ink);font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;font-size:14px}
@@ -30,6 +31,9 @@
   #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--ground)}
   .login-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:34px;width:340px;box-shadow:0 10px 30px -14px rgba(22,28,31,.2)}
   .login-card .mark{width:44px;height:44px;border-radius:11px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Kanit';margin-bottom:14px}
+  .login-mascot{width:118px;height:118px;object-fit:contain;display:block;margin:-14px auto 6px;animation:mascot-float 3.6s ease-in-out infinite}
+  @keyframes mascot-float{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-9px) rotate(1deg)}}
+  @media (prefers-reduced-motion:reduce){ .login-mascot{ animation:none; } }
   .login-card h1{font-size:19px;margin:0 0 3px}
   .login-card p{color:var(--ink-soft);font-size:12.5px;margin:0 0 22px}
   .field{margin-bottom:14px}
@@ -70,7 +74,8 @@
 
   .sb-header{ display:flex; align-items:center; justify-content:space-between; padding:16px 14px 8px; flex-shrink:0; gap:8px; border-bottom:1px solid rgba(255,255,255,.08); }
   .sb-logo{ display:flex; align-items:center; gap:9px; overflow:hidden; }
-  .sb-logo-mark{ width:30px; height:30px; border-radius:8px; background:var(--blue-soft); color:#1B2C33; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+  .sb-logo-mark{ width:30px; height:30px; border-radius:8px; background:var(--blue-soft); color:#1B2C33; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; overflow:hidden; }
+  .sb-logo-mark img{ width:100%; height:100%; object-fit:contain; }
   .sb-logo-txt{ font-size:15.5px; font-weight:700; white-space:nowrap; letter-spacing:.01em; color:rgba(255,255,255,.95); }
   body.sb-collapsed .sb-logo-txt{ display:none; }
   body.sb-collapsed .sb-header{ justify-content:center; padding:16px 0 8px; }
@@ -213,7 +218,7 @@
 <!-- ══════════ LOGIN ══════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="mark">TS</div>
+    <img src="mascot-sr1.png" alt="SalesRanger" class="login-mascot">
     <h1>SalesRanger TOPSHOP</h1>
     <p>เข้าสู่ระบบ Admin App</p>
     <div class="err" id="login-err"></div>
@@ -245,7 +250,7 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="sb-header">
-        <div class="sb-logo"><span class="sb-logo-mark">TS</span><span class="sb-logo-txt">TOPSHOP</span></div>
+        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png" alt="SR"></span><span class="sb-logo-txt">TOPSHOP</span></div>
         <button class="sb-ctrl-btn" id="pinBtn" title="ปักหมุดเมนูไว้" onclick="togglePin()">📌</button>
       </div>
       <div class="sb-company">
