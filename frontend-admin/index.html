@@ -413,11 +413,11 @@
           <div class="view-head"><div><h1>สินค้าและราคา</h1><p>ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย</p></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>รูป</th><th>ชื่อ</th><th>ราคาฐาน</th><th>ราคาทุน</th><th>VAT</th><th>หน่วยฐาน</th><th>กลุ่ม</th>
-              <th>บาร์โค้ด (ชุด)</th><th>บาร์โค้ด (กลุ่ม)</th><th>รหัสอ้างอิง</th><th>สถานะ</th></tr></thead>
-            <tbody id="products-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
+              <th>บาร์โค้ด (ชุด)</th><th>บาร์โค้ด (กลุ่ม)</th><th>รหัสอ้างอิง</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="products-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
           </table></div>
-          <div class="form-card">
-            <h3>เพิ่มสินค้าใหม่</h3>
+          <div class="form-card" id="product-form-card">
+            <h3 id="product-form-title">เพิ่มสินค้าใหม่</h3>
             <p class="form-hint">อัปโหลดรูปสินค้าได้หลังบันทึก — จากช่อง "รูป" ในตารางด้านบน</p>
             <div class="form-grid">
               <div class="field span2"><label>ชื่อสินค้า</label><input id="p-name" placeholder="เช่น น้ำดื่มตราภูเขา 600ml"></div>
@@ -436,7 +436,10 @@
               <div class="field"><label>บาร์โค้ด (ชุด) <span class="unit">unique เฉพาะสินค้า+หน่วยนี้</span></label><input id="p-barcode" placeholder="สแกน/พิมพ์บาร์โค้ด"></div>
               <div class="field"><label>บาร์โค้ด (กลุ่ม) <span class="unit">ซ้ำกับสินค้าอื่นได้ ถ้าเป็นของชิ้นเดียวกันจริง</span></label><input id="p-groupbarcode" placeholder="ไม่บังคับ"></div>
             </div>
-            <div class="form-actions"><button class="btn btn-primary" onclick="addProductUI()">+ เพิ่มสินค้า</button></div>
+            <div class="form-actions">
+              <button class="btn btn-primary" id="product-save-btn" onclick="saveProductUI()">+ เพิ่มสินค้า</button>
+              <button class="btn btn-sm" id="product-cancel-btn" style="display:none" onclick="cancelEditProductUI()">ยกเลิก</button>
+            </div>
           </div>
 
           <div class="form-card">
@@ -1115,18 +1118,19 @@ async function saveDocSeriesUI(){
 
 /* ══════════════ PRODUCTS + UNITS + GROUPS ══════════════ */
 const VAT_TYPE_LABEL = { none:'ไม่มี VAT', included:'รวม VAT', excluded:'แยก VAT' };
+let editingProductId = null;
 async function loadProducts(){
   const body = document.getElementById('products-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr>';
+  body.innerHTML = '<tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr>';
   await ensureProductGroups();
   const r = await callApi('listProductsAdmin', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="11">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
   productsCache = r.data;
   const gName = {}; productGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
   const uProd = document.getElementById('u-product');
   uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p => '<option value="'+p.record_id+'">'+esc(p.name)+'</option>').join('');
 
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">ยังไม่มีสินค้า</td></tr>'; return; }
+  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="12">ยังไม่มีสินค้า</td></tr>'; return; }
   body.innerHTML = r.data.map(p =>
     '<tr><td>' +
       (p.image_url ? '<img src="'+esc(p.image_url)+'" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:var(--surface-2)">' : '<span style="color:var(--ink-faint);font-size:11px">ไม่มีรูป</span>') +
@@ -1140,13 +1144,43 @@ async function loadProducts(){
     '<td class="mono-data">'+esc(p.barcode||'-')+'</td>' +
     '<td class="mono-data">'+esc(p.group_barcode||'-')+'</td>' +
     '<td class="mono-data">'+esc(p.external_code||'-')+'</td>' +
-    '<td><span class="pill '+(String(p.is_active)==='TRUE'?'ok':'off')+'">'+(String(p.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td></tr>'
+    '<td><span class="pill '+(String(p.is_active)==='TRUE'?'ok':'off')+'">'+(String(p.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td>' +
+    '<td><button class="btn btn-sm" onclick="editProductUI('+p.record_id+')">แก้ไข</button> ' +
+      '<button class="btn btn-sm" onclick="toggleProductStatusUI('+p.record_id+',\''+esc(p.is_active)+'\')">'+(String(p.is_active)==='TRUE'?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td></tr>'
   ).join('');
 }
-async function addProductUI(){
+function editProductUI(id){
+  const p = productsCache.find(x => String(x.record_id) === String(id));
+  if (!p) return;
+  editingProductId = id;
+  document.getElementById('product-form-title').textContent = 'แก้ไขสินค้า: ' + p.name;
+  document.getElementById('p-name').value = p.name || '';
+  document.getElementById('p-extcode').value = p.external_code || '';
+  document.getElementById('p-price').value = p.base_price || '';
+  document.getElementById('p-cost').value = p.cost_price || '';
+  document.getElementById('p-unit').value = p.unit || 'ชิ้น';
+  document.getElementById('p-group').value = p.group_id || '0';
+  document.getElementById('p-vat').value = p.vat_type || 'none';
+  document.getElementById('p-barcode').value = p.barcode || '';
+  document.getElementById('p-groupbarcode').value = p.group_barcode || '';
+  document.getElementById('product-save-btn').textContent = 'บันทึกการแก้ไข';
+  document.getElementById('product-cancel-btn').style.display = '';
+  document.getElementById('product-form-card').scrollIntoView({behavior:'smooth', block:'center'});
+}
+function cancelEditProductUI(){
+  editingProductId = null;
+  document.getElementById('product-form-title').textContent = 'เพิ่มสินค้าใหม่';
+  ['p-name','p-extcode','p-price','p-cost','p-barcode','p-groupbarcode'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('p-unit').value = 'ชิ้น';
+  document.getElementById('p-group').value = '0';
+  document.getElementById('p-vat').value = 'none';
+  document.getElementById('product-save-btn').textContent = '+ เพิ่มสินค้า';
+  document.getElementById('product-cancel-btn').style.display = 'none';
+}
+async function saveProductUI(){
   const name = document.getElementById('p-name').value.trim();
   if (!name) { toast('กรุณากรอกชื่อสินค้า', true); return; }
-  const r = await callApi('addProduct', {
+  const payload = {
     name, basePrice: parseFloat(document.getElementById('p-price').value) || 0,
     costPrice: parseFloat(document.getElementById('p-cost').value) || 0,
     vatType: document.getElementById('p-vat').value,
@@ -1155,10 +1189,20 @@ async function addProductUI(){
     externalCode: document.getElementById('p-extcode').value.trim(),
     barcode: document.getElementById('p-barcode').value.trim(),
     groupBarcode: document.getElementById('p-groupbarcode').value.trim()
-  });
+  };
+  const isEditing = !!editingProductId;
+  let r;
+  if (isEditing) { payload.id = editingProductId; r = await callApi('updateProduct', payload); }
+  else r = await callApi('addProduct', payload);
   if (!r.success) { toast(r.message, true); return; }
-  toast('เพิ่มสินค้าสำเร็จ');
-  ['p-name','p-extcode','p-price','p-cost','p-barcode','p-groupbarcode'].forEach(id => document.getElementById(id).value = '');
+  toast(isEditing ? 'บันทึกการแก้ไขสำเร็จ' : 'เพิ่มสินค้าสำเร็จ');
+  cancelEditProductUI();
+  loadProducts();
+}
+async function toggleProductStatusUI(id, currentStatus){
+  const r = await callApi('updateProduct', { id, isActive: currentStatus === 'TRUE' ? 'FALSE' : 'TRUE' });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('อัปเดตสถานะสำเร็จ');
   loadProducts();
 }
 async function uploadProductImageUI(input, productId){

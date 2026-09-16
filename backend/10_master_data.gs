@@ -96,14 +96,22 @@ function addProduct(session, payload) {
   return { success: true };
 }
 
+// เซตเฉพาะ key ที่ payload ส่งมาจริง (!== undefined) กัน field อื่นถูกเขียนทับเป็นค่าว่าง
+// เวลาเรียกแบบ partial update เช่น toggleProductStatusUI ที่ส่งมาแค่ {id, isActive}
 function updateProduct(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
-  centralUpdate('products', payload.id, {
-    name: payload.name, base_price: payload.basePrice, unit: payload.unit,
-    group_id: payload.groupId, is_active: payload.isActive,
-    barcode: payload.barcode, group_barcode: payload.groupBarcode,
-    cost_price: payload.costPrice, vat_type: payload.vatType
-  });
+  var fields = {};
+  if (payload.name !== undefined) fields.name = payload.name;
+  if (payload.basePrice !== undefined) fields.base_price = payload.basePrice;
+  if (payload.unit !== undefined) fields.unit = payload.unit;
+  if (payload.groupId !== undefined) fields.group_id = payload.groupId;
+  if (payload.isActive !== undefined) fields.is_active = payload.isActive;
+  if (payload.barcode !== undefined) fields.barcode = payload.barcode;
+  if (payload.groupBarcode !== undefined) fields.group_barcode = payload.groupBarcode;
+  if (payload.costPrice !== undefined) fields.cost_price = payload.costPrice;
+  if (payload.vatType !== undefined) fields.vat_type = payload.vatType;
+  if (payload.externalCode !== undefined) fields.external_code = payload.externalCode;
+  centralUpdate('products', payload.id, fields);
   return { success: true };
 }
 
@@ -146,10 +154,13 @@ function addProductUnit(session, payload) {
 
 function updateProductUnit(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
-  centralUpdate('product_units', payload.id, {
-    unit_label: payload.unitLabel, unit_factor: payload.unitFactor, price: payload.price,
-    is_active: payload.isActive, barcode: payload.barcode
-  });
+  var fields = {};
+  if (payload.unitLabel !== undefined) fields.unit_label = payload.unitLabel;
+  if (payload.unitFactor !== undefined) fields.unit_factor = payload.unitFactor;
+  if (payload.price !== undefined) fields.price = payload.price;
+  if (payload.isActive !== undefined) fields.is_active = payload.isActive;
+  if (payload.barcode !== undefined) fields.barcode = payload.barcode;
+  centralUpdate('product_units', payload.id, fields);
   return { success: true };
 }
 
