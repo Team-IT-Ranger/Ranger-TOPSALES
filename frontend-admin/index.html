@@ -407,36 +407,49 @@
         <section class="view" id="view-products">
           <div class="view-head"><div><h1>สินค้าและราคา</h1><p>ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย</p></div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>ชื่อ</th><th>ราคาฐาน</th><th>หน่วยฐาน</th><th>กลุ่ม</th><th>รหัสอ้างอิง</th><th>สถานะ</th></tr></thead>
-            <tbody id="products-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รูป</th><th>ชื่อ</th><th>ราคาฐาน</th><th>ราคาทุน</th><th>VAT</th><th>หน่วยฐาน</th><th>กลุ่ม</th>
+              <th>บาร์โค้ด (ชุด)</th><th>บาร์โค้ด (กลุ่ม)</th><th>รหัสอ้างอิง</th><th>สถานะ</th></tr></thead>
+            <tbody id="products-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่มสินค้าใหม่</h3>
+            <p class="form-hint">อัปโหลดรูปสินค้าได้หลังบันทึก — จากช่อง "รูป" ในตารางด้านบน</p>
             <div class="form-grid">
               <div class="field span2"><label>ชื่อสินค้า</label><input id="p-name" placeholder="เช่น น้ำดื่มตราภูเขา 600ml"></div>
               <div class="field"><label>รหัสอ้างอิง (Express)</label><input id="p-extcode"></div>
-              <div class="field"><label>ราคาฐาน</label><input id="p-price" type="number" placeholder="0.00"></div>
+              <div class="field"><label>ราคาฐาน (ราคาขาย)</label><input id="p-price" type="number" placeholder="0.00"></div>
+              <div class="field"><label>ราคาทุน <span class="unit">(ไม่แสดงในแอปมือถือ)</span></label><input id="p-cost" type="number" placeholder="0.00"></div>
               <div class="field"><label>หน่วยฐาน</label><input id="p-unit" placeholder="ชิ้น" value="ชิ้น"></div>
               <div class="field"><label>กลุ่มสินค้า</label><select id="p-group"><option value="0">— ไม่ระบุ —</option></select></div>
+              <div class="field"><label>VAT</label>
+                <select id="p-vat">
+                  <option value="none">ไม่มี VAT</option>
+                  <option value="included">รวม VAT (7%)</option>
+                  <option value="excluded">แยก VAT (7%)</option>
+                </select>
+              </div>
+              <div class="field"><label>บาร์โค้ด (ชุด) <span class="unit">unique เฉพาะสินค้า+หน่วยนี้</span></label><input id="p-barcode" placeholder="สแกน/พิมพ์บาร์โค้ด"></div>
+              <div class="field"><label>บาร์โค้ด (กลุ่ม) <span class="unit">ซ้ำกับสินค้าอื่นได้ ถ้าเป็นของชิ้นเดียวกันจริง</span></label><input id="p-groupbarcode" placeholder="ไม่บังคับ"></div>
             </div>
             <div class="form-actions"><button class="btn btn-primary" onclick="addProductUI()">+ เพิ่มสินค้า</button></div>
           </div>
 
           <div class="form-card">
             <h3>หน่วยขายเพิ่มเติม (แพ็ค / ลัง)</h3>
-            <p class="form-hint">เลือกสินค้าเพื่อดู/เพิ่มหน่วยขายอื่นนอกจากหน่วยฐาน</p>
+            <p class="form-hint">เลือกสินค้าเพื่อดู/เพิ่มหน่วยขายอื่นนอกจากหน่วยฐาน — แต่ละหน่วยมีบาร์โค้ด "ชุด" ของตัวเอง unique เฉพาะสินค้า+หน่วยนี้</p>
             <div class="form-grid g2">
               <div class="field span2"><label>สินค้า</label><select id="u-product" onchange="loadProductUnitsUI()"><option value="">— เลือกสินค้า —</option></select></div>
             </div>
             <div class="table-wrap" style="margin-top:10px"><table>
-              <thead><tr><th>รหัสหน่วย</th><th>ชื่อหน่วย</th><th>Factor</th><th>ราคา</th><th>สถานะ</th></tr></thead>
-              <tbody id="units-body"><tr class="empty-row"><td colspan="5">เลือกสินค้าก่อน</td></tr></tbody>
+              <thead><tr><th>รหัสหน่วย</th><th>ชื่อหน่วย</th><th>Factor</th><th>ราคา</th><th>บาร์โค้ด</th><th>สถานะ</th></tr></thead>
+              <tbody id="units-body"><tr class="empty-row"><td colspan="6">เลือกสินค้าก่อน</td></tr></tbody>
             </table></div>
             <div class="form-grid" style="margin-top:12px">
               <div class="field"><label>รหัสหน่วย</label><input id="u-code" placeholder="เช่น CT"></div>
               <div class="field"><label>ชื่อหน่วย</label><input id="u-label" placeholder="เช่น ลัง"></div>
               <div class="field"><label>Factor <span class="unit">(1 หน่วยนี้ = กี่หน่วยฐาน)</span></label><input id="u-factor" type="number" placeholder="12"></div>
               <div class="field"><label>ราคาต่อหน่วยนี้</label><input id="u-price" type="number" placeholder="0.00"></div>
+              <div class="field"><label>บาร์โค้ด (ชุด)</label><input id="u-barcode" placeholder="ไม่บังคับ"></div>
             </div>
             <div class="form-actions"><button class="btn btn-primary" onclick="addProductUnitUI()">+ เพิ่มหน่วยขาย</button></div>
           </div>
@@ -1089,21 +1102,32 @@ async function saveDocSeriesUI(){
 }
 
 /* ══════════════ PRODUCTS + UNITS + GROUPS ══════════════ */
+const VAT_TYPE_LABEL = { none:'ไม่มี VAT', included:'รวม VAT', excluded:'แยก VAT' };
 async function loadProducts(){
   const body = document.getElementById('products-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  body.innerHTML = '<tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr>';
   await ensureProductGroups();
   const r = await callApi('listProductsAdmin', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="11">'+esc(r.message)+'</td></tr>'; return; }
   productsCache = r.data;
   const gName = {}; productGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
   const uProd = document.getElementById('u-product');
   uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p => '<option value="'+p.record_id+'">'+esc(p.name)+'</option>').join('');
 
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีสินค้า</td></tr>'; return; }
+  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">ยังไม่มีสินค้า</td></tr>'; return; }
   body.innerHTML = r.data.map(p =>
-    '<tr><td>'+esc(p.name)+'</td><td class="mono-data">฿'+baht(p.base_price)+'</td><td>'+esc(p.unit)+'</td>' +
-    '<td>'+esc(gName[String(p.group_id)]||'-')+'</td><td class="mono-data">'+esc(p.external_code||'-')+'</td>' +
+    '<tr><td>' +
+      (p.image_url ? '<img src="'+esc(p.image_url)+'" style="width:32px;height:32px;object-fit:contain;border-radius:6px;background:var(--surface-2)">' : '<span style="color:var(--ink-faint);font-size:11px">ไม่มีรูป</span>') +
+      '<input type="file" accept="image/*" style="display:block;width:70px;font-size:9.5px;margin-top:3px" onchange="uploadProductImageUI(this,'+p.record_id+')">' +
+    '</td>' +
+    '<td>'+esc(p.name)+'</td><td class="mono-data">฿'+baht(p.base_price)+'</td>' +
+    '<td class="mono-data">'+(p.cost_price ? '฿'+baht(p.cost_price) : '-')+'</td>' +
+    '<td>'+(VAT_TYPE_LABEL[p.vat_type]||'-')+'</td>' +
+    '<td>'+esc(p.unit)+'</td>' +
+    '<td>'+esc(gName[String(p.group_id)]||'-')+'</td>' +
+    '<td class="mono-data">'+esc(p.barcode||'-')+'</td>' +
+    '<td class="mono-data">'+esc(p.group_barcode||'-')+'</td>' +
+    '<td class="mono-data">'+esc(p.external_code||'-')+'</td>' +
     '<td><span class="pill '+(String(p.is_active)==='TRUE'?'ok':'off')+'">'+(String(p.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td></tr>'
   ).join('');
 }
@@ -1112,12 +1136,28 @@ async function addProductUI(){
   if (!name) { toast('กรุณากรอกชื่อสินค้า', true); return; }
   const r = await callApi('addProduct', {
     name, basePrice: parseFloat(document.getElementById('p-price').value) || 0,
+    costPrice: parseFloat(document.getElementById('p-cost').value) || 0,
+    vatType: document.getElementById('p-vat').value,
     unit: document.getElementById('p-unit').value.trim() || 'ชิ้น',
-    groupId: parseInt(document.getElementById('p-group').value) || 0
+    groupId: parseInt(document.getElementById('p-group').value) || 0,
+    externalCode: document.getElementById('p-extcode').value.trim(),
+    barcode: document.getElementById('p-barcode').value.trim(),
+    groupBarcode: document.getElementById('p-groupbarcode').value.trim()
   });
   if (!r.success) { toast(r.message, true); return; }
   toast('เพิ่มสินค้าสำเร็จ');
-  ['p-name','p-extcode','p-price'].forEach(id => document.getElementById(id).value = '');
+  ['p-name','p-extcode','p-price','p-cost','p-barcode','p-groupbarcode'].forEach(id => document.getElementById(id).value = '');
+  loadProducts();
+}
+async function uploadProductImageUI(input, productId){
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('ไฟล์ใหญ่เกินไป (ไม่เกิน 2MB)', true); input.value = ''; return; }
+  toast('กำลังอัปโหลดรูปสินค้า...');
+  const base64 = await fileToBase64(file);
+  const r = await callApi('uploadProductImage', { productId, base64, mimeType: file.type });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('อัปโหลดรูปสินค้าสำเร็จ');
   loadProducts();
 }
 async function ensureProductGroups(){
@@ -1142,14 +1182,15 @@ async function addProductGroupUI(){
 async function loadProductUnitsUI(){
   const productId = document.getElementById('u-product').value;
   const body = document.getElementById('units-body');
-  if (!productId) { body.innerHTML = '<tr class="empty-row"><td colspan="5">เลือกสินค้าก่อน</td></tr>'; return; }
-  body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  if (!productId) { body.innerHTML = '<tr class="empty-row"><td colspan="6">เลือกสินค้าก่อน</td></tr>'; return; }
+  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
   const r = await callApi('listProductUnits', { productId });
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   body.innerHTML = r.data.length
     ? r.data.map(u => '<tr><td class="mono-data">'+esc(u.unit_code)+'</td><td>'+esc(u.unit_label)+'</td><td class="mono-data">×'+esc(u.unit_factor)+'</td><td class="mono-data">฿'+baht(u.price)+'</td>' +
+        '<td class="mono-data">'+esc(u.barcode||'-')+'</td>' +
         '<td><span class="pill '+(String(u.is_active)==='TRUE'?'ok':'off')+'">'+(String(u.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td></tr>').join('')
-    : '<tr class="empty-row"><td colspan="5">ยังไม่มีหน่วยขายเพิ่มเติม</td></tr>';
+    : '<tr class="empty-row"><td colspan="6">ยังไม่มีหน่วยขายเพิ่มเติม</td></tr>';
 }
 async function addProductUnitUI(){
   const productId = document.getElementById('u-product').value;
@@ -1159,11 +1200,12 @@ async function addProductUnitUI(){
   if (!unitCode || !unitFactor) { toast('กรุณากรอกรหัสหน่วยและ factor', true); return; }
   const r = await callApi('addProductUnit', {
     productId, unitCode, unitLabel: document.getElementById('u-label').value.trim() || unitCode,
-    unitFactor, price: parseFloat(document.getElementById('u-price').value) || 0
+    unitFactor, price: parseFloat(document.getElementById('u-price').value) || 0,
+    barcode: document.getElementById('u-barcode').value.trim()
   });
   if (!r.success) { toast(r.message, true); return; }
   toast('เพิ่มหน่วยขายสำเร็จ');
-  ['u-code','u-label','u-factor','u-price'].forEach(id => document.getElementById(id).value = '');
+  ['u-code','u-label','u-factor','u-price','u-barcode'].forEach(id => document.getElementById(id).value = '');
   loadProductUnitsUI();
 }
 

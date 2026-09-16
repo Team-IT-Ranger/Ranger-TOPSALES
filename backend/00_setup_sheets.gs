@@ -10,12 +10,17 @@ var CENTRAL_SHEETS = {
   tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at',
     'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name'],
 
-  products: ['record_id','name','base_price','unit','group_id','is_active','external_code'],
+  // barcode: บาร์โค้ด "ชุด" ของหน่วยฐาน unique เฉพาะสินค้า+หน่วยนี้เท่านั้น
+  // group_barcode: บาร์โค้ด "กลุ่ม" ของหน่วยฐาน — ตั้งใจให้ซ้ำกันได้ข้ามหลาย record (สินค้าเดียวกันจริงแต่คนละรหัสสินค้า)
+  // vat_type: 'none' | 'included' | 'excluded' (VAT ใช้อัตรา 7% คงที่ตามกฎหมายไทย ไม่ต้องเก็บอัตราแยกรายสินค้า)
+  products: ['record_id','name','base_price','unit','group_id','is_active','external_code',
+    'barcode','group_barcode','cost_price','vat_type','image_url'],
   product_groups: ['record_id','name','description'],
   // หน่วยขายเพิ่มเติมของสินค้า นอกเหนือจากหน่วยฐาน (products.unit/base_price)
   // เช่น สินค้าเป็น "ชิ้น" ฐาน แต่ขายเป็น "แพ็ค" (factor 6) หรือ "ลัง" (factor 12) ได้ด้วย คนละราคา
   // อ้างอิงจากไฟล์ export จริงของ SmartVan BackOffice (Export_Express) ที่เก็บ UnitCode+UnitFactor แยกจากกัน
-  product_units: ['record_id','product_id','unit_code','unit_label','unit_factor','price','is_active'],
+  // barcode: บาร์โค้ด "ชุด" ของหน่วยนี้โดยเฉพาะ unique เฉพาะสินค้า+หน่วยนี้ (หน่วยขายเพิ่มเติมไม่มี group_barcode เพราะ concept กลุ่มอยู่ที่ระดับหน่วยฐานเท่านั้น)
+  product_units: ['record_id','product_id','unit_code','unit_label','unit_factor','price','is_active','barcode'],
 
   customers: ['record_id','name','tenant_id','group_id','phone','tax_id','address','subdistrict_id','district_id','province_id','lat','lng','is_active','created_at','external_code'],
   customer_groups: ['record_id','name','description'],

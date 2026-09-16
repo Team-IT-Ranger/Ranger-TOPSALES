@@ -88,7 +88,10 @@ function addProduct(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
   centralAppend('products', {
     record_id: centralNextId('products'), name: payload.name, base_price: payload.basePrice || 0,
-    unit: payload.unit || 'ชิ้น', group_id: payload.groupId || 0, is_active: 'TRUE'
+    unit: payload.unit || 'ชิ้น', group_id: payload.groupId || 0, is_active: 'TRUE',
+    external_code: payload.externalCode || '',
+    barcode: payload.barcode || '', group_barcode: payload.groupBarcode || '',
+    cost_price: payload.costPrice || 0, vat_type: payload.vatType || 'none', image_url: ''
   });
   return { success: true };
 }
@@ -97,9 +100,29 @@ function updateProduct(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
   centralUpdate('products', payload.id, {
     name: payload.name, base_price: payload.basePrice, unit: payload.unit,
-    group_id: payload.groupId, is_active: payload.isActive
+    group_id: payload.groupId, is_active: payload.isActive,
+    barcode: payload.barcode, group_barcode: payload.groupBarcode,
+    cost_price: payload.costPrice, vat_type: payload.vatType
   });
   return { success: true };
+}
+
+// payload: { productId, base64, mimeType }
+function uploadProductImage(session, payload) {
+  var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
+  if (!payload.productId) return { success: false, message: 'กรุณาระบุสินค้า' };
+  if (!payload.base64) return { success: false, message: 'ไม่พบไฟล์รูปภาพ' };
+  try {
+    var bytes = Utilities.base64Decode(payload.base64);
+    var blob = Utilities.newBlob(bytes, payload.mimeType || 'image/png', 'product_' + payload.productId + '_' + Date.now());
+    var file = DriveApp.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var url = 'https://drive.google.com/uc?export=view&id=' + file.getId();
+    centralUpdate('products', payload.productId, { image_url: url });
+    return { success: true, imageUrl: url };
+  } catch (e) {
+    return { success: false, message: 'อัปโหลดไม่สำเร็จ: ' + e.message };
+  }
 }
 
 // ── Admin App: หน่วยขายเพิ่มเติมของสินค้า (เช่น แพ็ค/ลัง คนละราคา คนละ factor) ──
@@ -115,7 +138,8 @@ function addProductUnit(session, payload) {
   if (!payload.productId || !payload.unitCode || !payload.unitFactor) return { success: false, message: 'กรุณาระบุสินค้า/รหัสหน่วย/factor ให้ครบ' };
   centralAppend('product_units', {
     record_id: centralNextId('product_units'), product_id: payload.productId, unit_code: payload.unitCode,
-    unit_label: payload.unitLabel || payload.unitCode, unit_factor: payload.unitFactor, price: payload.price || 0, is_active: 'TRUE'
+    unit_label: payload.unitLabel || payload.unitCode, unit_factor: payload.unitFactor, price: payload.price || 0,
+    is_active: 'TRUE', barcode: payload.barcode || ''
   });
   return { success: true };
 }
@@ -123,7 +147,8 @@ function addProductUnit(session, payload) {
 function updateProductUnit(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
   centralUpdate('product_units', payload.id, {
-    unit_label: payload.unitLabel, unit_factor: payload.unitFactor, price: payload.price, is_active: payload.isActive
+    unit_label: payload.unitLabel, unit_factor: payload.unitFactor, price: payload.price,
+    is_active: payload.isActive, barcode: payload.barcode
   });
   return { success: true };
 }
