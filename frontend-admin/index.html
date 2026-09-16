@@ -793,19 +793,26 @@ const NAV = {
   ]}
 };
 
-let sbPinned = false, sbCollapsed = true, closeTimer = null;
+let sbPinned = false, sbCollapsed = true, closeTimer = null, openTimer = null;
+// หน่วง 1 วินาทีก่อนยืด/หุบ left pane เอง (แยกจาก transition ของกลุ่มเมนูที่ยาวกว่านั้นอีก) กันสไลด์วูบวาบตอนเมาส์กวาดผ่าน
+var SB_HOVER_DELAY = 1000;
 function expandSidebar(){
   if (closeTimer){ clearTimeout(closeTimer); closeTimer = null; }
-  if (sbPinned || !sbCollapsed) return;
-  sbCollapsed = false; document.body.classList.remove('sb-collapsed');
+  if (sbPinned || !sbCollapsed || openTimer) return;
+  openTimer = setTimeout(function(){
+    openTimer = null;
+    if (sbPinned || !sbCollapsed) return;
+    sbCollapsed = false; document.body.classList.remove('sb-collapsed');
+  }, SB_HOVER_DELAY);
 }
 function collapseSidebar(){
+  if (openTimer){ clearTimeout(openTimer); openTimer = null; }
   if (closeTimer) clearTimeout(closeTimer);
   closeTimer = setTimeout(function(){
     closeTimer = null; closeAllFlies();
     if (sbPinned) return;
     sbCollapsed = true; document.body.classList.add('sb-collapsed');
-  }, 260);
+  }, SB_HOVER_DELAY);
 }
 function togglePin(){
   sbPinned = !sbPinned;
