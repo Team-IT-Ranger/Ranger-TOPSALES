@@ -86,6 +86,66 @@ function getDashboard(user) {
   return result;
 }
 
+/**
+ * ===================== ADMIN DASHBOARD (Admin App) =====================
+ * session.tenant_id มีค่า → สรุปของตัวแทนนั้นรายเดียว (บิล/ยอดวันนี้/พนักงานรออนุมัติ/SO รอจัดส่ง)
+ * session.tenant_id ว่าง (owner_admin/super_admin) → สรุปรวมทุกตัวแทนที่ active
+ */
+function getAdminDashboard(session) {
+  var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  if (session.tenant_id) {
+    var orders = tenantObjects(session.tenant_id, 'sales_orders')
+      .filter(function(o) { return String(o.created_at).indexOf(today) === 0; });
+    var pendingSO = orders.filter(function(o) { return o.status === 'pending_delivery'; });
+
+    var staff = centralObjects('liff_users').filter(function(u) { return String(u.tenant_id) === String(session.tenant_id); });
+    var custName = {};
+    centralObjects('customers').forEach(function(c) { custName[String(c.record_id)] = c.name; });
+
+    var recentOrders = orders
+      .sort(function(a, b) { return safeDateStr(b.created_at).localeCompare(safeDateStr(a.created_at)); })
+      .slice(0, 6)
+      .map(function(o) { return {
+        code: o.order_code, customer: custName[String(o.customer_id)] || 'ลูกค้าทั่วไป',
+        total: parseFloat(o.total) || 0, time: safeDateStr(o.created_at).substring(11, 16)
+      }; });
+
+    return {
+      success: true, scope: 'tenant',
+      bills: orders.length,
+      revenue: orders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0),
+      activeStaff: staff.filter(function(u) { return String(u.status) === 'Yes'; }).length,
+      pendingStaff: staff.filter(function(u) { return String(u.status) !== 'Yes'; }).length,
+      pendingDeliveryCount: pendingSO.length,
+      pendingDeliveryValue: pendingSO.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0),
+      recentOrders: recentOrders
+    };
+  }
+
+  // ── owner_admin / super_admin: รวมทุกตัวแทนที่ active ──
+  var tenants = centralObjects('tenants').filter(function(t) { return String(t.is_active) === 'TRUE' || String(t.is_active) === '1'; });
+  var totalBills = 0, totalRevenue = 0, perTenant = [];
+  tenants.forEach(function(t) {
+    try {
+      var tOrders = tenantObjects(t.tenant_id, 'sales_orders').filter(function(o) { return String(o.created_at).indexOf(today) === 0; });
+      var rev = tOrders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0);
+      totalBills += tOrders.length; totalRevenue += rev;
+      perTenant.push({ tenantId: t.tenant_id, name: t.name, bills: tOrders.length, revenue: rev });
+    } catch (e) { /* ตัวแทนที่ sheet ยังไม่พร้อม ข้ามไปไม่ให้ dashboard พังทั้งหน้า */ }
+  });
+
+  return {
+    success: true, scope: 'owner',
+    tenantCount: tenants.length,
+    bills: totalBills, revenue: totalRevenue,
+    productCount: centralObjects('products').filter(function(p) { return String(p.is_active) !== 'FALSE'; }).length,
+    activePromoCount: centralObjects('discount_rules').filter(function(r) { return String(r.is_active) === 'TRUE'; }).length,
+    perTenant: perTenant
+  };
+}
+
 function getRecentSales(user, payload) {
   var limit = parseInt(payload.limit) || 20;
   var customers = centralObjects('customers');

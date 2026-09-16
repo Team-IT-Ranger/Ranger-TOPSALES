@@ -4,13 +4,13 @@
     {
       "name": "frontend-admin",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5500", "--directory", "frontend-admin"],
+      "runtimeArgs": [".dev/serve_utf8.py", "5500", "frontend-admin"],
       "port": 5500
     },
     {
       "name": "docs",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["docs/_serve_utf8.py", "5501"],
+      "runtimeArgs": [".dev/serve_utf8.py", "5501", "docs"],
       "port": 5501
     }
   ]
