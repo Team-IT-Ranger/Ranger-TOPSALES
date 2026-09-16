@@ -117,6 +117,17 @@ function recordSale(user, payload) {
     _cutVanStock(user.tenantId, user.lineUserId, need, orderId);
   }
 
+  // ล็อก product_code ของสินค้าที่เพิ่งขายจริง กัน admin เปลี่ยนรหัสย้อนหลังจนเอกสาร/รายงานเก่าอ้างรหัสผิดของ
+  // เช็ค productMap ในหน่วยความจำก่อน (มีอยู่แล้วจากด้านบน) เขียนเฉพาะตัวที่ยังไม่เคยถูกล็อกเท่านั้น —
+  // กันไม่ให้ทุกการขายต้องเขียน Central Sheet ซ้ำๆ ทั้งที่ตัวเลขเดิมเซ็ตไปแล้วตั้งแต่ครั้งแรก
+  var soldProductIds = {};
+  items.forEach(function(it) { soldProductIds[it.productId] = true; });
+  freeGoods.forEach(function(f) { soldProductIds[String(f.productId)] = true; });
+  Object.keys(soldProductIds).forEach(function(pid) {
+    var p = productMap[pid];
+    if (p && String(p.has_transactions) !== 'TRUE') centralUpdate('products', pid, { has_transactions: 'TRUE' });
+  });
+
   cacheClearUser(user.lineUserId);
 
   return { success: true, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType };

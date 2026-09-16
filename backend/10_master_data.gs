@@ -97,6 +97,14 @@ function _productCodeTakenBy(code, excludeId) {
   return null;
 }
 
+function _productById(id) {
+  var rows = centralObjects('products');
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].record_id) === String(id)) return rows[i];
+  }
+  return null;
+}
+
 function addProduct(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
   var productCode = String(payload.productCode || '').trim();
@@ -124,8 +132,15 @@ function updateProduct(session, payload) {
   if (payload.productCode !== undefined) {
     var productCode = String(payload.productCode || '').trim();
     if (!productCode) return { success: false, message: 'กรุณากรอกรหัสสินค้า (product_code) — เป็นเลขประจำตัวสินค้า จำเป็นต้องมี' };
-    var clash = _productCodeTakenBy(productCode, payload.id);
-    if (clash) return { success: false, message: 'รหัสสินค้า "' + productCode + '" ถูกใช้แล้วโดย "' + clash.name + '"' };
+    var existing = _productById(payload.id);
+    var isRealChange = existing && String(existing.product_code || '').trim().toLowerCase() !== productCode.toLowerCase();
+    if (isRealChange && existing && String(existing.has_transactions) === 'TRUE') {
+      return { success: false, message: 'เปลี่ยนรหัสสินค้าไม่ได้ — มีรายการขายเกิดขึ้นกับรหัส "' + existing.product_code + '" แล้ว (เอกสาร/รายงานเก่าจะอ้างรหัสผิดถ้าเปลี่ยน)' };
+    }
+    if (isRealChange) {
+      var clash = _productCodeTakenBy(productCode, payload.id);
+      if (clash) return { success: false, message: 'รหัสสินค้า "' + productCode + '" ถูกใช้แล้วโดย "' + clash.name + '"' };
+    }
     fields.product_code = productCode;
   }
   if (payload.name !== undefined) fields.name = payload.name;

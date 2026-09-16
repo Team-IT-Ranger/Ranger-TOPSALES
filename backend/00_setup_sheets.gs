@@ -13,11 +13,13 @@ var CENTRAL_SHEETS = {
   // product_code: รหัสประจำตัวสินค้า (เหมือนเลขบัตรประชาชนของสินค้า) — unique บังคับ, สำคัญอันดับ 1
   //   ผู้ใช้ตั้งเอง/แก้เองได้ ไม่ใช่ FK ไปหาอะไร คนละความหมายกับ external_code (รหัสจากไฟล์นำเข้า Express
   //   ใช้จับคู่ตอน import เท่านั้น อาจไม่ unique เพราะมาจากระบบภายนอก) — แนวคิดจาก item_code ของ Hippo Village
+  // has_transactions: 'TRUE' เมื่อสินค้านี้เคยถูกขายจริงอย่างน้อยหนึ่งครั้ง (recordSale ใน 07_sales.gs เป็นคนเซ็ต)
+  //   ใช้ล็อกไม่ให้เปลี่ยน product_code อีก กันเอกสาร/รายงานย้อนหลังอ้างรหัสผิดของ — เซ็ตครั้งเดียวไม่มีวันเคลียร์คืน
   // barcode: บาร์โค้ด "ชุด" ของหน่วยฐาน unique เฉพาะสินค้า+หน่วยนี้เท่านั้น
   // group_barcode: บาร์โค้ด "กลุ่ม" ของหน่วยฐาน — ตั้งใจให้ซ้ำกันได้ข้ามหลาย record (สินค้าเดียวกันจริงแต่คนละรหัสสินค้า)
   // vat_type: 'none' | 'included' | 'excluded' (VAT ใช้อัตรา 7% คงที่ตามกฎหมายไทย ไม่ต้องเก็บอัตราแยกรายสินค้า)
   products: ['record_id','product_code','name','base_price','unit','group_id','is_active','external_code',
-    'barcode','group_barcode','cost_price','vat_type','image_url'],
+    'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions'],
   product_groups: ['record_id','name','description'],
   // หน่วยขายเพิ่มเติมของสินค้า นอกเหนือจากหน่วยฐาน (products.unit/base_price)
   // เช่น สินค้าเป็น "ชิ้น" ฐาน แต่ขายเป็น "แพ็ค" (factor 6) หรือ "ลัง" (factor 12) ได้ด้วย คนละราคา

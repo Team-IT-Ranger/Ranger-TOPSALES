@@ -1258,9 +1258,10 @@ async function loadProducts(){
 }
 
 /* ── หน้าเต็ม เพิ่ม/แก้ไขสินค้า 1 รายการ ── */
-function _pfFieldHtml(f, val){
+function _pfFieldHtml(f, val, locked){
   const cls = 'field' + (f.wide ? ' span2' : '');
-  const lbl = '<label>'+esc(f.label)+(f.required?' <span style="color:var(--red)">*</span>':'')+(f.hint?' <span class="unit">'+esc(f.hint)+'</span>':'')+'</label>';
+  const lockHint = locked ? ' <span class="unit" style="color:var(--red)">(ล็อก — มีรายการขายกับสินค้านี้แล้ว)</span>' : '';
+  const lbl = '<label>'+esc(f.label)+(f.required?' <span style="color:var(--red)">*</span>':'')+(f.hint?' <span class="unit">'+esc(f.hint)+'</span>':'')+lockHint+'</label>';
   if (f.type === 'select') {
     let opts;
     if (f.optionsFrom === 'productGroups') {
@@ -1271,13 +1272,16 @@ function _pfFieldHtml(f, val){
     }
     return '<div class="'+cls+'">'+lbl+'<select data-key="'+f.key+'">'+opts+'</select></div>';
   }
-  return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'" placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'"></div>';
+  // readonly ไม่ใช่ disabled — ต้องยังอ่านค่าจาก .value ได้ตอนบันทึก (แค่ห้ามแก้)
+  const ro = locked ? ' readonly style="background:var(--surface-2);color:var(--ink-faint);cursor:not-allowed"' : '';
+  return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'"'+ro+' placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'"></div>';
 }
 function renderProductFormFields(row){
+  const codeLocked = !!(row && String(row.has_transactions) === 'TRUE');
   document.getElementById('pf-fields').innerHTML = PRODUCT_FIELDS.map(f => {
     const raw = row ? row[f.dataKey] : undefined;
     const val = (raw !== undefined && raw !== null && raw !== '') ? raw : (f.default !== undefined ? f.default : '');
-    return _pfFieldHtml(f, val);
+    return _pfFieldHtml(f, val, codeLocked && f.key === 'productCode');
   }).join('');
 }
 function readProductFormFields(){
