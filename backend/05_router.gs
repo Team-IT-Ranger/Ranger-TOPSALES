@@ -67,6 +67,10 @@ var ADMIN_ACTION_MAP = {
   addProductGroup:        addProductGroup,
   listCustomerGroups:     listCustomerGroups,
   addCustomerGroup:       addCustomerGroup,
+  listDistributionChannels: listDistributionChannels,
+  addDistributionChannel:   addDistributionChannel,
+  listPaymentTypes:         listPaymentTypes,
+  addPaymentType:           addPaymentType,
 
   listPromotions:         listPromotions,
   addPromotion:           addPromotion,

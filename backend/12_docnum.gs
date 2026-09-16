@@ -72,23 +72,25 @@ function previewNextDocNumber(tenantId, docType) {
 // preview เลขเอกสารถัดไปให้ Admin App โชว์ก่อนสร้างเอกสารจริง
 function previewDocNumberAdmin(session, payload) {
   var err = _requirePermission(session, 'docnum', 'view'); if (err) return err;
-  var tenantId = session.tenant_id || payload.tenantId;
+  var tenantId = _effectiveTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   return { success: true, docNumber: previewNextDocNumber(tenantId, payload.docType) };
 }
 
-// ── Admin CRUD (ฝั่งตัวแทน จัดการรูปแบบเลขเอกสารของตัวเอง) ──
-function listDocSeries(session) {
+// ── Admin CRUD (ตัวแทน หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทน จัดการรูปแบบเลขเอกสาร) ──
+function listDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'view'); if (err) return err;
-  if (!session.tenant_id) return { success: false, message: 'ต้องเป็นผู้ใช้ระดับตัวแทนเท่านั้น' };
-  return { success: true, data: tenantObjects(session.tenant_id, 'doc_number_series') };
+  var tenantId = _effectiveTenantId(session, payload || {});
+  if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
+  return { success: true, data: tenantObjects(tenantId, 'doc_number_series') };
 }
 
 function addDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'edit'); if (err) return err;
-  if (!session.tenant_id) return { success: false, message: 'ต้องเป็นผู้ใช้ระดับตัวแทนเท่านั้น' };
-  tenantAppend(session.tenant_id, 'doc_number_series', {
-    record_id: tenantNextId(session.tenant_id, 'doc_number_series'),
+  var tenantId = _effectiveTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
+  tenantAppend(tenantId, 'doc_number_series', {
+    record_id: tenantNextId(tenantId, 'doc_number_series'),
     doc_type: payload.docType, prefix: payload.prefix || payload.docType,
     date_format: payload.dateFormat || 'yyyyMMdd', running_digits: payload.runningDigits || 4,
     reset_cycle: payload.resetCycle || 'daily', separator: payload.separator || '-', is_active: 'TRUE'
@@ -98,8 +100,9 @@ function addDocSeries(session, payload) {
 
 function updateDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'edit'); if (err) return err;
-  if (!session.tenant_id) return { success: false, message: 'ต้องเป็นผู้ใช้ระดับตัวแทนเท่านั้น' };
-  tenantUpdate(session.tenant_id, 'doc_number_series', payload.id, {
+  var tenantId = _effectiveTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
+  tenantUpdate(tenantId, 'doc_number_series', payload.id, {
     prefix: payload.prefix, date_format: payload.dateFormat, running_digits: payload.runningDigits,
     reset_cycle: payload.resetCycle, separator: payload.separator, is_active: payload.isActive
   });

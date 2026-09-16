@@ -18,17 +18,18 @@ function addCustomer(user, payload) {
   return { success: true, customerId: custId };
 }
 
-// ── Admin App: ลูกค้า (ฝั่งตัวแทนจัดการของตัวเอง, บริษัทเห็นทั้งหมด) ──
-function listCustomersAdmin(session) {
+// ── Admin App: ลูกค้า (ตัวแทน/Ultra Admin ที่สวมสิทธิ์ จัดการของตัวเอง, บริษัทเห็นทั้งหมด) ──
+function listCustomersAdmin(session, payload) {
   var err = _requirePermission(session, 'customers', 'view'); if (err) return err;
   var rows = centralObjects('customers');
-  if (session.tenant_id) rows = rows.filter(function(c) { return String(c.tenant_id) === String(session.tenant_id); });
+  var effTenantId = _effectiveTenantId(session, payload || {});
+  if (effTenantId) rows = rows.filter(function(c) { return String(c.tenant_id) === String(effTenantId); });
   return { success: true, data: rows };
 }
 
 function addCustomerAdmin(session, payload) {
   var err = _requirePermission(session, 'customers', 'edit'); if (err) return err;
-  var tenantId = session.tenant_id || payload.tenantId;
+  var tenantId = _effectiveTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   centralAppend('customers', {
     record_id: centralNextId('customers'), name: payload.name, tenant_id: tenantId, group_id: payload.groupId || 0,
@@ -48,25 +49,27 @@ function updateCustomerAdmin(session, payload) {
   return { success: true };
 }
 
-// ── Admin App: พนักงานขาย (ตัวแทนอนุมัติ/ปิดการใช้งานพนักงานของตัวเอง) ──
-function listStaffAdmin(session) {
+// ── Admin App: พนักงานขาย (ตัวแทน/Ultra Admin ที่สวมสิทธิ์ อนุมัติ/ปิดการใช้งานพนักงาน) ──
+function listStaffAdmin(session, payload) {
   var err = _requirePermission(session, 'staff', 'view'); if (err) return err;
   var rows = centralObjects('liff_users');
-  if (session.tenant_id) rows = rows.filter(function(u) { return String(u.tenant_id) === String(session.tenant_id); });
+  var effTenantId = _effectiveTenantId(session, payload || {});
+  if (effTenantId) rows = rows.filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
   return { success: true, data: rows.map(function(u) { return {
     lineUserId: u.line_user_id, displayName: u.display_name, role: u.role, tenantId: u.tenant_id,
     status: u.status, lastLogin: safeDateStr(u.last_login)
   }; }) };
 }
 
-// payload: { lineUserId, status('Yes'/'No'), role('van_sales'/'credit_sales') }
+// payload: { lineUserId, status('Yes'/'No'), role('van_sales'/'credit_sales'), tenantId? }
 function updateStaffAdmin(session, payload) {
   var err = _requirePermission(session, 'staff', 'edit'); if (err) return err;
+  var effTenantId = _effectiveTenantId(session, payload);
   var sh = centralSheet('liff_users');
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(payload.lineUserId)) {
-      if (session.tenant_id && String(data[i][3]) !== String(session.tenant_id)) return { success: false, message: 'ไม่มีสิทธิ์แก้ไขพนักงานของตัวแทนอื่น' };
+      if (effTenantId && String(data[i][3]) !== String(effTenantId)) return { success: false, message: 'ไม่มีสิทธิ์แก้ไขพนักงานของตัวแทนอื่น' };
       if (payload.status) sh.getRange(i + 1, 5).setValue(payload.status);
       if (payload.role) sh.getRange(i + 1, 3).setValue(payload.role);
       return { success: true };
@@ -136,12 +139,36 @@ function addProductGroup(session, payload) {
   return { success: true };
 }
 
+// ── Admin App: ข้อมูลกลาง (Ultra Admin ขณะอยู่ในโหมด "บริษัทเจ้าของสินค้า") ──
+// กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน — ทั้งหมดใช้ร่วมกันทุกตัวแทน
 function listCustomerGroups(session) {
-  var err = _requirePermission(session, 'promotions', 'view'); if (err) return err;
+  var err = _requirePermission(session, 'settings', 'view'); if (err) return err;
   return { success: true, data: centralObjects('customer_groups') };
 }
 function addCustomerGroup(session, payload) {
-  var err = _requirePermission(session, 'promotions', 'edit'); if (err) return err;
+  var err = _requirePermission(session, 'settings', 'edit'); if (err) return err;
   centralAppend('customer_groups', { record_id: centralNextId('customer_groups'), name: payload.name, description: payload.description || '' });
+  return { success: true };
+}
+
+function listDistributionChannels(session) {
+  var err = _requirePermission(session, 'settings', 'view'); if (err) return err;
+  return { success: true, data: centralObjects('distribution_channels') };
+}
+function addDistributionChannel(session, payload) {
+  var err = _requirePermission(session, 'settings', 'edit'); if (err) return err;
+  if (!payload.name) return { success: false, message: 'กรุณาระบุชื่อช่องทางการจัดจำหน่าย' };
+  centralAppend('distribution_channels', { record_id: centralNextId('distribution_channels'), name: payload.name, description: payload.description || '', is_active: 'TRUE' });
+  return { success: true };
+}
+
+function listPaymentTypes(session) {
+  var err = _requirePermission(session, 'settings', 'view'); if (err) return err;
+  return { success: true, data: centralObjects('payment_types') };
+}
+function addPaymentType(session, payload) {
+  var err = _requirePermission(session, 'settings', 'edit'); if (err) return err;
+  if (!payload.code || !payload.name) return { success: false, message: 'กรุณาระบุรหัสและชื่อประเภทการชำระเงิน' };
+  centralAppend('payment_types', { record_id: centralNextId('payment_types'), code: payload.code, name: payload.name, is_active: 'TRUE' });
   return { success: true };
 }

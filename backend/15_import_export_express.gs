@@ -54,7 +54,7 @@ function importExpressProducts(session, payload) {
 
 function importExpressCustomers(session, payload) {
   var err = _requirePermission(session, 'customers', 'edit'); if (err) return err;
-  var tenantId = session.tenant_id || payload.tenantId;
+  var tenantId = _effectiveTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var rows = payload.rows || [];
@@ -92,7 +92,7 @@ function importExpressCustomers(session, payload) {
  */
 function exportExpressSales(session, payload) {
   var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
-  var tenantId = session.tenant_id || payload.tenantId;
+  var tenantId = _effectiveTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var dateFrom = payload.dateFrom || '0000-00-00';

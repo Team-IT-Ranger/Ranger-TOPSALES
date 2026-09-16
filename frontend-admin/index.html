@@ -37,6 +37,20 @@
   .field input,.field select{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:inherit;background:var(--surface);color:var(--ink)}
   .err{background:var(--red-soft);color:var(--red);font-size:12.5px;padding:9px 11px;border-radius:7px;margin-bottom:14px;display:none}
 
+  /* ── company picker (Ultra Admin เลือกก่อนเข้าใช้งาน) ── */
+  #picker-screen{min-height:100vh;display:none;align-items:flex-start;justify-content:center;background:var(--ground);padding:60px 20px}
+  .picker-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:30px 34px;width:100%;max-width:560px;box-shadow:0 10px 30px -14px rgba(22,28,31,.2)}
+  .picker-card h1{font-size:18px;margin:0 0 4px}
+  .picker-card p{color:var(--ink-soft);font-size:12.5px;margin:0 0 20px}
+  .picker-list{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow-y:auto}
+  .picker-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface);text-align:left;width:100%}
+  .picker-row:hover{border-color:var(--blue);background:var(--blue-pale)}
+  .picker-row .mark{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex-shrink:0}
+  .picker-row .txt{flex:1;min-width:0}
+  .picker-row .name{font-weight:600;font-size:13.5px}
+  .picker-row .sub{font-size:11.5px;color:var(--ink-soft)}
+  .picker-divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+
   /* ── app shell (โครง Hippo Village) ── */
   #app-screen{display:none}
   .app-shell{display:flex;min-height:100vh}
@@ -209,6 +223,22 @@
   </div>
 </div>
 
+<!-- ══════════ COMPANY PICKER (Ultra Admin เท่านั้น) ══════════ -->
+<div id="picker-screen">
+  <div class="picker-card">
+    <h1>เลือกบริษัทที่ต้องการใช้งาน</h1>
+    <p>คุณเป็น Ultra Admin — เลือกได้ทั้งข้อมูลกลางของบริษัทเจ้าของสินค้า หรือสวมสิทธิ์เข้าไปทำงานแทนตัวแทนรายใดรายหนึ่ง</p>
+    <div class="picker-list" id="picker-list">
+      <button class="picker-row" onclick="pickOwnerContext()">
+        <span class="mark" style="background:var(--blue)">TS</span>
+        <span class="txt"><div class="name">บริษัทเจ้าของสินค้า</div><div class="sub">จัดการสินค้า โปรโมชั่น ข้อมูลกลาง เครือข่ายตัวแทน</div></span>
+      </button>
+      <hr class="picker-divider">
+      <div id="picker-tenants"><div class="sub" style="padding:8px 4px">กำลังโหลดรายชื่อตัวแทน...</div></div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════ APP ══════════ -->
 <div id="app-screen">
   <div class="app-shell">
@@ -235,6 +265,7 @@
         <div class="crumb">TOPSHOP Admin / <b id="crumb-current">ภาพรวม</b></div>
         <div class="top-right">
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
+          <button class="btn btn-sm" id="switch-company-btn" style="display:none" onclick="backToPicker()">↔ เปลี่ยนบริษัท</button>
           <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
           <div class="avatar" id="who-avatar">-</div>
@@ -475,6 +506,57 @@
           </div>
         </section>
 
+        <!-- ═══ ข้อมูลกลาง: กลุ่มลูกค้า ═══ -->
+        <section class="view" id="view-custgroups">
+          <div class="view-head"><div><h1>กลุ่มลูกค้า</h1><p>ข้อมูลกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — จัดการได้เฉพาะบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>ชื่อกลุ่ม</th><th>คำอธิบาย</th></tr></thead>
+            <tbody id="custgroups-body"><tr class="empty-row"><td colspan="2">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>เพิ่มกลุ่มลูกค้าใหม่</h3>
+            <div class="form-grid g2">
+              <div class="field"><label>ชื่อกลุ่ม</label><input id="cg-name"></div>
+              <div class="field"><label>คำอธิบาย</label><input id="cg-desc"></div>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" onclick="addCustomerGroupUI()">+ เพิ่มกลุ่ม</button></div>
+          </div>
+        </section>
+
+        <!-- ═══ ข้อมูลกลาง: ช่องทางการจัดจำหน่าย ═══ -->
+        <section class="view" id="view-distchannels">
+          <div class="view-head"><div><h1>ช่องทางการจัดจำหน่าย</h1><p>ข้อมูลกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — จัดการได้เฉพาะบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>ชื่อช่องทาง</th><th>คำอธิบาย</th><th>สถานะ</th></tr></thead>
+            <tbody id="distchannels-body"><tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>เพิ่มช่องทางการจัดจำหน่ายใหม่</h3>
+            <div class="form-grid g2">
+              <div class="field"><label>ชื่อช่องทาง</label><input id="dc-name" placeholder="เช่น Cash Van Sales"></div>
+              <div class="field"><label>คำอธิบาย</label><input id="dc-desc"></div>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" onclick="addDistributionChannelUI()">+ เพิ่มช่องทาง</button></div>
+          </div>
+        </section>
+
+        <!-- ═══ ข้อมูลกลาง: ประเภทการชำระเงิน ═══ -->
+        <section class="view" id="view-paytypes">
+          <div class="view-head"><div><h1>ประเภทการชำระเงิน</h1><p>ข้อมูลกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — จัดการได้เฉพาะบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>รหัส</th><th>ชื่อ</th><th>สถานะ</th></tr></thead>
+            <tbody id="paytypes-body"><tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>เพิ่มประเภทการชำระเงินใหม่</h3>
+            <div class="form-grid g2">
+              <div class="field"><label>รหัส</label><input id="pt-code" placeholder="เช่น credit_term"></div>
+              <div class="field"><label>ชื่อ</label><input id="pt-name" placeholder="เช่น เครดิตเทอม"></div>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" onclick="addPaymentTypeUI()">+ เพิ่มประเภท</button></div>
+          </div>
+        </section>
+
         <!-- ═══ TENANTS ═══ -->
         <section class="view" id="view-tenants">
           <div class="view-head"><div><h1>ตัวแทนจำหน่าย</h1><p>สร้าง Tenant Sheet ใหม่ให้ตัวแทนแต่ละราย — ฝั่งบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
@@ -516,8 +598,12 @@ const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzDLcX5Qd4MMdBpcwr4
 
 let TOKEN = localStorage.getItem('topshop_admin_token') || '';
 let SESSION = JSON.parse(localStorage.getItem('topshop_admin_session') || 'null');
-let SCOPE = 'tenant'; // 'tenant' | 'owner' — มาจาก SESSION.tenantId จริง ไม่ใช่ตัวสลับมือ
+let SCOPE = 'tenant'; // 'tenant' | 'owner' — คำนวณจาก EFFECTIVE_TENANT_ID() เสมอ
+let ACTIVE_TENANT_ID = null; // Ultra Admin (super_admin) เท่านั้นที่ตั้งค่านี้ได้ — สวมสิทธิ์เข้าตัวแทนรายนั้น
 let productGroupsCache = [], customerGroupsCache = [], productsCache = [];
+
+// เซสชันจริงเป็นตัวแทน (tenant_admin) → ใช้ tenant ตัวเอง, ไม่งั้นถ้า Ultra Admin เลือกสวมสิทธิ์ไว้ → ใช้อันนั้น, ไม่งั้น = โหมดบริษัทเจ้าของสินค้า
+function EFFECTIVE_TENANT_ID(){ return (SESSION && SESSION.tenantId) || ACTIVE_TENANT_ID || null; }
 
 function toast(msg, isErr){
   const t = document.getElementById('toast');
@@ -529,10 +615,13 @@ const baht = n => (parseFloat(n) || 0).toLocaleString('th-TH', {minimumFractionD
 
 /* ── API (doPost เดียว, text/plain กัน CORS preflight) ── */
 async function callApi(action, payload){
+  const body = Object.assign({}, payload || {});
+  // Ultra Admin สวมสิทธิ์ตัวแทนอยู่ → แนบ tenantId ให้ทุก action อัตโนมัติ (ฝั่ง backend มีแค่ super_admin เท่านั้นที่ยอมรับค่านี้)
+  if (ACTIVE_TENANT_ID && !body.tenantId) body.tenantId = ACTIVE_TENANT_ID;
   const res = await fetch(BACKEND_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, token: TOKEN, payload: payload || {} })
+    body: JSON.stringify({ action, token: TOKEN, payload: body })
   });
   const data = await res.json();
   // ไม่ throw ที่นี่ — data.success เป็น false อยู่แล้ว ทุกที่ที่เรียก callApi เช็ค !r.success และ return
@@ -563,7 +652,7 @@ async function doLogin(){
     SESSION = { displayName: data.displayName, roleCode: data.roleCode, tenantId: data.tenantId };
     localStorage.setItem('topshop_admin_token', TOKEN);
     localStorage.setItem('topshop_admin_session', JSON.stringify(SESSION));
-    enterApp();
+    routeAfterAuth();
   } catch (e) {
     errEl.textContent = 'เรียก backend ไม่ได้: ' + e.message;
     errEl.style.display = 'block';
@@ -572,21 +661,69 @@ async function doLogin(){
   }
 }
 function doLogout(){
-  TOKEN = ''; SESSION = null;
+  TOKEN = ''; SESSION = null; ACTIVE_TENANT_ID = null;
   localStorage.removeItem('topshop_admin_token'); localStorage.removeItem('topshop_admin_session');
   document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('picker-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
+
+/* หลัง login สำเร็จ (หรือโหลดหน้าใหม่ทั้งที่ยัง login ค้างอยู่) — super_admin (Ultra Admin) ต้องเลือกบริษัทก่อนเสมอ */
+function routeAfterAuth(){
+  document.getElementById('login-screen').style.display = 'none';
+  ACTIVE_TENANT_ID = null;
+  if (SESSION.roleCode === 'super_admin') showCompanyPicker();
+  else enterApp();
+}
+async function showCompanyPicker(){
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('picker-screen').style.display = 'flex';
+  const list = document.getElementById('picker-tenants');
+  list.innerHTML = '<div class="sub" style="padding:8px 4px">กำลังโหลดรายชื่อตัวแทน...</div>';
+  const r = await callApi('listTenants', {});
+  if (!r.success) { list.innerHTML = '<div class="sub" style="padding:8px 4px">'+esc(r.message)+'</div>'; return; }
+  tenantsCache = r.data;
+  list.innerHTML = r.data.length ? r.data.map(t =>
+    '<button class="picker-row" onclick="pickTenantContext(\''+esc(t.tenantId)+'\')">' +
+      '<span class="mark" style="background:var(--green)">'+esc(String(t.tenantId).slice(0,2))+'</span>' +
+      '<span class="txt"><div class="name">'+esc(t.name)+'</div><div class="sub">'+esc(t.tenantId)+(t.region?' · '+esc(t.region):'')+'</div></span>' +
+    '</button>'
+  ).join('') : '<div class="sub" style="padding:8px 4px">ยังไม่มีตัวแทน</div>';
+}
+function pickOwnerContext(){
+  ACTIVE_TENANT_ID = null;
+  document.getElementById('picker-screen').style.display = 'none';
+  enterApp();
+}
+function pickTenantContext(tenantId){
+  ACTIVE_TENANT_ID = tenantId;
+  document.getElementById('picker-screen').style.display = 'none';
+  enterApp();
+}
+function backToPicker(){
+  document.getElementById('app-screen').style.display = 'none';
+  showCompanyPicker();
+}
+
 function enterApp(){
   document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('picker-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
-  SCOPE = SESSION.tenantId ? 'tenant' : 'owner';
+  const effTenant = EFFECTIVE_TENANT_ID();
+  SCOPE = effTenant ? 'tenant' : 'owner';
+  document.getElementById('switch-company-btn').style.display = SESSION.roleCode === 'super_admin' ? '' : 'none';
   document.getElementById('who-name').textContent = SESSION.displayName;
   document.getElementById('who-role').textContent = SESSION.roleCode;
-  document.getElementById('who-tenant').textContent = SESSION.tenantId ? ('· ' + SESSION.tenantId) : '';
+  document.getElementById('who-tenant').textContent = effTenant ? ('· ' + effTenant) : '';
   document.getElementById('who-avatar').textContent = (SESSION.displayName || '?').slice(0,1).toUpperCase();
-  document.getElementById('scopeMark').textContent = SESSION.tenantId ? SESSION.tenantId.slice(0,2) : 'TS';
-  document.getElementById('scopeLabel').textContent = SESSION.tenantId ? (SESSION.tenantId + ' · แอดมินตัวแทน') : 'บริษัทเจ้าของสินค้า';
+  document.getElementById('scopeMark').textContent = effTenant ? effTenant.slice(0,2) : 'TS';
+  let scopeLabelText;
+  if (SESSION.tenantId) scopeLabelText = SESSION.tenantId + ' · แอดมินตัวแทน';
+  else if (ACTIVE_TENANT_ID) {
+    const t = tenantsCache.find(x => String(x.tenantId) === String(ACTIVE_TENANT_ID));
+    scopeLabelText = ACTIVE_TENANT_ID + (t ? ' · ' + t.name : '') + ' · Ultra Admin';
+  } else scopeLabelText = 'บริษัทเจ้าของสินค้า';
+  document.getElementById('scopeLabel').textContent = scopeLabelText;
   renderNav();
   gotoView('dashboard');
 }
@@ -623,12 +760,17 @@ const NAV = {
       { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', ready:true} ] },
       { n:'1.2', label:'โปรโมชั่น', items:[ {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', ready:true} ] }
     ]},
-    { n:'2', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
-      { n:'2.1', label:'ตัวแทนจำหน่าย', items:[ {n:'2.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
-      { n:'2.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'2.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
+    { n:'2', icon:'⚙️', label:'ข้อมูลกลาง', subs:[
+      { n:'2.1', label:'กลุ่มลูกค้า', items:[ {n:'2.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', ready:true} ] },
+      { n:'2.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'2.2.1', label:'รายการช่องทาง', view:'distchannels', ready:true} ] },
+      { n:'2.3', label:'ประเภทการชำระเงิน', items:[ {n:'2.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', ready:true} ] }
     ]},
-    { n:'3', icon:'📈', label:'รายงาน', subs:[
-      { n:'3.1', label:'ยอดขาย', items:[ {n:'3.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
+    { n:'3', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
+      { n:'3.1', label:'ตัวแทนจำหน่าย', items:[ {n:'3.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
+      { n:'3.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'3.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
+    ]},
+    { n:'4', icon:'📈', label:'รายงาน', subs:[
+      { n:'4.1', label:'ยอดขาย', items:[ {n:'4.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
     ]}
   ]}
 };
@@ -743,7 +885,8 @@ function findMeta(view){
 const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
-  companyprofile: loadCompanyProfile, adminusers: loadAdminUsers
+  companyprofile: loadCompanyProfile, adminusers: loadAdminUsers,
+  custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes
 };
 function gotoView(view){
   let elId = 'soon', label = view, meta = findMeta(view);
@@ -855,6 +998,66 @@ async function ensureCustomerGroups(){
   if (r.success) customerGroupsCache = r.data;
   const opts = customerGroupsCache.map(g => '<option value="'+g.record_id+'">'+esc(g.name)+'</option>').join('');
   ['c-group','pr-custgroup'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = el.innerHTML.split('</option>')[0] + '</option>' + opts; });
+}
+
+/* ══════════════ ข้อมูลกลาง: กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน ══════════════ */
+async function loadCustomerGroupsView(){
+  const body = document.getElementById('custgroups-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="2">กำลังโหลด...</td></tr>';
+  const r = await callApi('listCustomerGroups', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="2">'+esc(r.message)+'</td></tr>'; return; }
+  customerGroupsCache = r.data;
+  body.innerHTML = r.data.length
+    ? r.data.map(g => '<tr><td>'+esc(g.name)+'</td><td>'+esc(g.description||'-')+'</td></tr>').join('')
+    : '<tr class="empty-row"><td colspan="2">ยังไม่มีกลุ่มลูกค้า</td></tr>';
+}
+async function addCustomerGroupUI(){
+  const name = document.getElementById('cg-name').value.trim();
+  if (!name) { toast('กรุณากรอกชื่อกลุ่ม', true); return; }
+  const r = await callApi('addCustomerGroup', { name, description: document.getElementById('cg-desc').value.trim() });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('เพิ่มกลุ่มลูกค้าสำเร็จ');
+  document.getElementById('cg-name').value = ''; document.getElementById('cg-desc').value = '';
+  loadCustomerGroupsView();
+}
+async function loadDistributionChannels(){
+  const body = document.getElementById('distchannels-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr>';
+  const r = await callApi('listDistributionChannels', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="3">'+esc(r.message)+'</td></tr>'; return; }
+  body.innerHTML = r.data.length
+    ? r.data.map(c => '<tr><td>'+esc(c.name)+'</td><td>'+esc(c.description||'-')+'</td>' +
+        '<td><span class="pill '+(String(c.is_active)==='TRUE'?'ok':'off')+'">'+(String(c.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td></tr>').join('')
+    : '<tr class="empty-row"><td colspan="3">ยังไม่มีช่องทางการจัดจำหน่าย</td></tr>';
+}
+async function addDistributionChannelUI(){
+  const name = document.getElementById('dc-name').value.trim();
+  if (!name) { toast('กรุณากรอกชื่อช่องทาง', true); return; }
+  const r = await callApi('addDistributionChannel', { name, description: document.getElementById('dc-desc').value.trim() });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('เพิ่มช่องทางการจัดจำหน่ายสำเร็จ');
+  document.getElementById('dc-name').value = ''; document.getElementById('dc-desc').value = '';
+  loadDistributionChannels();
+}
+async function loadPaymentTypes(){
+  const body = document.getElementById('paytypes-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr>';
+  const r = await callApi('listPaymentTypes', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="3">'+esc(r.message)+'</td></tr>'; return; }
+  body.innerHTML = r.data.length
+    ? r.data.map(p => '<tr><td class="mono-data">'+esc(p.code)+'</td><td>'+esc(p.name)+'</td>' +
+        '<td><span class="pill '+(String(p.is_active)==='TRUE'?'ok':'off')+'">'+(String(p.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td></tr>').join('')
+    : '<tr class="empty-row"><td colspan="3">ยังไม่มีประเภทการชำระเงิน</td></tr>';
+}
+async function addPaymentTypeUI(){
+  const code = document.getElementById('pt-code').value.trim();
+  const name = document.getElementById('pt-name').value.trim();
+  if (!code || !name) { toast('กรุณากรอกรหัสและชื่อ', true); return; }
+  const r = await callApi('addPaymentType', { code, name });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('เพิ่มประเภทการชำระเงินสำเร็จ');
+  document.getElementById('pt-code').value = ''; document.getElementById('pt-name').value = '';
+  loadPaymentTypes();
 }
 
 /* ══════════════ DOCNUM ══════════════ */
@@ -1130,9 +1333,9 @@ function onAdminRoleChange(){
 async function loadAdminUsers(){
   const body = document.getElementById('adminusers-body');
   body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
-  // ฝั่งตัวแทน สร้างได้แค่ tenant_admin ของตัวเอง ไม่ต้องเลือกตัวแทน — ซ่อนช่องเลือกตัวแทนและตัวเลือกสิทธิ์
+  // ฝั่งตัวแทน (หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทนอยู่) สร้างได้แค่ tenant_admin ของตัวเอง — ซ่อนช่องเลือกตัวแทนและตัวเลือกสิทธิ์
   const roleWrap = document.getElementById('au-role-wrap');
-  if (SESSION.tenantId) { roleWrap.style.display = 'none'; document.getElementById('au-tenant-wrap').style.display = 'none'; }
+  if (EFFECTIVE_TENANT_ID()) { roleWrap.style.display = 'none'; document.getElementById('au-tenant-wrap').style.display = 'none'; }
   else { roleWrap.style.display = ''; onAdminRoleChange(); }
 
   const r = await callApi('listAdminUsers', {});
@@ -1155,7 +1358,7 @@ async function createAdminUserUI(){
   if (!username || !password || !displayName) { toast('กรุณากรอกให้ครบ', true); return; }
   if (password.length < 8) { toast('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร', true); return; }
   const payload = { username, password, displayName };
-  if (!SESSION.tenantId) {
+  if (!EFFECTIVE_TENANT_ID()) {
     payload.roleCode = document.getElementById('au-role').value;
     if (payload.roleCode === 'tenant_admin') payload.tenantId = document.getElementById('au-tenant').value;
   }
@@ -1194,7 +1397,7 @@ async function changeMyPasswordUI(){
 }
 
 /* ── init ── */
-window.onload = function(){ if (TOKEN && SESSION) enterApp(); };
+window.onload = function(){ if (TOKEN && SESSION) routeAfterAuth(); };
 </script>
 </body>
 </html>

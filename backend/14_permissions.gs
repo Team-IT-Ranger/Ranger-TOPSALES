@@ -24,8 +24,23 @@ var MODULE_REGISTRY = [
   { code: 'products',       label: 'สินค้าและราคา',       scope: 'owner'  },
   { code: 'promotions',     label: 'โปรโมชั่น',           scope: 'owner'  },
   { code: 'tenants',        label: 'ตัวแทนจำหน่าย',       scope: 'owner'  },
+  { code: 'settings',       label: 'ข้อมูลกลาง (กลุ่มลูกค้า/ช่องทางจำหน่าย/ประเภทชำระเงิน)', scope: 'owner' },
   { code: 'users_roles',    label: 'ผู้ใช้งานและสิทธิ์',   scope: 'both'   }
 ];
+
+/**
+ * "tenant id ที่แท้จริง" ของ request นี้:
+ *  - session.tenant_id มีค่า → เป็น tenant_admin ตัวจริงของตัวแทนนั้น ใช้ค่านี้เสมอ
+ *  - session.tenant_id ว่าง + เป็น super_admin (Ultra Admin) + ส่ง payload.tenantId มา
+ *    → กำลัง "สวมสิทธิ์" เข้าไปทำงานในตัวแทนนั้นเหมือนเป็น super_admin ของบริษัทนั้นเอง
+ *  - owner_admin ไม่ได้สิทธิ์สวมสิทธิ์นี้ (ตามที่ตกลงกันไว้ — เห็นแค่ภาพรวมข้ามตัวแทน)
+ *  - ไม่มีทั้งคู่ → null (ฝั่งบริษัท ทำงานกับข้อมูลกลางไม่ผูกตัวแทนใดตัวแทนหนึ่ง)
+ */
+function _effectiveTenantId(session, payload) {
+  if (session.tenant_id) return session.tenant_id;
+  if (session.role_code === 'super_admin' && payload && payload.tenantId) return String(payload.tenantId);
+  return null;
+}
 
 // role_code เริ่มต้นตอน setupCentralSheet — ดู seedRolesDefaults ใน 00_setup_sheets.gs
 // super_admin ข้ามทุกการเช็คสิทธิ์เสมอ กันกรณีตั้งค่า role_permissions ผิดแล้วล็อกตัวเองออกจากระบบ
@@ -54,11 +69,13 @@ function _requirePermission(adminUser, moduleCode, action) {
 }
 
 // ── จัดการผู้ใช้ Admin (super_admin เท่านั้น) ──
-function listAdminUsers(adminUser) {
+function listAdminUsers(adminUser, payload) {
   var err = _requirePermission(adminUser, 'users_roles', 'view'); if (err) return err;
   var rows = centralObjects('admin_users');
-  // ผู้ใช้ระดับตัวแทน เห็นได้เฉพาะ admin ของตัวแทนตัวเอง, ผู้ใช้บริษัทเห็นทั้งหมด
-  if (adminUser.tenant_id) rows = rows.filter(function(u) { return String(u.tenant_id) === String(adminUser.tenant_id); });
+  // ผู้ใช้ระดับตัวแทน (หรือ Ultra Admin ที่กำลังสวมสิทธิ์ตัวแทน) เห็นเฉพาะ admin ของตัวแทนนั้น
+  // owner_admin/super_admin ที่ไม่ได้สวมสิทธิ์ตัวแทนไหน เห็นทุกบัญชี (ภาพรวม)
+  var effTenantId = _effectiveTenantId(adminUser, payload || {});
+  if (effTenantId) rows = rows.filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
   return {
     success: true,
     data: rows.map(function(u) {

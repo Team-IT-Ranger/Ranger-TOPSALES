@@ -82,7 +82,7 @@ function listTenants(session) {
  */
 function getTenantProfile(session, payload) {
   var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
-  var tenantId = session.tenant_id || payload.tenantId;
+  var tenantId = _effectiveTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var rows = centralObjects('tenants');
@@ -102,7 +102,7 @@ function getTenantProfile(session, payload) {
 
 function updateTenantProfile(session, payload) {
   var err = _requirePermission(session, 'tenants', 'edit'); if (err) return err;
-  var tenantId = session.tenant_id || payload.tenantId;
+  var tenantId = _effectiveTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var rows = centralObjects('tenants');
@@ -131,7 +131,7 @@ function updateTenantProfile(session, payload) {
 // payload: { tenantId?, base64, mimeType, fileName }  base64 ไม่ต้องมี prefix "data:...;base64,"
 function uploadTenantLogo(session, payload) {
   var err = _requirePermission(session, 'tenants', 'edit'); if (err) return err;
-  var tenantId = session.tenant_id || payload.tenantId;
+  var tenantId = _effectiveTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   if (!payload.base64) return { success: false, message: 'ไม่พบไฟล์รูปภาพ' };
 

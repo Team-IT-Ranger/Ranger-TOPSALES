@@ -88,19 +88,20 @@ function getDashboard(user) {
 
 /**
  * ===================== ADMIN DASHBOARD (Admin App) =====================
- * session.tenant_id มีค่า → สรุปของตัวแทนนั้นรายเดียว (บิล/ยอดวันนี้/พนักงานรออนุมัติ/SO รอจัดส่ง)
- * session.tenant_id ว่าง (owner_admin/super_admin) → สรุปรวมทุกตัวแทนที่ active
+ * tenant จริง หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทน → สรุปของตัวแทนนั้นรายเดียว
+ * บริษัทเจ้าของสินค้า (ไม่ได้สวมสิทธิ์ตัวแทนไหน) → สรุปรวมทุกตัวแทนที่ active
  */
-function getAdminDashboard(session) {
+function getAdminDashboard(session, payload) {
   var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var effTenantId = _effectiveTenantId(session, payload || {});
 
-  if (session.tenant_id) {
-    var orders = tenantObjects(session.tenant_id, 'sales_orders')
+  if (effTenantId) {
+    var orders = tenantObjects(effTenantId, 'sales_orders')
       .filter(function(o) { return String(o.created_at).indexOf(today) === 0; });
     var pendingSO = orders.filter(function(o) { return o.status === 'pending_delivery'; });
 
-    var staff = centralObjects('liff_users').filter(function(u) { return String(u.tenant_id) === String(session.tenant_id); });
+    var staff = centralObjects('liff_users').filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
     var custName = {};
     centralObjects('customers').forEach(function(c) { custName[String(c.record_id)] = c.name; });
 

@@ -19,6 +19,9 @@ var CENTRAL_SHEETS = {
 
   customers: ['record_id','name','tenant_id','group_id','phone','tax_id','address','subdistrict_id','district_id','province_id','lat','lng','is_active','created_at','external_code'],
   customer_groups: ['record_id','name','description'],
+  // ข้อมูลอ้างอิงกลางเพิ่มเติม จัดการได้เฉพาะโหมด "บริษัทเจ้าของสินค้า" (module 'settings')
+  distribution_channels: ['record_id','name','description','is_active'],
+  payment_types: ['record_id','code','name','is_active'],
 
   discount_rules: ['record_id','name','scope','product_group_id','product_id','trigger_group_ids','customer_group_id','min_qty','min_amount','type','value','free_product_id','free_qty','priority','stackable','date_start','date_end','is_active'],
 
@@ -54,6 +57,8 @@ function setupCentralSheet() {
 
   _seedProductGroups();
   _seedCustomerGroups();
+  _seedDistributionChannels();
+  _seedPaymentTypes();
   _seedProvinces();
   _seedRolesAndPermissions();
 
@@ -97,6 +102,27 @@ function _seedCustomerGroups() {
     [5, 'Convenience', 'ร้านสะดวกซื้อ'],
     [6, 'Online', 'ร้านค้าออนไลน์'],
     [7, 'อื่นๆ', '']
+  ].forEach(function(r) { sh.appendRow(r); });
+}
+
+function _seedDistributionChannels() {
+  var sh = centralSheet('distribution_channels');
+  if (sh.getLastRow() > 1) return;
+  [
+    [1, 'Cash Van Sales', 'พนักงานขับรถขายเสนอขายหน้าร้าน ตัดสต็อกบนรถ', 'TRUE'],
+    [2, 'Credit Sales', 'พนักงานเข้าเยี่ยมจด Sales Order ส่งสำนักงานจัดส่งทีหลัง', 'TRUE'],
+    [3, 'ขายหน้าคลัง', 'ลูกค้ามารับสินค้าที่คลังตัวแทนโดยตรง', 'TRUE']
+  ].forEach(function(r) { sh.appendRow(r); });
+}
+
+function _seedPaymentTypes() {
+  var sh = centralSheet('payment_types');
+  if (sh.getLastRow() > 1) return;
+  [
+    [1, 'cash', 'เงินสด', 'TRUE'],
+    [2, 'transfer', 'เงินโอน', 'TRUE'],
+    [3, 'cheque', 'เช็ค', 'TRUE'],
+    [4, 'credit_term', 'เครดิตเทอม', 'TRUE']
   ].forEach(function(r) { sh.appendRow(r); });
 }
 
@@ -144,12 +170,15 @@ function _seedRolesAndPermissions() {
     ].forEach(function(r) { rolesSh.appendRow(r); });
   }
 
+  // เช็คทีละ (role, module) แทนที่จะดูว่า sheet ว่างเปล่าไหม — กัน rerun setupCentralSheet()
+  // ครั้งถัดๆ ไป ไม่เพิ่มสิทธิ์ของ module ที่เพิ่งเพิ่มใหม่ให้ role เดิมที่ seed ไปแล้วก่อนหน้า
   var permSh = centralSheet('role_permissions');
-  if (permSh.getLastRow() > 1) return;
+  var existingPerms = {};
+  permSh.getDataRange().getValues().slice(1).forEach(function(row) { existingPerms[row[0] + '|' + row[1]] = true; });
 
-  var ownerModules = ['products', 'promotions', 'tenants', 'users_roles', 'sales_report'];
+  var ownerModules = ['products', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report'];
   var tenantModules = ['staff', 'zones', 'customers', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles'];
 
-  ownerModules.forEach(function(m) { permSh.appendRow(['owner_admin', m, 'TRUE', 'TRUE']); });
-  tenantModules.forEach(function(m) { permSh.appendRow(['tenant_admin', m, 'TRUE', 'TRUE']); });
+  ownerModules.forEach(function(m) { if (!existingPerms['owner_admin|' + m]) permSh.appendRow(['owner_admin', m, 'TRUE', 'TRUE']); });
+  tenantModules.forEach(function(m) { if (!existingPerms['tenant_admin|' + m]) permSh.appendRow(['tenant_admin', m, 'TRUE', 'TRUE']); });
 }
