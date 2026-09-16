@@ -1,8 +1,12 @@
 name: Deploy Admin App to GitHub Pages
 
+# Pages รองรับได้แค่ 1 การ deploy ต่อ repo (ไม่มี multi-branch preview เหมือน Vercel)
+# เลยรวมเป็น workflow เดียว เช็คเอาต์ทั้ง main (prod) และ UAT มาประกอบเป็นเว็บเดียว
+# แยกกันด้วย path: /admin/ = prod (main), /admin-uat/ = UAT
+# เพิ่ม frontend-mobile ทีหลังได้ด้วยแพทเทิร์นเดียวกัน (/mobile/, /mobile-uat/)
 on:
   push:
-    branches: [main]
+    branches: [main, UAT]
     paths: ["frontend-admin/**"]
   workflow_dispatch:
 
@@ -22,10 +26,32 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout main (prod)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: src-main
+
+      - name: Checkout UAT
+        uses: actions/checkout@v4
+        with:
+          ref: UAT
+          path: src-uat
+
+      - name: Assemble combined site (prod + uat คนละ path)
+        run: |
+          mkdir -p site/admin site/admin-uat
+          cp -r src-main/frontend-admin/. site/admin/
+          cp -r src-uat/frontend-admin/. site/admin-uat/
+          cat > site/index.html <<'HTML'
+          <!doctype html><meta charset="utf-8">
+          <p><a href="./admin/">Admin — Production (main)</a></p>
+          <p><a href="./admin-uat/">Admin — UAT</a></p>
+          HTML
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend-admin
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v4
