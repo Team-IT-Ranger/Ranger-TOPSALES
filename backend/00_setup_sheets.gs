@@ -7,7 +7,8 @@
 var CENTRAL_SHEETS = {
   liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at'],
-  tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at'],
+  tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at',
+    'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name'],
 
   products: ['record_id','name','base_price','unit','group_id','is_active','external_code'],
   product_groups: ['record_id','name','description'],

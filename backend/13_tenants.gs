@@ -66,8 +66,95 @@ function createTenant(session, payload) {
 function listTenants(session) {
   var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
   return { success: true, data: centralObjects('tenants').map(function(t) {
-    return { tenantId: t.tenant_id, name: t.name, region: t.region, isActive: t.is_active, sheetUrl: 'https://docs.google.com/spreadsheets/d/' + t.sheet_file_id };
+    return {
+      tenantId: t.tenant_id, name: t.name, region: t.region, isActive: t.is_active,
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/' + t.sheet_file_id,
+      address: t.address || '', taxId: t.tax_id || '', branchCode: t.branch_code || '',
+      phone: t.phone || '', email: t.email || '', logoUrl: t.logo_url || ''
+    };
   }) };
+}
+
+/**
+ * ===================== ข้อมูลบริษัทของตัวแทน (Company Profile) =====================
+ * ตัวแทนแก้ข้อมูลของตัวเองได้ (module 'tenants' scope เดียวกับที่ตัวแทนมองเห็นตัวเอง)
+ * บริษัทเจ้าของสินค้า (ไม่มี session.tenant_id) ต้องระบุ payload.tenantId ว่าจะดู/แก้ของใคร
+ */
+function getTenantProfile(session, payload) {
+  var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
+  var tenantId = session.tenant_id || payload.tenantId;
+  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+
+  var rows = centralObjects('tenants');
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].tenant_id) === String(tenantId)) {
+      var t = rows[i];
+      return { success: true, data: {
+        tenantId: t.tenant_id, name: t.name, region: t.region,
+        address: t.address || '', taxId: t.tax_id || '', branchCode: t.branch_code || '',
+        phone: t.phone || '', email: t.email || '', logoUrl: t.logo_url || '',
+        bankName: t.bank_name || '', bankAccountNo: t.bank_account_no || '', bankAccountName: t.bank_account_name || ''
+      } };
+    }
+  }
+  return { success: false, message: 'ไม่พบตัวแทนนี้' };
+}
+
+function updateTenantProfile(session, payload) {
+  var err = _requirePermission(session, 'tenants', 'edit'); if (err) return err;
+  var tenantId = session.tenant_id || payload.tenantId;
+  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+
+  var rows = centralObjects('tenants');
+  var sh = centralSheet('tenants');
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].tenant_id) === String(tenantId)) {
+      var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      var rowNum = i + 2;
+      var fields = {
+        name: payload.name, region: payload.region, address: payload.address, tax_id: payload.taxId,
+        branch_code: payload.branchCode, phone: payload.phone, email: payload.email,
+        bank_name: payload.bankName, bank_account_no: payload.bankAccountNo, bank_account_name: payload.bankAccountName
+      };
+      Object.keys(fields).forEach(function(key) {
+        if (fields[key] === undefined) return;
+        var col = headers.indexOf(key);
+        if (col !== -1) sh.getRange(rowNum, col + 1).setValue(fields[key]);
+      });
+      return { success: true };
+    }
+  }
+  return { success: false, message: 'ไม่พบตัวแทนนี้' };
+}
+
+// อัปโหลดโลโก้บริษัท — เก็บเป็นไฟล์จริงบน Drive (โฟลเดอร์เดียวกับ Tenant Sheet) แล้วบันทึก URL ไว้
+// payload: { tenantId?, base64, mimeType, fileName }  base64 ไม่ต้องมี prefix "data:...;base64,"
+function uploadTenantLogo(session, payload) {
+  var err = _requirePermission(session, 'tenants', 'edit'); if (err) return err;
+  var tenantId = session.tenant_id || payload.tenantId;
+  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+  if (!payload.base64) return { success: false, message: 'ไม่พบไฟล์รูปภาพ' };
+
+  try {
+    var bytes = Utilities.base64Decode(payload.base64);
+    var blob = Utilities.newBlob(bytes, payload.mimeType || 'image/png', 'logo_' + tenantId + '_' + Date.now());
+    var file = DriveApp.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var url = 'https://drive.google.com/uc?export=view&id=' + file.getId();
+
+    var rows = centralObjects('tenants');
+    var sh = centralSheet('tenants');
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i].tenant_id) === String(tenantId)) {
+        var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+        sh.getRange(i + 2, headers.indexOf('logo_url') + 1).setValue(url);
+        return { success: true, logoUrl: url };
+      }
+    }
+    return { success: false, message: 'ไม่พบตัวแทนนี้' };
+  } catch (e) {
+    return { success: false, message: 'อัปโหลดไม่สำเร็จ: ' + e.message };
+  }
 }
 
 function updateTenantStatus(session, payload) {

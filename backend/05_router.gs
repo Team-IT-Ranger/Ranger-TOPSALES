@@ -41,6 +41,14 @@ var ADMIN_ACTION_MAP = {
   getAdminDashboard:      getAdminDashboard,
   listAdminUsers:        listAdminUsers,
   listRoles:              listRoles,
+  createAdminUser:        createAdminUser,
+  updateAdminUser:        updateAdminUser,
+  resetAdminUserPasswordByAdmin: resetAdminUserPasswordByAdmin,
+  changeMyPassword:       changeMyPassword,
+
+  getTenantProfile:       getTenantProfile,
+  updateTenantProfile:    updateTenantProfile,
+  uploadTenantLogo:       uploadTenantLogo,
 
   listStaffAdmin:         listStaffAdmin,
   updateStaffAdmin:       updateStaffAdmin,

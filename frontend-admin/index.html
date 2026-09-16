@@ -235,6 +235,7 @@
         <div class="crumb">TOPSHOP Admin / <b id="crumb-current">ภาพรวม</b></div>
         <div class="top-right">
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
+          <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
           <div class="avatar" id="who-avatar">-</div>
         </div>
@@ -249,6 +250,70 @@
           <div class="two-col">
             <div class="panel"><h3 id="dash-panel1-title">รายการล่าสุด</h3><div id="dash-panel1"></div></div>
             <div class="panel"><h3 id="dash-panel2-title">สรุป</h3><div id="dash-panel2"></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ COMPANY PROFILE ═══ -->
+        <section class="view" id="view-companyprofile">
+          <div class="view-head"><div><h1>ข้อมูลบริษัท</h1><p>ใช้พิมพ์บนเอกสาร/ใบกำกับภาษีของตัวแทนนี้</p></div></div>
+          <div class="form-card">
+            <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex-shrink:0">
+                <img id="cp-logo-preview" src="" alt="โลโก้บริษัท" style="width:96px;height:96px;object-fit:contain;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;display:none">
+                <div id="cp-logo-empty" style="width:96px;height:96px;background:var(--surface-2);border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--ink-faint);font-size:11px;text-align:center">ยังไม่มีโลโก้</div>
+                <input type="file" id="cp-logo-file" accept="image/*" style="margin-top:8px;font-size:11px;width:120px" onchange="uploadLogoUI()">
+              </div>
+              <div class="form-grid g2" style="flex:1;min-width:280px">
+                <div class="field span2"><label>ชื่อบริษัท</label><input id="cp-name"></div>
+                <div class="field span2"><label>ที่อยู่</label><input id="cp-address"></div>
+                <div class="field"><label>เลขผู้เสียภาษี (13 หลัก)</label><input id="cp-taxid" maxlength="13"></div>
+                <div class="field"><label>รหัสสำนักงานใหญ่/สาขา</label><input id="cp-branch" placeholder="00000 = สำนักงานใหญ่"></div>
+                <div class="field"><label>เบอร์โทร</label><input id="cp-phone"></div>
+                <div class="field"><label>อีเมล</label><input id="cp-email" type="email"></div>
+              </div>
+            </div>
+            <fieldset class="fieldset" style="margin-top:16px">
+              <legend>บัญชีธนาคาร (สำหรับอ้างอิงการโอนเงิน)</legend>
+              <div class="form-grid">
+                <div class="field"><label>ธนาคาร</label><input id="cp-bankname"></div>
+                <div class="field"><label>เลขที่บัญชี</label><input id="cp-bankaccno" class="mono-data"></div>
+                <div class="field"><label>ชื่อบัญชี</label><input id="cp-bankaccname"></div>
+              </div>
+            </fieldset>
+            <div class="form-actions"><button class="btn btn-primary" onclick="saveCompanyProfileUI()">บันทึก</button></div>
+          </div>
+        </section>
+
+        <!-- ═══ ADMIN USERS ═══ -->
+        <section class="view" id="view-adminusers">
+          <div class="view-head"><div><h1>ผู้ใช้งานระบบ</h1><p>บัญชีแอดมินที่เข้า Admin App ได้ — คนละส่วนกับพนักงานขับรถขาย (LIFF)</p></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Username</th><th>ชื่อ</th><th>สิทธิ์</th><th>ตัวแทน</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="adminusers-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>เพิ่มผู้ใช้งานใหม่</h3>
+            <div class="form-grid g2">
+              <div class="field"><label>Username</label><input id="au-username" autocomplete="off"></div>
+              <div class="field"><label>รหัสผ่าน <span class="unit">(อย่างน้อย 8 ตัวอักษร)</span></label><input id="au-password" type="password" autocomplete="new-password"></div>
+              <div class="field"><label>ชื่อที่แสดง</label><input id="au-displayname"></div>
+              <div class="field" id="au-role-wrap"><label>สิทธิ์</label>
+                <select id="au-role" onchange="onAdminRoleChange()"><option value="tenant_admin">แอดมินตัวแทน</option><option value="owner_admin">แอดมินบริษัท</option></select>
+              </div>
+              <div class="field" id="au-tenant-wrap" style="display:none"><label>ตัวแทนจำหน่าย</label><select id="au-tenant"></select></div>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" onclick="createAdminUserUI()">+ เพิ่มผู้ใช้งาน</button></div>
+          </div>
+        </section>
+
+        <!-- ═══ CHANGE PASSWORD ═══ -->
+        <section class="view" id="view-changepassword">
+          <div class="view-head"><div><h1>เปลี่ยนรหัสผ่าน</h1><p>เปลี่ยนรหัสผ่านของบัญชีที่ล็อกอินอยู่ตอนนี้</p></div></div>
+          <div class="form-card" style="max-width:380px">
+            <div class="field" style="margin-bottom:12px"><label>รหัสผ่านปัจจุบัน</label><input id="cpw-current" type="password" autocomplete="current-password"></div>
+            <div class="field" style="margin-bottom:12px"><label>รหัสผ่านใหม่ <span class="unit">(อย่างน้อย 8 ตัวอักษร)</span></label><input id="cpw-new" type="password" autocomplete="new-password"></div>
+            <div class="field"><label>ยืนยันรหัสผ่านใหม่</label><input id="cpw-confirm" type="password" autocomplete="new-password"></div>
+            <div class="form-actions"><button class="btn btn-primary" onclick="changeMyPasswordUI()">เปลี่ยนรหัสผ่าน</button></div>
           </div>
         </section>
 
@@ -529,24 +594,28 @@ function enterApp(){
 /* ══════════════ เมนู — เลข group.subgroup.action ตามโครง Hippo Village ══════════════ */
 const NAV = {
   tenant: { groups: [
-    { n:'1', icon:'👥', label:'บุคลากรและเขตขาย', subs:[
-      { n:'1.1', label:'พนักงานขาย', items:[ {n:'1.1.1', label:'รายชื่อพนักงาน', view:'staff', ready:true} ] },
-      { n:'1.2', label:'เขตการขาย', items:[ {n:'1.2.1', label:'ผังเขตการขาย', view:'v-zone', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
+    { n:'1', icon:'🏢', label:'ข้อมูลตัวแทน', subs:[
+      { n:'1.1', label:'ข้อมูลบริษัท', items:[ {n:'1.1.1', label:'ข้อมูลบริษัท', view:'companyprofile', ready:true} ] },
+      { n:'1.2', label:'บัญชีแอดมิน', items:[ {n:'1.2.1', label:'ผู้ใช้งานระบบ', view:'adminusers', ready:true} ] }
     ]},
-    { n:'2', icon:'🏪', label:'ลูกค้าและเอกสาร', subs:[
-      { n:'2.1', label:'ลูกค้า', items:[ {n:'2.1.1', label:'รายชื่อลูกค้า', view:'customers', ready:true} ] },
-      { n:'2.2', label:'เลขที่เอกสาร', items:[ {n:'2.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', ready:true} ] }
+    { n:'2', icon:'👥', label:'บุคลากรและเขตขาย', subs:[
+      { n:'2.1', label:'พนักงานขาย', items:[ {n:'2.1.1', label:'รายชื่อพนักงาน', view:'staff', ready:true} ] },
+      { n:'2.2', label:'เขตการขาย', items:[ {n:'2.2.1', label:'ผังเขตการขาย', view:'v-zone', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
     ]},
-    { n:'3', icon:'📦', label:'คลังสินค้า', subs:[
-      { n:'3.1', label:'เคลื่อนไหวสินค้า', items:[
-        {n:'3.1.1', label:'รับสินค้าเข้าคลัง', view:'v-recv', ready:false, soon:'รับสินค้าเข้าคลัง', desc:'ใบรับสินค้าเข้าคลังแบบมีเลขเอกสารทางการ ผูกกับใบสั่งซื้อ'},
-        {n:'3.1.2', label:'โอนย้ายคลัง', view:'v-transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
+    { n:'3', icon:'🏪', label:'ลูกค้าและเอกสาร', subs:[
+      { n:'3.1', label:'ลูกค้า', items:[ {n:'3.1.1', label:'รายชื่อลูกค้า', view:'customers', ready:true} ] },
+      { n:'3.2', label:'เลขที่เอกสาร', items:[ {n:'3.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', ready:true} ] }
+    ]},
+    { n:'4', icon:'📦', label:'คลังสินค้า', subs:[
+      { n:'4.1', label:'เคลื่อนไหวสินค้า', items:[
+        {n:'4.1.1', label:'รับสินค้าเข้าคลัง', view:'v-recv', ready:false, soon:'รับสินค้าเข้าคลัง', desc:'ใบรับสินค้าเข้าคลังแบบมีเลขเอกสารทางการ ผูกกับใบสั่งซื้อ'},
+        {n:'4.1.2', label:'โอนย้ายคลัง', view:'v-transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
       ]},
-      { n:'3.2', label:'เบิกจ่าย', items:[ {n:'3.2.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
+      { n:'4.2', label:'เบิกจ่าย', items:[ {n:'4.2.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
     ]},
-    { n:'4', icon:'🚚', label:'การจัดส่งและรายงาน', subs:[
-      { n:'4.1', label:'การจัดส่ง', items:[ {n:'4.1.1', label:'สถานะการจัดส่ง', view:'v-ship', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
-      { n:'4.2', label:'รายงาน', items:[ {n:'4.2.1', label:'รายงานการขาย', view:'v-report1', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
+    { n:'5', icon:'🚚', label:'การจัดส่งและรายงาน', subs:[
+      { n:'5.1', label:'การจัดส่ง', items:[ {n:'5.1.1', label:'สถานะการจัดส่ง', view:'v-ship', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
+      { n:'5.2', label:'รายงาน', items:[ {n:'5.2.1', label:'รายงานการขาย', view:'v-report1', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
     ]}
   ]},
   owner: { groups: [
@@ -556,7 +625,7 @@ const NAV = {
     ]},
     { n:'2', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
       { n:'2.1', label:'ตัวแทนจำหน่าย', items:[ {n:'2.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
-      { n:'2.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'2.2.1', label:'บัญชีแอดมิน', view:'v-roles', ready:false, soon:'ผู้ใช้งานและสิทธิ์', desc:'จัดการบัญชีแอดมิน กำหนดสิทธิ์ตาม role — ตอนนี้ทำผ่าน Apps Script Editor โดยตรง'} ] }
+      { n:'2.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'2.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
     ]},
     { n:'3', icon:'📈', label:'รายงาน', subs:[
       { n:'3.1', label:'ยอดขาย', items:[ {n:'3.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
@@ -673,11 +742,13 @@ function findMeta(view){
 }
 const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum,
-  products: loadProducts, promotions: loadPromotions, tenants: loadTenants
+  products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
+  companyprofile: loadCompanyProfile, adminusers: loadAdminUsers
 };
 function gotoView(view){
   let elId = 'soon', label = view, meta = findMeta(view);
   if (view === 'dashboard'){ elId = 'dashboard'; label = 'ภาพรวม'; }
+  else if (view === 'changepassword'){ elId = 'changepassword'; label = 'เปลี่ยนรหัสผ่าน'; }
   else if (meta && meta.ready){ elId = view; label = meta.label; }
   else if (meta){ elId = 'soon'; label = meta.label; document.getElementById('soon-title').textContent = meta.soon; document.getElementById('soon-desc').textContent = meta.desc; }
 
@@ -957,11 +1028,13 @@ async function deactivatePromotionUI(id){
 }
 
 /* ══════════════ TENANTS ══════════════ */
+let tenantsCache = [];
 async function loadTenants(){
   const body = document.getElementById('tenants-body');
   body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
   const r = await callApi('listTenants', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  tenantsCache = r.data;
   if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีตัวแทน</td></tr>'; return; }
   body.innerHTML = r.data.map(t =>
     '<tr><td class="mono-data">'+esc(t.tenantId)+'</td><td>'+esc(t.name)+'</td><td>'+esc(t.region||'-')+'</td>' +
@@ -981,6 +1054,143 @@ async function createTenantUI(){
   toast('สร้างตัวแทน ' + tenantId + ' สำเร็จ');
   ['t-id','t-name','t-region'].forEach(id => document.getElementById(id).value = '');
   loadTenants();
+}
+
+/* ══════════════ COMPANY PROFILE ══════════════ */
+async function loadCompanyProfile(){
+  const r = await callApi('getTenantProfile', {});
+  if (!r.success) { toast(r.message, true); return; }
+  const d = r.data;
+  document.getElementById('cp-name').value = d.name || '';
+  document.getElementById('cp-address').value = d.address || '';
+  document.getElementById('cp-taxid').value = d.taxId || '';
+  document.getElementById('cp-branch').value = d.branchCode || '';
+  document.getElementById('cp-phone').value = d.phone || '';
+  document.getElementById('cp-email').value = d.email || '';
+  document.getElementById('cp-bankname').value = d.bankName || '';
+  document.getElementById('cp-bankaccno').value = d.bankAccountNo || '';
+  document.getElementById('cp-bankaccname').value = d.bankAccountName || '';
+  setLogoPreview(d.logoUrl);
+}
+function setLogoPreview(url){
+  const img = document.getElementById('cp-logo-preview');
+  const empty = document.getElementById('cp-logo-empty');
+  if (url) { img.src = url; img.style.display = 'block'; empty.style.display = 'none'; }
+  else { img.style.display = 'none'; empty.style.display = 'flex'; }
+}
+async function saveCompanyProfileUI(){
+  const r = await callApi('updateTenantProfile', {
+    name: document.getElementById('cp-name').value.trim(),
+    address: document.getElementById('cp-address').value.trim(),
+    taxId: document.getElementById('cp-taxid').value.trim(),
+    branchCode: document.getElementById('cp-branch').value.trim(),
+    phone: document.getElementById('cp-phone').value.trim(),
+    email: document.getElementById('cp-email').value.trim(),
+    bankName: document.getElementById('cp-bankname').value.trim(),
+    bankAccountNo: document.getElementById('cp-bankaccno').value.trim(),
+    bankAccountName: document.getElementById('cp-bankaccname').value.trim()
+  });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('บันทึกข้อมูลบริษัทสำเร็จ');
+}
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+async function uploadLogoUI(){
+  const input = document.getElementById('cp-logo-file');
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('ไฟล์ใหญ่เกินไป (ไม่เกิน 2MB)', true); input.value = ''; return; }
+  toast('กำลังอัปโหลดโลโก้...');
+  const base64 = await fileToBase64(file);
+  const r = await callApi('uploadTenantLogo', { base64, mimeType: file.type, fileName: file.name });
+  input.value = '';
+  if (!r.success) { toast(r.message, true); return; }
+  toast('อัปโหลดโลโก้สำเร็จ');
+  setLogoPreview(r.logoUrl);
+}
+
+/* ══════════════ ADMIN USERS ══════════════ */
+async function ensureTenantsForDropdown(){
+  if (!tenantsCache.length) await loadTenantsQuiet();
+  const sel = document.getElementById('au-tenant');
+  sel.innerHTML = tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'">'+esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
+}
+async function loadTenantsQuiet(){ const r = await callApi('listTenants', {}); if (r.success) tenantsCache = r.data; }
+function onAdminRoleChange(){
+  const isTenantAdmin = document.getElementById('au-role').value === 'tenant_admin';
+  document.getElementById('au-tenant-wrap').style.display = isTenantAdmin ? '' : 'none';
+  if (isTenantAdmin) ensureTenantsForDropdown();
+}
+async function loadAdminUsers(){
+  const body = document.getElementById('adminusers-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  // ฝั่งตัวแทน สร้างได้แค่ tenant_admin ของตัวเอง ไม่ต้องเลือกตัวแทน — ซ่อนช่องเลือกตัวแทนและตัวเลือกสิทธิ์
+  const roleWrap = document.getElementById('au-role-wrap');
+  if (SESSION.tenantId) { roleWrap.style.display = 'none'; document.getElementById('au-tenant-wrap').style.display = 'none'; }
+  else { roleWrap.style.display = ''; onAdminRoleChange(); }
+
+  const r = await callApi('listAdminUsers', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีผู้ใช้งาน</td></tr>'; return; }
+  const roleLabel = { super_admin:'ผู้ดูแลระบบสูงสุด', owner_admin:'แอดมินบริษัท', tenant_admin:'แอดมินตัวแทน' };
+  body.innerHTML = r.data.map(u =>
+    '<tr><td class="mono-data">'+esc(u.username)+'</td><td>'+esc(u.displayName)+'</td><td>'+(roleLabel[u.roleCode]||u.roleCode)+'</td>' +
+    '<td class="mono-data">'+esc(u.tenantId||'-')+'</td>' +
+    '<td><span class="pill '+(u.status==='active'?'ok':'off')+'">'+(u.status==='active'?'ใช้งาน':'ปิด')+'</span></td>' +
+    '<td>' + (u.roleCode === 'super_admin' ? '<span style="color:var(--ink-faint);font-size:11.5px">แก้ผ่าน Editor</span>' :
+      '<button class="btn btn-sm" onclick="toggleAdminUserStatusUI(\''+u.id+'\',\''+u.status+'\')">'+(u.status==='active'?'ปิดใช้งาน':'เปิดใช้งาน')+'</button> ' +
+      '<button class="btn btn-sm" onclick="resetAdminUserPasswordUI(\''+u.id+'\',\''+esc(u.username)+'\')">รีเซ็ตรหัสผ่าน</button>') + '</td></tr>'
+  ).join('');
+}
+async function createAdminUserUI(){
+  const username = document.getElementById('au-username').value.trim();
+  const password = document.getElementById('au-password').value;
+  const displayName = document.getElementById('au-displayname').value.trim();
+  if (!username || !password || !displayName) { toast('กรุณากรอกให้ครบ', true); return; }
+  if (password.length < 8) { toast('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร', true); return; }
+  const payload = { username, password, displayName };
+  if (!SESSION.tenantId) {
+    payload.roleCode = document.getElementById('au-role').value;
+    if (payload.roleCode === 'tenant_admin') payload.tenantId = document.getElementById('au-tenant').value;
+  }
+  const r = await callApi('createAdminUser', payload);
+  if (!r.success) { toast(r.message, true); return; }
+  toast('เพิ่มผู้ใช้งานสำเร็จ');
+  ['au-username','au-password','au-displayname'].forEach(id => document.getElementById(id).value = '');
+  loadAdminUsers();
+}
+async function toggleAdminUserStatusUI(id, currentStatus){
+  const r = await callApi('updateAdminUser', { id, status: currentStatus === 'active' ? 'suspended' : 'active' });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('อัปเดตสถานะสำเร็จ'); loadAdminUsers();
+}
+async function resetAdminUserPasswordUI(id, username){
+  const newPassword = prompt('ตั้งรหัสผ่านใหม่ให้ ' + username + ' (อย่างน้อย 8 ตัวอักษร)');
+  if (!newPassword) return;
+  if (newPassword.length < 8) { toast('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร', true); return; }
+  const r = await callApi('resetAdminUserPasswordByAdmin', { id, newPassword });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('รีเซ็ตรหัสผ่านสำเร็จ — แจ้งรหัสใหม่ให้เจ้าของบัญชีเอง');
+}
+
+/* ══════════════ CHANGE PASSWORD (self) ══════════════ */
+async function changeMyPasswordUI(){
+  const currentPassword = document.getElementById('cpw-current').value;
+  const newPassword = document.getElementById('cpw-new').value;
+  const confirm2 = document.getElementById('cpw-confirm').value;
+  if (!currentPassword || !newPassword) { toast('กรุณากรอกให้ครบ', true); return; }
+  if (newPassword.length < 8) { toast('รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร', true); return; }
+  if (newPassword !== confirm2) { toast('รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน', true); return; }
+  const r = await callApi('changeMyPassword', { currentPassword, newPassword });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('เปลี่ยนรหัสผ่านสำเร็จ');
+  ['cpw-current','cpw-new','cpw-confirm'].forEach(id => document.getElementById(id).value = '');
 }
 
 /* ── init ── */

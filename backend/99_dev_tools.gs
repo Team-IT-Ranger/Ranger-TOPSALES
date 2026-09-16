@@ -54,6 +54,42 @@ function createTenantAdmin(tenantId, username, password, displayName) {
   Logger.log('✅ สร้าง tenant_admin สำเร็จ: ' + username + ' (tenant: ' + tenantId + ')');
 }
 
+// ลืม username/password แล้วนึกไม่ออก — รันตัวนี้ดูรายชื่อ username ที่มีอยู่ทั้งหมดก่อน
+// (ดูผลได้ที่ View → Logs หรือ Ctrl+Enter หลังรัน) รหัสผ่านกู้คืนไม่ได้เพราะเก็บเป็น hash
+// ต้องใช้ resetAdminPasswordDev() ตั้งรหัสใหม่แทน
+function listAdminUsernamesForRecovery() {
+  var rows = centralObjects('admin_users');
+  if (!rows.length) { Logger.log('ยังไม่มี admin_users เลย — รัน createFirstSuperAdmin() ก่อน'); return; }
+  rows.forEach(function(u) {
+    Logger.log(u.username + '  |  role=' + u.role_code + '  |  tenant=' + (u.tenant_id || '(บริษัท)') + '  |  status=' + u.status);
+  });
+}
+
+// ลืมรหัสผ่าน — ตั้งรหัสใหม่ให้ username ที่มีอยู่แล้ว (ไม่สร้างบัญชีใหม่)
+// แก้ 2 ค่าด้านล่างก่อน Run แล้วรีบเปลี่ยนรหัสผ่านเองในแอปหลัง login เข้าได้แล้ว
+function resetAdminPasswordDev() {
+  var username = 'admin';            // ← แก้เป็น username จริงที่จะรีเซ็ต
+  var newPassword = 'ChangeMe123!';  // ← ตั้งรหัสผ่านใหม่ตรงนี้
+
+  var sh = centralSheet('admin_users');
+  var data = sh.getDataRange().getValues();
+  var headers = data[0];
+  var userCol = headers.indexOf('username');
+  var hashCol = headers.indexOf('password_hash');
+  var saltCol = headers.indexOf('salt');
+
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][userCol]).toLowerCase() === username.toLowerCase()) {
+      var salt = Utilities.getUuid();
+      sh.getRange(i + 1, saltCol + 1).setValue(salt);
+      sh.getRange(i + 1, hashCol + 1).setValue(_hashPassword(newPassword, salt));
+      Logger.log('✅ ตั้งรหัสผ่านใหม่ให้ ' + username + ' สำเร็จ — เข้าสู่ระบบแล้วรีบเปลี่ยนรหัสผ่าน');
+      return;
+    }
+  }
+  Logger.log('ไม่พบ username: ' + username + ' — ลองรัน listAdminUsernamesForRecovery() ดูชื่อที่มีอยู่ก่อน');
+}
+
 // เรียกทดสอบว่าเชื่อม Central Sheet ได้ปกติหรือไม่
 function testCentralConnection() {
   var sheet = centralSheet('liff_users');
