@@ -632,6 +632,8 @@ function toast(msg, isErr){
   setTimeout(() => t.style.display = 'none', 3200);
 }
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Sheets บางทีคืนค่า is_active เป็น boolean true/false จริง ไม่ใช่ string 'TRUE'/'FALSE' — เช็คให้ครอบคลุมทั้งสองแบบ
+const isOn = v => v === true || v === 'TRUE' || v === 'true' || v === 1 || v === '1';
 const baht = n => (parseFloat(n) || 0).toLocaleString('th-TH', {minimumFractionDigits:2, maximumFractionDigits:2});
 
 /* ── API (doPost เดียว, text/plain กัน CORS preflight) ── */
@@ -1144,14 +1146,14 @@ async function loadProducts(){
     '<td class="mono-data">'+esc(p.barcode||'-')+'</td>' +
     '<td class="mono-data">'+esc(p.group_barcode||'-')+'</td>' +
     '<td class="mono-data">'+esc(p.external_code||'-')+'</td>' +
-    '<td><span class="pill '+(String(p.is_active)==='TRUE'?'ok':'off')+'">'+(String(p.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td>' +
-    '<td><button class="btn btn-sm" onclick="editProductUI('+p.record_id+')">แก้ไข</button> ' +
-      '<button class="btn btn-sm" onclick="toggleProductStatusUI('+p.record_id+',\''+esc(p.is_active)+'\')">'+(String(p.is_active)==='TRUE'?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td></tr>'
+    '<td><span class="pill '+(isOn(p.is_active)?'ok':'off')+'">'+(isOn(p.is_active)?'ใช้งาน':'ปิด')+'</span></td>' +
+    '<td><button class="btn btn-sm" onclick="editProductUI(\''+esc(p.record_id)+'\')">แก้ไข</button> ' +
+      '<button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td></tr>'
   ).join('');
 }
 function editProductUI(id){
   const p = productsCache.find(x => String(x.record_id) === String(id));
-  if (!p) return;
+  if (!p) { toast('ไม่พบสินค้านี้ในรายการ ลองโหลดหน้าใหม่', true); return; }
   editingProductId = id;
   document.getElementById('product-form-title').textContent = 'แก้ไขสินค้า: ' + p.name;
   document.getElementById('p-name').value = p.name || '';
@@ -1199,8 +1201,8 @@ async function saveProductUI(){
   cancelEditProductUI();
   loadProducts();
 }
-async function toggleProductStatusUI(id, currentStatus){
-  const r = await callApi('updateProduct', { id, isActive: currentStatus === 'TRUE' ? 'FALSE' : 'TRUE' });
+async function toggleProductStatusUI(id, isCurrentlyOn){
+  const r = await callApi('updateProduct', { id, isActive: isCurrentlyOn ? 'FALSE' : 'TRUE' });
   if (!r.success) { toast(r.message, true); return; }
   toast('อัปเดตสถานะสำเร็จ');
   loadProducts();

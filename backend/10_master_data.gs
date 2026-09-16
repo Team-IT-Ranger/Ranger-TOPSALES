@@ -111,7 +111,8 @@ function updateProduct(session, payload) {
   if (payload.costPrice !== undefined) fields.cost_price = payload.costPrice;
   if (payload.vatType !== undefined) fields.vat_type = payload.vatType;
   if (payload.externalCode !== undefined) fields.external_code = payload.externalCode;
-  centralUpdate('products', payload.id, fields);
+  var found = centralUpdate('products', payload.id, fields);
+  if (!found) return { success: false, message: 'ไม่พบสินค้านี้ (id: ' + payload.id + ')' };
   return { success: true };
 }
 
@@ -160,7 +161,8 @@ function updateProductUnit(session, payload) {
   if (payload.price !== undefined) fields.price = payload.price;
   if (payload.isActive !== undefined) fields.is_active = payload.isActive;
   if (payload.barcode !== undefined) fields.barcode = payload.barcode;
-  centralUpdate('product_units', payload.id, fields);
+  var found = centralUpdate('product_units', payload.id, fields);
+  if (!found) return { success: false, message: 'ไม่พบหน่วยขายนี้ (id: ' + payload.id + ')' };
   return { success: true };
 }
 
