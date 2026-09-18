@@ -24,3 +24,24 @@ docs/              เอกสารแผน/สถาปัตยกรรม
 
 Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pages (Admin App) + Vercel (Mobile App — แผนสัปดาห์ 3)
 — เตรียมโครงสร้างรองรับ Cloud Database เต็มรูปแบบไว้สำหรับเฟสถัดไป ยังไม่ใช้ตอนนี้
+
+## UAT / Production — แยกกันเสมอ
+
+ทุกการแก้ไขต้องผ่าน UAT ก่อน ผู้ใช้จริงบน production ต้องไม่โดนกระทบระหว่างเราทำงาน
+
+| | UAT | Production |
+|---|---|---|
+| Git branch | `UAT` | `main` |
+| Admin App | `.../admin-uat/` (แถบแดง "UAT") | `.../admin/` |
+| Backend | Apps Script โปรเจกต์ "TOPSHOP Backend UAT" (`backend/.clasp.uat.json`) | โปรเจกต์เดิม (`backend/.clasp.json`) |
+| Database | Central Sheet ของ UAT (สร้างโดย `setupUatEnvironment()`) + Tenant Sheet แยก | Central Sheet จริง |
+
+**ขั้นตอนทุกครั้ง**
+1. แก้โค้ด → commit ลง branch `UAT` เท่านั้น → `.dev/push-backend.sh uat` (ถ้าแก้ backend)
+2. ทดสอบบน `/admin-uat/` จนผ่าน
+3. เมื่ออนุมัติให้ขึ้นจริง: `git checkout main && git merge UAT --ff-only && git push` แล้ว `.dev/push-backend.sh prod` และ Deploy → New version ใน Apps Script ของ production
+4. ห้าม commit ลง `main` ตรงๆ
+
+`frontend-admin/config.js` เลือก backend เองตาม URL (`/admin-uat/` และ localhost = UAT) — ค่า UAT ว่างไว้จนกว่าจะตั้ง Web App URL ของ UAT
+UAT ไม่มีค่า → ระบบไม่ตกไปชี้ production (ล็อกอินไม่ได้ + มีแถบเตือน)
+`.dev/push-backend.sh uat` ไม่ส่ง `script_properties.gs` (มี secret และ Sheet ID จริงของ production) ไปโปรเจกต์ UAT

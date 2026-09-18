@@ -116,6 +116,27 @@ function backfillMissingProductCodes() {
     : 'ไม่มีสินค้ารายการไหนขาดรหัส — ไม่ต้องทำอะไรเพิ่ม');
 }
 
+// ══════ สร้างสภาพแวดล้อม UAT ครั้งแรก (รันใน Apps Script โปรเจกต์ "TOPSHOP Backend UAT" เท่านั้น) ══════
+// UAT ต้องแยกจาก production เด็ดขาด: คนละโปรเจกต์ Apps Script + คนละ Central Sheet + คนละ Tenant Sheet
+// ผู้ใช้จริงจึงไม่โดนกระทบเวลาเราทดสอบ/แก้แอป — ฟังก์ชันนี้สร้าง Central Sheet ใหม่ให้เอง ตั้ง Script Properties
+// สร้างตารางทั้งหมด และสร้าง super_admin ตั้งต้นของ UAT (ดูผลที่ Logs)
+// กันพลาด: ถ้าโปรเจกต์นี้มี CENTRAL_SHEET_FILEID อยู่แล้ว (เช่น เผลอรันใน production) จะไม่ทำอะไรเลย
+function setupUatEnvironment() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CENTRAL_SHEET_FILEID')) {
+    Logger.log('❌ หยุด: โปรเจกต์นี้ตั้ง CENTRAL_SHEET_FILEID ไว้แล้ว (' + props.getProperty('ENV_NAME') + ') — ไม่สร้างซ้ำ กันไปแตะข้อมูลเดิม');
+    return;
+  }
+  var ss = SpreadsheetApp.create('TOPSHOP UAT — Central Sheet');
+  props.setProperties({ CENTRAL_SHEET_FILEID: ss.getId(), ENV_NAME: 'uat' });
+  Logger.log('สร้าง Central Sheet UAT แล้ว: ' + ss.getUrl());
+
+  setupCentralSheet();
+  createFirstSuperAdmin();
+  Logger.log('✅ UAT พร้อมใช้ — Central Sheet: ' + ss.getUrl() + ' | login: admin / ChangeMe123! (เปลี่ยนรหัสหลังเข้าได้)');
+  Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Anyone) แล้วส่ง URL ที่ได้ให้ตั้งเป็น BACKEND_URL_UAT');
+}
+
 // เรียกทดสอบว่าเชื่อม Central Sheet ได้ปกติหรือไม่
 function testCentralConnection() {
   var sheet = centralSheet('liff_users');

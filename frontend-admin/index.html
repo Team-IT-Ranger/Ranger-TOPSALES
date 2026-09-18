@@ -27,6 +27,9 @@
   button{cursor:pointer;font-size:13px;font-family:inherit}
   a{color:var(--blue)}
 
+  /* ── แถบบอกสภาพแวดล้อม: UAT ต้องเห็นชัดตลอดเวลา กันเข้าใจผิดว่ากำลังแก้ข้อมูลจริง ── */
+  #env-banner{position:fixed;top:0;left:0;right:0;z-index:9999;background:#B5544C;color:#fff;text-align:center;font:700 12px 'Kanit',sans-serif;padding:3px 8px;letter-spacing:.04em}
+  body.env-uat #app-screen .main-area{padding-top:22px}
   /* ── login ── */
   #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--ground)}
   .login-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:34px;width:340px;box-shadow:0 10px 30px -14px rgba(22,28,31,.2)}
@@ -219,6 +222,8 @@
 </style>
 </head>
 <body>
+<script src="config.js"></script>
+<div id="env-banner" style="display:none"></div>
 
 <!-- ══════════ LOGIN ══════════ -->
 <div id="login-screen">
@@ -644,10 +649,14 @@
 
 <script>
 /* ตั้งครั้งเดียว — ไม่ต้องพิมพ์ URL เองเหมือนหน้าทดสอบเดิม */
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzDLcX5Qd4MMdBpcwr4MWoYJdP0JCiMMgMAnFmcC9t5zS2zoOfkfttXXcj0Ettza56gIA/exec';
+const APP_ENV = APP_CONFIG.ENV;                 // 'uat' | 'prod' (ดู config.js)
+const BACKEND_URL = APP_CONFIG.BACKEND_URL;
+// คีย์ localStorage แยกตามสภาพแวดล้อม — /admin/ กับ /admin-uat/ อยู่ origin เดียวกัน ถ้าใช้คีย์ร่วมกัน token ของอันหนึ่ง
+// จะไปโผล่ในอีกอัน (ส่ง token production ไปหา UAT แล้วโดนเตะออก) ทั้งสองต้องแยกกันเด็ดขาด
+const LS_TOKEN = 'topshop_' + APP_ENV + '_admin_token', LS_SESSION = 'topshop_' + APP_ENV + '_admin_session';
 
-let TOKEN = localStorage.getItem('topshop_admin_token') || '';
-let SESSION = JSON.parse(localStorage.getItem('topshop_admin_session') || 'null');
+let TOKEN = localStorage.getItem(LS_TOKEN) || '';
+let SESSION = JSON.parse(localStorage.getItem(LS_SESSION) || 'null');
 let SCOPE = 'tenant'; // 'tenant' | 'owner' — คำนวณจาก EFFECTIVE_TENANT_ID() เสมอ
 let ACTIVE_TENANT_ID = null; // Ultra Admin (super_admin) เท่านั้นที่ตั้งค่านี้ได้ — สวมสิทธิ์เข้าตัวแทนรายนั้น
 let productGroupsCache = [], customerGroupsCache = [], productsCache = [];
@@ -688,6 +697,7 @@ async function doLogin(){
   const password = document.getElementById('login-pass').value;
   const errEl = document.getElementById('login-err');
   errEl.style.display = 'none';
+  if (!BACKEND_URL) { errEl.textContent = 'สภาพแวดล้อม ' + APP_ENV.toUpperCase() + ' ยังไม่ได้ตั้งค่า backend'; errEl.style.display = 'block'; return; }
   if (!username || !password) { errEl.textContent = 'กรุณากรอก username และ password'; errEl.style.display = 'block'; return; }
 
   const btn = document.getElementById('login-btn');
@@ -702,8 +712,8 @@ async function doLogin(){
     if (!data.success) { errEl.textContent = data.message || 'เข้าสู่ระบบไม่สำเร็จ'; errEl.style.display = 'block'; return; }
     TOKEN = data.token;
     SESSION = { displayName: data.displayName, roleCode: data.roleCode, tenantId: data.tenantId };
-    localStorage.setItem('topshop_admin_token', TOKEN);
-    localStorage.setItem('topshop_admin_session', JSON.stringify(SESSION));
+    localStorage.setItem(LS_TOKEN, TOKEN);
+    localStorage.setItem(LS_SESSION, JSON.stringify(SESSION));
     routeAfterAuth();
   } catch (e) {
     errEl.textContent = 'เรียก backend ไม่ได้: ' + e.message;
@@ -714,7 +724,7 @@ async function doLogin(){
 }
 function doLogout(){
   TOKEN = ''; SESSION = null; ACTIVE_TENANT_ID = null;
-  localStorage.removeItem('topshop_admin_token'); localStorage.removeItem('topshop_admin_session');
+  localStorage.removeItem(LS_TOKEN); localStorage.removeItem(LS_SESSION);
   document.getElementById('app-screen').style.display = 'none';
   document.getElementById('picker-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
@@ -1689,6 +1699,16 @@ async function changeMyPasswordUI(){
   toast('เปลี่ยนรหัสผ่านสำเร็จ');
   ['cpw-current','cpw-new','cpw-confirm'].forEach(id => document.getElementById(id).value = '');
 }
+
+/* ── สภาพแวดล้อม ── */
+(function initEnv(){
+  if (APP_ENV === 'uat') {
+    const b = document.getElementById('env-banner');
+    b.style.display = 'block'; document.body.classList.add('env-uat');
+    b.textContent = BACKEND_URL ? 'UAT — สภาพแวดล้อมทดสอบ ข้อมูลไม่ใช่ของจริง' : 'UAT ยังไม่ได้ตั้งค่า backend (BACKEND_URL_UAT ใน config.js) — ยังใช้งานไม่ได้';
+    document.title = '[UAT] ' + document.title;
+  }
+})();
 
 /* ── init ── */
 window.onload = function(){ if (TOKEN && SESSION) routeAfterAuth(); };
