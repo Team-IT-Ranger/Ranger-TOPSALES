@@ -1,7 +1,7 @@
 /**
  * ===================== AUTH =====================
  * Backend นี้เป็น JSON API ล้วนๆ — ไม่มี HtmlService/doGet เสิร์ฟหน้าเว็บอีกต่อไป
- * หน้าตาทั้งหมด (LIFF มือถือ + Admin App) อยู่คนละโปรเจกต์ ไปขึ้นบน Vercel แล้วเรียก API นี้ผ่าน fetch()
+ * หน้าตาทั้งหมด (LIFF มือถือ + Admin App) อยู่คนละโปรเจกต์ (Admin App ขึ้น GitHub Pages, Mobile ขึ้น Vercel) แล้วเรียก API นี้ผ่าน fetch()
  *
  * doPost(e) เป็นทางเข้าเดียวของทุก action แยกเป็น 3 กลุ่มตามการยืนยันตัวตน:
  *  1) Public   — ยังไม่มีตัวตน (lineLoginUrl, lineExchangeCode, registerUser, checkUser, adminLogin)

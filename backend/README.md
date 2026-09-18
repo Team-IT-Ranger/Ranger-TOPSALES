@@ -2,8 +2,8 @@
 
 **Backend นี้เป็น JSON API ล้วนๆ ไม่มีหน้าเว็บ ไม่มี HtmlService** — จัดการ Sheet (Central + Tenant) และ
 business logic ทั้งหมดเท่านั้น หน้าตาทั้ง 2 แอป (Mobile LIFF ของพนักงานขาย และ Admin App) แยกคนละ
-โปรเจกต์ ไปขึ้นบน **Vercel** ทั้งคู่ (`frontend-mobile/`, `frontend-admin/` — ทั้งสองยังไม่ได้สร้างจริง
-รอสัปดาห์ 2-3) แล้วเรียก backend นี้ผ่าน `fetch()`
+โปรเจกต์ — Admin App (`frontend-admin/`) ขึ้น **GitHub Pages** แล้ว ส่วน Mobile (`frontend-mobile/`)
+ยังไม่ได้สร้างจริง รอสัปดาห์ 3 แล้วเรียก backend นี้ผ่าน `fetch()`
 
 โครงสร้างไฟล์: ไฟล์ `.gs` เรียงเลขตามลำดับที่ควรอ่าน/แก้ (ไม่ใช่ลำดับรัน — GAS โหลดทุกไฟล์เป็น global scope เดียวกัน)
 
@@ -47,7 +47,7 @@ Client (ทั้ง frontend-mobile และ frontend-admin) ยิง `fetch(
 
 ## ยังไม่ได้ทำ (สัปดาห์ถัดไป)
 
-- **frontend-mobile/** และ **frontend-admin/** บน Vercel — ยังไม่ได้สร้างจริง มีแค่ HTML เดิม (GAS
+- **frontend-mobile/** บน Vercel — ยังไม่ได้สร้างจริง มีแค่ HTML เดิม (GAS
   HtmlService รุ่นก่อนแยกโปรเจกต์) เก็บไว้อ้างอิงที่ `frontend-mobile/_legacy-gas-liff-reference/`
   เท่านั้น ต้องเขียนใหม่เป็น static site เรียก backend ผ่าน `fetch()` ตามสัญญา `doPost` ด้านบน
 - คลังสินค้า/ใบรับสินค้าเข้า/ใบโอนคลัง แบบมีเลขเอกสารทางการ (ปัจจุบัน restock/count ยังเป็นแบบเรียบง่าย)

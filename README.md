@@ -8,7 +8,8 @@
 ```
 backend/          Google Apps Script — JSON API ล้วนๆ (ไม่มีหน้าเว็บ) จัดการ Central + Tenant Sheets
                    deploy ด้วย clasp (มี .clasp.json ผูกกับโปรเจกต์จริงแล้ว) — ดู backend/README.md
-frontend-admin/    Admin App (ตัวแทนจำหน่าย + บริษัทเจ้าของสินค้า) — ยังไม่สร้าง แผนขึ้น Vercel สัปดาห์ 2
+frontend-admin/    Admin App (ตัวแทนจำหน่าย + บริษัทเจ้าของสินค้า) — deploy บน GitHub Pages อัตโนมัติ
+                   (.github/workflows/deploy-admin.yml: main → /admin/, UAT → /admin-uat/)
 frontend-mobile/   Mobile App พนักงานขาย (LINE LIFF) — ยังไม่สร้าง แผนขึ้น Vercel สัปดาห์ 3
                    มีของเดิม 2 ชุดเก็บไว้อ้างอิง ดู frontend-mobile/README.md
 docs/              เอกสารแผน/สถาปัตยกรรม
@@ -21,5 +22,5 @@ docs/              เอกสารแผน/สถาปัตยกรรม
 
 ## Stack
 
-Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub + Vercel (frontend ทั้ง 2 แอป)
+Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pages (Admin App) + Vercel (Mobile App — แผนสัปดาห์ 3)
 — เตรียมโครงสร้างรองรับ Cloud Database เต็มรูปแบบไว้สำหรับเฟสถัดไป ยังไม่ใช้ตอนนี้

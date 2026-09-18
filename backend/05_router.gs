@@ -36,7 +36,7 @@ function _handleMobileActionCore(lineUserId, action, payload) {
   }
 }
 
-// ── Admin App (hosted แยกบน Vercel — username/password + token ผ่าน doPost) ──
+// ── Admin App (hosted แยกบน GitHub Pages — username/password + token ผ่าน doPost) ──
 var ADMIN_ACTION_MAP = {
   getAdminDashboard:      getAdminDashboard,
   listAdminUsers:        listAdminUsers,

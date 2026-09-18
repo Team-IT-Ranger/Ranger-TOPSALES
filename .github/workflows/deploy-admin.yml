@@ -1,6 +1,6 @@
 name: Deploy Admin App to GitHub Pages
 
-# Pages รองรับได้แค่ 1 การ deploy ต่อ repo (ไม่มี multi-branch preview เหมือน Vercel)
+# Pages รองรับได้แค่ 1 การ deploy ต่อ repo (ไม่มี multi-branch preview แบบแยก URL ต่อ branch)
 # เลยรวมเป็น workflow เดียว เช็คเอาต์ทั้ง main (prod) และ UAT มาประกอบเป็นเว็บเดียว
 # แยกกันด้วย path: /admin/ = prod (main), /admin-uat/ = UAT
 # เพิ่ม frontend-mobile ทีหลังได้ด้วยแพทเทิร์นเดียวกัน (/mobile/, /mobile-uat/)
