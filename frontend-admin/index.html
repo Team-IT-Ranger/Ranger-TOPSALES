@@ -223,7 +223,7 @@
 <!-- ══════════ LOGIN ══════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="mascot-sr1.png?v=2" alt="SalesRanger" class="login-mascot">
+    <img src="mascot-sr1.png?v=3" alt="SalesRanger" class="login-mascot">
     <h1>SalesRanger TOPSHOP</h1>
     <p>เข้าสู่ระบบ Admin App</p>
     <div class="err" id="login-err"></div>
@@ -255,7 +255,7 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="sb-header">
-        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png?v=2" alt="SR"></span><span class="sb-logo-txt">TOPSHOP</span></div>
+        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png?v=3" alt="SR"></span><span class="sb-logo-txt">TOPSHOP</span></div>
         <button class="sb-ctrl-btn" id="pinBtn" title="ปักหมุดเมนูไว้" onclick="togglePin()">📌</button>
       </div>
       <div class="sb-company">
@@ -1037,8 +1037,7 @@ async function toggleStaffStatus(lineUserId, currentStatus){
 async function loadCustomers(){
   const body = document.getElementById('customers-body');
   body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
-  await ensureCustomerGroups();
-  const r = await callApi('listCustomersAdmin', {});
+  const [, r] = await Promise.all([ensureCustomerGroups(), callApi('listCustomersAdmin', {})]);
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
   if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีลูกค้า</td></tr>'; return; }
   const gName = {}; customerGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
@@ -1251,10 +1250,12 @@ function renderProductsTable(){
 }
 async function loadProducts(){
   const body = document.getElementById('products-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr>';
-  await ensureProductGroups();
-  const r = await callApi('listProductsAdmin', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
+  // เคยโหลดแล้ว → วาดจาก cache ทันที (หน้าไม่ว่าง ไม่ต้องรอ backend 2-4 วิ) แล้วค่อยอัปเดตเบื้องหลัง
+  if (productsCache.length) renderProductsTable();
+  else body.innerHTML = '<tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr>';
+  // ยิงคู่ขนาน — เดิมรอกลุ่มสินค้าให้เสร็จก่อนค่อยโหลดสินค้า เสียเวลาเป็นสองเท่าโดยไม่จำเป็น
+  const [, r] = await Promise.all([ensureProductGroups(), callApi('listProductsAdmin', {})]);
+  if (!r.success) { if (!productsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
   productsCache = r.data;
   renderProductsTable();
 }
@@ -1390,9 +1391,11 @@ async function toggleProductStatusUI(id, isCurrentlyOn){
   renderProductsTable();
   toast('อัปเดตสถานะสำเร็จ');
 }
-async function ensureProductGroups(){
-  const r = await callApi('listProductGroups', {});
-  if (r.success) productGroupsCache = r.data;
+async function ensureProductGroups(force){
+  if (force || !productGroupsCache.length) {
+    const r = await callApi('listProductGroups', {});
+    if (r.success) productGroupsCache = r.data;
+  }
   const opts = productGroupsCache.map(g => '<option value="'+g.record_id+'">'+esc(g.name)+'</option>').join('');
   ['pr-group'].forEach(id => { const el = document.getElementById(id); el.innerHTML = el.innerHTML.split('</option>')[0] + '</option>' + opts; });
   const pgBody = document.getElementById('pgroups-body');
@@ -1407,7 +1410,7 @@ async function addProductGroupUI(){
   if (!r.success) { toast(r.message, true); return; }
   toast('เพิ่มกลุ่มสำเร็จ');
   document.getElementById('pg-name').value = ''; document.getElementById('pg-desc').value = '';
-  ensureProductGroups();
+  ensureProductGroups(true);
 }
 async function loadProductUnitsUI(){
   const productId = document.getElementById('u-product').value;
@@ -1464,10 +1467,10 @@ function renderPromotionsTable(){
 }
 async function loadPromotions(){
   const body = document.getElementById('promotions-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
-  await ensureProductGroups(); await ensureCustomerGroups();
-  const r = await callApi('listPromotions', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  if (promotionsCache.length) renderPromotionsTable();
+  else body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  const [, , r] = await Promise.all([ensureProductGroups(), ensureCustomerGroups(), callApi('listPromotions', {})]);
+  if (!r.success) { if (!promotionsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   promotionsCache = r.data;
   renderPromotionsTable();
 }

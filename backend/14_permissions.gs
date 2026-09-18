@@ -45,11 +45,27 @@ function _effectiveTenantId(session, payload) {
 // role_code เริ่มต้นตอน setupCentralSheet — ดู seedRolesDefaults ใน 00_setup_sheets.gs
 // super_admin ข้ามทุกการเช็คสิทธิ์เสมอ กันกรณีตั้งค่า role_permissions ผิดแล้วล็อกตัวเองออกจากระบบ
 
+// ตารางสิทธิ์แทบไม่เปลี่ยน (แก้ผ่าน setupCentralSheet เท่านั้น) แต่ถูกอ่านทุกคำขอของแอดมินที่ไม่ใช่ super_admin
+// — แต่ละครั้งต้องเปิด Spreadsheet + อ่านชีต ~1-2 วิ เลยแคชข้ามคำขอ 5 นาที (สิทธิ์เป็นของ role ไม่ใช่ของ user
+// จึงแชร์แคชเดียวกันได้ปลอดภัย) แคชล้มเหลว/เกิน 100KB ก็อ่านชีตตรงๆ ตามปกติ
+var ROLE_PERMS_CACHE_KEY = 'role_permissions_v1';
+function _rolePermissionRows() {
+  var cache = CacheService.getScriptCache();
+  try {
+    var hit = cache.get(ROLE_PERMS_CACHE_KEY);
+    if (hit) return JSON.parse(hit);
+  } catch (e) {}
+  var rows = centralObjects('role_permissions');
+  try { cache.put(ROLE_PERMS_CACHE_KEY, JSON.stringify(rows), 300); } catch (e) {}
+  return rows;
+}
+function clearRolePermissionsCache() { CacheService.getScriptCache().remove(ROLE_PERMS_CACHE_KEY); }
+
 function hasPermission(adminUser, moduleCode, action) {
   if (!adminUser) return false;
   if (adminUser.role_code === 'super_admin') return true;
 
-  var rows = centralObjects('role_permissions');
+  var rows = _rolePermissionRows();
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i].role_code) === String(adminUser.role_code) && String(rows[i].module_code) === String(moduleCode)) {
       var flag = action === 'edit' ? rows[i].can_edit : rows[i].can_view;

@@ -75,6 +75,7 @@ function setupCentralSheet() {
   _seedProvinces();
   _seedRolesAndPermissions();
 
+  clearRolePermissionsCache(); // ให้สิทธิ์ที่เพิ่งเติม (เช่น settings) มีผลทันที ไม่ต้องรอแคช 5 นาที
   SpreadsheetApp.flush();
   Logger.log('Created: ' + created.join(', '));
   Logger.log('Already existed (columns synced): ' + existed.join(', '));
