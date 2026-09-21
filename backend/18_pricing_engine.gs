@@ -24,7 +24,10 @@ function findActivePriceList(customerGroupId, dateStr) {
 // { list, items:[price_list_items แถวดิบ], billPromos:[{minAmountExVat,percent}] } หรือ null (ไม่มีชุดราคาที่ใช้ได้ → ใช้ราคาแบบเดิม)
 function getPricingContext(customerGroupId, dateStr) {
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  var list = findActivePriceList(customerGroupId, dateStr || today);
+  return _pricingContextForList(findActivePriceList(customerGroupId, dateStr || today));
+}
+// ชุดราคาตาม id (ไม่สนสถานะ/วันที่) — ใช้กับหน้า "ทดลองคิดราคา" เพื่อลองชุดร่างก่อนเปิดใช้งาน
+function _pricingContextForList(list) {
   if (!list) return null;
   return {
     list: list,
@@ -106,11 +109,20 @@ function priceCart(ctx, cart, opts) {
            total: _round2(subtotal - billDiscount), priceListId: ctx.list.record_id, priceListName: ctx.list.name };
 }
 
-// แอดมินทดลองคิดราคา — payload: { customerGroupId, date?, paymentType, isVan, items:[{productId|productCode, unitCode, qty}] }
+// แอดมินทดลองคิดราคา — payload: { priceListId | customerGroupId+date?, paymentType, isVan, items:[{productId|productCode, unitCode, qty}] }
+// ส่ง priceListId = ลองชุดนั้นตรงๆ (รวมชุดร่าง) ไม่ส่ง = ใช้ชุดที่ "ใช้งาน" ของกลุ่มลูกค้า ณ วันที่ เหมือนตอนขายจริง
 function previewPricing(session, payload) {
   var err = _requirePermission(session, 'pricing', 'view'); if (err) return err;
-  var ctx = getPricingContext(payload.customerGroupId, payload.date);
-  if (!ctx) return { success: false, message: 'ไม่มีชุดราคาที่ "ใช้งาน" ของกลุ่มลูกค้านี้ ณ วันที่ระบุ' };
+  var ctx;
+  if (payload.priceListId) {
+    var picked = null;
+    centralObjects('price_lists').forEach(function(l) { if (String(l.record_id) === String(payload.priceListId)) picked = l; });
+    ctx = _pricingContextForList(picked);
+    if (!ctx) return { success: false, message: 'ไม่พบชุดราคานี้' };
+  } else {
+    ctx = getPricingContext(payload.customerGroupId, payload.date);
+    if (!ctx) return { success: false, message: 'ไม่มีชุดราคาที่ "ใช้งาน" ของกลุ่มลูกค้านี้ ณ วันที่ระบุ' };
+  }
   var products = centralObjects('products');
   var cart = [];
   for (var i = 0; i < (payload.items || []).length; i++) {

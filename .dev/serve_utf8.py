@@ -11,5 +11,6 @@ class UTF8Handler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 port = int(sys.argv[1]) if len(sys.argv) > 1 else 5501
-with socketserver.TCPServer(("", port), UTF8Handler) as httpd:
+socketserver.ThreadingTCPServer.daemon_threads = True
+with socketserver.ThreadingTCPServer(("", port), UTF8Handler) as httpd:
     httpd.serve_forever()

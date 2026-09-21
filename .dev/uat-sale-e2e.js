@@ -64,7 +64,7 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   check('recordSale จำนวน 0 ถูกปฏิเสธ', !sale.success, sale);
 
   const prod = (await admin('listProductsAdmin')).data.find(p => p.record_id === ext.record_id);
-  check('has_transactions ของสินค้าที่ขายถูกตั้ง TRUE', String(prod.has_transactions) === 'TRUE', prod.has_transactions);
+  check('has_transactions ของสินค้าที่ขายถูกตั้ง TRUE', String(prod.has_transactions).toUpperCase() === 'TRUE', prod.has_transactions);
 
   const recent = await mobile('getRecentSales', {});
   console.log('recent sales sample:', JSON.stringify(recent).slice(0, 400));
