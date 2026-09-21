@@ -4,3 +4,10 @@ backend/script_properties.gs
 
 node_modules/
 .DS_Store
+
+# SheetJS สำหรับทดสอบตัวอ่านไฟล์ใน node เท่านั้น (ดาวน์โหลดจาก CDN) — ห้าม commit
+.dev/xlsx.full.min.js
+.dev_scratch/
+
+# ใบราคา/ข้อมูลราคาจริงของบริษัท — เก็บบนไดรฟ์ ห้ามขึ้น GitHub
+reference/
