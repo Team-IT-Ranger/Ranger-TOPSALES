@@ -10,6 +10,7 @@ var ACTION_MAP = {
   getDashboard:   getDashboard,
   getRecentSales: getRecentSales,
   recordSale:     recordSale,
+  quoteSale:      quoteSale,
   restockVan:     restockVan,
   submitCount:    submitCount,
   checkInVisit:   checkInVisit,
@@ -79,6 +80,7 @@ var ADMIN_ACTION_MAP = {
   updatePriceList:        updatePriceList,
   setPriceListStatus:     setPriceListStatus,
   deletePriceList:        deletePriceList,
+  previewPricing:         previewPricing,
 
   listPromotions:         listPromotions,
   addPromotion:           addPromotion,

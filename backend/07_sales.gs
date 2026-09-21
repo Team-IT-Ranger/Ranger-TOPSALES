@@ -57,7 +57,26 @@ function recordSale(user, payload) {
 
   // แปลงเป็นหน่วยฐานล้วนๆ ให้เครื่องยนต์โปรโมชั่น (ผลรวม price×qty เท่าเดิมเสมอ ไม่ว่าจะคิดหน่วยไหน)
   var itemsWithGroup = items.map(function(it) { return { productId: it.productId, qty: it.baseQty, price: it.basePrice, groupId: it.groupId }; });
-  var calc = applyPromotions(itemsWithGroup, payload.customerId);
+
+  // ── ชุดราคาตามกลุ่มลูกค้า (17/18_pricing*.gs) ──
+  // ร้านที่กลุ่มของร้านมีชุดราคา "ใช้งาน" ณ วันนี้ → ชุดราคาเป็นแหล่งราคาเดียว (ขั้นบันได/เงินสด-เครดิต/แพ็คเฉพาะ Cash Van/
+  // โปรท้ายบิล) ห้ามซ้อนกับ discount_rules แบบเดิม (ส่วนลดจะเบิ้ล) และสินค้าที่ไม่อยู่ในชุดราคา = ขายไม่ได้ (ดีกว่าขายผิดราคา)
+  // ไม่มีชุดราคาที่ใช้ได้ → ทำงานแบบเดิมทุกอย่าง
+  var pricingCtx = getPricingContext(_customerGroupId(payload.customerId));
+  var priceListUsed = null;
+  var calc;
+  if (pricingCtx) {
+    var priced = priceCart(pricingCtx,
+      items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
+      { isCredit: isCreditPayment(payload.paymentType), isVan: user.role === 'van_sales' });
+    if (!priced.success) return { success: false, message: priced.message, code: priced.code };
+    items.forEach(function(it, i) { it.price = priced.lines[i].unitPrice; it.lineTotal = priced.lines[i].lineTotal; });
+    priceListUsed = pricingCtx.list;
+    calc = { subtotal: priced.subtotal, discount: priced.billDiscount, total: priced.total, freeGoods: [],
+             appliedRules: priced.billPercent ? [{ ruleId: 'BILL', ruleName: 'ส่วนลดท้ายบิล ' + priced.billPercent + '% (ยอดรวมครบ ' + priced.billMinExVat + ' บาท ไม่รวม VAT)', type: 'percent', value: priced.billPercent }] : [] };
+  } else {
+    calc = applyPromotions(itemsWithGroup, payload.customerId);
+  }
 
   // เคารพการ "ยกเลิกรับของแถม" ที่ผู้ใช้ติ๊กออกจากฝั่ง client แต่ตัวของแถมเองต้องมาจากผลคำนวณฝั่งเซิร์ฟเวอร์เท่านั้น
   var requestedFreeOff = {};
@@ -92,7 +111,7 @@ function recordSale(user, payload) {
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
     sale_by: user.lineUserId, lat: payload.latitude || '', lng: payload.longitude || '',
-    map: payload.googleMap || '', note: '', created_at: createdAt
+    map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt
   });
 
   items.forEach(function(it) {
@@ -150,4 +169,16 @@ function _cutVanStock(tenantId, lineUserId, need, orderId) {
     if (!found) sh.appendRow([lineUserId, pid, -need[pid]]);
     tenantAppend(tenantId, 'stock_movements', { record_id: tenantNextId(tenantId, 'stock_movements'), line_user_id: lineUserId, product_id: pid, change_qty: -need[pid], type: 'sale', ref_id: orderId, created_at: nowStr() });
   });
+}
+
+// ── ราคาในตะกร้า (Mobile) ก่อนกดขาย — ใช้เครื่องยนต์ชุดเดียวกับ recordSale เป๊ะ ผลจึงตรงกับบิลที่จะออก ──
+// payload: { customerId, paymentType, items:[{productId, unitCode, qty}] }
+// ไม่มีชุดราคาที่ใช้ได้ → { success:true, priceList:null } (ให้แอปใช้ราคาจากข้อมูลตั้งต้นแบบเดิม)
+function quoteSale(user, payload) {
+  var ctx = getPricingContext(_customerGroupId(payload.customerId));
+  if (!ctx) return { success: true, priceList: null };
+  var res = priceCart(ctx, (payload.items || []).map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
+    { isCredit: isCreditPayment(payload.paymentType), isVan: user.role === 'van_sales' });
+  if (res.success) res.priceList = { id: ctx.list.record_id, name: ctx.list.name };
+  return res;
 }
