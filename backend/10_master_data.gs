@@ -92,9 +92,16 @@ function _productCodeTakenBy(code, excludeId) {
   var rows = centralObjects('products');
   for (var i = 0; i < rows.length; i++) {
     if (excludeId !== undefined && excludeId !== null && String(rows[i].record_id) === String(excludeId)) continue;
-    if (String(rows[i].product_code || '').trim().toLowerCase() === norm) return rows[i];
+    if (_productAllCodes(rows[i]).indexOf(norm) !== -1) return rows[i];
   }
   return null;
+}
+
+// รหัสทั้งหมดของสินค้า (product_code + alias_codes) เป็นตัวพิมพ์เล็ก — ใช้เช็คซ้ำและจับคู่ตอนนำเข้าใบราคา
+function _productAllCodes(p) {
+  var codes = [String(p.product_code || '').trim().toLowerCase()];
+  String(p.alias_codes || '').split(',').forEach(function(c) { c = c.trim().toLowerCase(); if (c) codes.push(c); });
+  return codes.filter(function(c) { return c; });
 }
 
 function _productById(id) {
@@ -155,6 +162,14 @@ function updateProduct(session, payload) {
   if (payload.costPrice !== undefined) fields.cost_price = payload.costPrice;
   if (payload.vatType !== undefined) fields.vat_type = payload.vatType;
   if (payload.externalCode !== undefined) fields.external_code = payload.externalCode;
+  if (payload.aliasCodes !== undefined) {
+    var aliases = String(payload.aliasCodes || '').split(',').map(function(c) { return c.trim(); }).filter(Boolean);
+    for (var ai = 0; ai < aliases.length; ai++) {
+      var aClash = _productCodeTakenBy(aliases[ai], payload.id);
+      if (aClash) return { success: false, message: 'รหัส "' + aliases[ai] + '" ถูกใช้แล้วโดย "' + aClash.name + '"' };
+    }
+    fields.alias_codes = aliases.join(',');
+  }
   var found = centralUpdate('products', payload.id, fields);
   if (!found) return { success: false, message: 'ไม่พบสินค้านี้ (id: ' + payload.id + ')' };
   return { success: true };

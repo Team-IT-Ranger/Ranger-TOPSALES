@@ -6,9 +6,9 @@ for (const f of fs.readdirSync(dir).filter(x=>x.endsWith('.xlsx')&&x.startsWith(
   const res=P.parse(XLSX, fs.readFileSync(path.join(dir,f)), {type:'buffer'});
   console.log('\n=====',f.slice(0,60),'| sheets:',res.sheets.length,'hiddenSheetsSkipped:',res.skippedHiddenSheets);
   for (const s of res.sheets) {
-    console.log(' title:',s.title.slice(0,110));
+    console.log(' title:',s.title.slice(0,110),'| period',JSON.stringify(P.parsePeriod(s.title)));
     console.log(' cash:',s.hasCash,'credit:',s.hasCredit,'items:',s.items.length,'billPromos:',JSON.stringify(s.billPromos.map(b=>[b.minAmountExVat,b.percent])));
-    for (const it of s.items) console.log('  -',it.codes.join('/'),'|',it.pack,'| list',it.listExVat,'/',it.listInclVat,'| tiers',it.tiers.map(t=>`${t.min}-${t.max===null?'∞':t.max}:${t.cashInclVat}/${t.creditInclVat}`).join(' '),'| packs',it.packs.map(p=>`${p.cashInclVat}`).join(','),'| sug',it.suggestedPack,'retail',it.retailPiece,'| names',it.names.length);
+    for (const it of s.items) console.log('  -',it.variants.map(v=>v.codes.join('/')).join(' ; '),'|',it.pack,'x'+it.caseFactor,'| list',it.listExVat,'/',it.listInclVat,'| tiers',it.tiers.map(t=>`${t.min}-${t.max===null?'∞':t.max}:${t.cashInclVat}/${t.creditInclVat}`).join(' '),'| packs',it.packs.map(p=>`${p.cashInclVat}`).join(','),'| sug',it.suggestedPack,'retail',it.retailPiece,'| variants',it.variants.length);
     console.log(' warnings:',s.warnings.length? '\n   '+s.warnings.join('\n   ') : 'none');
   }
 }

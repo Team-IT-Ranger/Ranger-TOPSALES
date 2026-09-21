@@ -73,6 +73,13 @@ var ADMIN_ACTION_MAP = {
   listPaymentTypes:         listPaymentTypes,
   addPaymentType:           addPaymentType,
 
+  listPriceLists:         listPriceLists,
+  getPriceList:           getPriceList,
+  importPriceList:        importPriceList,
+  updatePriceList:        updatePriceList,
+  setPriceListStatus:     setPriceListStatus,
+  deletePriceList:        deletePriceList,
+
   listPromotions:         listPromotions,
   addPromotion:           addPromotion,
   updatePromotion:        updatePromotion,

@@ -87,6 +87,25 @@ function appendRowToSheet(sh, obj) {
   return sh.getLastRow();
 }
 
+// เติมหลายแถวรวดเดียว (setValues ครั้งเดียว) — นำเข้าไฟล์ทีละแถวด้วย appendRow ช้ามากจนใช้ไม่ได้
+function appendRowsToSheet(sh, objs) {
+  if (!objs.length) return 0;
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var rows = objs.map(function(o) { return headers.map(function(h) { return o[h] !== undefined ? o[h] : ''; }); });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+  return rows.length;
+}
+function centralAppendMany(name, objs) { return appendRowsToSheet(centralSheet(name), objs); }
+
+// ลบทุกแถวที่คอลัมน์ colName = value (ลบจากล่างขึ้นบน ไม่ให้เลขแถวเลื่อน)
+function deleteRowsWhere(sh, colName, value) {
+  var data = sh.getDataRange().getValues();
+  var col = data[0].indexOf(colName); if (col === -1) return 0;
+  var n = 0;
+  for (var i = data.length - 1; i >= 1; i--) if (String(data[i][col]) === String(value)) { sh.deleteRow(i + 1); n++; }
+  return n;
+}
+
 // อัปเดตบางฟิลด์ของแถวที่ record_id ตรงกับที่ระบุ (partial update ตาม key ที่ส่งมาใน obj)
 function updateRowInSheet(sh, recordId, obj) {
   var data = sh.getDataRange().getValues();

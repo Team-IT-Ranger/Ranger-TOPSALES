@@ -13,6 +13,25 @@
   var num = function (v) { if (v === '' || v == null) return null; var n = Number(v); return isFinite(n) ? n : null; };
   var round2 = function (n) { return Math.round(n * 100) / 100; };
 
+  // บรรจุ "1x12x5" = 1 หีบ มี 12 แพ็ค แพ็คละ 5 ชิ้น → 60 หน่วยฐานต่อหีบ (เลขนำหน้า 1 คือ "1 หีบ" ไม่นับ)
+  function packFactor(txt) {
+    var n = String(txt || '').split(/x/i).map(function (x) { return Number(String(x).trim()); });
+    if (n.length < 2 || n.some(function (x) { return !isFinite(x) || x <= 0; })) return null;
+    return n.slice(1).reduce(function (a, b) { return a * b; }, 1);
+  }
+  var TH_MONTHS = { 'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4, 'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'กรกฏาคม': 7,
+                    'สิงหาคม': 8, 'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12 };
+  // "เดือน กรกฏาคม - กันยายน 2569" → { from:'2026-07-01', to:'2026-09-30' } (ปี พ.ศ. → ค.ศ.) ไม่เจอ = null
+  function parsePeriod(title) {
+    var mons = Object.keys(TH_MONTHS).join('|');
+    var m = String(title || '').match(new RegExp('(' + mons + ')\\s*(?:-|–|ถึง)?\\s*(' + mons + ')?\\s*(25\\d\\d)'));
+    if (!m) return null;
+    var m1 = TH_MONTHS[m[1]], m2 = m[2] ? TH_MONTHS[m[2]] : m1, year = Number(m[3]) - 543;
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var last = new Date(year, m2, 0).getDate();
+    return { from: year + '-' + pad(m1) + '-01', to: year + '-' + pad(m2) + '-' + pad(last) };
+  }
+
   function colLetter(i) { var s = ''; i++; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
 
   function parseSheet(XLSX, ws, sheetName) {
@@ -93,7 +112,7 @@
 
       var isHeader = /^\d+x/i.test(packTxt) && unitTxt === 'หีบ';
       if (isHeader) {
-        cur = { names: [String(name).trim()], codes: codes, pack: packTxt, unit: 'หีบ',
+        cur = { variants: [{ name: String(name).trim(), codes: codes }], pack: packTxt, caseFactor: packFactor(packTxt), unit: 'หีบ',
                 listExVat: num(val(r, colsFound.listEx)), listInclVat: colsFound.listIncl != null ? num(val(r, colsFound.listIncl)) : null,
                 tiers: [], packs: [], suggestedPack: null, retailPiece: null, row: r + 1 };
         var single = netCash(r);
@@ -112,15 +131,15 @@
         continue;
       }
       if (nameTxt.indexOf('ขายเฉพาะหน่วยรถ') !== -1) {
-        cur.packs.push({ unit: 'แพ็ค', pack: packTxt || null, listExVat: num(val(r, colsFound.listEx)),
+        cur.packs.push({ unit: 'แพ็ค', pack: packTxt || null, factor: packFactor(packTxt), listExVat: num(val(r, colsFound.listEx)),
                          listInclVat: colsFound.listIncl != null ? num(val(r, colsFound.listIncl)) : null,
                          cashInclVat: netCash(r), creditInclVat: netCredit(r), vanOnly: true, note: String(name).trim() });
         if (colsFound.retail != null && num(val(r, colsFound.retail)) != null && cur.retailPiece == null) cur.retailPiece = num(val(r, colsFound.retail));
         continue;
       }
       // แถวชื่อ+รหัสที่ไม่มีบรรจุ ติดกับแถวหัว = สินค้าอีกตัวที่ใช้ชุดราคาเดียวกัน (นับเฉพาะก่อนเจอแถวขั้นบันไดแรก)
-      if (codes.length && !cur.tiers.length && !cur.packs.length) { cur.names.push(String(name).trim()); cur.codes = cur.codes.concat(codes); continue; }
-      if (codes.length && r === lastHeaderRow + 1) { cur.names.push(String(name).trim()); cur.codes = cur.codes.concat(codes); }
+      if (codes.length && !cur.tiers.length && !cur.packs.length) { cur.variants.push({ name: String(name).trim(), codes: codes }); continue; }
+      if (codes.length && r === lastHeaderRow + 1) { cur.variants.push({ name: String(name).trim(), codes: codes }); }
     }
 
     // ── ตรวจเลขด้วยกฎของไฟล์เอง ──
@@ -136,7 +155,8 @@
           warnings.push('แถว ' + it.row + ' ' + t.label + ': เครดิต−เงินสด = ' + round2(t.creditInclVat - t.cashInclVat) + ' (ปกติ +15)');
         prev = t;
       });
-      if (!it.tiers.length && !it.packs.length) warnings.push('แถว ' + it.row + ': สินค้า ' + it.names[0] + ' ไม่มีราคา');
+      if (!it.tiers.length && !it.packs.length) warnings.push('แถว ' + it.row + ': สินค้า ' + it.variants[0].name + ' ไม่มีราคา');
+      if (!it.caseFactor) warnings.push('แถว ' + it.row + ': อ่านบรรจุ "' + it.pack + '" ไม่ออก');
     });
 
     // ── โปรระดับบิล (ข้อความท้ายตาราง) ──
@@ -171,6 +191,6 @@
     return { sheets: results, skippedHiddenSheets: wb.SheetNames.length - visible.length };
   }
 
-  var api = { parse: parse };
+  var api = { parse: parse, packFactor: packFactor, parsePeriod: parsePeriod };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PricelistParser = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -22,6 +22,7 @@ var MODULE_REGISTRY = [
   { code: 'sales_report',   label: 'รายงานการขาย',        scope: 'both'   },
   // ── ฝั่งบริษัทเจ้าของสินค้า ──
   { code: 'products',       label: 'สินค้าและราคา',       scope: 'owner'  },
+  { code: 'pricing',        label: 'ชุดราคาและส่วนลด',     scope: 'owner'  },
   { code: 'promotions',     label: 'โปรโมชั่น',           scope: 'owner'  },
   { code: 'tenants',        label: 'ตัวแทนจำหน่าย',       scope: 'owner'  },
   { code: 'settings',       label: 'ข้อมูลกลาง (กลุ่มลูกค้า/ช่องทางจำหน่าย/ประเภทชำระเงิน)', scope: 'owner' },

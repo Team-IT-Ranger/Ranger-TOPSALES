@@ -125,6 +125,8 @@ function adminLogin(payload) {
   if (String(found.status) !== 'active') return { success: false, message: 'บัญชีนี้ถูกระงับการใช้งาน' };
   if (_hashPassword(password, found.salt) !== found.password_hash) return { success: false, message: 'รหัสผ่านไม่ถูกต้อง' };
 
+  ensureSchemaCurrent();   // สคีมา Central Sheet เปลี่ยนตามโค้ดใหม่ → ปรับให้เองครั้งเดียว (ดู 00_setup_sheets.gs)
+
   var cfg = getConfig();
   var token = Utilities.getUuid();
   var session = {

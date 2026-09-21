@@ -21,9 +21,20 @@ var CENTRAL_SHEETS = {
   // barcode: บาร์โค้ด "ชุด" ของหน่วยฐาน unique เฉพาะสินค้า+หน่วยนี้เท่านั้น
   // group_barcode: บาร์โค้ด "กลุ่ม" ของหน่วยฐาน — ตั้งใจให้ซ้ำกันได้ข้ามหลาย record (สินค้าเดียวกันจริงแต่คนละรหัสสินค้า)
   // vat_type: 'none' | 'included' | 'excluded' (VAT ใช้อัตรา 7% คงที่ตามกฎหมายไทย ไม่ต้องเก็บอัตราแยกรายสินค้า)
+  // alias_codes: รหัสอื่นของสินค้าตัวเดียวกัน คั่นด้วย , (เช่น ใบราคาเขียน "10189 / 10191" = product_code 10189 + alias 10191)
+  //   ต้อง unique รวมกับ product_code ของสินค้าทุกตัว — ใช้จับคู่ตอนนำเข้าใบราคา/ไฟล์ขาย
   products: ['record_id','product_code','name','base_price','unit','unit_code','group_id','is_active','external_code',
-    'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions'],
+    'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions','alias_codes'],
   product_groups: ['record_id','name','description'],
+  // ── ชุดราคา/ส่วนลดตามกลุ่มลูกค้า (ใบรายการขายรายไตรมาส) — ดู 17_pricing.gs ──
+  //  price_lists: 1 ชุด = 1 กลุ่มลูกค้า × 1 ช่วงเวลา, status: draft | active | archived (valid_from/to เป็นข้อความ yyyy-MM-dd)
+  //  price_list_items: 1 แถว = 1 ขั้นราคาของ 1 สินค้า 1 หน่วยขาย — ราคาสุทธิรวม VAT เป็นตัวตั้ง (ส่วนลด % คำนวณเอา)
+  //    line_id = กลุ่มแถวที่ใช้ตารางขั้นบันไดร่วมกัน (เช่น แซนดัลวูด+ลาเวนเดอร์) นับจำนวนหีบรวมกันทั้ง line
+  //    unit_code CASE=หีบ, PACK=แพ็ค (van_only=TRUE ขายได้เฉพาะ Cash Van + เงินสด), max_qty ว่าง = ขึ้นไป
+  price_lists: ['record_id','name','customer_group_id','valid_from','valid_to','status','source_file','note','created_at','activated_at'],
+  price_list_items: ['record_id','price_list_id','line_id','product_id','unit_code','unit_factor','min_qty','max_qty',
+    'list_price_ex_vat','cash_price_incl_vat','credit_price_incl_vat','van_only','suggested_price','retail_price','tier_label'],
+  price_list_bill_promos: ['record_id','price_list_id','min_amount_ex_vat','percent'],
   // หน่วยขายเพิ่มเติมของสินค้า นอกเหนือจากหน่วยฐาน (products.unit/base_price)
   // เช่น สินค้าเป็น "ชิ้น" ฐาน แต่ขายเป็น "แพ็ค" (factor 6) หรือ "ลัง" (factor 12) ได้ด้วย คนละราคา
   // อ้างอิงจากไฟล์ export จริงของ SmartVan BackOffice (Export_Express) ที่เก็บ UnitCode+UnitFactor แยกจากกัน
@@ -45,6 +56,35 @@ var CENTRAL_SHEETS = {
   districts: ['id','name','name_en','province_id'],
   subdistricts: ['id','name','name_en','district_id','zipcode']
 };
+
+// สคีมาเปลี่ยน (เพิ่มตาราง/คอลัมน์ใน CENTRAL_SHEETS) → รัน setupCentralSheet() ให้เองอัตโนมัติ "ครั้งเดียว" ตอนแอดมินล็อกอิน
+// เทียบลายนิ้วมือ (MD5) ของ CENTRAL_SHEETS กับที่เคยใช้ไว้ใน Script Properties — ไม่ต้องจำไปรัน setup ด้วยมืออีก
+// ล้มเหลวไม่ทำให้ล็อกอินพัง (แค่ไม่บันทึกลายนิ้วมือ จะลองใหม่ครั้งหน้า)
+function ensureSchemaCurrent() {
+  try {
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(CENTRAL_SHEETS));
+    var fp = digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(30000)) return false;
+    try {
+      if (props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
+      setupCentralSheet();
+      props.setProperty('SCHEMA_FINGERPRINT', fp);
+      return true;
+    } finally { lock.releaseLock(); }
+  } catch (e) { Logger.log('ensureSchemaCurrent ล้มเหลว: ' + e.message); return false; }
+}
+
+function _setTextColumns(ss, sheetName, headers) {
+  var sh = ss.getSheetByName(sheetName); if (!sh) return;
+  var hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  headers.forEach(function(h) {
+    var c = hdr.indexOf(h); if (c === -1) return;
+    sh.getRange(2, c + 1, Math.max(sh.getMaxRows() - 1, 1), 1).setNumberFormat('@');
+  });
+}
 
 function setupCentralSheet() {
   var cfg = getConfig();
@@ -75,6 +115,7 @@ function setupCentralSheet() {
   _seedProvinces();
   _seedRolesAndPermissions();
 
+  _setTextColumns(ss, 'price_lists', ['valid_from', 'valid_to']);   // กัน Sheets แปลงวันที่เป็น Date เอง (เขตเวลาไม่ตรงกัน = วันเลื่อน)
   clearRolePermissionsCache(); // ให้สิทธิ์ที่เพิ่งเติม (เช่น settings) มีผลทันที ไม่ต้องรอแคช 5 นาที
   SpreadsheetApp.flush();
   Logger.log('Created: ' + created.join(', '));
@@ -190,7 +231,7 @@ function _seedRolesAndPermissions() {
   var existingPerms = {};
   permSh.getDataRange().getValues().slice(1).forEach(function(row) { existingPerms[row[0] + '|' + row[1]] = true; });
 
-  var ownerModules = ['products', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report'];
+  var ownerModules = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report'];
   var tenantModules = ['staff', 'zones', 'customers', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles'];
 
   ownerModules.forEach(function(m) { if (!existingPerms['owner_admin|' + m]) permSh.appendRow(['owner_admin', m, 'TRUE', 'TRUE']); });
