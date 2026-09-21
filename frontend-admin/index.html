@@ -223,6 +223,7 @@
 </head>
 <body>
 <script src="config.js"></script>
+<script src="pricelist-parser.js"></script>
 <div id="env-banner" style="display:none"></div>
 
 <!-- ══════════ LOGIN ══════════ -->
@@ -510,6 +511,73 @@
           </div>
         </section>
 
+        <!-- ═══ ชุดราคาและส่วนลด: รายการ ═══ -->
+        <section class="view" id="view-pricelists">
+          <div class="view-head">
+            <div><h1>ชุดราคาและส่วนลด</h1><p>ใบรายการขายตามกลุ่มลูกค้าและช่วงเวลา (ราคาตั้งรายปี ส่วนลดรายไตรมาส) — ลูกค้า 1 ร้านใช้ได้ชุดเดียวตามกลุ่มของร้าน คลิกแถวเพื่อดูรายละเอียด</p></div>
+            <button class="btn btn-primary" onclick="openPriceListImport()">+ นำเข้าจากไฟล์ Excel</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>ชื่อชุดราคา</th><th>กลุ่มลูกค้า</th><th>ช่วงเวลา</th><th>รายการสินค้า</th><th>สถานะ</th></tr></thead>
+            <tbody id="pricelists-body"><tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <!-- ═══ ชุดราคา: รายละเอียด ═══ -->
+        <section class="view" id="view-pricelistdetail">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="closePriceListDetail()">← กลับ</button>
+              <div><h1 id="pld-title">ชุดราคา</h1><p id="pld-meta"></p></div>
+            </div>
+            <div id="pld-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
+          <div id="pld-warn"></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>สินค้า</th><th>บรรจุ</th><th>ราคาตั้ง (ไม่รวม VAT)</th><th>ช่วงจำนวน</th><th>เงินสด (รวม VAT)</th><th>ลด %</th><th>เครดิต (รวม VAT)</th><th>ลด %</th></tr></thead>
+            <tbody id="pld-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card" id="pld-promos-card" style="display:none">
+            <h3>โปรระดับบิล</h3>
+            <p class="form-hint">ยอดซื้อรวมทั้งบิล (ไม่รวม VAT) ครบตามขั้น ลดเพิ่มตาม % — ใช้ขั้นสูงสุดที่ถึงเงื่อนไขเพียงขั้นเดียว</p>
+            <div id="pld-promos"></div>
+          </div>
+        </section>
+
+        <!-- ═══ ชุดราคา: นำเข้าจาก Excel ═══ -->
+        <section class="view" id="view-pricelistimport">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="closePriceListImport()">← กลับ</button>
+              <div><h1>นำเข้าชุดราคาจากไฟล์ Excel</h1></div>
+            </div>
+          </div>
+          <div class="form-card">
+            <p class="form-hint">เลือกไฟล์ "ใบรายการขาย" (.xlsx) — ระบบอ่านเฉพาะแถวที่มองเห็น (แถว/ชีตที่ผู้เตรียมซ่อนไว้ถือว่าเลิกใช้) ไฟล์ถูกอ่านในเครื่องคุณ ยังไม่มีอะไรถูกบันทึกจนกว่าจะกด "นำเข้า" และผลที่ได้เป็น "ชุดร่าง" ตรวจแล้วค่อยเปิดใช้งาน</p>
+            <input type="file" id="pli-file" accept=".xlsx,.xlsm" onchange="pliPickFile(this)">
+            <div id="pli-status" style="margin-top:10px;font-size:12.5px;color:var(--ink-soft)"></div>
+          </div>
+          <div id="pli-form" style="display:none">
+            <div class="form-card">
+              <h3>ข้อมูลชุดราคา</h3>
+              <div class="form-grid">
+                <div class="field span2"><label>ชื่อชุดราคา</label><input id="pli-name"></div>
+                <div class="field"><label>กลุ่มลูกค้า <span class="unit">(พิมพ์ชื่อใหม่ได้ ระบบสร้างกลุ่มให้)</span></label><input id="pli-group" list="pli-groups"><datalist id="pli-groups"></datalist></div>
+                <div class="field"><label>มีผลตั้งแต่</label><input id="pli-from" type="date"></div>
+                <div class="field"><label>ถึง</label><input id="pli-to" type="date"></div>
+                <div class="field"><label>สินค้าที่ยังไม่มีในระบบ</label><label class="toggle-row"><input type="checkbox" id="pli-create" checked> สร้างให้อัตโนมัติ</label></div>
+              </div>
+              <div id="pli-warnings"></div>
+            </div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>สินค้า (รหัส)</th><th>จำนวนตัว</th><th>บรรจุ</th><th>ราคาตั้ง</th><th>ขั้นราคา (เงินสด / เครดิต รวม VAT)</th><th>แพ็ครถ</th></tr></thead>
+              <tbody id="pli-preview"></tbody>
+            </table></div>
+            <div class="form-card" id="pli-promos" style="display:none"></div>
+            <div class="form-actions"><button class="btn btn-primary" id="pli-submit" onclick="pliSubmit()">นำเข้าเป็นชุดร่าง</button></div>
+          </div>
+        </section>
+
         <!-- ═══ PROMOTIONS ═══ -->
         <section class="view" id="view-promotions">
           <div class="view-head"><div><h1>โปรโมชั่น</h1><p>ควบคุมจากส่วนกลาง ใช้ได้กับทุกตัวแทน — เครื่องยนต์คำนวณซ้ำเสมอตอนบันทึกขายจริง</p></div></div>
@@ -679,12 +747,25 @@ async function callApi(action, payload){
   const body = Object.assign({}, payload || {});
   // Ultra Admin สวมสิทธิ์ตัวแทนอยู่ → แนบ tenantId ให้ทุก action อัตโนมัติ (ฝั่ง backend มีแค่ super_admin เท่านั้นที่ยอมรับค่านี้)
   if (ACTIVE_TENANT_ID && !body.tenantId) body.tenantId = ACTIVE_TENANT_ID;
-  const res = await fetch(BACKEND_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, token: TOKEN, payload: body })
-  });
-  const data = await res.json();
+  const send = async () => {
+    const res = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, token: TOKEN, payload: body })
+    });
+    return res.json();
+  };
+  let data;
+  try {
+    try { data = await send(); }
+    catch (e) {
+      // Apps Script บางครั้งตอบหน้า HTML error/timeout แทน JSON — ถ้าเป็นคำสั่งอ่านอย่างเดียว (list*/get*) ลองซ้ำหนึ่งครั้ง
+      // คำสั่งที่เขียนข้อมูลห้ามลองซ้ำเอง (เสี่ยงบันทึกซ้ำ) ให้ผู้ใช้ตัดสินใจกดใหม่
+      if (/^(list|get)/.test(action)) data = await send(); else throw e;
+    }
+  } catch (e) {
+    return { success: false, message: 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (เซิร์ฟเวอร์ตอบผิดรูปแบบชั่วคราว) — ลองอีกครั้ง' };
+  }
   // ไม่ throw ที่นี่ — data.success เป็น false อยู่แล้ว ทุกที่ที่เรียก callApi เช็ค !r.success และ return
   // เองอยู่แล้ว การ throw ซ้ำมีแต่ทำให้เกิด unhandled promise rejection เปล่าๆ
   if (data.authError) { doLogout(); toast('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', true); }
@@ -822,17 +903,20 @@ const NAV = {
       { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', ready:true} ] },
       { n:'1.2', label:'โปรโมชั่น', items:[ {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', ready:true} ] }
     ]},
-    { n:'2', icon:'⚙️', label:'ข้อมูลกลาง', subs:[
-      { n:'2.1', label:'กลุ่มลูกค้า', items:[ {n:'2.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', ready:true} ] },
-      { n:'2.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'2.2.1', label:'รายการช่องทาง', view:'distchannels', ready:true} ] },
-      { n:'2.3', label:'ประเภทการชำระเงิน', items:[ {n:'2.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', ready:true} ] }
+    { n:'2', icon:'💰', label:'ราคาและส่วนลด', subs:[
+      { n:'2.1', label:'ชุดราคา', items:[ {n:'2.1.1', label:'ชุดราคาและส่วนลด', view:'pricelists', ready:true} ] }
     ]},
-    { n:'3', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
-      { n:'3.1', label:'ตัวแทนจำหน่าย', items:[ {n:'3.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
-      { n:'3.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'3.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
+    { n:'3', icon:'⚙️', label:'ข้อมูลกลาง', subs:[
+      { n:'3.1', label:'กลุ่มลูกค้า', items:[ {n:'3.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', ready:true} ] },
+      { n:'3.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'3.2.1', label:'รายการช่องทาง', view:'distchannels', ready:true} ] },
+      { n:'3.3', label:'ประเภทการชำระเงิน', items:[ {n:'3.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', ready:true} ] }
     ]},
-    { n:'4', icon:'📈', label:'รายงาน', subs:[
-      { n:'4.1', label:'ยอดขาย', items:[ {n:'4.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
+    { n:'4', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
+      { n:'4.1', label:'ตัวแทนจำหน่าย', items:[ {n:'4.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
+      { n:'4.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'4.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
+    ]},
+    { n:'5', icon:'📈', label:'รายงาน', subs:[
+      { n:'5.1', label:'ยอดขาย', items:[ {n:'5.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
     ]}
   ]}
 };
@@ -954,7 +1038,7 @@ function findMeta(view){
 const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
-  companyprofile: loadCompanyProfile, adminusers: loadAdminUsers,
+  companyprofile: loadCompanyProfile, adminusers: loadAdminUsers, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes
 };
 function gotoView(view){
@@ -1450,6 +1534,190 @@ async function addProductUnitUI(){
   toast('เพิ่มหน่วยขายสำเร็จ');
   ['u-code','u-label','u-factor','u-price','u-barcode'].forEach(id => document.getElementById(id).value = '');
   loadProductUnitsUI();
+}
+
+/* ══════════════ ชุดราคาและส่วนลด (17_pricing.gs) ══════════════ */
+let pricelistsCache = [];
+const PLD_CACHE = {};                   // id → รายละเอียดที่โหลดแล้ว (เปิดซ้ำไม่ยิง API)
+let currentPriceListId = null;
+const PL_STATUS = { draft:['wait','ร่าง'], active:['ok','ใช้งาน'], archived:['off','เก็บถาวร'] };
+const plPill = st => '<span class="pill '+(PL_STATUS[st]||PL_STATUS.draft)[0]+'">'+(PL_STATUS[st]||PL_STATUS.draft)[1]+'</span>';
+const plPeriod = l => esc(l.validFrom) + ' – ' + esc(l.validTo);
+// ส่วนลด % ที่ "คำนวณเอา" จากราคาตั้ง (ตัวตั้งคือราคาสุทธิที่กรอก) — ตรงกับสูตรในใบรายการขาย
+const plPct = (net, listEx) => (net == null || !listEx) ? '-' : ((1 - (net / 1.07) / listEx) * 100).toFixed(2) + '%';
+const plRange = t => t.max == null ? (t.min + ' หีบขึ้นไป') : (t.min === t.max ? (t.min + ' หีบ') : (t.min + ' – ' + t.max + ' หีบ'));
+const plErr = ws => (ws||[]).map(w => '<div class="err" style="display:block;margin-top:8px">'+esc(w)+'</div>').join('');
+
+function renderPriceListsTable(){
+  const body = document.getElementById('pricelists-body');
+  if (!pricelistsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีชุดราคา — กด "นำเข้าจากไฟล์ Excel"</td></tr>'; return; }
+  body.innerHTML = pricelistsCache.map(l =>
+    '<tr class="clickable-row" onclick="openPriceListDetail('+l.id+')"><td>'+esc(l.name)+'</td><td>'+esc(l.customerGroupName||'-')+'</td>' +
+    '<td class="mono-data">'+plPeriod(l)+'</td><td>'+l.lineCount+' รายการ</td><td>'+plPill(l.status)+'</td></tr>').join('');
+}
+async function loadPriceLists(){
+  const body = document.getElementById('pricelists-body');
+  if (pricelistsCache.length) renderPriceListsTable();
+  else body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  const r = await callApi('listPriceLists', {});
+  if (!r.success) { if (!pricelistsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  pricelistsCache = r.data;
+  renderPriceListsTable();
+}
+
+/* ── รายละเอียดชุดราคา ── */
+function plActionButtons(l){
+  const b = (label, fn, cls) => '<button class="btn '+(cls||'btn-sm')+'" onclick="'+fn+'">'+label+'</button>';
+  let h = '';
+  if (l.status !== 'active') h += b('เปิดใช้งาน', "changePriceListStatus('active')", 'btn-primary btn-sm');
+  if (l.status === 'active') h += b('เก็บถาวร', "changePriceListStatus('archived')");
+  if (l.status === 'archived') h += b('ย้อนเป็นร่าง', "changePriceListStatus('draft')");
+  if (l.status === 'draft') h += b('ลบชุดร่าง', 'deletePriceListUI()');
+  return h;
+}
+function renderPriceListDetail(d){
+  const l = d.list;
+  document.getElementById('pld-title').textContent = l.name;
+  document.getElementById('pld-meta').innerHTML = 'กลุ่ม: <b>'+esc(l.customerGroupName||'-')+'</b> · '+plPeriod(l)+' · '+plPill(l.status)+(l.sourceFile?' · ไฟล์: '+esc(l.sourceFile):'');
+  document.getElementById('pld-actions').innerHTML = plActionButtons(l);
+  const body = document.getElementById('pld-body');
+  if (!d.lines.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">ไม่มีรายการ</td></tr>'; }
+  else body.innerHTML = d.lines.map(ln => {
+    const prod = ln.products.map(p => '<div><span class="mono-data">'+esc(p.productCode||'-')+'</span> '+esc(p.name)+'</div>').join('');
+    const span = ln.tiers.length + ln.packs.length;
+    const rows = ln.tiers.map((t, i) =>
+      '<tr>' + (i === 0 ? '<td class="wrap" rowspan="'+span+'">'+prod+'</td><td rowspan="'+span+'" class="mono-data">1×'+esc(ln.caseFactor)+'</td><td rowspan="'+span+'" class="mono-data">'+(ln.listExVat!=null?'฿'+baht(ln.listExVat):'-')+'</td>' : '') +
+      '<td>'+plRange(t)+'</td><td class="mono-data">'+(t.cashInclVat!=null?'฿'+baht(t.cashInclVat):'—')+'</td><td class="mono-data">'+plPct(t.cashInclVat, ln.listExVat)+'</td>' +
+      '<td class="mono-data">'+(t.creditInclVat!=null?'฿'+baht(t.creditInclVat):'—')+'</td><td class="mono-data">'+plPct(t.creditInclVat, ln.listExVat)+'</td></tr>');
+    const packs = ln.packs.map(pk => '<tr style="background:var(--blue-pale)"><td>แพ็ค ×'+esc(pk.unitFactor)+' <span class="unit">ขายเฉพาะหน่วยรถ · เงินสด</span></td><td class="mono-data">'+(pk.cashInclVat!=null?'฿'+baht(pk.cashInclVat):'—')+'</td><td class="mono-data">'+plPct(pk.cashInclVat, pk.listExVat)+'</td><td>—</td><td>—</td></tr>');
+    return rows.concat(packs).join('');
+  }).join('');
+  const pc = document.getElementById('pld-promos-card');
+  pc.style.display = d.billPromos.length ? '' : 'none';
+  document.getElementById('pld-promos').innerHTML = d.billPromos.map(b => '<div class="activity-row"><span>ยอดซื้อรวมครบ ฿'+baht(b.minAmountExVat)+' (ไม่รวม VAT)</span><span class="amt mono-data">ลดเพิ่ม '+esc(b.percent)+'%</span></div>').join('');
+}
+async function openPriceListDetail(id){
+  currentPriceListId = id;
+  _switchProductView('view-pricelistdetail', 'ชุดราคา');
+  document.getElementById('pld-warn').innerHTML = '';
+  if (PLD_CACHE[id]) renderPriceListDetail(PLD_CACHE[id]);
+  else {
+    document.getElementById('pld-body').innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+    document.getElementById('pld-title').textContent = 'ชุดราคา'; document.getElementById('pld-meta').textContent = ''; document.getElementById('pld-actions').innerHTML = '';
+  }
+  const r = await callApi('getPriceList', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  PLD_CACHE[id] = r;
+  if (currentPriceListId === id) renderPriceListDetail(r);
+}
+function closePriceListDetail(){ _switchProductView('view-pricelists', 'ชุดราคาและส่วนลด'); renderPriceListsTable(); }
+
+async function changePriceListStatus(status){
+  const id = currentPriceListId; if (!id) return;
+  const r = await callApi('setPriceListStatus', { id, status });
+  if (!r.success) { toast(r.message, true); return; }
+  // รู้สถานะใหม่อยู่แล้ว → แก้ cache แล้ววาดใหม่ ไม่ยิง API โหลดซ้ำ
+  if (PLD_CACHE[id]) PLD_CACHE[id].list.status = status;
+  const row = pricelistsCache.find(x => x.id === id); if (row) row.status = status;
+  if (PLD_CACHE[id]) renderPriceListDetail(PLD_CACHE[id]);
+  document.getElementById('pld-warn').innerHTML = plErr(r.warnings);
+  toast('อัปเดตสถานะสำเร็จ');
+}
+async function deletePriceListUI(){
+  const id = currentPriceListId; if (!id) return;
+  if (!confirm('ลบชุดราคาร่างนี้? (สินค้าที่สร้างจากการนำเข้าจะไม่ถูกลบ)')) return;
+  const r = await callApi('deletePriceList', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  delete PLD_CACHE[id]; pricelistsCache = pricelistsCache.filter(x => x.id !== id);
+  toast('ลบชุดราคาแล้ว'); closePriceListDetail();
+}
+
+/* ── นำเข้าจาก Excel ── */
+let PLI = { sheet: null, fileName: '' };
+function openPriceListImport(){
+  PLI = { sheet: null, fileName: '' };
+  document.getElementById('pli-file').value = ''; document.getElementById('pli-status').textContent = '';
+  document.getElementById('pli-form').style.display = 'none';
+  _switchProductView('view-pricelistimport', 'นำเข้าชุดราคา');
+}
+function closePriceListImport(){ _switchProductView('view-pricelists', 'ชุดราคาและส่วนลด'); }
+function loadSheetJS(){
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = () => resolve(window.XLSX); s.onerror = () => reject(new Error('โหลดตัวอ่าน Excel ไม่สำเร็จ (ตรวจอินเทอร์เน็ต)'));
+    document.head.appendChild(s);
+  });
+}
+const plNormCode = c => String(c).trim().toLowerCase();
+function plProductCodes(p){ return [p.product_code].concat(String(p.alias_codes||'').split(',')).map(plNormCode).filter(Boolean); }
+async function pliPickFile(input){
+  const file = input.files[0]; if (!file) return;
+  const st = document.getElementById('pli-status');
+  st.textContent = 'กำลังอ่านไฟล์...';
+  try {
+    const [XL, buf] = await Promise.all([loadSheetJS(), file.arrayBuffer()]);
+    const res = PricelistParser.parse(XL, buf, { type: 'array' });
+    const sheet = res.sheets.find(s => s.items.length);
+    if (!sheet) { st.textContent = 'ไม่พบตารางราคาในไฟล์นี้ (ต้องเป็นรูปแบบ "ใบรายการขาย" ที่มีหัวราคาเงินสด/เครดิต)'; return; }
+    PLI = { sheet, fileName: file.name };
+    const [pr, gr] = await Promise.all([productsCache.length ? Promise.resolve(null) : callApi('listProductsAdmin', {}), callApi('listCustomerGroups', {})]);
+    if (pr && pr.success) productsCache = pr.data;
+    if (gr.success) { customerGroupsCache = gr.data; document.getElementById('pli-groups').innerHTML = gr.data.map(g => '<option value="'+esc(g.name)+'">').join(''); }
+    // เดาชื่อ/กลุ่ม/ช่วงเวลาจากหัวไฟล์ (แก้ได้ก่อนนำเข้า)
+    const period = PricelistParser.parsePeriod(sheet.title) || {};
+    const inParen = (sheet.title.match(/\(([^)]*)\)/) || [])[1] || '';
+    // ไม่มีวงเล็บ (เช่น "…กันยายน 2569  ขายให้ศูนย์") → ใช้ข้อความท้ายหลังปี พ.ศ.
+    const afterYear = (sheet.title.match(/25\d\d\s+(.+)$/) || [])[1] || '';
+    const groupGuess = (inParen || afterYear).replace(/^สำหรับ\s*/, '').trim();
+    document.getElementById('pli-group').value = groupGuess;
+    document.getElementById('pli-from').value = period.from || ''; document.getElementById('pli-to').value = period.to || '';
+    document.getElementById('pli-name').value = (groupGuess || 'ชุดราคา') + (period.from ? ' ' + period.from + ' ถึง ' + period.to : '');
+    renderPliPreview();
+    const hidden = res.skippedHiddenSheets ? ' · ข้ามชีตที่ซ่อน '+res.skippedHiddenSheets+' ชีต' : '';
+    st.textContent = 'อ่านสำเร็จ: '+sheet.items.length+' รายการสินค้า'+hidden+' — ตรวจตัวอย่างด้านล่างแล้วกดนำเข้า';
+    document.getElementById('pli-form').style.display = '';
+  } catch (e) { st.textContent = 'อ่านไฟล์ไม่สำเร็จ: ' + e.message; }
+}
+function renderPliPreview(){
+  const s = PLI.sheet; if (!s) return;
+  const byCode = {}; productsCache.forEach(p => plProductCodes(p).forEach(c => { byCode[c] = p; }));
+  let missing = 0;
+  document.getElementById('pli-preview').innerHTML = s.items.map(it => {
+    const prod = it.variants.map(v => {
+      const hit = v.codes.map(c => byCode[plNormCode(c)]).find(Boolean);
+      if (!hit) missing++;
+      return '<div><span class="mono-data">'+esc(v.codes.join(' / '))+'</span> '+esc(v.name)+' '+(hit?'<span class="pill ok">พบแล้ว</span>':'<span class="pill wait">ใหม่</span>')+'</div>';
+    }).join('');
+    const tiers = it.tiers.map(t => '<div>'+esc(t.label)+': '+(t.cashInclVat!=null?'฿'+baht(t.cashInclVat):'—')+' / '+(t.creditInclVat!=null?'฿'+baht(t.creditInclVat):'—')+'</div>').join('');
+    const packs = it.packs.map(p => '฿'+baht(p.cashInclVat)).join(', ') || '-';
+    return '<tr><td class="wrap">'+prod+'</td><td>'+it.variants.length+' ตัว</td><td class="mono-data">'+esc(it.pack)+' (×'+esc(it.caseFactor)+')</td><td class="mono-data">'+(it.listExVat!=null?'฿'+baht(it.listExVat):'-')+'</td><td class="wrap">'+tiers+'</td><td class="mono-data">'+packs+'</td></tr>';
+  }).join('');
+  document.getElementById('pli-warnings').innerHTML = plErr(s.warnings) +
+    (missing ? '<p class="form-hint" style="margin-top:8px">มี '+missing+' สินค้าที่ยังไม่อยู่ในระบบ — ติ๊ก "สร้างให้อัตโนมัติ" เพื่อสร้าง (ชื่อ/รหัสจากไฟล์ ราคาอื่นตั้งทีหลังได้)</p>' : '');
+  const pc = document.getElementById('pli-promos');
+  pc.style.display = s.billPromos.length ? '' : 'none';
+  pc.innerHTML = '<h3>โปรระดับบิลที่พบในไฟล์</h3>' + s.billPromos.map(b => '<div class="activity-row"><span>ยอดซื้อรวมครบ ฿'+baht(b.minAmountExVat)+' (ไม่รวม VAT)</span><span class="amt mono-data">ลดเพิ่ม '+esc(b.percent)+'%</span></div>').join('');
+}
+async function pliSubmit(){
+  const s = PLI.sheet; if (!s) return;
+  const name = document.getElementById('pli-name').value.trim(), group = document.getElementById('pli-group').value.trim();
+  const from = document.getElementById('pli-from').value, to = document.getElementById('pli-to').value;
+  if (!name) { toast('กรุณาตั้งชื่อชุดราคา', true); return; }
+  if (!group) { toast('กรุณาระบุกลุ่มลูกค้า', true); return; }
+  if (!from || !to) { toast('กรุณาระบุช่วงเวลา', true); return; }
+  const btn = document.getElementById('pli-submit'); btn.disabled = true; btn.textContent = 'กำลังนำเข้า...';
+  const r = await callApi('importPriceList', { name, customerGroupName: group, validFrom: from, validTo: to, sourceFile: PLI.fileName,
+    createMissingProducts: document.getElementById('pli-create').checked, lines: s.items, billPromos: s.billPromos });
+  btn.disabled = false; btn.textContent = 'นำเข้าเป็นชุดร่าง';
+  if (!r.success) { toast(r.message, true); document.getElementById('pli-warnings').innerHTML = plErr(r.warnings); return; }
+  const st = r.stats;
+  toast('นำเข้าสำเร็จ: '+st.itemsCreated+' ขั้นราคา'+(st.productsCreated?' · สร้างสินค้าใหม่ '+st.productsCreated:''));
+  productsCache = []; customerGroupsCache = []; pricelistsCache = [];      // มีสินค้า/กลุ่มใหม่ — ให้หน้าอื่นโหลดใหม่ครั้งถัดไป
+  _switchProductView('view-pricelists', 'ชุดราคาและส่วนลด'); loadPriceLists();
+  if ((r.warnings||[]).length) alert('นำเข้าแล้ว แต่มีข้อควรตรวจ:\n\n' + r.warnings.join('\n'));
+  openPriceListDetail(r.id);
 }
 
 /* ══════════════ PROMOTIONS ══════════════ */
