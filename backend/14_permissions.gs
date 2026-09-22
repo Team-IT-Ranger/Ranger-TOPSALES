@@ -14,6 +14,7 @@ var MODULE_REGISTRY = [
   { code: 'staff',          label: 'พนักงานขาย',        scope: 'tenant' },
   { code: 'zones',          label: 'เขตการขาย',          scope: 'tenant' },
   { code: 'customers',      label: 'ลูกค้า',              scope: 'tenant' },
+  { code: 'sales',          label: 'บันทึกการขาย',        scope: 'tenant' },
   { code: 'docnum',         label: 'เลขที่เอกสาร',        scope: 'tenant' },
   { code: 'stock_receive',  label: 'รับสินค้าเข้าคลัง',    scope: 'tenant' },
   { code: 'stock_transfer', label: 'โอนย้ายคลัง',         scope: 'tenant' },

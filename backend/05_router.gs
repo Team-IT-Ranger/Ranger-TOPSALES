@@ -58,6 +58,12 @@ var ADMIN_ACTION_MAP = {
   addCustomerAdmin:       addCustomerAdmin,
   updateCustomerAdmin:    updateCustomerAdmin,
 
+  listSalesOrdersAdmin:   listSalesOrdersAdmin,
+  getSalesOrderAdmin:     getSalesOrderAdmin,
+  previewSaleAdmin:       previewSaleAdmin,
+  recordSaleAdmin:        recordSaleAdmin,
+  cancelSalesOrderAdmin:  cancelSalesOrderAdmin,
+
   listProductsAdmin:      listProductsAdmin,
   addProduct:             addProduct,
   updateProduct:          updateProduct,

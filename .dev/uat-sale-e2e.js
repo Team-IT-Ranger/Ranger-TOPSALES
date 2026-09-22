@@ -68,6 +68,37 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   const recent = await mobile('getRecentSales', {});
   console.log('recent sales sample:', JSON.stringify(recent).slice(0, 400));
+
+  // 4) เปิดบิลขายจากแอดมินเอง (19_sales_admin.gs)
+  r = await admin('previewSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'cash', fulfillmentType: 'office_delivery',
+    items: [{ productId: ext.record_id, unitCode: 'CASE', qty: 1 }, { productId: lav.record_id, unitCode: 'CASE', qty: 1 }] });
+  check('previewSaleAdmin ตรงกับเครื่องยนต์ (2,400)', r.success && r.total === 2400, r);
+
+  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'credit_term', fulfillmentType: 'office_delivery',
+    items: [{ productId: ext.record_id, unitCode: 'CASE', qty: 1 }] });
+  check('recordSaleAdmin (office_delivery, เครดิต 1 หีบ) = 1,225', sale.success && sale.total === 1225, sale);
+  const officeOrderId = sale.orderId;
+
+  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'cash', fulfillmentType: 'immediate',
+    items: [{ productId: ext.record_id, unitCode: 'PACK', qty: 2 }] });
+  check('recordSaleAdmin ตัดสต็อกทันทีแต่ไม่ระบุพนักงาน ถูกปฏิเสธ', !sale.success, sale);
+
+  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'cash', fulfillmentType: 'immediate', soldByLineUserId: uid,
+    items: [{ productId: ext.record_id, unitCode: 'PACK', qty: 2 }] });
+  check('recordSaleAdmin (immediate ตัดสต็อกพนักงาน, แพ็คเงินสด 2 แพ็ค) = 202', sale.success && sale.total === 202, sale);
+  const immediateOrderId = sale.orderId;
+
+  const listed = await admin('listSalesOrdersAdmin', { tenantId: tid });
+  check('listSalesOrdersAdmin เห็นบิลที่เพิ่งเปิดทั้งสองใบ', listed.success && listed.data.some(o => o.id === officeOrderId) && listed.data.some(o => o.id === immediateOrderId), listed);
+
+  const detail = await admin('getSalesOrderAdmin', { tenantId: tid, id: officeOrderId });
+  check('getSalesOrderAdmin รายละเอียดตรง (1,225 · 1 รายการ)', detail.success && detail.order.total === 1225 && detail.items.length === 1, detail);
+
+  const cancel = await admin('cancelSalesOrderAdmin', { tenantId: tid, id: immediateOrderId });
+  check('cancelSalesOrderAdmin ยกเลิกบิลที่ตัดสต็อกแล้วสำเร็จ', cancel.success, cancel);
+  const afterCancel = await admin('listSalesOrdersAdmin', { tenantId: tid, status: 'cancelled' });
+  check('บิลที่ยกเลิกสถานะเป็น cancelled', afterCancel.success && afterCancel.data.some(o => o.id === immediateOrderId), afterCancel);
+
   console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

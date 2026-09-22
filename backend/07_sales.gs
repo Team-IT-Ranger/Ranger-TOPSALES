@@ -17,11 +17,10 @@
  * fulfillmentType='immediate'      → ตัดสต็อกบนรถทันที (คนขายมีของบนรถ ขายจบในที่)
  * fulfillmentType='office_delivery'→ ไม่ตัดสต็อกรถ บันทึกเป็น SO รอสำนักงานจัดส่ง (status='pending_delivery')
  */
-function recordSale(user, payload) {
-  var rawItems = payload.items || [];
-  if (!rawItems.length) return { success: false, message: 'ไม่มีรายการสินค้า' };
-
-  var fulfillmentType = payload.fulfillmentType === 'office_delivery' ? 'office_delivery' : 'immediate';
+// ── คิดราคาตะกร้าล้วนๆ ไม่แตะสต็อก/ไม่บันทึกอะไร — ใช้ร่วมกันทั้ง recordSale (มือถือ) และฝั่งแอดมิน (19_sales_admin.gs)
+// rawItems: [{productId, qty, unitCode}]   คืน { success, items, calc, priceListUsed } หรือ { success:false, message, code? }
+function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
+  if (!rawItems || !rawItems.length) return { success: false, message: 'ไม่มีรายการสินค้า' };
 
   var productMap = {};
   centralObjects('products').forEach(function(p) { productMap[String(p.record_id)] = p; });
@@ -62,21 +61,34 @@ function recordSale(user, payload) {
   // ร้านที่กลุ่มของร้านมีชุดราคา "ใช้งาน" ณ วันนี้ → ชุดราคาเป็นแหล่งราคาเดียว (ขั้นบันได/เงินสด-เครดิต/แพ็คเฉพาะ Cash Van/
   // โปรท้ายบิล) ห้ามซ้อนกับ discount_rules แบบเดิม (ส่วนลดจะเบิ้ล) และสินค้าที่ไม่อยู่ในชุดราคา = ขายไม่ได้ (ดีกว่าขายผิดราคา)
   // ไม่มีชุดราคาที่ใช้ได้ → ทำงานแบบเดิมทุกอย่าง
-  var pricingCtx = getPricingContext(_customerGroupId(payload.customerId));
+  var pricingCtx = getPricingContext(_customerGroupId(customerId));
   var priceListUsed = null;
   var calc;
   if (pricingCtx) {
     var priced = priceCart(pricingCtx,
       items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
-      { isCredit: isCreditPayment(payload.paymentType), isVan: user.role === 'van_sales' });
+      { isCredit: isCreditPayment(paymentType), isVan: !!isVan });
     if (!priced.success) return { success: false, message: priced.message, code: priced.code };
     items.forEach(function(it, i) { it.price = priced.lines[i].unitPrice; it.lineTotal = priced.lines[i].lineTotal; });
     priceListUsed = pricingCtx.list;
     calc = { subtotal: priced.subtotal, discount: priced.billDiscount, total: priced.total, freeGoods: [],
              appliedRules: priced.billPercent ? [{ ruleId: 'BILL', ruleName: 'ส่วนลดท้ายบิล ' + priced.billPercent + '% (ยอดรวมครบ ' + priced.billMinExVat + ' บาท ไม่รวม VAT)', type: 'percent', value: priced.billPercent }] : [] };
   } else {
-    calc = applyPromotions(itemsWithGroup, payload.customerId);
+    calc = applyPromotions(itemsWithGroup, customerId);
   }
+
+  return { success: true, items: items, calc: calc, priceListUsed: priceListUsed };
+}
+
+function recordSale(user, payload) {
+  var fulfillmentType = payload.fulfillmentType === 'office_delivery' ? 'office_delivery' : 'immediate';
+
+  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales');
+  if (!priced.success) return priced;
+  var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;
+
+  var productMap = {};
+  centralObjects('products').forEach(function(p) { productMap[String(p.record_id)] = p; });
 
   // เคารพการ "ยกเลิกรับของแถม" ที่ผู้ใช้ติ๊กออกจากฝั่ง client แต่ตัวของแถมเองต้องมาจากผลคำนวณฝั่งเซิร์ฟเวอร์เท่านั้น
   var requestedFreeOff = {};
@@ -91,7 +103,7 @@ function recordSale(user, payload) {
       .forEach(function(s) { myStock[String(s.product_id)] = parseInt(s.qty) || 0; });
 
     var need = {};
-    itemsWithGroup.forEach(function(it) { need[it.productId] = (need[it.productId] || 0) + it.qty; });
+    items.forEach(function(it) { need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
     freeGoods.forEach(function(f) { need[String(f.productId)] = (need[String(f.productId)] || 0) + f.qty; });
 
     var pids = Object.keys(need);
@@ -152,7 +164,8 @@ function recordSale(user, payload) {
   return { success: true, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType };
 }
 
-function _cutVanStock(tenantId, lineUserId, need, orderId) {
+// need: { productId: จำนวนหน่วยฐานที่จะตัดออกจากสต็อกรถ } — ค่าติดลบ = คืนสต็อกกลับ (ใช้ตอนยกเลิกบิล)
+function _cutVanStock(tenantId, lineUserId, need, orderId, movementType) {
   var sh = tenantSheet(tenantId, 'van_stock');
   var data = sh.getDataRange().getValues();
   var hdr = data[0];
@@ -167,7 +180,7 @@ function _cutVanStock(tenantId, lineUserId, need, orderId) {
       }
     }
     if (!found) sh.appendRow([lineUserId, pid, -need[pid]]);
-    tenantAppend(tenantId, 'stock_movements', { record_id: tenantNextId(tenantId, 'stock_movements'), line_user_id: lineUserId, product_id: pid, change_qty: -need[pid], type: 'sale', ref_id: orderId, created_at: nowStr() });
+    tenantAppend(tenantId, 'stock_movements', { record_id: tenantNextId(tenantId, 'stock_movements'), line_user_id: lineUserId, product_id: pid, change_qty: -need[pid], type: movementType || 'sale', ref_id: orderId, created_at: nowStr() });
   });
 }
 

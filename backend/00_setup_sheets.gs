@@ -4,6 +4,11 @@
  * Apps Script Editor → เลือกฟังก์ชัน setupCentralSheet → Run
  * รันซ้ำได้ปลอดภัย (สร้างเฉพาะ tab/คอลัมน์ที่ยังไม่มี ไม่แตะข้อมูลเดิม)
  */
+// สิทธิ์เริ่มต้นของ role มาตรฐาน (owner_admin/tenant_admin) — ต้องอยู่นอกฟังก์ชันเพื่อให้ ensureSchemaCurrent()
+// เอาไปรวมกับ CENTRAL_SHEETS คำนวณลายนิ้วมือด้วย (เพิ่มโมดูลใหม่ในนี้ = สคีมาเปลี่ยน ต้อง re-seed อัตโนมัติ)
+var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report'];
+var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles'];
+
 var CENTRAL_SHEETS = {
   liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at'],
@@ -57,12 +62,13 @@ var CENTRAL_SHEETS = {
   subdistricts: ['id','name','name_en','district_id','zipcode']
 };
 
-// สคีมาเปลี่ยน (เพิ่มตาราง/คอลัมน์ใน CENTRAL_SHEETS) → รัน setupCentralSheet() ให้เองอัตโนมัติ "ครั้งเดียว" ตอนแอดมินล็อกอิน
-// เทียบลายนิ้วมือ (MD5) ของ CENTRAL_SHEETS กับที่เคยใช้ไว้ใน Script Properties — ไม่ต้องจำไปรัน setup ด้วยมืออีก
+// สคีมาเปลี่ยน (เพิ่มตาราง/คอลัมน์ใน CENTRAL_SHEETS หรือเพิ่มโมดูลสิทธิ์ใหม่ใน OWNER_MODULES/TENANT_MODULES)
+// → รัน setupCentralSheet() ให้เองอัตโนมัติ "ครั้งเดียว" ตอนแอดมินล็อกอิน
+// เทียบลายนิ้วมือ (MD5) กับที่เคยใช้ไว้ใน Script Properties — ไม่ต้องจำไปรัน setup ด้วยมืออีก
 // ล้มเหลวไม่ทำให้ล็อกอินพัง (แค่ไม่บันทึกลายนิ้วมือ จะลองใหม่ครั้งหน้า)
 function ensureSchemaCurrent() {
   try {
-    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(CENTRAL_SHEETS));
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify({ sheets: CENTRAL_SHEETS, ownerModules: OWNER_MODULES, tenantModules: TENANT_MODULES }));
     var fp = digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
     var props = PropertiesService.getScriptProperties();
     if (props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
@@ -231,9 +237,6 @@ function _seedRolesAndPermissions() {
   var existingPerms = {};
   permSh.getDataRange().getValues().slice(1).forEach(function(row) { existingPerms[row[0] + '|' + row[1]] = true; });
 
-  var ownerModules = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report'];
-  var tenantModules = ['staff', 'zones', 'customers', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles'];
-
-  ownerModules.forEach(function(m) { if (!existingPerms['owner_admin|' + m]) permSh.appendRow(['owner_admin', m, 'TRUE', 'TRUE']); });
-  tenantModules.forEach(function(m) { if (!existingPerms['tenant_admin|' + m]) permSh.appendRow(['tenant_admin', m, 'TRUE', 'TRUE']); });
+  OWNER_MODULES.forEach(function(m) { if (!existingPerms['owner_admin|' + m]) permSh.appendRow(['owner_admin', m, 'TRUE', 'TRUE']); });
+  TENANT_MODULES.forEach(function(m) { if (!existingPerms['tenant_admin|' + m]) permSh.appendRow(['tenant_admin', m, 'TRUE', 'TRUE']); });
 }
