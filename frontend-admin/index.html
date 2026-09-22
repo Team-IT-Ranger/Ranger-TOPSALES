@@ -219,6 +219,32 @@
 
   .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:10px 18px; border-radius:9px; font-size:13px; display:none; z-index:80; box-shadow:0 8px 24px -8px rgba(0,0,0,.3); }
   .toast.err{ background:var(--red); }
+
+  /* modal กรอก/แก้ชุดราคา */
+  .modal-bg{ position:fixed; inset:0; background:rgba(22,28,31,.45); display:none; align-items:flex-start; justify-content:center; z-index:60; overflow-y:auto; padding:40px 16px; }
+  .modal-box{ background:var(--surface); border-radius:12px; width:100%; max-width:720px; padding:20px 22px; box-shadow:0 20px 50px -12px rgba(0,0,0,.35); }
+  .modal-box h3{ margin:0 0 4px; font-size:15px; }
+  .modal-box h4{ margin:16px 0 8px; font-size:12.5px; color:var(--blue); }
+  .plm-row{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) 34px; gap:8px; margin-bottom:6px; align-items:center; }
+  .plm-row.packs{ grid-template-columns:repeat(3,minmax(0,1fr)) 34px; }
+  .plm-row.promo{ grid-template-columns:repeat(2,minmax(0,1fr)) 34px; }
+  .plm-row.head{ font-size:11px; color:var(--ink-soft); font-weight:600; margin-bottom:2px; }
+  .plm-row input{ width:100%; min-width:0; padding:7px 9px; border:1px solid var(--border); border-radius:7px; font:inherit; font-size:13px; background:var(--surface); color:var(--ink); }
+  .plm-chip{ display:inline-flex; gap:6px; align-items:center; background:var(--blue-soft); border-radius:999px; padding:3px 6px 3px 10px; font-size:12px; margin:0 6px 6px 0; }
+  .plm-chip button{ border:none; background:none; cursor:pointer; color:var(--ink-soft); font-size:13px; padding:0 3px; }
+  .plm-pick{ max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:7px; margin-top:6px; }
+  .plm-pick div{ padding:7px 10px; cursor:pointer; font-size:12.5px; border-top:1px solid var(--border); }
+  .plm-pick div:first-child{ border-top:none; }
+  .plm-pick div:hover{ background:var(--blue-pale); }
+  .plm-pick div.off{ color:var(--ink-faint); cursor:default; background:none; }
+  .pld-line-actions{ margin-top:6px; display:flex; gap:6px; }
+  @media (max-width:600px){
+    .plm-row, .plm-row.packs, .plm-row.promo{ grid-template-columns:1fr 1fr; padding-bottom:8px; border-bottom:1px dashed var(--border); }
+    .plm-row > button{ grid-column:span 2; }
+    .plm-row.head{ display:none; } .modal-bg{ padding:16px 8px; }
+    .modal-box .form-grid, .modal-box .form-grid.g2{ grid-template-columns:1fr; }
+  }
+  .plm-row input::placeholder{ color:var(--ink-faint); }
 </style>
 </head>
 <body>
@@ -583,7 +609,11 @@
         <section class="view" id="view-pricelists">
           <div class="view-head">
             <div><h1>ชุดราคาและส่วนลด</h1><p>ใบรายการขายตามกลุ่มลูกค้าและช่วงเวลา (ราคาตั้งรายปี ส่วนลดรายไตรมาส) — ลูกค้า 1 ร้านใช้ได้ชุดเดียวตามกลุ่มของร้าน คลิกแถวเพื่อดูรายละเอียด</p></div>
-            <button class="btn btn-primary" onclick="openPriceListImport()">+ นำเข้าจากไฟล์ Excel</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn btn-primary" onclick="openClonePriceList()">คัดลอกเป็นงวดใหม่</button>
+              <button class="btn" onclick="openCreatePriceList()">+ สร้างชุดราคาใหม่</button>
+              <button class="btn" onclick="openPriceListImport()">+ นำเข้าจากไฟล์ Excel</button>
+            </div>
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อชุดราคา</th><th>กลุ่มลูกค้า</th><th>ช่วงเวลา</th><th>รายการสินค้า</th><th>สถานะ</th></tr></thead>
@@ -601,6 +631,7 @@
             <div id="pld-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
           </div>
           <div id="pld-warn"></div>
+          <div id="pld-editbar"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>สินค้า</th><th>บรรจุ</th><th>ราคาตั้ง (ไม่รวม VAT)</th><th>ช่วงจำนวน</th><th>เงินสด (รวม VAT)</th><th>ลด %</th><th>เครดิต (รวม VAT)</th><th>ลด %</th></tr></thead>
             <tbody id="pld-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
@@ -793,6 +824,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="modal-bg" id="pl-modal" onclick="if(event.target===this)plModalClose()"><div class="modal-box"></div></div>
 
 <script>
 /* ตั้งครั้งเดียว — ไม่ต้องพิมพ์ URL เองเหมือนหน้าทดสอบเดิม */
@@ -1832,7 +1864,7 @@ const plErr = ws => (ws||[]).map(w => '<div class="err" style="display:block;mar
 
 function renderPriceListsTable(){
   const body = document.getElementById('pricelists-body');
-  if (!pricelistsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีชุดราคา — กด "นำเข้าจากไฟล์ Excel"</td></tr>'; return; }
+  if (!pricelistsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีชุดราคา — กด "สร้างชุดราคาใหม่" หรือ "นำเข้าจากไฟล์ Excel"</td></tr>'; return; }
   body.innerHTML = pricelistsCache.map(l =>
     '<tr class="clickable-row" onclick="openPriceListDetail('+l.id+')"><td>'+esc(l.name)+'</td><td>'+esc(l.customerGroupName||'-')+'</td>' +
     '<td class="mono-data">'+plPeriod(l)+'</td><td>'+l.lineCount+' รายการ</td><td>'+plPill(l.status)+'</td></tr>').join('');
@@ -1851,6 +1883,8 @@ async function loadPriceLists(){
 function plActionButtons(l){
   const b = (label, fn, cls) => '<button class="btn '+(cls||'btn-sm')+'" onclick="'+fn+'">'+label+'</button>';
   let h = '';
+  if (plEditable(l)) h += PLD_EDIT ? b('✓ เสร็จสิ้นการแก้ไข', 'togglePriceListEdit()', 'btn-primary btn-sm') : b('✎ แก้ไขราคา', 'togglePriceListEdit()');
+  h += b('คัดลอกเป็นงวดใหม่', 'openClonePriceList(currentPriceListId)');
   if (l.status !== 'active') h += b('เปิดใช้งาน', "changePriceListStatus('active')", 'btn-primary btn-sm');
   if (l.status === 'active') h += b('เก็บถาวร', "changePriceListStatus('archived')");
   if (l.status === 'archived') h += b('ย้อนเป็นร่าง', "changePriceListStatus('draft')");
@@ -1861,11 +1895,18 @@ function renderPriceListDetail(d){
   const l = d.list;
   document.getElementById('pld-title').textContent = l.name;
   document.getElementById('pld-meta').innerHTML = 'กลุ่ม: <b>'+esc(l.customerGroupName||'-')+'</b> · '+plPeriod(l)+' · '+plPill(l.status)+(l.sourceFile?' · ไฟล์: '+esc(l.sourceFile):'');
+  if (!plEditable(l)) PLD_EDIT = false;
+  const editing = PLD_EDIT;
   document.getElementById('pld-actions').innerHTML = plActionButtons(l);
+  document.getElementById('pld-editbar').innerHTML = editing
+    ? '<div class="form-card" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="openLineModal(null)">+ เพิ่มรายการราคา</button>' +
+      '<span class="form-hint" style="margin:0">โหมดแก้ไข — กด "แก้ไข" ที่รายการใดก็ได้ บันทึกทีละรายการ มีผลทันทีกับชุดร่างนี้ (ยังไม่กระทบการขายจนกว่าจะเปิดใช้งาน)</span></div>'
+    : (plEditable(l) ? '' : '<p class="form-hint" style="margin:0 0 12px">ชุดที่'+(l.status==='active'?'ใช้งานอยู่':l.status==='archived'?'เก็บถาวรแล้ว':'เคยเปิดใช้งานแล้ว')+'แก้ราคาไม่ได้ (บิลเก่าอ้างราคาย้อนหลัง) — ต้องการเปลี่ยนราคา กด "คัดลอกเป็นงวดใหม่" แล้วแก้ในชุดใหม่</p>');
   const body = document.getElementById('pld-body');
-  if (!d.lines.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">ไม่มีรายการ</td></tr>'; }
-  else body.innerHTML = d.lines.map(ln => {
-    const prod = ln.products.map(p => '<div><span class="mono-data">'+esc(p.productCode||'-')+'</span> '+esc(p.name)+'</div>').join('');
+  if (!d.lines.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+(editing?'ยังไม่มีรายการ — กด "+ เพิ่มรายการราคา"':'ไม่มีรายการ')+'</td></tr>'; }
+  else body.innerHTML = d.lines.map((ln, idx) => {
+    const prod = ln.products.map(p => '<div><span class="mono-data">'+esc(p.productCode||'-')+'</span> '+esc(p.name)+'</div>').join('') +
+      (editing ? '<div class="pld-line-actions"><button class="btn btn-sm" onclick="openLineModal('+idx+')">แก้ไข</button><button class="btn btn-sm btn-ghost" onclick="deleteLineUI('+idx+')">ลบ</button></div>' : '');
     const span = ln.tiers.length + ln.packs.length;
     const rows = ln.tiers.map((t, i) =>
       '<tr>' + (i === 0 ? '<td class="wrap" rowspan="'+span+'">'+prod+'</td><td rowspan="'+span+'" class="mono-data">1×'+esc(ln.caseFactor)+'</td><td rowspan="'+span+'" class="mono-data">'+(ln.listExVat!=null?'฿'+baht(ln.listExVat):'-')+'</td>' : '') +
@@ -1875,8 +1916,9 @@ function renderPriceListDetail(d){
     return rows.concat(packs).join('');
   }).join('');
   const pc = document.getElementById('pld-promos-card');
-  pc.style.display = d.billPromos.length ? '' : 'none';
+  pc.style.display = (d.billPromos.length || editing) ? '' : 'none';
   pltInit(d);
+  if (editing) { renderPromoEditor(d.billPromos); return; }
   document.getElementById('pld-promos').innerHTML = d.billPromos.map(b => '<div class="activity-row"><span>ยอดซื้อรวมครบ ฿'+baht(b.minAmountExVat)+' (ไม่รวม VAT)</span><span class="amt mono-data">ลดเพิ่ม '+esc(b.percent)+'%</span></div>').join('');
 }
 /* ── ทดลองคิดราคา (previewPricing) ── */
@@ -1908,14 +1950,17 @@ async function pltRun(){
     (r.billPercent ? '<div class="activity-row"><span>โปรระดับบิล ลด '+esc(r.billPercent)+'% (ยอดไม่รวม VAT ฿'+baht(r.subtotalExVat)+' ครบ ฿'+baht(r.billMinExVat)+')</span><span class="amt mono-data">-฿'+baht(r.billDiscount)+'</span></div>' : '') +
     '<div class="activity-row"><b>สุทธิ</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
 }
-async function openPriceListDetail(id){
+// opts.edit = เปิดในโหมดแก้ไขเลย (หลังสร้าง/คัดลอก) · opts.noFetch = cache ครบแล้ว ไม่ต้องยิง getPriceList (ชุดเปล่าที่เพิ่งสร้าง)
+async function openPriceListDetail(id, opts = {}){
   currentPriceListId = id;
+  PLD_EDIT = !!opts.edit;
   _switchProductView('view-pricelistdetail', 'ชุดราคา');
   document.getElementById('pld-warn').innerHTML = '';
   if (PLD_CACHE[id]) renderPriceListDetail(PLD_CACHE[id]);
+  if (PLD_CACHE[id] && opts.noFetch) return;
   else {
     document.getElementById('pld-body').innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
-    document.getElementById('pld-title').textContent = 'ชุดราคา'; document.getElementById('pld-meta').textContent = ''; document.getElementById('pld-actions').innerHTML = '';
+    document.getElementById('pld-title').textContent = 'ชุดราคา'; document.getElementById('pld-meta').textContent = ''; document.getElementById('pld-actions').innerHTML = ''; document.getElementById('pld-editbar').innerHTML = '';
   }
   const r = await callApi('getPriceList', { id });
   if (!r.success) { toast(r.message, true); return; }
@@ -1929,8 +1974,8 @@ async function changePriceListStatus(status){
   const r = await callApi('setPriceListStatus', { id, status });
   if (!r.success) { toast(r.message, true); return; }
   // รู้สถานะใหม่อยู่แล้ว → แก้ cache แล้ววาดใหม่ ไม่ยิง API โหลดซ้ำ
-  if (PLD_CACHE[id]) PLD_CACHE[id].list.status = status;
-  const row = pricelistsCache.find(x => x.id === id); if (row) row.status = status;
+  const row = pricelistsCache.find(x => x.id === id);
+  [PLD_CACHE[id] && PLD_CACHE[id].list, row].forEach(l => { if (!l) return; l.status = status; if (status === 'active') l.activatedAt = l.activatedAt || new Date().toISOString(); });
   if (PLD_CACHE[id]) renderPriceListDetail(PLD_CACHE[id]);
   document.getElementById('pld-warn').innerHTML = plErr(r.warnings);
   toast('อัปเดตสถานะสำเร็จ');
@@ -1942,6 +1987,257 @@ async function deletePriceListUI(){
   if (!r.success) { toast(r.message, true); return; }
   delete PLD_CACHE[id]; pricelistsCache = pricelistsCache.filter(x => x.id !== id);
   toast('ลบชุดราคาแล้ว'); closePriceListDetail();
+}
+
+/* ── กรอก/แก้ราคาเอง — แก้ได้เฉพาะชุดร่าง (backend บังคับซ้ำอีกชั้น) ──
+   งวดใหม่ = คัดลอกเป็นงวดใหม่ → แก้เฉพาะตัวที่เปลี่ยน → เปิดใช้งาน
+   ทุกการบันทึกแก้ PLD_CACHE / pricelistsCache แล้ววาดใหม่ ไม่โหลดทั้งลิสต์ซ้ำ */
+let PLD_EDIT = false;
+// ร่างที่ไม่เคยเปิดใช้งาน (ชุดที่เคย active แล้วย้อนเป็นร่าง อาจมีบิลอ้างราคาอยู่ — backend ก็ห้ามเหมือนกัน)
+const plEditable = l => l.status === 'draft' && !l.activatedAt;
+function plModal(html){ const m = document.getElementById('pl-modal'); m.querySelector('.modal-box').innerHTML = html; m.style.display = 'flex'; const f = m.querySelector('input:not([type=checkbox]),select'); if (f) f.focus(); }
+function plModalClose(){ document.getElementById('pl-modal').style.display = 'none'; }
+function plModalErr(msg){ const e = document.getElementById('plm-err'); if (e) { e.textContent = msg; e.style.display = msg ? 'block' : 'none'; } }
+const plModalActions = (fn, label) => '<div class="err" id="plm-err" style="margin:12px 0 0"></div><div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button><button class="btn btn-primary" id="plm-save" onclick="'+fn+'">'+label+'</button></div>';
+// กันกดซ้ำระหว่างรอ backend (UAT บางทีช้า 10+ วิ)
+async function plBusy(fn){
+  const b = document.getElementById('plm-save'); if (b && b.disabled) return;
+  const label = b ? b.textContent : ''; if (b) { b.disabled = true; b.textContent = 'กำลังบันทึก...'; }
+  try { await fn(); } finally { if (b && document.body.contains(b)) { b.disabled = false; b.textContent = label; } }
+}
+document.addEventListener('keydown', e => {
+  const m = document.getElementById('pl-modal'); if (!m || m.style.display !== 'flex') return;
+  if (e.key === 'Escape') plModalClose();
+  if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+  e.preventDefault();
+  // Enter ในช่องค้นหาสินค้า = เลือกตัวแรกที่เจอ (กรอกราคาศูนย์เร็ว ๆ ไม่ต้องจับเมาส์) · ช่องอื่น = บันทึก
+  if (e.target.id === 'plm-q') { const first = document.querySelector('#plm-pick div:not(.off)'); if (first) first.click(); return; }
+  const b = document.getElementById('plm-save'); if (b) b.click();
+});
+function plSortCache(){ pricelistsCache.sort((a, b) => String(b.validFrom).localeCompare(String(a.validFrom)) || (b.id - a.id)); }
+const plIsCentre = l => /ศูนย์/.test((l && l.customerGroupName) || '');
+const plField = (label, inner, cls) => '<div class="field'+(cls?' '+cls:'')+'"><label>'+label+'</label>'+inner+'</div>';
+
+// วันที่ yyyy-mm-dd ใช้ UTC ล้วน กันเขตเวลาทำวันเลื่อน
+const plD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+const plS = dt => dt.toISOString().slice(0, 10);
+// งวดถัดไปต่อจากชุดต้นทาง: ถ้าต้นทางเต็มเดือน (1 ถึงสิ้นเดือน) เลื่อนตามจำนวนเดือน ไม่งั้นเลื่อนตามจำนวนวัน
+function plNextPeriod(from, to){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(to || '')) return { from: '', to: '' };
+  const f = plD(from), t = plD(to), nf = new Date(t.getTime() + 864e5);
+  const fullMonths = f.getUTCDate() === 1 && nf.getUTCDate() === 1;
+  if (fullMonths) {
+    const months = (t.getUTCFullYear() - f.getUTCFullYear()) * 12 + t.getUTCMonth() - f.getUTCMonth() + 1;
+    return { from: plS(nf), to: plS(new Date(Date.UTC(nf.getUTCFullYear(), nf.getUTCMonth() + months, 0))) };
+  }
+  return { from: plS(nf), to: plS(new Date(nf.getTime() + (t - f))) };
+}
+
+async function openCreatePriceList(){
+  await ensureCustomerGroups();
+  if (!customerGroupsCache.length) { toast('โหลดกลุ่มลูกค้าไม่ได้ (ต้องมีสิทธิ์ดูข้อมูลตั้งค่า)', true); return; }
+  plModal('<h3>สร้างชุดราคาใหม่</h3><p class="form-hint">ได้ชุดเปล่าสถานะร่าง แล้วกรอกราคาทีละรายการ — ถ้างวดใหม่ต่างจากงวดก่อนแค่ไม่กี่ตัว ใช้ "คัดลอกเป็นงวดใหม่" จะเร็วกว่า</p>' +
+    plField('ชื่อชุดราคา', '<input id="plc-name" placeholder="เช่น ราคาศูนย์ ต.ค.–ธ.ค. 2569">') +
+    plField('กลุ่มลูกค้า', '<select id="plc-group">' + customerGroupsCache.map(g => '<option value="'+esc(g.record_id)+'">'+esc(g.name)+'</option>').join('') + '</select>') +
+    '<div class="form-grid g2">' + plField('ตั้งแต่', '<input type="date" id="plc-from">') + plField('ถึง', '<input type="date" id="plc-to">') + '</div>' +
+    plField('หมายเหตุ', '<input id="plc-note">') + plModalActions('submitCreatePriceList()', 'สร้างชุดราคา'));
+}
+function submitCreatePriceList(){ return plBusy(async () => {
+  const v = id => document.getElementById(id).value.trim();
+  if (!v('plc-name')) return plModalErr('กรุณาตั้งชื่อชุดราคา');
+  if (!v('plc-from') || !v('plc-to')) return plModalErr('กรุณาระบุช่วงเวลา');
+  const r = await callApi('createPriceList', { name: v('plc-name'), customerGroupId: v('plc-group'), validFrom: v('plc-from'), validTo: v('plc-to'), note: v('plc-note') });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose();
+  pricelistsCache.push(r.list); plSortCache();
+  PLD_CACHE[r.id] = { success: true, list: r.list, lines: [], billPromos: [] };
+  openPriceListDetail(r.id, { edit: true, noFetch: true });
+  toast('สร้างชุดราคาแล้ว — เพิ่มรายการราคาได้เลย');
+}); }
+
+async function openClonePriceList(srcId){
+  if (!pricelistsCache.length) { const r = await callApi('listPriceLists', {}); if (r.success) pricelistsCache = r.data; }
+  if (!pricelistsCache.length) { toast('ยังไม่มีชุดราคาให้คัดลอก — สร้างใหม่หรือนำเข้าจาก Excel ก่อน', true); return; }
+  // ค่าเริ่มต้น: ชุดที่เปิดอยู่ ไม่งั้นชุดที่ใช้งานล่าสุด
+  const def = pricelistsCache.find(l => l.id === srcId) || pricelistsCache.find(l => l.status === 'active') || pricelistsCache[0];
+  plModal('<h3>คัดลอกเป็นงวดใหม่</h3><p class="form-hint">ก๊อปทุกรายการราคาและโปรระดับบิลของชุดต้นทางเป็นชุดร่างใหม่ (กลุ่มลูกค้าเดิม) — แก้เฉพาะตัวที่เปลี่ยนแล้วค่อยเปิดใช้งาน ชุดต้นทางไม่ถูกแตะ</p>' +
+    plField('คัดลอกจากชุด', '<select id="plk-src" onchange="plCloneDefaults()">' + pricelistsCache.map(l =>
+      '<option value="'+l.id+'"'+(l.id===def.id?' selected':'')+'>'+esc(l.name)+' · '+esc(l.customerGroupName||'-')+' · '+esc(l.validFrom)+' – '+esc(l.validTo)+' ('+(PL_STATUS[l.status]||PL_STATUS.draft)[1]+')</option>').join('') + '</select>') +
+    plField('ชื่อชุดใหม่', '<input id="plk-name">') +
+    '<div class="form-grid g2">' + plField('ตั้งแต่', '<input type="date" id="plk-from">') + plField('ถึง', '<input type="date" id="plk-to">') + '</div>' +
+    plModalActions('submitClonePriceList()', 'คัดลอก'));
+  plCloneDefaults();
+}
+function plCloneDefaults(){
+  const src = pricelistsCache.find(l => String(l.id) === document.getElementById('plk-src').value); if (!src) return;
+  const p = plNextPeriod(src.validFrom, src.validTo);
+  document.getElementById('plk-name').value = src.name + ' (งวดใหม่)';
+  document.getElementById('plk-from').value = p.from; document.getElementById('plk-to').value = p.to;
+}
+function submitClonePriceList(){ return plBusy(async () => {
+  const v = id => document.getElementById(id).value.trim();
+  if (!v('plk-name')) return plModalErr('กรุณาตั้งชื่อชุดใหม่');
+  if (!v('plk-from') || !v('plk-to')) return plModalErr('กรุณาระบุช่วงเวลา');
+  const r = await callApi('clonePriceList', { id: Number(v('plk-src')), name: v('plk-name'), validFrom: v('plk-from'), validTo: v('plk-to') });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose();
+  pricelistsCache.push(r.list); plSortCache();
+  openPriceListDetail(r.id, { edit: true });      // รายการที่ก๊อปมาต้องโหลดจาก backend ครั้งเดียว
+  toast('คัดลอกแล้ว '+r.list.lineCount+' รายการ — แก้เฉพาะตัวที่เปลี่ยนได้เลย');
+}); }
+
+function togglePriceListEdit(){ PLD_EDIT = !PLD_EDIT; const d = PLD_CACHE[currentPriceListId]; if (d) renderPriceListDetail(d); }
+
+/* modal แก้ 1 รายการ (line = สินค้าที่ใช้ขั้นบันไดร่วมกัน) */
+let PLM = null;
+const plVal = v => v == null ? '' : esc(v);
+function plmTierRow(t){
+  return '<div class="plm-row" data-label="'+esc(t.label||'')+'">' +
+    '<input class="t-min" type="number" min="1" step="1" placeholder="จาก (หีบ)" value="'+plVal(t.min)+'">' +
+    '<input class="t-max" type="number" min="1" step="1" placeholder="ถึง (ว่าง=ขึ้นไป)" value="'+plVal(t.max)+'">' +
+    '<input class="t-cash" type="number" min="0" step="0.01" placeholder="เงินสด รวม VAT" value="'+plVal(t.cashInclVat)+'">' +
+    '<input class="t-credit" type="number" min="0" step="0.01" placeholder="เครดิต รวม VAT" value="'+plVal(t.creditInclVat)+'">' +
+    '<button class="btn btn-sm btn-ghost" title="ลบขั้นนี้" onclick="this.parentNode.remove()">✕</button></div>';
+}
+function plmPackRow(p){
+  return '<div class="plm-row packs" data-note="'+esc(p.label||'')+'">' +
+    '<input class="p-factor" type="number" min="1" step="1" placeholder="ชิ้น/แพ็ค" value="'+plVal(p.unitFactor)+'">' +
+    '<input class="p-cash" type="number" min="0" step="0.01" placeholder="เงินสด รวม VAT" value="'+plVal(p.cashInclVat)+'">' +
+    '<input class="p-list" type="number" min="0" step="0.01" placeholder="ราคาตั้ง ไม่รวม VAT (ถ้ามี)" value="'+plVal(p.listExVat)+'">' +
+    '<button class="btn btn-sm btn-ghost" title="ลบแพ็คนี้" onclick="this.parentNode.remove()">✕</button></div>';
+}
+async function openLineModal(idx){
+  const d = PLD_CACHE[currentPriceListId]; if (!d || !plEditable(d.list)) return;
+  if (!productsCache.length) { toast('กำลังโหลดรายการสินค้า...'); await ensureProductsForSale(); }
+  const ln = idx == null ? null : d.lines[idx];
+  const taken = {};                                   // สินค้าที่อยู่รายการอื่นของชุดนี้แล้ว (1 สินค้าอยู่ได้รายการเดียว)
+  d.lines.forEach((x, i) => { if (i !== idx) x.products.forEach(p => { taken[String(p.productId)] = true; }); });
+  PLM = { idx, lineId: ln ? ln.lineId : null, selected: ln ? ln.products.map(p => String(p.productId)) : [], taken };
+  // ศูนย์ใช้ราคาเดียวต่อสินค้า → ค่าเริ่มต้นขั้นเดียว 1 หีบขึ้นไป (ชุดอื่นก็เริ่มขั้นเดียว แล้วกด + เพิ่มขั้นได้)
+  const tiers = ln && ln.tiers.length ? ln.tiers : [{ min: 1, max: null }];
+  const centre = plIsCentre(d.list);
+  plModal('<h3>'+(ln ? 'แก้ไขรายการราคา' : 'เพิ่มรายการราคา')+'</h3>' +
+    '<p class="form-hint">'+(centre ? 'กลุ่มศูนย์: ราคาเดียวต่อสินค้า — เลือกสินค้า ใส่จำนวนต่อหีบ แล้วกรอกราคาช่องเดียวพอ' : 'เลือกสินค้าได้หลายตัวถ้าใช้ตารางขั้นราคาร่วมกัน (นับจำนวนหีบรวมกัน เช่น กลิ่นต่าง ๆ ของสินค้าเดียวกัน)')+'</p>' +
+    '<h4>สินค้า</h4><div id="plm-chips"></div>' +
+    '<input id="plm-q" placeholder="ค้นหารหัสหรือชื่อสินค้า..." oninput="plmRenderPick()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:7px;font:inherit">' +
+    '<div class="plm-pick" id="plm-pick"></div>' +
+    '<div class="form-grid" style="margin-top:14px">' +
+      plField('จำนวนชิ้นต่อหีบ', '<input id="plm-factor" type="number" min="1" step="1" value="'+plVal(ln && ln.caseFactor)+'">') +
+      plField('ราคาตั้ง/หีบ <span class="unit">ไม่รวม VAT ใช้คำนวณ % ส่วนลด</span>', '<input id="plm-list" type="number" min="0" step="0.01" value="'+plVal(ln && ln.listExVat)+'">') +
+      '<div></div>' +
+    '</div>' +
+    '<h4>ขั้นราคาต่อหีบ (รวม VAT)</h4>' +
+    '<div class="plm-row head"><span>จาก (หีบ)</span><span>ถึง (ว่าง = ขึ้นไป)</span><span>เงินสด</span><span>เครดิต</span><span></span></div>' +
+    '<div id="plm-tiers">' + tiers.map(plmTierRow).join('') + '</div>' +
+    '<button class="btn btn-sm" onclick="plmAddTier()">+ เพิ่มขั้น</button>' +
+    '<h4>แพ็ค <span class="unit" style="font-weight:400;color:var(--ink-faint)">ขายเฉพาะรถ Cash Van · เงินสดเท่านั้น</span></h4>' +
+    '<div class="plm-row packs head"><span>ชิ้นต่อแพ็ค</span><span>ราคาเงินสด (รวม VAT)</span><span>ราคาตั้ง (ไม่รวม VAT)</span><span></span></div>' +
+    '<div id="plm-packs">' + (ln ? ln.packs.map(plmPackRow).join('') : '') + '</div>' +
+    '<button class="btn btn-sm" onclick="document.getElementById(\'plm-packs\').insertAdjacentHTML(\'beforeend\', plmPackRow({}))">+ เพิ่มแพ็ค</button>' +
+    '<div class="form-grid g2" style="margin-top:14px">' +
+      plField('ราคาขายแนะนำ (ต่อแพ็ค)', '<input id="plm-sugg" type="number" min="0" step="0.01" value="'+plVal(ln && ln.suggestedPack)+'">') +
+      plField('ราคาขายปลีก (ต่อชิ้น)', '<input id="plm-retail" type="number" min="0" step="0.01" value="'+plVal(ln && ln.retailPiece)+'">') +
+    '</div>' +
+    plModalActions('submitLineModal()', 'บันทึกรายการ'));
+  plmRenderChips(); plmRenderPick();
+  // แก้รายการเดิม = ส่วนใหญ่แค่เปลี่ยนราคา → เคอร์เซอร์ไปช่องเงินสดขั้นแรกเลย · รายการใหม่ = เริ่มจากค้นหาสินค้า
+  const cash = ln && document.querySelector('#plm-tiers .t-cash');
+  if (cash) { cash.focus(); cash.select(); } else document.getElementById('plm-q').focus();
+}
+function plmAddTier(){
+  const rows = [...document.querySelectorAll('#plm-tiers .plm-row')], last = rows[rows.length - 1];
+  const lastMax = last ? Number(last.querySelector('.t-max').value) : 0;
+  document.getElementById('plm-tiers').insertAdjacentHTML('beforeend', plmTierRow({ min: lastMax ? lastMax + 1 : null, max: null }));
+}
+const plmProd = id => productsCache.find(p => String(p.record_id) === String(id));
+function plmRenderChips(){
+  document.getElementById('plm-chips').innerHTML = PLM.selected.length
+    ? PLM.selected.map(id => { const p = plmProd(id) || {}; return '<span class="plm-chip"><span class="mono-data">'+esc(p.product_code||id)+'</span> '+esc(p.name||'')+'<button onclick="plmToggle(\''+esc(id)+'\')" title="เอาออก">✕</button></span>'; }).join('')
+    : '<p class="form-hint" style="margin:0 0 6px">ยังไม่ได้เลือกสินค้า</p>';
+}
+function plmRenderPick(){
+  const q = document.getElementById('plm-q').value.trim().toLowerCase();
+  const hit = productsCache.filter(p => !PLM.selected.includes(String(p.record_id)) &&
+    (!q || String(p.product_code||'').toLowerCase().includes(q) || String(p.alias_codes||'').toLowerCase().includes(q) || String(p.name||'').toLowerCase().includes(q))).slice(0, 40);
+  document.getElementById('plm-pick').innerHTML = hit.length ? hit.map(p => PLM.taken[String(p.record_id)]
+    ? '<div class="off"><span class="mono-data">'+esc(p.product_code)+'</span> '+esc(p.name)+' — อยู่ในรายการอื่นของชุดนี้แล้ว</div>'
+    : '<div onclick="plmToggle(\''+esc(p.record_id)+'\')"><span class="mono-data">'+esc(p.product_code)+'</span> '+esc(p.name)+(String(p.is_active)==='FALSE'?' <span class="unit">(ปิดใช้งาน)</span>':'')+'</div>').join('')
+    : '<div class="off">ไม่พบสินค้า</div>';
+}
+function plmToggle(id){
+  id = String(id);
+  PLM.selected = PLM.selected.includes(id) ? PLM.selected.filter(x => x !== id) : PLM.selected.concat(id);
+  plmRenderChips(); plmRenderPick();
+  const q = document.getElementById('plm-q'); if (q.value) { q.value = ''; plmRenderPick(); }
+  q.focus();
+}
+function submitLineModal(){ return plBusy(async () => {
+  const id = currentPriceListId, d = PLD_CACHE[id]; if (!d || !PLM) return;
+  const num = el => el.value.trim() === '' ? null : Number(el.value);
+  if (!PLM.selected.length) return plModalErr('เลือกสินค้าอย่างน้อย 1 ตัว');
+  const payload = {
+    priceListId: id, lineId: PLM.lineId, productIds: PLM.selected.map(Number),
+    caseFactor: num(document.getElementById('plm-factor')), listExVat: num(document.getElementById('plm-list')),
+    suggestedPack: num(document.getElementById('plm-sugg')), retailPiece: num(document.getElementById('plm-retail')),
+    tiers: [...document.querySelectorAll('#plm-tiers .plm-row')].map(r => ({ min: num(r.querySelector('.t-min')), max: num(r.querySelector('.t-max')),
+      cashInclVat: num(r.querySelector('.t-cash')), creditInclVat: num(r.querySelector('.t-credit')), label: r.dataset.label || '' }))
+      .filter(t => !(t.min == null && t.max == null && t.cashInclVat == null && t.creditInclVat == null)),   // แถวว่างทั้งแถว = ไม่นับ
+    packs: [...document.querySelectorAll('#plm-packs .plm-row')].map(r => ({ factor: num(r.querySelector('.p-factor')), cashInclVat: num(r.querySelector('.p-cash')),
+      listExVat: num(r.querySelector('.p-list')), note: r.dataset.note || '' })).filter(p => !(p.factor == null && p.cashInclVat == null && p.listExVat == null))
+  };
+  if (!payload.caseFactor) return plModalErr('กรอกจำนวนชิ้นต่อหีบ');
+  if (!payload.tiers.length) return plModalErr('กรอกราคาอย่างน้อย 1 ขั้น');
+  const r = await callApi('savePriceListLine', payload);
+  if (!r.success) return plModalErr(r.message);
+  if (PLM.idx == null) d.lines.push(r.line); else d.lines[PLM.idx] = r.line;
+  plLineCountChanged(id, d);
+  plModalClose();
+  renderPriceListDetail(d);
+  document.getElementById('pld-warn').innerHTML = plErr(r.warnings);
+  toast('บันทึกรายการแล้ว');
+}); }
+function plLineCountChanged(id, d){
+  d.list.lineCount = d.lines.length;
+  const row = pricelistsCache.find(x => x.id === id); if (row) row.lineCount = d.lines.length;
+}
+async function deleteLineUI(idx){
+  const id = currentPriceListId, d = PLD_CACHE[id], ln = d && d.lines[idx]; if (!ln) return;
+  if (!confirm('ลบรายการ ' + ln.products.map(p => p.productCode || p.name).join(', ') + ' ออกจากชุดร่างนี้?')) return;
+  const r = await callApi('deletePriceListLine', { priceListId: id, lineId: ln.lineId });
+  if (!r.success) { toast(r.message, true); return; }
+  d.lines.splice(d.lines.indexOf(ln), 1);
+  plLineCountChanged(id, d);
+  renderPriceListDetail(d);
+  toast('ลบรายการแล้ว');
+}
+
+/* โปรระดับบิล (โหมดแก้ไข) */
+function plPromoRow(b){
+  return '<div class="plm-row promo">' +
+    '<input class="b-min" type="number" min="0" step="0.01" placeholder="ยอดรวมขั้นต่ำ ไม่รวม VAT" value="'+plVal(b.minAmountExVat)+'">' +
+    '<input class="b-pct" type="number" min="0" max="99.99" step="0.01" placeholder="ลดเพิ่ม %" value="'+plVal(b.percent)+'">' +
+    '<button class="btn btn-sm btn-ghost" title="ลบขั้นนี้" onclick="this.parentNode.remove()">✕</button></div>';
+}
+function renderPromoEditor(promos){
+  document.getElementById('pld-promos').innerHTML =
+    '<div class="plm-row promo head"><span>ยอดซื้อรวมทั้งบิลครบ (บาท ไม่รวม VAT)</span><span>ลดเพิ่ม %</span><span></span></div>' +
+    '<div id="pld-promo-rows">' + promos.map(plPromoRow).join('') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:6px"><button class="btn btn-sm" onclick="document.getElementById(\'pld-promo-rows\').insertAdjacentHTML(\'beforeend\', plPromoRow({}))">+ เพิ่มขั้น</button>' +
+    '<button class="btn btn-primary btn-sm" id="pld-promo-save" onclick="savePromosUI()">บันทึกโปรระดับบิล</button></div>';
+}
+async function savePromosUI(){
+  const id = currentPriceListId, d = PLD_CACHE[id]; if (!d) return;
+  const btn = document.getElementById('pld-promo-save'); if (btn.disabled) return;
+  const num = el => el.value.trim() === '' ? null : Number(el.value);
+  const promos = [...document.querySelectorAll('#pld-promo-rows .plm-row')].map(r => ({ minAmountExVat: num(r.querySelector('.b-min')), percent: num(r.querySelector('.b-pct')) }))
+    .filter(b => !(b.minAmountExVat == null && b.percent == null));
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  const r = await callApi('savePriceListBillPromos', { priceListId: id, promos });
+  btn.disabled = false; btn.textContent = 'บันทึกโปรระดับบิล';
+  if (!r.success) { toast(r.message, true); return; }
+  d.billPromos = r.billPromos;
+  renderPriceListDetail(d);
+  toast('บันทึกโปรระดับบิลแล้ว');
 }
 
 /* ── นำเข้าจาก Excel ── */

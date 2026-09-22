@@ -86,6 +86,11 @@ var ADMIN_ACTION_MAP = {
   updatePriceList:        updatePriceList,
   setPriceListStatus:     setPriceListStatus,
   deletePriceList:        deletePriceList,
+  createPriceList:        createPriceList,
+  clonePriceList:         clonePriceList,
+  savePriceListLine:      savePriceListLine,
+  deletePriceListLine:    deletePriceListLine,
+  savePriceListBillPromos: savePriceListBillPromos,
   previewPricing:         previewPricing,
 
   listPromotions:         listPromotions,

@@ -11,3 +11,9 @@ node_modules/
 
 # ใบราคา/ข้อมูลราคาจริงของบริษัท — เก็บบนไดรฟ์ ห้ามขึ้น GitHub
 reference/
+
+# Claude Code settings เฉพาะเครื่อง (allowlist ของใครของมัน) — ไม่ต้องแชร์
+.claude/settings.local.json
+
+# Drive shortcut ไม่ใช่ไฟล์จริง แค่ตัวชี้ไป Google Sheet บนไดรฟ์
+*.gsheet
