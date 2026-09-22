@@ -14,7 +14,8 @@ var CENTRAL_SHEETS = {
   liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at'],
   tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at',
-    'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name'],
+    'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name',
+    'is_house'],  // TRUE บนแถวเดียว = "ตัวแทนบ้าน" ของบริษัทเจ้าของสินค้าเอง ใช้เก็บยอดขายตรงที่ไม่ผ่านตัวแทนจำหน่าย (ดู _ensureHouseTenant ใน 13_tenants.gs)
 
   // product_code: รหัสประจำตัวสินค้า (เหมือนเลขบัตรประชาชนของสินค้า) — unique บังคับ, สำคัญอันดับ 1
   //   ผู้ใช้ตั้งเอง/แก้เองได้ ไม่ใช่ FK ไปหาอะไร คนละความหมายกับ external_code (รหัสจากไฟล์นำเข้า Express

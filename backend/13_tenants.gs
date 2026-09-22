@@ -63,6 +63,32 @@ function createTenant(session, payload) {
   return { success: true, tenantId: payload.tenantId, sheetFileId: fileId, sheetUrl: 'https://docs.google.com/spreadsheets/d/' + fileId };
 }
 
+// ===================== ตัวแทน "บ้าน" ของบริษัทเจ้าของสินค้าเอง =====================
+// โมเดลธุรกิจ: ขายส่วนหนึ่งผ่านตัวแทนจำหน่าย อีกส่วนบริษัทมีพนักงานขายตรงเอง ยอดเข้าบริษัทเอง
+// ไม่ต้องให้ owner_admin ไปเลือกตัวแทนจำหน่ายรายไหนก่อน — ใช้ tenant พิเศษนี้แทนโดยอัตโนมัติ (ดู _salesTenantId ใน 14_permissions.gs)
+// สร้าง Google Sheet ของตัวเองเหมือนตัวแทนทั่วไปทุกอย่าง (sales_orders/van_stock/customers ฯลฯ) เพียงแต่ auto-create ครั้งแรกที่ใช้งาน
+var HOUSE_TENANT_ID = 'HOUSE';
+function _ensureHouseTenant() {
+  var rows = centralObjects('tenants');
+  for (var i = 0; i < rows.length; i++) {
+    if (_isTrue(rows[i].is_house) || String(rows[i].tenant_id) === HOUSE_TENANT_ID) return rows[i].tenant_id;
+  }
+  var lock = LockService.getScriptLock();
+  lock.tryLock(20000);
+  try {
+    rows = centralObjects('tenants'); // เช็คซ้ำหลังได้ lock กันสร้างซ้อนถ้ามีสองคำขอพร้อมกัน
+    for (var j = 0; j < rows.length; j++) {
+      if (_isTrue(rows[j].is_house) || String(rows[j].tenant_id) === HOUSE_TENANT_ID) return rows[j].tenant_id;
+    }
+    var fileId = _buildTenantSpreadsheet(HOUSE_TENANT_ID, 'บริษัทเจ้าของสินค้า (ขายตรง)');
+    centralAppend('tenants', {
+      tenant_id: HOUSE_TENANT_ID, name: 'บริษัทเจ้าของสินค้า (ขายตรง)', sheet_file_id: fileId,
+      region: '', is_active: 'TRUE', created_at: nowStr(), is_house: 'TRUE'
+    });
+    return HOUSE_TENANT_ID;
+  } finally { lock.releaseLock(); }
+}
+
 function listTenants(session) {
   var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
   return { success: true, data: centralObjects('tenants').map(function(t) {

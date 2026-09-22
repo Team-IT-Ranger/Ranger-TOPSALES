@@ -19,17 +19,19 @@ function addCustomer(user, payload) {
 }
 
 // ── Admin App: ลูกค้า (ตัวแทน/Ultra Admin ที่สวมสิทธิ์ จัดการของตัวเอง, บริษัทเห็นทั้งหมด) ──
+// ใช้ _salesTenantId() (ไม่ใช่ _effectiveTenantId เฉยๆ) เพราะหน้า "เปิดบิลขาย" (19_sales_admin.gs) เรียกฟังก์ชันนี้
+// ตอนบริษัทเจ้าของสินค้าไม่ได้สวมสิทธิ์ตัวแทนไหนอยู่ด้วย — ต้อง fallback ไปที่ตัวแทนบ้านของบริษัทเองได้
 function listCustomersAdmin(session, payload) {
   var err = _requirePermission(session, 'customers', 'view'); if (err) return err;
   var rows = centralObjects('customers');
-  var effTenantId = _effectiveTenantId(session, payload || {});
+  var effTenantId = _salesTenantId(session, payload || {});
   if (effTenantId) rows = rows.filter(function(c) { return String(c.tenant_id) === String(effTenantId); });
   return { success: true, data: rows };
 }
 
 function addCustomerAdmin(session, payload) {
   var err = _requirePermission(session, 'customers', 'edit'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   centralAppend('customers', {
     record_id: centralNextId('customers'), name: payload.name, tenant_id: tenantId, group_id: payload.groupId || 0,
@@ -53,7 +55,7 @@ function updateCustomerAdmin(session, payload) {
 function listStaffAdmin(session, payload) {
   var err = _requirePermission(session, 'staff', 'view'); if (err) return err;
   var rows = centralObjects('liff_users');
-  var effTenantId = _effectiveTenantId(session, payload || {});
+  var effTenantId = _salesTenantId(session, payload || {}); // เหตุผลเดียวกับ listCustomersAdmin ด้านบน
   if (effTenantId) rows = rows.filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
   return { success: true, data: rows.map(function(u) { return {
     lineUserId: u.line_user_id, displayName: u.display_name, role: u.role, tenantId: u.tenant_id,

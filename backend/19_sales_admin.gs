@@ -12,7 +12,7 @@
 function listSalesOrdersAdmin(session, payload) {
   var err = _requirePermission(session, 'sales', 'view'); if (err) return err;
   payload = payload || {};
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var custName = {};
@@ -40,7 +40,7 @@ function listSalesOrdersAdmin(session, payload) {
 function getSalesOrderAdmin(session, payload) {
   var err = _requirePermission(session, 'sales', 'view'); if (err) return err;
   payload = payload || {};
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var order = null;
@@ -77,7 +77,7 @@ function getSalesOrderAdmin(session, payload) {
 function previewSaleAdmin(session, payload) {
   var err = _requirePermission(session, 'sales', 'view'); if (err) return err;
   payload = payload || {};
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   if (!payload.customerId) return { success: false, message: 'กรุณาระบุลูกค้า' };
 
@@ -107,7 +107,7 @@ function _customerInTenant(customerId, tenantId) {
 function recordSaleAdmin(session, payload) {
   var err = _requirePermission(session, 'sales', 'edit'); if (err) return err;
   payload = payload || {};
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   if (!payload.customerId) return { success: false, message: 'กรุณาระบุลูกค้า' };
   if (!_customerInTenant(payload.customerId, tenantId)) return { success: false, message: 'ไม่พบลูกค้านี้ในตัวแทนจำหน่ายที่เลือก' };
@@ -204,7 +204,7 @@ function recordSaleAdmin(session, payload) {
 function cancelSalesOrderAdmin(session, payload) {
   var err = _requirePermission(session, 'sales', 'edit'); if (err) return err;
   payload = payload || {};
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var order = null;

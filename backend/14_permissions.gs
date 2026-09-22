@@ -45,6 +45,17 @@ function _effectiveTenantId(session, payload) {
   return null;
 }
 
+// เหมือน _effectiveTenantId() แต่ถ้าไม่มีทั้ง session.tenant_id และ payload.tenantId (บริษัทเจ้าของสินค้า ไม่ได้สวมสิทธิ์
+// ตัวแทนรายไหนอยู่) จะ fallback ไปที่ "ตัวแทนบ้าน" ของบริษัทเอง (auto-create, ดู _ensureHouseTenant ใน 13_tenants.gs)
+// แทนที่จะคืน null — เพราะบริษัทเองก็มีพนักงานขายตรง ยอดเข้าบริษัทเอง ไม่ต้องเลือกตัวแทนก่อนใช้งาน
+// ใช้เฉพาะกับโมดูลที่เกี่ยวกับ "งานขาย" (19_sales_admin.gs + customers/staff lookup ที่หน้าเปิดบิลขายต้องใช้)
+function _salesTenantId(session, payload) {
+  var t = _effectiveTenantId(session, payload);
+  if (t) return t;
+  if (session.role_code === 'super_admin' || session.role_code === 'owner_admin') return _ensureHouseTenant();
+  return null;
+}
+
 // role_code เริ่มต้นตอน setupCentralSheet — ดู seedRolesDefaults ใน 00_setup_sheets.gs
 // super_admin ข้ามทุกการเช็คสิทธิ์เสมอ กันกรณีตั้งค่า role_permissions ผิดแล้วล็อกตัวเองออกจากระบบ
 
