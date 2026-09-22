@@ -126,6 +126,13 @@ it fills the gaps around them.
   through both the mobile and admin action surfaces). Refuses to run against the production URL as a
   safety check. Re-run this after any pricing-engine or sales-order backend change before calling it
   verified.
+- `UAT_URL='<uat exec url>' node .dev/uat-pricelist-edit-e2e.js` — live UAT test of manual price entry
+  (clone an active list, edit/delete lines, bill promos, empty list; confirms active lists refuse edits).
+  Only touches drafts it creates and deletes them at the end.
+- Before trusting a UAT/prod deployment, check it actually runs the expected code: a deployment
+  version snapshots whatever is at the project's HEAD, and a push from a stale clone silently puts
+  old code there (happened 2026-09-22 — UAT @10 was built from `5861bc1`). Quick check: call a new
+  action and make sure it doesn't answer `ไม่พบ action`, or `clasp pull` into a temp dir and diff.
 
 ## Current status (as of the last work in this repo)
 
