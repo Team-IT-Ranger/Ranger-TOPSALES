@@ -10,7 +10,7 @@
   };
   var LIFF_IDS = {
     prod: '',
-    uat:  ''
+    uat:  '2010417493-pYb6cS8e'   /* Endpoint URL: https://team-it-ranger.github.io/salesranger-TOPSHOP/mobile-uat/ */
   };
   var h = location.hostname, p = location.pathname;
   var env = (p.indexOf('/mobile-uat/') !== -1 || h === 'localhost' || h === '127.0.0.1') ? 'uat' : 'prod';
