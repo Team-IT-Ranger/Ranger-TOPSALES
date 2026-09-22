@@ -393,6 +393,74 @@
           </div>
         </section>
 
+        <!-- ═══ งานขาย: รายการบิลขาย ═══ -->
+        <section class="view" id="view-salesorders">
+          <div class="view-head">
+            <div><h1>บิลขาย</h1><p>รายการบิลขายของตัวแทนนี้ — เปิดบิลขายเองได้จากที่นี่โดยไม่ต้องผ่านแอปมือถือ</p></div>
+            <button class="btn btn-primary" onclick="openSaleOrderNew()">+ เปิดบิลขาย</button>
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+            <select id="so-filter-status" onchange="renderSalesOrdersTable()">
+              <option value="">ทุกสถานะ</option>
+              <option value="completed">เสร็จสิ้น (ตัดสต็อกแล้ว)</option>
+              <option value="pending_delivery">รอสำนักงานจัดส่ง</option>
+              <option value="cancelled">ยกเลิกแล้ว</option>
+            </select>
+            <input id="so-filter-search" placeholder="ค้นหาชื่อร้าน/เลขที่บิล" oninput="renderSalesOrdersTable()" style="flex:1;min-width:220px">
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>วันที่</th></tr></thead>
+            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <!-- ═══ งานขาย: รายละเอียดบิล ═══ -->
+        <section class="view" id="view-saleorderdetail">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="closeSaleOrderDetail()">← กลับ</button>
+              <div><h1 id="sod-title">บิลขาย</h1><p id="sod-meta"></p></div>
+            </div>
+            <div id="sod-actions"></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead>
+            <tbody id="sod-body"></tbody>
+          </table></div>
+        </section>
+
+        <!-- ═══ งานขาย: เปิดบิลขายใหม่ ═══ -->
+        <section class="view" id="view-saleordernew">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="closeSaleOrderNew()">← กลับ</button>
+              <div><h1>เปิดบิลขาย</h1><p>ราคา/ส่วนลดคำนวณจากชุดราคาของกลุ่มลูกค้าโดยอัตโนมัติ (ถ้ามี) — เหมือนขายจากแอปมือถือเป๊ะ</p></div>
+            </div>
+          </div>
+          <div class="form-card">
+            <div class="form-grid g2">
+              <div class="field"><label>ลูกค้า</label><select id="son-customer"><option value="">— เลือกลูกค้า —</option></select></div>
+              <div class="field"><label>ชำระเงิน</label><select id="son-pay"></select></div>
+              <div class="field"><label>การจัดส่ง</label><select id="son-fulfill" onchange="sonFulfillChanged()">
+                <option value="office_delivery">รอสำนักงานจัดส่ง (ไม่ตัดสต็อกรถ)</option>
+                <option value="immediate">ตัดสต็อกรถทันที (ต้องเลือกพนักงาน)</option>
+              </select></div>
+              <div class="field" id="son-staff-field" style="display:none"><label>พนักงานที่จะตัดสต็อกให้</label><select id="son-staff"></select></div>
+            </div>
+            <p class="form-hint">แพ็ค (PACK) ขายได้เฉพาะตัดสต็อกรถทันที + ชำระเงินสดเท่านั้น (ตามกติการาคา)</p>
+          </div>
+          <div class="form-card">
+            <h3>รายการสินค้า</h3>
+            <div id="son-rows"></div>
+            <div style="margin:10px 0"><button class="btn btn-sm" onclick="sonAddRow()">+ เพิ่มรายการ</button></div>
+            <div class="form-actions"><button class="btn btn-primary" onclick="sonPreview()">คำนวณราคา</button></div>
+            <div id="son-result" style="margin-top:14px"></div>
+            <div class="form-actions" id="son-confirm" style="display:none">
+              <button class="btn btn-primary" onclick="sonSubmit()">✓ บันทึกบิลขาย</button>
+            </div>
+          </div>
+        </section>
+
         <!-- ═══ DOCNUM ═══ -->
         <section class="view" id="view-docnum">
           <div class="view-head"><div><h1>เลขที่เอกสาร</h1><p>รูปแบบเลขที่ใบขาย/SO ของตัวแทนนี้</p></div></div>
@@ -803,7 +871,7 @@ async function doLogin(){
     const data = await res.json();
     if (!data.success) { errEl.textContent = data.message || 'เข้าสู่ระบบไม่สำเร็จ'; errEl.style.display = 'block'; return; }
     TOKEN = data.token;
-    SESSION = { displayName: data.displayName, roleCode: data.roleCode, tenantId: data.tenantId };
+    SESSION = { username, displayName: data.displayName, roleCode: data.roleCode, tenantId: data.tenantId };
     localStorage.setItem(LS_TOKEN, TOKEN);
     localStorage.setItem(LS_SESSION, JSON.stringify(SESSION));
     routeAfterAuth();
@@ -889,24 +957,27 @@ const NAV = {
       { n:'1.1', label:'ข้อมูลบริษัท', items:[ {n:'1.1.1', label:'ข้อมูลบริษัท', view:'companyprofile', ready:true} ] },
       { n:'1.2', label:'บัญชีแอดมิน', items:[ {n:'1.2.1', label:'ผู้ใช้งานระบบ', view:'adminusers', ready:true} ] }
     ]},
-    { n:'2', icon:'👥', label:'บุคลากรและเขตขาย', subs:[
-      { n:'2.1', label:'พนักงานขาย', items:[ {n:'2.1.1', label:'รายชื่อพนักงาน', view:'staff', ready:true} ] },
-      { n:'2.2', label:'เขตการขาย', items:[ {n:'2.2.1', label:'ผังเขตการขาย', view:'v-zone', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
+    { n:'2', icon:'🧾', label:'งานขาย', subs:[
+      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', ready:true} ] }
     ]},
-    { n:'3', icon:'🏪', label:'ลูกค้าและเอกสาร', subs:[
-      { n:'3.1', label:'ลูกค้า', items:[ {n:'3.1.1', label:'รายชื่อลูกค้า', view:'customers', ready:true} ] },
-      { n:'3.2', label:'เลขที่เอกสาร', items:[ {n:'3.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', ready:true} ] }
+    { n:'3', icon:'👥', label:'บุคลากรและเขตขาย', subs:[
+      { n:'3.1', label:'พนักงานขาย', items:[ {n:'3.1.1', label:'รายชื่อพนักงาน', view:'staff', ready:true} ] },
+      { n:'3.2', label:'เขตการขาย', items:[ {n:'3.2.1', label:'ผังเขตการขาย', view:'v-zone', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
     ]},
-    { n:'4', icon:'📦', label:'คลังสินค้า', subs:[
-      { n:'4.1', label:'เคลื่อนไหวสินค้า', items:[
-        {n:'4.1.1', label:'รับสินค้าเข้าคลัง', view:'v-recv', ready:false, soon:'รับสินค้าเข้าคลัง', desc:'ใบรับสินค้าเข้าคลังแบบมีเลขเอกสารทางการ ผูกกับใบสั่งซื้อ'},
-        {n:'4.1.2', label:'โอนย้ายคลัง', view:'v-transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
+    { n:'4', icon:'🏪', label:'ลูกค้าและเอกสาร', subs:[
+      { n:'4.1', label:'ลูกค้า', items:[ {n:'4.1.1', label:'รายชื่อลูกค้า', view:'customers', ready:true} ] },
+      { n:'4.2', label:'เลขที่เอกสาร', items:[ {n:'4.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', ready:true} ] }
+    ]},
+    { n:'5', icon:'📦', label:'คลังสินค้า', subs:[
+      { n:'5.1', label:'เคลื่อนไหวสินค้า', items:[
+        {n:'5.1.1', label:'รับสินค้าเข้าคลัง', view:'v-recv', ready:false, soon:'รับสินค้าเข้าคลัง', desc:'ใบรับสินค้าเข้าคลังแบบมีเลขเอกสารทางการ ผูกกับใบสั่งซื้อ'},
+        {n:'5.1.2', label:'โอนย้ายคลัง', view:'v-transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
       ]},
-      { n:'4.2', label:'เบิกจ่าย', items:[ {n:'4.2.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
+      { n:'5.2', label:'เบิกจ่าย', items:[ {n:'5.2.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
     ]},
-    { n:'5', icon:'🚚', label:'การจัดส่งและรายงาน', subs:[
-      { n:'5.1', label:'การจัดส่ง', items:[ {n:'5.1.1', label:'สถานะการจัดส่ง', view:'v-ship', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
-      { n:'5.2', label:'รายงาน', items:[ {n:'5.2.1', label:'รายงานการขาย', view:'v-report1', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
+    { n:'6', icon:'🚚', label:'การจัดส่งและรายงาน', subs:[
+      { n:'6.1', label:'การจัดส่ง', items:[ {n:'6.1.1', label:'สถานะการจัดส่ง', view:'v-ship', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
+      { n:'6.2', label:'รายงาน', items:[ {n:'6.2.1', label:'รายงานการขาย', view:'v-report1', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
     ]}
   ]},
   owner: { groups: [
@@ -1050,7 +1121,8 @@ const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
   companyprofile: loadCompanyProfile, adminusers: loadAdminUsers, pricelists: loadPriceLists,
-  custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes
+  custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
+  salesorders: loadSalesOrders
 };
 function gotoView(view){
   let elId = 'soon', label = view, meta = findMeta(view);
@@ -1260,6 +1332,199 @@ async function saveDocSeriesUI(){
   const r = await callApi('addDocSeries', payload);
   if (!r.success) { toast(r.message, true); return; }
   toast('บันทึกสำเร็จ'); loadDocnum();
+}
+
+/* ══════════════ งานขาย (19_sales_admin.gs) — เปิด/ดู/ยกเลิกบิลขายเองจากแอดมิน ══════════════ */
+let salesOrdersCache = [], customersCache = [], paymentTypesCache = [], currentSaleOrderId = null, sonPreviewData = null;
+const PRODUCT_UNITS_CACHE = {};
+const SO_STATUS = { completed:['ok','เสร็จสิ้น'], pending_delivery:['wait','รอจัดส่ง'], cancelled:['off','ยกเลิกแล้ว'] };
+const soPill = st => { const s = SO_STATUS[st] || ['wait', st]; return '<span class="pill '+s[0]+'">'+esc(s[1])+'</span>'; };
+const soFulfillLabel = f => f === 'immediate' ? 'ตัดสต็อกรถทันที' : 'รอสำนักงานจัดส่ง';
+async function ensurePaymentTypesCache(){
+  if (paymentTypesCache.length) return;
+  const r = await callApi('listPaymentTypes', {});
+  if (r.success) paymentTypesCache = r.data.filter(p => isOn(p.is_active));
+}
+const payLabel = code => { const p = paymentTypesCache.find(x => x.code === code); return p ? p.name : (code || '-'); };
+
+function renderSalesOrdersTable(){
+  const body = document.getElementById('salesorders-body');
+  const statusF = document.getElementById('so-filter-status').value;
+  const q = document.getElementById('so-filter-search').value.trim().toLowerCase();
+  let rows = salesOrdersCache;
+  if (statusF) rows = rows.filter(o => o.status === statusF);
+  if (q) rows = rows.filter(o => (o.customer||'').toLowerCase().indexOf(q) !== -1 || (o.code||'').toLowerCase().indexOf(q) !== -1);
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">ไม่พบบิลขาย</td></tr>'; return; }
+  body.innerHTML = rows.map(o =>
+    '<tr class="clickable-row" onclick="openSaleOrderDetail('+o.id+')"><td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
+    '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
+    '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soPill(o.status)+'</td><td class="mono-data">'+esc(o.createdAt)+'</td></tr>'
+  ).join('');
+}
+async function loadSalesOrders(){
+  const body = document.getElementById('salesorders-body');
+  if (salesOrdersCache.length) renderSalesOrdersTable();
+  else body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', {})]);
+  if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  salesOrdersCache = r.data;
+  renderSalesOrdersTable();
+}
+
+/* ── รายละเอียดบิล ── */
+async function openSaleOrderDetail(id){
+  currentSaleOrderId = id;
+  _switchProductView('view-saleorderdetail', 'บิลขาย');
+  document.getElementById('sod-title').textContent = 'บิลขาย'; document.getElementById('sod-meta').textContent = ''; document.getElementById('sod-actions').innerHTML = '';
+  document.getElementById('sod-body').innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  const r = await callApi('getSalesOrderAdmin', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  if (currentSaleOrderId !== id) return; // ผู้ใช้กดออกไปหน้าอื่นระหว่างรอโหลด
+  renderSaleOrderDetail(r);
+}
+function renderSaleOrderDetail(r){
+  const o = r.order;
+  document.getElementById('sod-title').textContent = o.code;
+  document.getElementById('sod-meta').innerHTML = esc(o.customer) + ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
+    ' · ' + soPill(o.status) + ' · ' + esc(o.createdAt) + (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
+  document.getElementById('sod-actions').innerHTML = o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '';
+  const rows = r.items.map(it =>
+    '<tr'+(it.isFree ? ' style="background:var(--blue-pale)"' : '')+'><td>' +
+    (it.productCode ? '<span class="mono-data">'+esc(it.productCode)+'</span> ' : '') + esc(it.productName) + (it.isFree ? ' <span class="unit">(ของแถม)</span>' : '') + '</td>' +
+    '<td>'+esc(it.unitCode||'-')+'</td><td>'+it.qty+'</td><td class="mono-data">฿'+baht(it.price)+'</td><td class="mono-data">฿'+baht(it.lineTotal)+'</td></tr>'
+  ).join('');
+  document.getElementById('sod-body').innerHTML = rows +
+    '<tr><td colspan="4" style="text-align:right"><b>ยอดรวมก่อนหักส่วนลด</b></td><td class="mono-data">฿'+baht(o.subtotal)+'</td></tr>' +
+    (o.discount ? '<tr><td colspan="4" style="text-align:right">ส่วนลด</td><td class="mono-data">-฿'+baht(o.discount)+'</td></tr>' : '') +
+    '<tr><td colspan="4" style="text-align:right"><b>สุทธิ</b></td><td class="mono-data"><b>฿'+baht(o.total)+'</b></td></tr>';
+}
+function closeSaleOrderDetail(){
+  _switchProductView('view-salesorders', 'บิลขาย');
+  document.querySelectorAll('.sb-action, .sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === 'salesorders'));
+}
+async function cancelSaleOrderUI(){
+  if (!confirm('ยกเลิกบิลนี้? ถ้าเคยตัดสต็อกรถไปแล้วระบบจะคืนสต็อกกลับให้อัตโนมัติ')) return;
+  const r = await callApi('cancelSalesOrderAdmin', { id: currentSaleOrderId });
+  if (!r.success) { toast(r.message, true); return; }
+  const row = salesOrdersCache.find(x => x.id === currentSaleOrderId); if (row) row.status = 'cancelled';
+  toast('ยกเลิกบิลแล้ว');
+  openSaleOrderDetail(currentSaleOrderId);
+}
+
+/* ── เปิดบิลขายใหม่ ── */
+async function ensureProductsForSale(){ if (!productsCache.length) await loadProducts(); }
+async function ensureStaffCache(){
+  if (staffCache.length) return;
+  const r = await callApi('listStaffAdmin', {});
+  if (r.success) staffCache = r.data;
+}
+function sonFulfillChanged(){
+  document.getElementById('son-staff-field').style.display = document.getElementById('son-fulfill').value === 'immediate' ? '' : 'none';
+}
+async function sonRowProductChanged(sel){
+  const row = sel.closest('.son-row'), pid = sel.value, unitSel = row.querySelector('.son-unit');
+  if (!pid) { unitSel.innerHTML = ''; return; }
+  const p = productsCache.find(x => String(x.record_id) === String(pid));
+  if (!p) { unitSel.innerHTML = ''; return; }
+  unitSel.innerHTML = '<option value="">กำลังโหลด...</option>';
+  if (!PRODUCT_UNITS_CACHE[pid]) {
+    const r = await callApi('listProductUnits', { productId: pid });
+    PRODUCT_UNITS_CACHE[pid] = r.success ? r.data.filter(u => isOn(u.is_active)) : [];
+  }
+  const baseOpt = '<option value="'+esc(p.unit)+'">'+esc(p.unit)+' (หน่วยฐาน)</option>';
+  const extraOpts = PRODUCT_UNITS_CACHE[pid].map(u => '<option value="'+esc(u.unit_code)+'">'+esc(u.unit_label)+' (×'+esc(u.unit_factor)+' '+esc(p.unit)+')</option>').join('');
+  unitSel.innerHTML = baseOpt + extraOpts;
+}
+function sonAddRow(){
+  const opts = productsCache.filter(p => isOn(p.is_active))
+    .map(p => '<option value="'+p.record_id+'">'+(p.product_code ? esc(p.product_code)+' — ' : '')+esc(p.name)+'</option>').join('');
+  const d = document.createElement('div');
+  d.className = 'son-row'; d.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
+  d.innerHTML = '<select class="son-prod" style="flex:1;min-width:0" onchange="sonRowProductChanged(this)"><option value="">— เลือกสินค้า —</option>'+opts+'</select>' +
+    '<select class="son-unit" style="width:170px"></select>' +
+    '<input type="number" class="son-qty" min="1" value="1" style="width:80px">' +
+    '<button class="btn btn-sm" onclick="this.parentNode.remove()">✕</button>';
+  document.getElementById('son-rows').appendChild(d);
+}
+async function openSaleOrderNew(){
+  sonPreviewData = null;
+  document.getElementById('son-rows').innerHTML = '';
+  document.getElementById('son-result').innerHTML = '';
+  document.getElementById('son-confirm').style.display = 'none';
+  document.getElementById('son-fulfill').value = 'office_delivery';
+  sonFulfillChanged();
+  _switchProductView('view-saleordernew', 'เปิดบิลขาย');
+
+  const custSel = document.getElementById('son-customer');
+  custSel.innerHTML = '<option value="">กำลังโหลด...</option>';
+  const [custR] = await Promise.all([callApi('listCustomersAdmin', {}), ensureStaffCache(), ensureProductsForSale(), ensurePaymentTypesCache()]);
+  customersCache = custR.success ? custR.data.filter(c => isOn(c.is_active)) : [];
+  custSel.innerHTML = '<option value="">— เลือกลูกค้า —</option>' + customersCache.map(c => '<option value="'+c.record_id+'">'+esc(c.name)+'</option>').join('');
+
+  const paySel = document.getElementById('son-pay');
+  paySel.innerHTML = paymentTypesCache.map(p => '<option value="'+esc(p.code)+'">'+esc(p.name)+'</option>').join('');
+  if (paymentTypesCache.some(p => p.code === 'cash')) paySel.value = 'cash';
+
+  document.getElementById('son-staff').innerHTML = staffCache.filter(u => u.status === 'Yes')
+    .map(u => '<option value="'+esc(u.lineUserId)+'">'+esc(u.displayName)+' ('+esc(u.role)+')</option>').join('');
+
+  sonAddRow();
+}
+function closeSaleOrderNew(){
+  _switchProductView('view-salesorders', 'บิลขาย');
+  document.querySelectorAll('.sb-action, .sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === 'salesorders'));
+}
+function _sonCollectItems(){
+  return [...document.querySelectorAll('#son-rows .son-row')].map(row => ({
+    productId: row.querySelector('.son-prod').value, unitCode: row.querySelector('.son-unit').value, qty: Number(row.querySelector('.son-qty').value)
+  })).filter(it => it.productId);
+}
+function _sonProdLabel(id){
+  const p = productsCache.find(x => String(x.record_id) === String(id));
+  return p ? ((p.product_code ? p.product_code+' — ' : '') + p.name) : id;
+}
+async function sonPreview(){
+  const out = document.getElementById('son-result');
+  document.getElementById('son-confirm').style.display = 'none'; sonPreviewData = null;
+  const customerId = document.getElementById('son-customer').value;
+  if (!customerId) { out.innerHTML = '<div class="err" style="display:block">กรุณาเลือกลูกค้า</div>'; return; }
+  const items = _sonCollectItems();
+  if (!items.length) { out.innerHTML = '<div class="err" style="display:block">เพิ่มรายการสินค้าก่อน</div>'; return; }
+  const fulfillmentType = document.getElementById('son-fulfill').value;
+  const soldByLineUserId = fulfillmentType === 'immediate' ? document.getElementById('son-staff').value : '';
+  if (fulfillmentType === 'immediate' && !soldByLineUserId) { out.innerHTML = '<div class="err" style="display:block">เลือกพนักงานที่จะตัดสต็อกให้ด้วย</div>'; return; }
+  const paymentType = document.getElementById('son-pay').value;
+
+  out.textContent = 'กำลังคำนวณ...';
+  const r = await callApi('previewSaleAdmin', { customerId, paymentType, fulfillmentType, items });
+  if (!r.success) { out.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
+  sonPreviewData = { customerId, paymentType, fulfillmentType, soldByLineUserId, items };
+
+  out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>' +
+    r.lines.map(l => '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+esc(l.unitCode)+'</td><td>'+l.qty+'</td><td class="mono-data">฿'+baht(l.unitPrice)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>').join('') +
+    (r.freeGoods||[]).map(f => '<tr style="background:var(--blue-pale)"><td colspan="2">'+esc(_sonProdLabel(f.productId))+' <span class="unit">(ของแถม: '+esc(f.ruleName)+')</span></td><td>'+f.qty+'</td><td>-</td><td>-</td></tr>').join('') +
+    '</tbody></table></div>' +
+    (r.priceListName ? '<div class="activity-row"><span>ใช้ชุดราคา</span><span class="amt">'+esc(r.priceListName)+'</span></div>' : '') +
+    '<div class="activity-row"><span>ยอดรวมก่อนหักส่วนลด</span><span class="amt mono-data">฿'+baht(r.subtotal)+'</span></div>' +
+    (r.discount ? '<div class="activity-row"><span>ส่วนลด</span><span class="amt mono-data">-฿'+baht(r.discount)+'</span></div>' : '') +
+    '<div class="activity-row"><b>สุทธิ</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
+  document.getElementById('son-confirm').style.display = '';
+}
+async function sonSubmit(){
+  if (!sonPreviewData) return;
+  const r = await callApi('recordSaleAdmin', sonPreviewData);
+  if (!r.success) { toast(r.message, true); return; }
+  toast('เปิดบิลขายสำเร็จ ('+r.orderCode+')');
+  // แพตช์ cache ในเครื่องแทนการโหลดรายการทั้งหมดซ้ำ
+  const cust = customersCache.find(c => String(c.record_id) === String(sonPreviewData.customerId));
+  salesOrdersCache.unshift({
+    id: r.orderId, code: r.orderCode, customerId: sonPreviewData.customerId, customer: cust ? cust.name : '',
+    subtotal: (r.total||0) + (r.discount||0), discount: r.discount, total: r.total, paymentMethod: sonPreviewData.paymentType,
+    fulfillmentType: r.fulfillmentType, status: r.fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
+    saleBy: sonPreviewData.soldByLineUserId || ('admin:' + SESSION.username), note: '',
+    createdAt: new Date().toISOString().slice(0,19).replace('T',' ')
+  });
+  closeSaleOrderNew();
 }
 
 /* ══════════════ PRODUCTS + UNITS + GROUPS ══════════════ */
