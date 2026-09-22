@@ -3,11 +3,12 @@ name: Deploy Admin App to GitHub Pages
 # Pages รองรับได้แค่ 1 การ deploy ต่อ repo (ไม่มี multi-branch preview แบบแยก URL ต่อ branch)
 # เลยรวมเป็น workflow เดียว เช็คเอาต์ทั้ง main (prod) และ UAT มาประกอบเป็นเว็บเดียว
 # แยกกันด้วย path: /admin/ = prod (main), /admin-uat/ = UAT
-# เพิ่ม frontend-mobile ทีหลังได้ด้วยแพทเทิร์นเดียวกัน (/mobile/, /mobile-uat/)
+# แอปมือถือ (LINE LIFF) แพทเทิร์นเดียวกัน: /mobile/ = prod (main), /mobile-uat/ = UAT
+# (ใช้เป็น Endpoint URL ของ LIFF app แต่ละตัวใน LINE Developers Console)
 on:
   push:
     branches: [main, UAT]
-    paths: ["frontend-admin/**"]
+    paths: ["frontend-admin/**", "frontend-mobile/**"]
   workflow_dispatch:
 
 permissions:
@@ -43,10 +44,20 @@ jobs:
           mkdir -p site/admin site/admin-uat
           cp -r src-main/frontend-admin/. site/admin/
           cp -r src-uat/frontend-admin/. site/admin-uat/
+          # แอปมือถือ: ขึ้นเฉพาะ branch ที่มี frontend-mobile/index.html แล้ว (main ก่อน merge มีแค่โฟลเดอร์ _legacy-*)
+          # ไม่เอา _legacy-* / README ขึ้นเว็บ — เป็นไฟล์อ้างอิงใน repo เท่านั้น
+          for pair in "src-main:mobile" "src-uat:mobile-uat"; do
+            src="${pair%%:*}/frontend-mobile"; dst="site/${pair##*:}"
+            if [ -f "$src/index.html" ]; then
+              mkdir -p "$dst"
+              find "$src" -maxdepth 1 -type f ! -name 'README*' -exec cp {} "$dst/" \;
+            fi
+          done
           cat > site/index.html <<'HTML'
           <!doctype html><meta charset="utf-8">
           <p><a href="./admin/">Admin — Production (main)</a></p>
           <p><a href="./admin-uat/">Admin — UAT</a></p>
+          <p><a href="./mobile-uat/">Mobile (LIFF) — UAT</a></p>
           HTML
           # ไม่มีไฟล์นี้ GitHub Pages จะรัน Jekyll ทับ index.html ของเราด้วยหน้า
           # default ที่สร้างจาก README.md เอง (อาการที่เจอ: root ขึ้นหน้า Jekyll

@@ -141,9 +141,20 @@ On UAT only (user testing on `/admin-uat/`):
   (สร้างชุดราคาใหม่ / คัดลอกเป็นงวดใหม่) and detail pages (✎ แก้ไขราคา mode + per-line modal +
   bill-promo editor).
 
+- LINE LIFF mobile sales app scaffold (2026-09-22): `frontend-mobile/index.html` + `config.js`, deployed
+  by the same Pages workflow to `/mobile-uat/` (and `/mobile/` once on `main`). Tested against a mock
+  backend only — see `frontend-mobile/README.md` for screens, offline-queue rules and what's missing.
+
 Pending / not started:
-- The LINE LIFF mobile sales app (`frontend-mobile/`) — not started; base it on
-  `frontend-mobile/_legacy-standalone-liff-app`.
+- LIFF IDs for both environments (LINE Developers Console → `frontend-mobile/config.js`).
+- Mobile auth hardening: backend trusts the client-sent `lineUserId`; should verify a LIFF ID token.
+- Several backend checks compare booleans as strings (`String(x.is_active) === 'TRUE'` /
+  `!== 'FALSE'`), but Sheets turns the written string `'TRUE'` into boolean `true` (verified on UAT
+  tenants). Affected: `06_bootstrap.gs` (inactive products/customers still shown on mobile, admin
+  dashboard tenant count), `11_promotions.gs` (legacy discount rules never apply), `12_docnum.gs`,
+  `has_transactions` checks in `07_sales.gs`/`10_master_data.gs`/`19_sales_admin.gs` (product-code
+  lock never engages). Fixing changes live behaviour (promotions would start applying) — ask the user
+  first. `listActiveTenants` was already fixed.
 - Minor open items noted in code comments: 10505's base unit was imported as ชิ้น but is probably
   แผ่น/ซอง; a per-shop pack quantity cap (ไม่เกิน 4 แพ็ค) isn't implemented; free goods (ของแถม) are
   deferred per the user's own prioritization.

@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SalesRanger TOPSHOP — ขาย</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<!--
+  แอปมือถือพนักงานขาย (LINE LIFF) — ต่อยอดจาก _legacy-standalone-liff-app/ ให้เข้ากับ backend ใหม่
+  - เรียก backend ผ่าน doPost กลุ่ม Mobile: { action, lineUserId, payload } (ACTION_MAP ใน backend/05_router.gs)
+  - ราคาคิดฝั่งเซิร์ฟเวอร์เสมอ (quoteSale ก่อนกดขาย / recordSale ตอนบันทึก) — แอปไม่เชื่อราคาตัวเอง
+  - ไม่มีสัญญาณ: บิลเข้าคิวใน localStorage แล้วส่งตอน Sync (บิลที่ส่งไม่ผ่านยังอยู่ในคิว ไม่หายเงียบ)
+-->
+<style>
+  :root{
+    --ground:#F2F6F5; --surface:#fff; --surface-2:#F6F9F8;
+    --ink:#161C1F; --ink-soft:#57696A; --ink-faint:#8FA09E; --border:#D7E4E1;
+    --blue:#3E6BB0; --blue-soft:#DCE9FB; --blue-pale:#EEF4FD;
+    --green:#2E8B57; --green-soft:#DDF3E6; --red:#C0392B; --red-soft:#FBE3E0; --orange:#C7771A; --orange-soft:#FCEBD5;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif; font-size:15px; }
+  button{ font:inherit; cursor:pointer; }
+  input,select,textarea{ font:inherit; color:var(--ink); }
+  .mono{ font-family:'IBM Plex Mono',monospace; }
+  .muted{ color:var(--ink-soft); font-size:12.5px; }
+  .hidden{ display:none !important; }
+
+  .env-bar{ background:var(--red); color:#fff; text-align:center; font-size:11.5px; font-weight:700; padding:3px; }
+  .center-screen{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 16px; text-align:center; gap:12px; }
+  .spinner{ width:34px; height:34px; border:3px solid var(--blue-soft); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; }
+  .center-screen .card{ width:100%; max-width:420px; text-align:left; }
+
+  .app{ max-width:560px; margin:0 auto; padding-bottom:calc(76px + env(safe-area-inset-bottom)); }
+  .top{ display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:20; }
+  .top img,.top .av{ width:36px; height:36px; border-radius:50%; background:var(--blue-soft); object-fit:cover; display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--blue); }
+  .top .who{ flex:1; min-width:0; }
+  .top .who b{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .net{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--green-soft); color:var(--green); }
+  .net.off{ background:var(--orange-soft); color:var(--orange); }
+  .screen{ display:none; padding:14px 16px; }
+  .screen.active{ display:block; }
+  h2{ font-size:17px; margin:4px 0 12px; }
+  h3{ font-size:14px; margin:0 0 8px; }
+
+  .tabs{ position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); display:flex; justify-content:center; padding-bottom:env(safe-area-inset-bottom); z-index:30; }
+  .tabs button{ flex:1; max-width:112px; border:none; background:none; padding:9px 2px 8px; font-size:11.5px; color:var(--ink-soft); display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .tabs button .ic{ font-size:19px; line-height:1; }
+  .tabs button.on{ color:var(--blue); font-weight:700; }
+
+  .kpis{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .kpi{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px; }
+  .kpi .v{ font-family:'IBM Plex Mono'; font-size:18px; font-weight:600; }
+  .kpi .l{ font-size:11px; color:var(--ink-soft); }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--border); font-size:13.5px; }
+  .row:first-child{ border-top:none; }
+  .stack{ display:flex; flex-direction:column; gap:10px; }
+
+  .btn{ border:1px solid var(--border); background:var(--surface); border-radius:10px; padding:10px 14px; font-weight:600; font-size:14px; color:var(--ink); }
+  .btn-primary{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  .btn-green{ background:var(--green); border-color:var(--green); color:#fff; }
+  .btn:disabled{ opacity:.55; }
+  .btn-block{ width:100%; }
+  .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:8px; }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size:12px; font-weight:600; color:var(--ink-soft); }
+  .inp{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:15px; }
+  .seg{ display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:3px; gap:3px; }
+  .seg button{ flex:1; border:none; background:none; border-radius:8px; padding:8px; font-weight:600; font-size:13.5px; color:var(--ink-soft); }
+  .seg button.on{ background:var(--surface); color:var(--blue); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .check{ display:flex; align-items:center; gap:8px; font-size:13.5px; }
+
+  .prod{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+  .prod .nm{ font-weight:600; font-size:14px; }
+  .prod .sub{ font-size:12px; color:var(--ink-soft); }
+  .prod .ctl{ display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .prod select{ flex:1; min-width:0; padding:7px 8px; border:1px solid var(--border); border-radius:8px; background:var(--surface); font-size:13px; }
+  .step{ display:flex; align-items:center; gap:6px; }
+  .step button{ width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2); font-size:19px; font-weight:700; }
+  .step button.plus{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  .step input{ width:48px; text-align:center; padding:8px 2px; border:1px solid var(--border); border-radius:8px; font-weight:700; }
+  .low{ color:var(--red); font-weight:700; }
+  .ok{ color:var(--green); font-weight:700; }
+
+  .cartbar{ position:fixed; left:0; right:0; bottom:calc(58px + env(safe-area-inset-bottom)); z-index:25; display:flex; justify-content:center; padding:0 10px 8px; pointer-events:none; }
+  .cartbar .inner{ pointer-events:auto; width:100%; max-width:540px; background:var(--ink); color:#fff; border-radius:14px; padding:10px 12px; box-shadow:0 10px 30px -10px rgba(0,0,0,.45); }
+  .cartbar .sum{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .cartbar .tot{ font-family:'IBM Plex Mono'; font-size:18px; font-weight:600; }
+  .cartbar .detail{ max-height:44vh; overflow-y:auto; margin:8px 0; font-size:13px; }
+  .cartbar .detail .row{ border-top-color:rgba(255,255,255,.15); }
+  .cartbar .note{ font-size:11.5px; opacity:.8; }
+  .cartbar .err{ background:rgba(192,57,43,.25); color:#FFD9D4; border-radius:8px; padding:6px 8px; font-size:12.5px; margin-top:6px; }
+  .pill{ display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; }
+  .pill.warn{ background:var(--orange-soft); color:var(--orange); }
+  .pill.bad{ background:var(--red-soft); color:var(--red); }
+  .pill.good{ background:var(--green-soft); color:var(--green); }
+
+  .toast{ position:fixed; top:14px; left:50%; transform:translateX(-50%); max-width:92%; background:var(--ink); color:#fff; padding:10px 16px; border-radius:12px; font-size:13.5px; z-index:100; display:none; text-align:center; box-shadow:0 8px 24px -8px rgba(0,0,0,.35); }
+  .toast.err{ background:var(--red); }
+  .toast.ok{ background:var(--green); }
+  .empty{ text-align:center; color:var(--ink-faint); padding:28px 8px; font-size:13.5px; }
+</style>
+</head>
+<body>
+<script src="config.js"></script>
+<div class="env-bar hidden" id="env-bar">UAT — สภาพแวดล้อมทดสอบ ข้อมูลไม่ใช่ของจริง</div>
+
+<!-- ═══ โหลด / ข้อความค้าง ═══ -->
+<div class="center-screen" id="scr-loading">
+  <div class="spinner" id="load-spin"></div>
+  <div id="load-txt">กำลังเริ่มต้น...</div>
+  <div id="load-extra"></div>
+</div>
+
+<!-- ═══ สมัครใช้งาน (ยังไม่มีในระบบ) ═══ -->
+<div class="center-screen hidden" id="scr-register">
+  <div class="card stack">
+    <h2 style="margin:0">ลงทะเบียนพนักงานขาย</h2>
+    <p class="muted" style="margin:0">บัญชี LINE นี้ยังไม่มีในระบบ — กรอกชื่อและเลือกตัวแทนจำหน่ายที่สังกัด แล้วรอแอดมินอนุมัติ</p>
+    <div class="field"><label>ชื่อ-นามสกุล</label><input class="inp" id="reg-name"></div>
+    <div class="field"><label>สังกัด</label><select class="inp" id="reg-tenant"><option value="">กำลังโหลด...</option></select></div>
+    <button class="btn btn-primary btn-block" id="reg-btn" onclick="submitRegister()">ส่งคำขอใช้งาน</button>
+  </div>
+</div>
+
+<!-- ═══ รออนุมัติ ═══ -->
+<div class="center-screen hidden" id="scr-pending">
+  <div class="card stack">
+    <h2 style="margin:0">รอแอดมินอนุมัติ</h2>
+    <p class="muted" style="margin:0" id="pending-msg">ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้</p>
+    <div class="field"><label>LINE User ID ของคุณ (แจ้งแอดมินได้)</label>
+      <div style="display:flex;gap:8px"><input class="inp mono" id="pending-uid" readonly style="font-size:12px"><button class="btn btn-sm" onclick="copyUid()">คัดลอก</button></div></div>
+    <button class="btn btn-primary btn-block" onclick="boot()">ตรวจสอบอีกครั้ง</button>
+  </div>
+</div>
+
+<!-- ═══ แอปหลัก ═══ -->
+<div class="app hidden" id="scr-app">
+  <div class="top">
+    <img id="me-pic" class="hidden" alt=""><div class="av" id="me-av">?</div>
+    <div class="who"><b id="me-name">-</b><span class="muted" id="me-sub">-</span></div>
+    <span class="net" id="net">ออนไลน์</span>
+  </div>
+
+  <!-- หน้าแรก -->
+  <section class="screen" id="tab-home">
+    <h2>ยอดวันนี้</h2>
+    <div class="kpis">
+      <div class="kpi"><div class="v" id="k-bills">-</div><div class="l">บิล</div></div>
+      <div class="kpi"><div class="v" id="k-rev">-</div><div class="l">ยอดขาย (บาท)</div></div>
+      <div class="kpi"><div class="v" id="k-visits">-</div><div class="l">เยี่ยมร้าน</div></div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <h3>ข้อมูลในเครื่อง</h3>
+      <div class="row"><span>Sync ล่าสุด</span><span id="h-sync">-</span></div>
+      <div class="row"><span>บิลรอส่ง (ออฟไลน์)</span><span id="h-queue">0</span></div>
+      <div id="h-queue-list"></div>
+      <button class="btn btn-primary btn-block" id="sync-btn" style="margin-top:10px" onclick="syncNow()">🔄 Sync ข้อมูล</button>
+    </div>
+    <div class="card"><h3>ขายดีวันนี้</h3><div id="h-top"><div class="empty">-</div></div></div>
+  </section>
+
+  <!-- ขาย -->
+  <section class="screen" id="tab-sell">
+    <div class="stack" style="margin-bottom:12px">
+      <div class="field"><label>ลูกค้า</label>
+        <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()">
+        <select class="inp" id="s-cust" onchange="cartChanged()"></select></div>
+      <div class="seg" id="s-pay">
+        <button class="on" data-v="cash" onclick="setPay('cash')">เงินสด</button>
+        <button data-v="credit_term" onclick="setPay('credit_term')">เครดิต</button>
+      </div>
+      <label class="check"><input type="checkbox" id="s-office" onchange="cartChanged()"> ส่งจากสำนักงาน (ไม่ตัดสต็อกบนรถ)</label>
+      <input class="inp" id="s-q" placeholder="ค้นหาสินค้า..." oninput="renderProducts()">
+    </div>
+    <div class="stack" id="s-list"></div>
+    <div style="height:120px"></div>
+  </section>
+
+  <!-- สต็อก -->
+  <section class="screen" id="tab-stock">
+    <div class="seg" style="margin-bottom:12px">
+      <button class="on" id="st-seg-restock" onclick="setStockMode('restock')">เบิกของขึ้นรถ</button>
+      <button id="st-seg-count" onclick="setStockMode('count')">ตรวจนับบนรถ</button>
+    </div>
+    <p class="muted" id="st-hint"></p>
+    <div class="stack" id="st-list"></div>
+    <button class="btn btn-primary btn-block" id="st-btn" style="margin-top:12px" onclick="submitStock()">ยืนยัน</button>
+  </section>
+
+  <!-- เยี่ยมร้าน -->
+  <section class="screen" id="tab-visit">
+    <div class="card stack" style="margin-bottom:12px">
+      <div class="field"><label>ร้านค้า</label><select class="inp" id="v-cust"></select></div>
+      <button class="btn btn-primary btn-block" id="v-checkin" onclick="doCheckIn()">📍 เช็คอิน</button>
+      <div id="v-active" class="hidden"><span class="pill good">เช็คอินแล้ว</span> <span id="v-active-name"></span></div>
+    </div>
+    <div class="card stack" style="margin-bottom:12px" id="v-note-card">
+      <h3>บันทึกการเยี่ยม</h3>
+      <textarea class="inp" id="v-note" rows="3" placeholder="ความคิดเห็นร้าน / สิ่งที่ต้องติดตาม"></textarea>
+      <button class="btn btn-block" onclick="submitNote()">บันทึก</button>
+    </div>
+    <div class="card stack" id="v-comp-card">
+      <h3>สินค้าคู่แข่ง</h3>
+      <input class="inp" id="v-comp-brand" placeholder="ยี่ห้อ">
+      <input class="inp" id="v-comp-prod" placeholder="สินค้า">
+      <input class="inp" id="v-comp-price" type="number" inputmode="decimal" placeholder="ราคา">
+      <button class="btn btn-block" onclick="submitComp()">บันทึกคู่แข่ง</button>
+    </div>
+  </section>
+
+  <!-- ลูกค้า -->
+  <section class="screen" id="tab-cust">
+    <div style="display:flex;gap:8px;margin-bottom:12px"><input class="inp" id="c-q" placeholder="ค้นหาลูกค้า..." oninput="renderCustomers()"><button class="btn btn-primary" onclick="toggleAddCust(true)">+ เพิ่ม</button></div>
+    <div class="card stack hidden" id="c-add" style="margin-bottom:12px">
+      <h3>เพิ่มลูกค้าใหม่</h3>
+      <input class="inp" id="c-name" placeholder="ชื่อร้าน / ลูกค้า *">
+      <input class="inp" id="c-phone" type="tel" placeholder="เบอร์โทร">
+      <input class="inp" id="c-tax" inputmode="numeric" placeholder="เลขประจำตัวผู้เสียภาษี">
+      <textarea class="inp" id="c-addr" rows="2" placeholder="ที่อยู่"></textarea>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" onclick="captureCustGps()">📍 จับพิกัด</button><span class="muted" id="c-gps">ยังไม่จับพิกัด</span></div>
+      <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="toggleAddCust(false)">ยกเลิก</button><button class="btn btn-green" style="flex:2" id="c-save" onclick="submitCust()">บันทึกลูกค้า</button></div>
+    </div>
+    <div class="stack" id="c-list"></div>
+  </section>
+
+  <!-- แถบตะกร้า (เฉพาะหน้าขาย) -->
+  <div class="cartbar hidden" id="cartbar"><div class="inner">
+    <div class="sum" onclick="toggleCartDetail()">
+      <div><div class="note" id="cb-count">0 รายการ</div><div class="tot" id="cb-total">฿0.00</div></div>
+      <div class="note" id="cb-src" style="text-align:right;max-width:55%"></div>
+    </div>
+    <div class="detail hidden" id="cb-detail"></div>
+    <div id="cb-err"></div>
+    <button class="btn btn-green btn-block" id="cb-save" style="margin-top:8px" onclick="submitSale()">✅ บันทึกการขาย</button>
+  </div></div>
+
+  <nav class="tabs">
+    <button data-tab="home" onclick="gotoTab('home')" class="on"><span class="ic">🏠</span>หน้าแรก</button>
+    <button data-tab="sell" onclick="gotoTab('sell')"><span class="ic">🛒</span>ขาย</button>
+    <button data-tab="stock" onclick="gotoTab('stock')"><span class="ic">📦</span>สต็อก</button>
+    <button data-tab="visit" onclick="gotoTab('visit')"><span class="ic">📍</span>เยี่ยมร้าน</button>
+    <button data-tab="cust" onclick="gotoTab('cust')"><span class="ic">🏪</span>ลูกค้า</button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════ ค่าตั้งต้น / ตัวช่วย ══════════════ */
+const CFG = window.APP_CONFIG || {}, ENV = CFG.ENV;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const baht = n => (parseFloat(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const LSK = k => 'srm_' + ENV + '_' + k;           // แยก key ตามสภาพแวดล้อม (UAT/prod ไม่ปนกันในเครื่องเดียว)
+const lsGet = (k, def) => { try { const v = localStorage.getItem(LSK(k)); return v == null ? def : JSON.parse(v); } catch (e) { return def; } };
+const lsSet = (k, v) => { try { localStorage.setItem(LSK(k), JSON.stringify(v)); } catch (e) {} };
+function toast(msg, kind){ const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200); }
+function show(id){ ['scr-loading','scr-register','scr-pending','scr-app'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+function setLoad(txt, spin = true, extraHtml = ''){ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
+
+let ME = { lineUserId: '', name: '', pictureUrl: '', role: '', tenantId: '' };
+let DATA = { products: [], customers: [] };
+
+// เรียก backend — กลุ่ม Mobile ต้องแนบ lineUserId เสมอ · text/plain เลี่ยง CORS preflight (ดู backend/README.md)
+// เน็ตหลุด/หมดเวลา = throw (ผู้เรียกตัดสินใจเองว่าจะเข้าคิวหรือแจ้งผู้ใช้) · backend ตอบ error = { success:false, message }
+async function api(action, payload, timeoutMs = 45000){
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await fetch(CFG.BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, lineUserId: ME.lineUserId, payload: payload || {} }), signal: ctl.signal });
+    const txt = await res.text();
+    try { return JSON.parse(txt); } catch (e) { throw new Error('เซิร์ฟเวอร์ตอบผิดรูปแบบชั่วคราว'); }   // Apps Script บางทีตอบหน้า HTML
+  } finally { clearTimeout(t); }
+}
+function getGPS(){
+  return new Promise(r => {
+    if (!navigator.geolocation) return r({ lat: '', lng: '', map: '' });
+    navigator.geolocation.getCurrentPosition(p => r({ lat: p.coords.latitude, lng: p.coords.longitude, map: 'https://maps.google.com/?q=' + p.coords.latitude + ',' + p.coords.longitude }),
+      () => r({ lat: '', lng: '', map: '' }), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  });
+}
+function updateNet(){ const n = $('net'); if (!n) return; n.textContent = navigator.onLine ? 'ออนไลน์' : 'ออฟไลน์'; n.classList.toggle('off', !navigator.onLine); }
+addEventListener('online', () => { updateNet(); cartChanged(); });
+addEventListener('offline', () => { updateNet(); cartChanged(); });
+
+/* ══════════════ เริ่มต้น: LIFF → ตรวจสิทธิ์ → เข้าแอป ══════════════ */
+function loadLiffSdk(){
+  if (window.liff) return Promise.resolve();
+  return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js'; s.onload = ok; s.onerror = () => bad(new Error('โหลด LINE SDK ไม่ได้')); document.head.appendChild(s); });
+}
+async function boot(){
+  if (ENV === 'uat') $('env-bar').classList.remove('hidden');
+  if (!CFG.BACKEND_URL) return setLoad('ยังไม่ได้ตั้งค่า backend ของสภาพแวดล้อม ' + String(ENV).toUpperCase(), false);
+  try {
+    // โหมดทดสอบ (UAT เท่านั้น): เปิดในเบราว์เซอร์ธรรมดาด้วย ?devLineUserId=... แทน LINE — production ไม่มีทางเข้านี้
+    const dev = new URLSearchParams(location.search).get('devLineUserId');
+    if (ENV === 'uat' && dev) { ME.lineUserId = dev; ME.name = 'ทดสอบ …' + dev.slice(-6); }
+    else {
+      if (!CFG.LIFF_ID) return setLoad('ยังไม่ได้ตั้งค่า LIFF ID ของสภาพแวดล้อม ' + String(ENV).toUpperCase() + ' (frontend-mobile/config.js)', false);
+      setLoad('เชื่อมต่อ LINE...');
+      await loadLiffSdk();
+      await liff.init({ liffId: CFG.LIFF_ID });
+      if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+      const p = await liff.getProfile();
+      ME.lineUserId = p.userId; ME.name = p.displayName; ME.pictureUrl = p.pictureUrl || '';
+    }
+    setLoad('กำลังตรวจสอบสิทธิ์...');
+    let st;
+    try { st = await api('checkUser', { lineUid: ME.lineUserId }, 30000); }
+    catch (e) {
+      // ไม่มีสัญญาณ แต่เคยได้รับอนุมัติในเครื่องนี้แล้ว → เปิดแอปแบบออฟไลน์ได้ (ขายเข้าคิว)
+      const cached = lsGet('me', null);
+      if (cached && cached.lineUserId === ME.lineUserId) { Object.assign(ME, cached); return enterApp(); }
+      return setLoad('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message, false, '<button class="btn btn-primary" onclick="boot()">ลองใหม่</button>');
+    }
+    if (!st || !st.exists) return showRegister();
+    if (String(st.status) !== 'Yes') return showPending('บัญชีรอแอดมินอนุมัติ (สถานะ: ' + (st.status || '-') + ')');
+    ME.role = st.role || ''; ME.tenantId = st.tenantId || ''; if (st.name) ME.name = st.name;
+    lsSet('me', ME);
+    enterApp();
+  } catch (e) { setLoad('ผิดพลาด: ' + e.message, false, '<button class="btn btn-primary" onclick="boot()">ลองใหม่</button>'); }
+}
+async function showRegister(){
+  show('scr-register');
+  $('reg-name').value = ME.name || '';
+  try {
+    const r = await api('listActiveTenants', {});
+    const ts = (r && r.data) || [];
+    $('reg-tenant').innerHTML = '<option value="">— เลือกสังกัด —</option>' + ts.map(t => '<option value="'+esc(t.tenant_id)+'">'+esc(t.name)+'</option>').join('');
+  } catch (e) { $('reg-tenant').innerHTML = '<option value="">โหลดรายชื่อไม่ได้ — ลองใหม่</option>'; }
+}
+async function submitRegister(){
+  const name = $('reg-name').value.trim(), tenant = $('reg-tenant').value, btn = $('reg-btn');
+  if (!name) return toast('กรุณากรอกชื่อ', 'err');
+  if (!tenant) return toast('กรุณาเลือกสังกัด', 'err');
+  btn.disabled = true; btn.textContent = 'กำลังส่ง...';
+  try {
+    const r = await api('registerUser', { lineUid: ME.lineUserId, name, schema: tenant });
+    if (!r.success) { toast(r.message || 'ส่งคำขอไม่สำเร็จ', 'err'); return; }
+    showPending('ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้');
+  } catch (e) { toast('ส่งไม่ได้: ' + e.message, 'err'); }
+  finally { btn.disabled = false; btn.textContent = 'ส่งคำขอใช้งาน'; }
+}
+function showPending(msg){ show('scr-pending'); $('pending-msg').textContent = msg; $('pending-uid').value = ME.lineUserId; }
+function copyUid(){ const i = $('pending-uid'); i.select(); (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject()).then(() => toast('คัดลอกแล้ว', 'ok')).catch(() => { document.execCommand('copy'); toast('คัดลอกแล้ว', 'ok'); }); }
+
+function enterApp(){
+  show('scr-app'); updateNet();
+  $('me-name').textContent = ME.name || '-';
+  $('me-sub').textContent = [ME.role === 'van_sales' ? 'หน่วยรถ (Cash Van)' : (ME.role || ''), ME.tenantId].filter(Boolean).join(' · ');
+  if (ME.pictureUrl) { $('me-pic').src = ME.pictureUrl; $('me-pic').classList.remove('hidden'); $('me-av').classList.add('hidden'); }
+  else $('me-av').textContent = (ME.name || '?').slice(0, 1);
+  const cached = lsGet('boot_' + ME.lineUserId, null);
+  if (cached) DATA = cached.data;
+  gotoTab('home');
+  if (navigator.onLine) refreshData(true);        // เปิดจาก cache ทันที แล้วค่อยดึงของใหม่เบื้องหลัง
+}
+
+/* ══════════════ ข้อมูลตั้งต้น (สินค้า/ลูกค้า/สต็อกบนรถ) ══════════════ */
+async function refreshData(silent){
+  try {
+    const r = await api('getBootstrap', {});
+    if (!r.success) { if (!silent) toast(r.message, 'err'); return false; }
+    DATA = { products: r.products || [], customers: r.customers || [] };
+    lsSet('boot_' + ME.lineUserId, { ts: Date.now(), data: DATA });
+    renderCurrentTab();
+    return true;
+  } catch (e) { if (!silent) toast('ดึงข้อมูลไม่ได้: ' + e.message, 'err'); return false; }
+}
+async function syncNow(){
+  const b = $('sync-btn'); b.disabled = true; b.textContent = '⏳ กำลัง Sync...';
+  try {
+    if (!navigator.onLine) { toast('ไม่มีสัญญาณ', 'err'); return; }
+    const q = await flushQueue();
+    if (await refreshData(false)) toast('Sync สำเร็จ' + (q ? ' · ' + q.msg : ''), q && q.bad ? 'err' : 'ok');
+    loadDashboard();
+  } finally { b.disabled = false; b.textContent = '🔄 Sync ข้อมูล'; renderHome(); }
+}
+
+/* ══════════════ แท็บ ══════════════ */
+let TAB = 'home';
+function gotoTab(t){
+  TAB = t;
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'tab-' + t));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  renderCurrentTab();
+  if (t === 'home') loadDashboard();
+  scrollTo(0, 0);
+}
+function renderCurrentTab(){
+  if (TAB === 'home') renderHome();
+  if (TAB === 'sell') { renderCustSelect(); renderProducts(); renderCartBar(); }
+  if (TAB === 'stock') renderStock();
+  if (TAB === 'visit') renderVisit();
+  if (TAB === 'cust') renderCustomers();
+  $('cartbar').classList.toggle('hidden', TAB !== 'sell' || !CART.length);
+}
+
+/* ══════════════ หน้าแรก ══════════════ */
+async function loadDashboard(){
+  if (!navigator.onLine) return;
+  try {
+    const r = await api('getDashboard', {});
+    if (!r.success) return;
+    $('k-bills').textContent = r.bills || 0; $('k-rev').textContent = baht(r.revenue); $('k-visits').textContent = r.visits || 0;
+    $('h-top').innerHTML = (r.topProducts || []).length
+      ? r.topProducts.map((t, i) => '<div class="row"><span>'+(i+1)+'. '+esc(t.name)+'</span><b>'+esc(t.sold)+'</b></div>').join('')
+      : '<div class="empty">ยังไม่มียอดขายวันนี้</div>';
+  } catch (e) {}
+}
+function renderHome(){
+  const c = lsGet('boot_' + ME.lineUserId, null);
+  $('h-sync').textContent = c ? new Date(c.ts).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่เคย';
+  const q = loadQueue();
+  $('h-queue').innerHTML = q.length ? '<span class="pill warn">' + q.length + ' บิล</span>' : '0';
+  $('h-queue-list').innerHTML = q.map((s, i) => '<div class="row"><span class="muted">' + esc(new Date(s.savedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })) + ' · ' + esc(custName(s.customerId)) + ' · ' + s.items.length + ' รายการ' +
+    (s.lastError ? '<br><span class="pill bad">ส่งไม่ผ่าน</span> ' + esc(s.lastError) : '') + '</span>' +
+    (s.lastError ? '<button class="btn btn-sm" onclick="dropQueued(' + i + ')">ลบ</button>' : '') + '</div>').join('');
+}
+
+/* ══════════════ คิวบิลออฟไลน์ ══════════════ */
+const loadQueue = () => lsGet('queue_' + ME.lineUserId, []);
+const saveQueue = q => lsSet('queue_' + ME.lineUserId, q);
+// ส่งทีละบิลตามลำดับ: สำเร็จ → เอาออก · เซิร์ฟเวอร์ปฏิเสธ (เช่น สต็อกไม่พอ) → เก็บไว้พร้อมเหตุผลให้คนตัดสินใจ · เน็ตหลุด → หยุด เก็บที่เหลือไว้ทั้งหมด
+async function flushQueue(){
+  let q = loadQueue(); if (!q.length) return;
+  let ok = 0, bad = 0;
+  const keep = [];
+  for (let i = 0; i < q.length; i++) {
+    const s = q[i];
+    try {
+      const r = await api('recordSale', s);
+      if (r.success) ok++; else { bad++; keep.push(Object.assign({}, s, { lastError: r.message || 'บันทึกไม่สำเร็จ' })); }
+    } catch (e) { keep.push(...q.slice(i)); break; }
+  }
+  saveQueue(keep);
+  if (!ok && !bad) return null;
+  const msg = 'ส่งบิลค้าง ' + ok + ' สำเร็จ' + (bad ? ' · ' + bad + ' ไม่ผ่าน (ดูหน้าแรก)' : '');
+  toast(msg, bad ? 'err' : 'ok');
+  return { ok, bad, msg };
+}
+function dropQueued(i){
+  const q = loadQueue(); if (!q[i]) return;
+  if (!confirm('ลบบิลนี้ออกจากคิว? (ยังไม่เคยบันทึกเข้าระบบ)')) return;
+  q.splice(i, 1); saveQueue(q); renderHome();
+}
+
+/* ══════════════ ขาย ══════════════ */
+let CART = [];          // [{ productId, unitCode ('' = หน่วยฐาน), qty }]
+let PAY = 'cash', QUOTE = null, quoteSeq = 0, quoteTimer = null;
+const prodById = id => DATA.products.find(p => String(p.id) === String(id));
+const custName = id => { const c = DATA.customers.find(x => String(x.id) === String(id)); return c ? c.name : (String(id) === '0' ? 'ลูกค้าทั่วไป' : '#' + id); };
+// หน่วยขายของสินค้า: หน่วยฐาน (factor 1) + หน่วยเพิ่ม (หีบ/แพ็ค ฯลฯ จาก product_units)
+const unitsOf = p => [{ unitCode: '', unitLabel: p.unit || 'ชิ้น', unitFactor: 1, price: p.price }].concat(p.units || []);
+const unitOf = (p, code) => unitsOf(p).find(u => u.unitCode === code) || unitsOf(p)[0];
+const UNIT_PICK = {};   // productId → unitCode ที่เลือกไว้บนการ์ด
+
+function renderCustSelect(){
+  const q = $('s-cust-q').value.trim().toLowerCase(), sel = $('s-cust'), cur = sel.value;
+  const list = DATA.customers.filter(c => !q || String(c.name).toLowerCase().includes(q));
+  sel.innerHTML = '<option value="0">ลูกค้าทั่วไป (ไม่ระบุร้าน)</option>' + list.map(c => '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join('');
+  // พิมพ์ค้นหาแล้วร้านที่เลือกอยู่ไม่ตรงคำค้น → เลือกร้านแรกที่เจอให้เลย (ไม่งั้นค้างที่ "ลูกค้าทั่วไป")
+  if (q && list.length && !list.some(c => String(c.id) === cur)) { sel.value = String(list[0].id); cartChanged(); }
+  else if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+function setPay(v){ PAY = v; document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); cartChanged(); }
+const cartQty = (pid, code) => { const c = CART.find(x => String(x.productId) === String(pid) && x.unitCode === code); return c ? c.qty : 0; };
+// หน่วยฐานที่ตะกร้าใช้ไปแล้วของสินค้านั้น (ทุกหน่วยรวมกัน) — เทียบกับสต็อกบนรถ
+const baseUsed = pid => CART.filter(c => String(c.productId) === String(pid)).reduce((s, c) => s + c.qty * unitOf(prodById(pid), c.unitCode).unitFactor, 0);
+
+function renderProducts(){
+  const box = $('s-list'), q = $('s-q').value.trim().toLowerCase();
+  if (!DATA.products.length) { box.innerHTML = '<div class="empty">ยังไม่มีข้อมูลสินค้า — ไปหน้าแรกกด Sync</div>'; return; }
+  const list = DATA.products.filter(p => !q || String(p.name).toLowerCase().includes(q));
+  if (!list.length) { box.innerHTML = '<div class="empty">ไม่พบสินค้า</div>'; return; }
+  box.innerHTML = list.slice(0, 80).map(p => {
+    const code = UNIT_PICK[p.id] != null ? UNIT_PICK[p.id] : '', u = unitOf(p, code), n = cartQty(p.id, code);
+    return '<div class="prod"><div class="nm">'+esc(p.name)+'</div>' +
+      '<div class="sub">บนรถ <span class="'+(p.vanStock < 3 ? 'low' : 'ok')+'">'+esc(p.vanStock)+'</span> '+esc(p.unit)+(baseUsed(p.id) ? ' · ในตะกร้า '+baseUsed(p.id)+' '+esc(p.unit) : '')+'</div>' +
+      '<div class="ctl"><select onchange="pickUnit(\''+esc(p.id)+'\', this.value)">' + unitsOf(p).map(x => '<option value="'+esc(x.unitCode)+'"'+(x.unitCode === u.unitCode ? ' selected' : '')+'>'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</option>').join('') + '</select>' +
+      '<div class="step"><button onclick="bump(\''+esc(p.id)+'\',-1)">−</button><input type="number" inputmode="numeric" min="0" value="'+(n || '')+'" placeholder="0" onchange="setQty(\''+esc(p.id)+'\', this.value)"><button class="plus" onclick="bump(\''+esc(p.id)+'\',1)">+</button></div></div></div>';
+  }).join('') + (list.length > 80 ? '<div class="empty">แสดง 80 รายการแรก — พิมพ์ค้นหาเพื่อหาตัวอื่น</div>' : '');
+}
+function pickUnit(pid, code){ UNIT_PICK[pid] = code; renderProducts(); }
+function bump(pid, d){ const code = UNIT_PICK[pid] || ''; setQty(pid, cartQty(pid, code) + d); }
+function setQty(pid, v){
+  const code = UNIT_PICK[pid] || '', p = prodById(pid); if (!p) return;
+  let qty = Math.max(0, parseInt(v) || 0);
+  if (!$('s-office').checked) {       // ขายจากรถ: ห้ามเกินของบนรถ (นับเป็นหน่วยฐานรวมทุกหน่วย)
+    const f = unitOf(p, code).unitFactor, other = baseUsed(pid) - cartQty(pid, code) * f;
+    const max = Math.floor((p.vanStock - other) / f);
+    if (qty > max) { qty = Math.max(0, max); toast('บนรถมีไม่พอ — ได้สูงสุด ' + qty + ' ' + unitOf(p, code).unitLabel, 'err'); }
+  }
+  CART = CART.filter(c => !(String(c.productId) === String(pid) && c.unitCode === code));
+  if (qty > 0) CART.push({ productId: String(pid), unitCode: code, qty });
+  renderProducts(); cartChanged();
+}
+// ราคาจริงคิดที่เซิร์ฟเวอร์ (quoteSale ใช้เครื่องยนต์เดียวกับตอนบันทึกบิล) — หน่วง 500ms กันยิงถี่ตอนกด +/−
+function cartChanged(){
+  QUOTE = null; renderCartBar();
+  clearTimeout(quoteTimer);
+  if (!CART.length || !navigator.onLine) return;
+  quoteTimer = setTimeout(async () => {
+    const seq = ++quoteSeq;
+    try {
+      const r = await api('quoteSale', { customerId: Number($('s-cust').value) || 0, paymentType: PAY, items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })) }, 30000);
+      if (seq !== quoteSeq) return;                  // ตะกร้าเปลี่ยนไปแล้วระหว่างรอ — ทิ้งผลเก่า
+      QUOTE = r; renderCartBar();
+    } catch (e) { if (seq === quoteSeq) { QUOTE = { success: false, message: 'คิดราคาไม่ได้ (' + e.message + ')', offline: true }; renderCartBar(); } }
+  }, 500);
+}
+function estimate(){ return CART.reduce((s, c) => { const p = prodById(c.productId); return s + (p ? unitOf(p, c.unitCode).price * c.qty : 0); }, 0); }
+let CART_OPEN = false;
+function toggleCartDetail(){ CART_OPEN = !CART_OPEN; renderCartBar(); }
+function renderCartBar(){
+  const bar = $('cartbar');
+  bar.classList.toggle('hidden', TAB !== 'sell' || !CART.length);
+  if (!CART.length) return;
+  $('cb-count').textContent = CART.length + ' รายการ · แตะเพื่อ' + (CART_OPEN ? 'ซ่อน' : 'ดูรายละเอียด');
+  const priced = QUOTE && QUOTE.success && QUOTE.priceList;
+  let total = estimate(), src, err = '';
+  if (priced) { total = QUOTE.total; src = 'ชุดราคา: ' + esc(QUOTE.priceList.name); }
+  else if (QUOTE && QUOTE.success) src = 'ราคาตั้งต้น — ส่วนลดโปรฯ คิดตอนบันทึก';
+  else if (QUOTE && !QUOTE.success) { src = QUOTE.offline ? 'ประมาณการ (ออฟไลน์)' : 'คิดราคาไม่ได้'; if (!QUOTE.offline) err = QUOTE.message; }
+  else src = navigator.onLine ? 'กำลังคิดราคา...' : 'ประมาณการ (ออฟไลน์) — คิดจริงตอนส่ง';
+  $('cb-total').textContent = '฿' + baht(total);
+  $('cb-src').innerHTML = src;
+  $('cb-err').innerHTML = err ? '<div class="err">' + esc(err) + '</div>' : '';
+  const det = $('cb-detail'); det.classList.toggle('hidden', !CART_OPEN);
+  if (CART_OPEN) {
+    det.innerHTML = CART.map(c => {
+      const p = prodById(c.productId) || { name: '#' + c.productId }, u = p.id ? unitOf(p, c.unitCode) : { unitLabel: '', price: 0 };
+      const ql = priced && (QUOTE.lines || []).find(l => String(l.productId) === String(c.productId) && String(l.unitCode) === (c.unitCode || String(l.unitCode)));
+      const unitPrice = ql ? ql.unitPrice : u.price, line = ql ? ql.lineTotal : u.price * c.qty;
+      return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + c.qty + ' ' + esc(u.unitLabel) + ' × ฿' + baht(unitPrice) + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') + '</span></span><span class="mono">฿' + baht(line) + '</span></div>';
+    }).join('') + (priced && QUOTE.billDiscount ? '<div class="row"><span>โปรระดับบิล ลด ' + esc(QUOTE.billPercent) + '%</span><span class="mono">-฿' + baht(QUOTE.billDiscount) + '</span></div>' : '') +
+      '<div class="row"><button class="btn btn-sm" onclick="clearCart()">ล้างตะกร้า</button><span></span></div>';
+  }
+  const save = $('cb-save'); save.disabled = !!err;
+  save.textContent = navigator.onLine ? '✅ บันทึกการขาย' : '📦 บันทึกเข้าคิว (ออฟไลน์)';
+}
+function clearCart(){ if (!confirm('ล้างตะกร้าทั้งหมด?')) return; CART = []; CART_OPEN = false; renderProducts(); cartChanged(); }
+async function submitSale(){
+  if (!CART.length) return;
+  const btn = $('cb-save'); if (btn.disabled) return;
+  btn.disabled = true; const label = btn.textContent; btn.textContent = '⏳ กำลังบันทึก...';
+  try {
+    const gps = await getGPS();
+    const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: $('s-office').checked ? 'office_delivery' : 'immediate',
+      items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })),
+      latitude: gps.lat, longitude: gps.lng, googleMap: gps.map, savedAt: new Date().toISOString() };
+    if (!navigator.onLine) {
+      const q = loadQueue(); q.push(sale); saveQueue(q);
+      afterSale(); toast('ไม่มีสัญญาณ — เก็บบิลเข้าคิวแล้ว (' + q.length + ' บิลรอส่ง)', 'ok');
+      return;
+    }
+    let r;
+    try { r = await api('recordSale', sale, 60000); }
+    catch (e) {
+      // ไม่รู้ว่าเซิร์ฟเวอร์ได้รับแล้วหรือยัง — ห้ามเข้าคิวอัตโนมัติ (เสี่ยงบิลซ้ำ) ให้คนเช็คยอดวันนี้ก่อน
+      toast('ไม่แน่ใจว่าบันทึกสำเร็จ (' + e.message + ') — เช็คยอดวันนี้ที่หน้าแรกก่อนกดซ้ำ', 'err'); return;
+    }
+    if (!r.success) { toast(r.message || 'บันทึกไม่สำเร็จ', 'err'); return; }
+    afterSale(); toast('บิล ' + (r.orderCode || '') + ' · ฿' + baht(r.total), 'ok');
+    refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
+  } finally { btn.disabled = false; btn.textContent = label; renderCartBar(); }
+}
+function afterSale(){
+  // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
+  if (!$('s-office').checked) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
+  lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
+  CART = []; CART_OPEN = false; QUOTE = null; renderProducts(); renderCartBar();
+}
+
+/* ══════════════ สต็อก ══════════════ */
+let STOCK_MODE = 'restock', STOCK_QTY = {};
+function setStockMode(m){ STOCK_MODE = m; STOCK_QTY = {}; $('st-seg-restock').classList.toggle('on', m === 'restock'); $('st-seg-count').classList.toggle('on', m === 'count'); renderStock(); }
+function renderStock(){
+  $('st-hint').textContent = STOCK_MODE === 'restock' ? 'ใส่จำนวนที่เบิกจากคลังขึ้นรถ (หน่วยฐาน)' : 'ใส่จำนวนที่นับได้จริงบนรถ (หน่วยฐาน) — เว้นว่าง = ไม่ได้นับ';
+  $('st-btn').textContent = STOCK_MODE === 'restock' ? 'ยืนยันเบิกของขึ้นรถ' : 'ยืนยันผลตรวจนับ';
+  $('st-list').innerHTML = DATA.products.length ? DATA.products.map(p =>
+    '<div class="prod" style="display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><div class="nm">'+esc(p.name)+'</div><div class="sub">บนรถ <b>'+esc(p.vanStock)+'</b> '+esc(p.unit)+'</div></div>' +
+    '<input class="inp" style="width:84px;text-align:center" type="number" inputmode="numeric" min="0" placeholder="'+(STOCK_MODE === 'restock' ? '0' : 'นับได้')+'" value="'+(STOCK_QTY[p.id] != null ? STOCK_QTY[p.id] : '')+'" onchange="setStockQty(\''+esc(p.id)+'\', this.value)"></div>').join('')
+    : '<div class="empty">ยังไม่มีข้อมูลสินค้า — ไปหน้าแรกกด Sync</div>';
+}
+function setStockQty(pid, v){ const n = parseInt(v); if (isNaN(n) || (STOCK_MODE === 'restock' && n <= 0) || n < 0) delete STOCK_QTY[pid]; else STOCK_QTY[pid] = n; }
+async function submitStock(){
+  const ids = Object.keys(STOCK_QTY); if (!ids.length) return toast('ยังไม่ได้กรอกจำนวน', 'err');
+  if (!navigator.onLine) return toast('ต้องมีสัญญาณจึงจะบันทึกสต็อกได้', 'err');
+  const btn = $('st-btn'); btn.disabled = true;
+  try {
+    const r = STOCK_MODE === 'restock'
+      ? await api('restockVan', { items: ids.map(id => ({ productId: id, qty: STOCK_QTY[id] })) })
+      : await api('submitCount', { items: ids.map(id => ({ productId: id, countedQty: STOCK_QTY[id] })) });
+    if (!r.success) return toast(r.message, 'err');
+    toast(STOCK_MODE === 'restock' ? 'เบิกของขึ้นรถแล้ว' : 'บันทึกผลตรวจนับแล้ว', 'ok');
+    STOCK_QTY = {}; await refreshData(true); renderStock();
+  } catch (e) { toast('บันทึกไม่ได้: ' + e.message, 'err'); }
+  finally { btn.disabled = false; }
+}
+
+/* ══════════════ เยี่ยมร้าน ══════════════ */
+let VISIT = lsGet('visit', null);    // { visitId, customerId, name, day } — เช็คอินค้างไว้ข้ามการเปิดแอปใหม่ได้ภายในวันเดียวกัน
+function renderVisit(){
+  const today = new Date().toDateString();
+  if (VISIT && VISIT.day !== today) { VISIT = null; lsSet('visit', null); }
+  const sel = $('v-cust'), cur = sel.value;
+  sel.innerHTML = '<option value="">— เลือกร้าน —</option>' + DATA.customers.map(c => '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join('');
+  sel.value = VISIT ? String(VISIT.customerId) : cur;
+  $('v-active').classList.toggle('hidden', !VISIT);
+  if (VISIT) $('v-active-name').textContent = VISIT.name;
+  ['v-note-card', 'v-comp-card'].forEach(id => { $(id).style.opacity = VISIT ? 1 : .5; $(id).style.pointerEvents = VISIT ? '' : 'none'; });
+}
+async function doCheckIn(){
+  const cid = Number($('v-cust').value); if (!cid) return toast('เลือกร้านก่อน', 'err');
+  const btn = $('v-checkin'); btn.disabled = true; btn.textContent = '⏳ กำลังเช็คอิน...';
+  try {
+    const gps = await getGPS();
+    const r = await api('checkInVisit', { customerId: cid, lat: gps.lat, lng: gps.lng });
+    if (!r.success) return toast(r.message, 'err');
+    VISIT = { visitId: r.visitId, customerId: cid, name: custName(cid), day: new Date().toDateString() }; lsSet('visit', VISIT);
+    toast('เช็คอินแล้ว', 'ok'); renderVisit();
+  } catch (e) { toast('เช็คอินไม่ได้: ' + e.message, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '📍 เช็คอิน'; }
+}
+async function submitNote(){
+  const note = $('v-note').value.trim(); if (!note) return toast('กรอกบันทึกก่อน', 'err');
+  try { const r = await api('addVisitNote', { visitId: VISIT.visitId, note }); if (!r.success) return toast(r.message, 'err'); $('v-note').value = ''; toast('บันทึกแล้ว', 'ok'); }
+  catch (e) { toast('บันทึกไม่ได้: ' + e.message, 'err'); }
+}
+async function submitComp(){
+  const brand = $('v-comp-brand').value.trim(); if (!brand) return toast('กรอกยี่ห้อก่อน', 'err');
+  try {
+    const r = await api('addCompetitor', { visitId: VISIT.visitId, customerId: VISIT.customerId, competitorName: brand, productName: $('v-comp-prod').value.trim(), price: parseFloat($('v-comp-price').value) || 0 });
+    if (!r.success) return toast(r.message, 'err');
+    ['v-comp-brand', 'v-comp-prod', 'v-comp-price'].forEach(id => { $(id).value = ''; }); toast('บันทึกคู่แข่งแล้ว', 'ok');
+  } catch (e) { toast('บันทึกไม่ได้: ' + e.message, 'err'); }
+}
+
+/* ══════════════ ลูกค้า ══════════════ */
+let CUST_GPS = { lat: '', lng: '' };
+function renderCustomers(){
+  const q = $('c-q').value.trim().toLowerCase();
+  const list = DATA.customers.filter(c => !q || String(c.name).toLowerCase().includes(q) || String(c.phone || '').includes(q));
+  $('c-list').innerHTML = list.length ? list.map(c => '<div class="prod"><div style="display:flex;justify-content:space-between;gap:8px"><div><div class="nm">'+esc(c.name)+'</div><div class="sub">'+esc(c.phone || '-')+' · '+esc(c.address || '-')+'</div></div>' +
+    (c.lat ? '<a class="btn btn-sm" href="https://maps.google.com/?q='+encodeURIComponent(c.lat+','+c.lng)+'" target="_blank" rel="noopener">📍 แผนที่</a>' : '') + '</div></div>').join('')
+    : '<div class="empty">' + (DATA.customers.length ? 'ไม่พบลูกค้า' : 'ยังไม่มีลูกค้า — กด + เพิ่ม หรือ Sync ที่หน้าแรก') + '</div>';
+}
+function toggleAddCust(on){ $('c-add').classList.toggle('hidden', !on); if (on) $('c-name').focus(); }
+async function captureCustGps(){ $('c-gps').textContent = 'กำลังจับพิกัด...'; const g = await getGPS(); if (g.lat) { CUST_GPS = g; $('c-gps').textContent = '✅ ' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5); } else $('c-gps').textContent = 'จับพิกัดไม่ได้'; }
+async function submitCust(){
+  const name = $('c-name').value.trim(); if (!name) return toast('กรอกชื่อลูกค้าก่อน', 'err');
+  const btn = $('c-save'); btn.disabled = true;
+  const payload = { name, phone: $('c-phone').value.trim(), taxId: $('c-tax').value.trim(), address: $('c-addr').value.trim(), lat: CUST_GPS.lat, lng: CUST_GPS.lng };
+  try {
+    const r = await api('addCustomer', payload);
+    if (!r.success) return toast(r.message, 'err');
+    // เพิ่มเข้า cache ในเครื่องเลย ไม่ต้องโหลดข้อมูลตั้งต้นใหม่ทั้งก้อน
+    DATA.customers.push({ id: r.customerId, name, groupId: 0, phone: payload.phone, address: payload.address, lat: Number(payload.lat) || 0, lng: Number(payload.lng) || 0 });
+    lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
+    ['c-name', 'c-phone', 'c-tax', 'c-addr'].forEach(id => { $(id).value = ''; }); CUST_GPS = { lat: '', lng: '' }; $('c-gps').textContent = 'ยังไม่จับพิกัด';
+    toggleAddCust(false); renderCustomers(); toast('เพิ่มลูกค้าแล้ว', 'ok');
+  } catch (e) { toast('บันทึกไม่ได้: ' + e.message, 'err'); }
+  finally { btn.disabled = false; }
+}
+
+boot();
+</script>
+</body>
+</html>

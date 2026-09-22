@@ -1,28 +1,63 @@
 # SalesRanger TOPSHOP — Frontend (Mobile / LINE LIFF)
 
-ยังไม่ได้สร้างจริง — แผนคือ static site (HTML/CSS/JS ธรรมดา หรือเฟรมเวิร์คเบาๆ) deploy บน Vercel
-ผ่าน GitHub เรียก backend (`../backend/`) ทั้งหมดผ่าน `fetch()` ตามสัญญา `doPost` ที่ระบุไว้ใน
-`backend/README.md`
+แอปพนักงานขาย (หน่วยรถ Cash Van / พนักงานขายตรง) เปิดใน LINE ผ่าน LIFF — static site ไฟล์เดียว
+(`index.html` + `config.js`, ไม่มี build, ไม่มี framework) ต่อยอดจาก `_legacy-standalone-liff-app/`
+เรียก backend (`../backend/`) ผ่าน `doPost` กลุ่ม **Mobile**: `{ action, lineUserId, payload }`
+(action ทั้งหมดอยู่ใน `ACTION_MAP` ของ `backend/05_router.gs`)
 
-## `_legacy-standalone-liff-app/` — ตัวตั้งต้นที่แนะนำให้ต่อยอด
+## Deploy
 
-`index.html` ไฟล์เดียวจบ (LIFF SDK + Tailwind, ไม่มี framework) ที่มีอยู่แล้วใน repo นี้ก่อนหน้า
-**มีของสำคัญที่เราไม่เคยออกแบบไว้เลย และควรเอามาต่อยอด ไม่ใช่เขียนใหม่หมด:**
-- เรียก backend ด้วย `fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;..."}})`
-  — ตรงกับสัญญา `doPost` ของ backend ใหม่เป๊ะ (เลี่ยง CORS preflight แบบเดียวกัน)
-- **Offline queue**: เก็บบิลลง `localStorage` เวลาไม่มีสัญญาณ แล้ว sync ทีหลัง (`saveQueue`/`loadQueue`)
-  — สำคัญมากสำหรับ cash van เขตห่างไกล ต้องยกแนวคิดนี้มาใช้ต่อ
-- แคชข้อมูล bootstrap ไว้ใน `localStorage` ให้เปิดแอปได้แม้เน็ตช้า
+GitHub Pages ด้วย workflow เดียวกับ Admin App (`.github/workflows/deploy-admin.yml`) — push แล้วขึ้นเอง
+- `UAT` branch → `https://<pages>/mobile-uat/`
+- `main` branch → `https://<pages>/mobile/`
 
-สิ่งที่ต้องแก้ก่อนใช้จริง: `API_URL`/`LIFF_ID` ชี้ endpoint เก่า, ชื่อ action ต้องแมพกับ `ACTION_MAP`
-ของ backend ใหม่ (`getBootstrap`/`recordSale`/...), หน้า login ต้องรับ `?code=` แล้วเรียก action
-`lineExchangeCode` แทนที่ backend จะ redirect ให้เอง (ดูขั้นตอนใน `backend/README.md`), และ payload
-ของ mobile action ทุกตัวต้องแนบ `lineUserId` มาด้วย (ดูตาราง action ใน `backend/README.md`)
+`config.js` เลือก backend ตาม URL เหมือน `frontend-admin/config.js` (`/mobile-uat/` และ localhost = UAT)
 
-## `_legacy-gas-liff-reference/` — อ้างอิงรอง
+## ตั้งค่า LINE (ทำครั้งเดียวต่อสภาพแวดล้อม — ยังไม่ได้ทำ)
 
-ไฟล์ HTML ชุดที่ backend เคยเสิร์ฟเองผ่าน HtmlService (ก่อนแยกโปรเจกต์ตามที่ตกลงกันภายหลัง) — เก็บไว้
-อ้างอิง UI/UX บางส่วนเท่านั้น (การ์ดสินค้า, ตะกร้า, หน้าจอ stock/visit) ตัวโครงหลักแนะนำให้ใช้
-`_legacy-standalone-liff-app/` เป็นฐานแทน เพราะมีรูปแบบเรียก backend ที่ตรงกับสถาปัตยกรรมใหม่อยู่แล้ว
+1. LINE Developers Console → channel แบบ **LINE Login** → แท็บ LIFF → Add
+   - Endpoint URL: `https://<pages>/mobile-uat/` (ตัว UAT) / `https://<pages>/mobile/` (ตัว production) — สร้างแยก 2 ตัว
+   - Size: Full · Scope: `profile` (+ `openid`)
+2. เอา LIFF ID ที่ได้ใส่ `LIFF_IDS.uat` / `LIFF_IDS.prod` ใน `config.js` แล้ว push
+3. ยังว่าง = production เปิดแล้วขึ้นข้อความ "ยังไม่ได้ตั้งค่า LIFF ID" (ไม่พัง ไม่ไปแตะข้อมูล)
 
-กำหนดสร้างจริง: สัปดาห์ที่ 3 ตามแผน — ก่อนหน้านั้น Admin App (`frontend-admin/`) มาก่อนในสัปดาห์ที่ 2
+## ทดสอบโดยไม่ผ่าน LINE (UAT เท่านั้น)
+
+`http://localhost:5502/?devLineUserId=U...` (preview config `frontend-mobile` ใน `.claude/launch.json`)
+หรือ `.../mobile-uat/?devLineUserId=U...` — ใช้ LINE user id นั้นเรียก backend UAT ตรงๆ
+production ไม่มีทางเข้านี้ (โค้ดเช็ค `ENV === 'uat'`)
+
+## หน้าจอ
+
+| แท็บ | ทำอะไร | action |
+|---|---|---|
+| (เริ่มต้น) | LIFF login → ตรวจสิทธิ์ → ยังไม่มีบัญชี = ลงทะเบียน (เลือกสังกัด) → รอแอดมินอนุมัติ | `checkUser`, `listActiveTenants`, `registerUser` |
+| หน้าแรก | ยอดวันนี้, Sync, บิลค้างในคิว (ดู/ลบบิลที่ส่งไม่ผ่าน) | `getDashboard`, `getBootstrap` |
+| ขาย | เลือกร้าน, เงินสด/เครดิต, ส่งจากสำนักงาน, เลือกหน่วย (ชิ้น/หีบ/แพ็ค), ราคาจริงจากเซิร์ฟเวอร์ก่อนกดขาย | `quoteSale`, `recordSale` |
+| สต็อก | เบิกของขึ้นรถ / ตรวจนับบนรถ (หน่วยฐาน) | `restockVan`, `submitCount` |
+| เยี่ยมร้าน | เช็คอิน (GPS) → บันทึกการเยี่ยม / สินค้าคู่แข่ง | `checkInVisit`, `addVisitNote`, `addCompetitor` |
+| ลูกค้า | รายชื่อ + แผนที่, เพิ่มร้านใหม่ (GPS) | `addCustomer` |
+
+กติกาที่สำคัญ:
+- **ราคาไม่เชื่อฝั่งแอป** — แอปส่งแค่ `productId / unitCode / qty`; ตัวเลขในตะกร้ามาจาก `quoteSale`
+  (เครื่องยนต์เดียวกับ `recordSale`) ถ้าร้านมีชุดราคาจะเห็นชื่อชุด/ขั้นราคา · ออฟไลน์แสดงเป็น "ประมาณการ"
+- **ออฟไลน์**: บิลเข้าคิวใน `localStorage` (แยก key ตาม env + lineUserId) ส่งตอนกด Sync ทีละบิล —
+  สำเร็จ = เอาออก, เซิร์ฟเวอร์ปฏิเสธ = ค้างไว้พร้อมเหตุผลให้คนตัดสินใจ, เน็ตหลุดกลางทาง = หยุด เก็บที่เหลือไว้
+  (ของเดิมใน legacy ล้างคิวทิ้งหมดแม้ส่งไม่ผ่าน)
+- กดขายตอนออนไลน์แล้วเน็ตหลุดระหว่างรอ → **ไม่**เข้าคิวอัตโนมัติ (ไม่รู้ว่าเซิร์ฟเวอร์ได้รับหรือยัง เสี่ยงบิลซ้ำ)
+  ให้คนเช็คยอดวันนี้ก่อน
+- ขายจากรถห้ามเกินของบนรถ (นับเป็นหน่วยฐานรวมทุกหน่วย) · ติ๊ก "ส่งจากสำนักงาน" = ไม่เช็ค/ไม่ตัดสต็อกรถ
+
+## ยังไม่ได้ทำ / ข้อควรรู้
+
+- LIFF ID ทั้งสอง env (ข้างบน)
+- **backend เชื่อ `lineUserId` ที่ client ส่งมาโดยไม่ตรวจ** — ใครรู้ user id ของพนักงานก็ยิง action แทนได้
+  ก่อนใช้จริงควรให้แอปส่ง `liff.getIDToken()` แล้ว backend verify กับ LINE (`/oauth2/v2.1/verify`) ก่อนเชื่อ
+- `recordSale` ไม่มี idempotency key — ถ้าจะให้คิวออฟไลน์ส่งซ้ำได้ปลอดภัย ควรเพิ่ม `clientRef` ที่ backend กันบิลซ้ำ
+- ของแถม (ของแถมตามชุดราคา) — พักไว้ตามลำดับความสำคัญของผู้ใช้; เพดานแพ็คต่อร้าน (ไม่เกิน 4 แพ็ค) ยังไม่ทำ
+
+## ไฟล์อ้างอิงเก่า
+
+- `_legacy-standalone-liff-app/` — ตัวตั้งต้นของแอปนี้ (API/LIFF เดิม, engine ส่วนลดฝั่ง client ที่เลิกใช้แล้ว)
+- `_legacy-gas-liff-reference/` — HTML รุ่นที่ backend เสิร์ฟเองผ่าน HtmlService อ้างอิง UI เท่านั้น
+- ทั้งสองโฟลเดอร์ไม่ถูก deploy ขึ้นเว็บ

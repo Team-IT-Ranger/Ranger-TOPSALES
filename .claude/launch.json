@@ -8,6 +8,12 @@
       "port": 5500
     },
     {
+      "name": "frontend-mobile",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [".dev/serve_utf8.py", "5502", "frontend-mobile"],
+      "port": 5502
+    },
+    {
       "name": "docs",
       "runtimeExecutable": "python",
       "runtimeArgs": [".dev/serve_utf8.py", "5501", "docs"],
