@@ -6,7 +6,8 @@
  */
 // สิทธิ์เริ่มต้นของ role มาตรฐาน (owner_admin/tenant_admin) — ต้องอยู่นอกฟังก์ชันเพื่อให้ ensureSchemaCurrent()
 // เอาไปรวมกับ CENTRAL_SHEETS คำนวณลายนิ้วมือด้วย (เพิ่มโมดูลใหม่ในนี้ = สคีมาเปลี่ยน ต้อง re-seed อัตโนมัติ)
-var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report'];
+// customers/staff/sales อยู่ในนี้ด้วย เพราะบริษัทเจ้าของสินค้าเองก็ต้องเปิดบิลขายแทนตัวแทนได้ (เลือกลูกค้า/พนักงานที่จะตัดสต็อกให้)
+var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report', 'customers', 'staff', 'sales'];
 var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles'];
 
 var CENTRAL_SHEETS = {

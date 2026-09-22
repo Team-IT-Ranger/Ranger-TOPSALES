@@ -33,14 +33,15 @@ var MODULE_REGISTRY = [
 /**
  * "tenant id ที่แท้จริง" ของ request นี้:
  *  - session.tenant_id มีค่า → เป็น tenant_admin ตัวจริงของตัวแทนนั้น ใช้ค่านี้เสมอ
- *  - session.tenant_id ว่าง + เป็น super_admin (Ultra Admin) + ส่ง payload.tenantId มา
- *    → กำลัง "สวมสิทธิ์" เข้าไปทำงานในตัวแทนนั้นเหมือนเป็น super_admin ของบริษัทนั้นเอง
- *  - owner_admin ไม่ได้สิทธิ์สวมสิทธิ์นี้ (ตามที่ตกลงกันไว้ — เห็นแค่ภาพรวมข้ามตัวแทน)
+ *  - session.tenant_id ว่าง + เป็น super_admin หรือ owner_admin (Ultra Admin / บริษัทเจ้าของสินค้า) + ส่ง payload.tenantId มา
+ *    → กำลัง "สวมสิทธิ์" เข้าไปทำงานในตัวแทนนั้น (บริษัทเจ้าของสินค้าเองก็ต้องเปิดบิลขายแทนตัวแทนได้เหมือนกัน
+ *      ไม่ใช่แค่ดูภาพรวมข้ามตัวแทนอย่างเดียว) — โมดูลที่ยังไม่มีปุ่มเรียกจริง (stock_receive/shipping ฯลฯ)
+ *      ไม่กระทบ เพราะ owner_admin ยังไม่มีสิทธิ์ (view/edit) ของโมดูลพวกนั้นใน role_permissions อยู่ดี
  *  - ไม่มีทั้งคู่ → null (ฝั่งบริษัท ทำงานกับข้อมูลกลางไม่ผูกตัวแทนใดตัวแทนหนึ่ง)
  */
 function _effectiveTenantId(session, payload) {
   if (session.tenant_id) return session.tenant_id;
-  if (session.role_code === 'super_admin' && payload && payload.tenantId) return String(payload.tenantId);
+  if ((session.role_code === 'super_admin' || session.role_code === 'owner_admin') && payload && payload.tenantId) return String(payload.tenantId);
   return null;
 }
 

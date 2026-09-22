@@ -396,8 +396,11 @@
         <!-- ═══ งานขาย: รายการบิลขาย ═══ -->
         <section class="view" id="view-salesorders">
           <div class="view-head">
-            <div><h1>บิลขาย</h1><p>รายการบิลขายของตัวแทนนี้ — เปิดบิลขายเองได้จากที่นี่โดยไม่ต้องผ่านแอปมือถือ</p></div>
-            <button class="btn btn-primary" onclick="openSaleOrderNew()">+ เปิดบิลขาย</button>
+            <div><h1>บิลขาย</h1><p id="so-head-desc">รายการบิลขายของตัวแทนนี้ — เปิดบิลขายเองได้จากที่นี่โดยไม่ต้องผ่านแอปมือถือ</p></div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <select id="so-tenant-select" style="display:none" onchange="onSalesTenantChanged()"></select>
+              <button class="btn btn-primary" onclick="openSaleOrderNew()">+ เปิดบิลขาย</button>
+            </div>
           </div>
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
             <select id="so-filter-status" onchange="renderSalesOrdersTable()">
@@ -985,20 +988,23 @@ const NAV = {
       { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', ready:true} ] },
       { n:'1.2', label:'โปรโมชั่น', items:[ {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', ready:true} ] }
     ]},
-    { n:'2', icon:'💰', label:'ราคาและส่วนลด', subs:[
-      { n:'2.1', label:'ชุดราคา', items:[ {n:'2.1.1', label:'ชุดราคาและส่วนลด', view:'pricelists', ready:true} ] }
+    { n:'2', icon:'🧾', label:'งานขาย', subs:[
+      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', ready:true} ] }
     ]},
-    { n:'3', icon:'⚙️', label:'ข้อมูลกลาง', subs:[
-      { n:'3.1', label:'กลุ่มลูกค้า', items:[ {n:'3.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', ready:true} ] },
-      { n:'3.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'3.2.1', label:'รายการช่องทาง', view:'distchannels', ready:true} ] },
-      { n:'3.3', label:'ประเภทการชำระเงิน', items:[ {n:'3.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', ready:true} ] }
+    { n:'3', icon:'💰', label:'ราคาและส่วนลด', subs:[
+      { n:'3.1', label:'ชุดราคา', items:[ {n:'3.1.1', label:'ชุดราคาและส่วนลด', view:'pricelists', ready:true} ] }
     ]},
-    { n:'4', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
-      { n:'4.1', label:'ตัวแทนจำหน่าย', items:[ {n:'4.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
-      { n:'4.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'4.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
+    { n:'4', icon:'⚙️', label:'ข้อมูลกลาง', subs:[
+      { n:'4.1', label:'กลุ่มลูกค้า', items:[ {n:'4.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', ready:true} ] },
+      { n:'4.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'4.2.1', label:'รายการช่องทาง', view:'distchannels', ready:true} ] },
+      { n:'4.3', label:'ประเภทการชำระเงิน', items:[ {n:'4.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', ready:true} ] }
     ]},
-    { n:'5', icon:'📈', label:'รายงาน', subs:[
-      { n:'5.1', label:'ยอดขาย', items:[ {n:'5.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
+    { n:'5', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
+      { n:'5.1', label:'ตัวแทนจำหน่าย', items:[ {n:'5.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
+      { n:'5.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'5.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
+    ]},
+    { n:'6', icon:'📈', label:'รายงาน', subs:[
+      { n:'6.1', label:'ยอดขาย', items:[ {n:'6.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
     ]}
   ]}
 };
@@ -1334,18 +1340,40 @@ async function saveDocSeriesUI(){
   toast('บันทึกสำเร็จ'); loadDocnum();
 }
 
-/* ══════════════ งานขาย (19_sales_admin.gs) — เปิด/ดู/ยกเลิกบิลขายเองจากแอดมิน ══════════════ */
+/* ══════════════ งานขาย (19_sales_admin.gs) — เปิด/ดู/ยกเลิกบิลขายเองจากแอดมิน ══════════════
+   โหมด "ตัวแทน" (tenant_admin หรือ Ultra Admin ที่สวมสิทธิ์อยู่แล้ว) → รู้ตัวแทนจาก EFFECTIVE_TENANT_ID() เสมอ
+   โหมด "บริษัทเจ้าของสินค้า" (owner) → บริษัทเองก็เปิดบิลขายแทนตัวแทนได้ ต้องเลือกตัวแทนก่อนจากตัวเลือกบนหน้านี้เอง
+   (SALES_TENANT_ID) เพราะไม่ได้ "สวมสิทธิ์" ทั้งแอปแบบ Ultra Admin แค่ยืม tenantId มาใช้เฉพาะหน้างานขาย */
 let salesOrdersCache = [], customersCache = [], paymentTypesCache = [], currentSaleOrderId = null, sonPreviewData = null;
+let SALES_TENANT_ID = null, staffCacheTenantId = null;
 const PRODUCT_UNITS_CACHE = {};
 const SO_STATUS = { completed:['ok','เสร็จสิ้น'], pending_delivery:['wait','รอจัดส่ง'], cancelled:['off','ยกเลิกแล้ว'] };
 const soPill = st => { const s = SO_STATUS[st] || ['wait', st]; return '<span class="pill '+s[0]+'">'+esc(s[1])+'</span>'; };
 const soFulfillLabel = f => f === 'immediate' ? 'ตัดสต็อกรถทันที' : 'รอสำนักงานจัดส่ง';
+const _salesTenantId = () => EFFECTIVE_TENANT_ID() || SALES_TENANT_ID;
 async function ensurePaymentTypesCache(){
   if (paymentTypesCache.length) return;
   const r = await callApi('listPaymentTypes', {});
   if (r.success) paymentTypesCache = r.data.filter(p => isOn(p.is_active));
 }
 const payLabel = code => { const p = paymentTypesCache.find(x => x.code === code); return p ? p.name : (code || '-'); };
+
+// โหมดตัวแทน (มี EFFECTIVE_TENANT_ID() อยู่แล้ว) → ซ่อนตัวเลือก ไม่ต้องเลือกซ้ำ
+// โหมดบริษัท → โชว์ตัวเลือกตัวแทนจำหน่าย ให้เลือกก่อนถึงจะเห็น/เปิดบิลขายได้
+async function _ensureSalesTenantPicker(){
+  const sel = document.getElementById('so-tenant-select');
+  if (EFFECTIVE_TENANT_ID()) { sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  if (!tenantsCache.length) { const r = await callApi('listTenants', {}); if (r.success) tenantsCache = r.data; }
+  sel.innerHTML = '<option value="">— เลือกตัวแทนจำหน่าย —</option>' +
+    tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'">'+esc(t.name)+' ('+esc(t.tenantId)+')</option>').join('');
+  if (SALES_TENANT_ID) sel.value = SALES_TENANT_ID;
+}
+function onSalesTenantChanged(){
+  SALES_TENANT_ID = document.getElementById('so-tenant-select').value || null;
+  salesOrdersCache = [];
+  loadSalesOrders();
+}
 
 function renderSalesOrdersTable(){
   const body = document.getElementById('salesorders-body');
@@ -1362,10 +1390,12 @@ function renderSalesOrdersTable(){
   ).join('');
 }
 async function loadSalesOrders(){
+  await _ensureSalesTenantPicker();
   const body = document.getElementById('salesorders-body');
+  if (!_salesTenantId()) { body.innerHTML = '<tr class="empty-row"><td colspan="7">เลือกตัวแทนจำหน่ายด้านบนก่อน</td></tr>'; return; }
   if (salesOrdersCache.length) renderSalesOrdersTable();
   else body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
-  const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', {})]);
+  const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', { tenantId: _salesTenantId() })]);
   if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   salesOrdersCache = r.data;
   renderSalesOrdersTable();
@@ -1377,7 +1407,7 @@ async function openSaleOrderDetail(id){
   _switchProductView('view-saleorderdetail', 'บิลขาย');
   document.getElementById('sod-title').textContent = 'บิลขาย'; document.getElementById('sod-meta').textContent = ''; document.getElementById('sod-actions').innerHTML = '';
   document.getElementById('sod-body').innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
-  const r = await callApi('getSalesOrderAdmin', { id });
+  const r = await callApi('getSalesOrderAdmin', { id, tenantId: _salesTenantId() });
   if (!r.success) { toast(r.message, true); return; }
   if (currentSaleOrderId !== id) return; // ผู้ใช้กดออกไปหน้าอื่นระหว่างรอโหลด
   renderSaleOrderDetail(r);
@@ -1404,7 +1434,7 @@ function closeSaleOrderDetail(){
 }
 async function cancelSaleOrderUI(){
   if (!confirm('ยกเลิกบิลนี้? ถ้าเคยตัดสต็อกรถไปแล้วระบบจะคืนสต็อกกลับให้อัตโนมัติ')) return;
-  const r = await callApi('cancelSalesOrderAdmin', { id: currentSaleOrderId });
+  const r = await callApi('cancelSalesOrderAdmin', { id: currentSaleOrderId, tenantId: _salesTenantId() });
   if (!r.success) { toast(r.message, true); return; }
   const row = salesOrdersCache.find(x => x.id === currentSaleOrderId); if (row) row.status = 'cancelled';
   toast('ยกเลิกบิลแล้ว');
@@ -1414,9 +1444,10 @@ async function cancelSaleOrderUI(){
 /* ── เปิดบิลขายใหม่ ── */
 async function ensureProductsForSale(){ if (!productsCache.length) await loadProducts(); }
 async function ensureStaffCache(){
-  if (staffCache.length) return;
-  const r = await callApi('listStaffAdmin', {});
-  if (r.success) staffCache = r.data;
+  const tid = _salesTenantId();
+  if (staffCache.length && staffCacheTenantId === tid) return;
+  const r = await callApi('listStaffAdmin', { tenantId: tid });
+  if (r.success) { staffCache = r.data; staffCacheTenantId = tid; }
 }
 function sonFulfillChanged(){
   document.getElementById('son-staff-field').style.display = document.getElementById('son-fulfill').value === 'immediate' ? '' : 'none';
@@ -1447,6 +1478,7 @@ function sonAddRow(){
   document.getElementById('son-rows').appendChild(d);
 }
 async function openSaleOrderNew(){
+  if (!_salesTenantId()) { toast('เลือกตัวแทนจำหน่ายที่หน้ารายการบิลขายก่อน', true); return; }
   sonPreviewData = null;
   document.getElementById('son-rows').innerHTML = '';
   document.getElementById('son-result').innerHTML = '';
@@ -1457,7 +1489,7 @@ async function openSaleOrderNew(){
 
   const custSel = document.getElementById('son-customer');
   custSel.innerHTML = '<option value="">กำลังโหลด...</option>';
-  const [custR] = await Promise.all([callApi('listCustomersAdmin', {}), ensureStaffCache(), ensureProductsForSale(), ensurePaymentTypesCache()]);
+  const [custR] = await Promise.all([callApi('listCustomersAdmin', { tenantId: _salesTenantId() }), ensureStaffCache(), ensureProductsForSale(), ensurePaymentTypesCache()]);
   customersCache = custR.success ? custR.data.filter(c => isOn(c.is_active)) : [];
   custSel.innerHTML = '<option value="">— เลือกลูกค้า —</option>' + customersCache.map(c => '<option value="'+c.record_id+'">'+esc(c.name)+'</option>').join('');
 
@@ -1495,10 +1527,11 @@ async function sonPreview(){
   if (fulfillmentType === 'immediate' && !soldByLineUserId) { out.innerHTML = '<div class="err" style="display:block">เลือกพนักงานที่จะตัดสต็อกให้ด้วย</div>'; return; }
   const paymentType = document.getElementById('son-pay').value;
 
+  const tenantId = _salesTenantId();
   out.textContent = 'กำลังคำนวณ...';
-  const r = await callApi('previewSaleAdmin', { customerId, paymentType, fulfillmentType, items });
+  const r = await callApi('previewSaleAdmin', { tenantId, customerId, paymentType, fulfillmentType, items });
   if (!r.success) { out.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
-  sonPreviewData = { customerId, paymentType, fulfillmentType, soldByLineUserId, items };
+  sonPreviewData = { tenantId, customerId, paymentType, fulfillmentType, soldByLineUserId, items };
 
   out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>' +
     r.lines.map(l => '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+esc(l.unitCode)+'</td><td>'+l.qty+'</td><td class="mono-data">฿'+baht(l.unitPrice)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>').join('') +
