@@ -14,10 +14,13 @@
 -->
 <style>
   :root{
-    --ground:#F2F6F5; --surface:#fff; --surface-2:#F6F9F8;
-    --ink:#161C1F; --ink-soft:#57696A; --ink-faint:#8FA09E; --border:#D7E4E1;
-    --blue:#3E6BB0; --blue-soft:#DCE9FB; --blue-pale:#EEF4FD;
-    --green:#2E8B57; --green-soft:#DDF3E6; --red:#C0392B; --red-soft:#FBE3E0; --orange:#C7771A; --orange-soft:#FCEBD5;
+    /* พาเลตต์เดียวกับแอดมิน (light/minimal 2026-09-23) — เปิดสองแอปสลับกันแล้วต้องรู้สึกว่าเป็นระบบเดียวกัน */
+    --ground:#F6F8FC; --surface:#fff; --surface-2:#F1F5FA;
+    --ink:#0F1B2D; --ink-soft:#5B6B84; --ink-faint:#94A2B8; --border:#E4E9F1;
+    --blue:#2B63D9; --blue-soft:#DEE9FD; --blue-pale:#F1F6FE;
+    --green:#1F8A5F; --green-soft:#DFF3E9; --red:#C4443C; --red-soft:#FDE7E5; --orange:#B4741A; --orange-soft:#FCEEDA;
+    --shadow-sm:0 1px 2px rgba(15,27,45,.05); --shadow-md:0 14px 34px -18px rgba(15,27,45,.4);
+    --r-card:14px; --r-ctl:10px;
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif; font-size:15px; }
@@ -103,6 +106,30 @@
   .toast.ok{ background:var(--green); }
   .empty{ text-align:center; color:var(--ink-faint); padding:28px 8px; font-size:13.5px; }
 
+  /* ══════════ ปรับโฉม light / minimal ให้ตรงกับแอดมิน (2026-09-23) ══════════ */
+  .mi{ width:15px; height:15px; display:inline-block; vertical-align:-2px; margin-right:6px; }
+  .env-bar{ background:var(--orange-soft); color:#7A4E10; border-bottom:1px solid #F0D9B0; font-weight:700; padding:4px; }
+  .card,.prod{ border-radius:var(--r-card); box-shadow:var(--shadow-sm); }
+  .kpi{ border-radius:12px; box-shadow:var(--shadow-sm); }
+  .btn{ border-radius:var(--r-ctl); }
+  .btn-sm{ border-radius:8px; }
+  .inp,.prod select,.step input{ border-radius:var(--r-ctl); }
+  .inp:focus,.prod select:focus,.step input:focus,textarea:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
+  .step button{ border-radius:var(--r-ctl); }
+  .seg{ border-radius:var(--r-ctl); }
+  .seg button.on{ box-shadow:var(--shadow-sm); }
+  .top{ box-shadow:var(--shadow-sm); }
+  .tabs{ box-shadow:0 -1px 2px rgba(15,27,45,.04); }
+  .tabs button .ic{ display:flex; align-items:center; justify-content:center; height:20px; }
+  .tabs button .ic svg{ width:20px; height:20px; }
+  /* แถบตะกร้าลอย: เดิมเป็นแถบดำทึบ ตัดกับธีมสว่างทั้งแอป เปลี่ยนเป็นการ์ดขาวยกลอย เน้นด้วยเงา */
+  .cartbar .inner{ background:var(--surface); color:var(--ink); border:1px solid var(--border); box-shadow:var(--shadow-md); border-radius:var(--r-card); }
+  .cartbar .detail .row{ border-top-color:var(--border); }
+  .cartbar .note{ opacity:1; color:var(--ink-soft); }
+  .cartbar .tot{ color:var(--ink); }
+  .cartbar .err{ background:var(--red-soft); color:var(--red); }
+  .spinner{ border-color:var(--blue-soft); border-top-color:var(--blue); }
+
   /* มุมมองกระชับ — เห็นสินค้า/รายการต่อหน้าจอมากขึ้น (ปุ่มสลับอยู่ที่การ์ด "ข้อมูลในเครื่อง" หน้าแรก)
      จำค่าไว้ใน localStorage เหมือนฝั่งแอดมิน */
   body.density-compact{ font-size:14px; }
@@ -176,7 +203,7 @@
       <div class="row"><span>บิลรอส่ง (ออฟไลน์)</span><span id="h-queue">0</span></div>
       <div id="h-queue-list"></div>
       <div class="row"><span>มุมมอง</span><button class="btn btn-sm" id="density-btn" onclick="toggleDensity()">ปกติ</button></div>
-      <button class="btn btn-primary btn-block" id="sync-btn" style="margin-top:10px" onclick="syncNow()">🔄 Sync ข้อมูล</button>
+      <button class="btn btn-primary btn-block" id="sync-btn" style="margin-top:10px" onclick="syncNow()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7"/><path d="M13.4 2.9v3.3H10.1"/></svg>Sync ข้อมูล</button>
     </div>
     <div class="card"><h3>ขายดีวันนี้</h3><div id="h-top"><div class="empty">-</div></div></div>
   </section>
@@ -213,7 +240,7 @@
   <section class="screen" id="tab-visit">
     <div class="card stack" style="margin-bottom:12px">
       <div class="field"><label>ร้านค้า</label><select class="inp" id="v-cust"></select></div>
-      <button class="btn btn-primary btn-block" id="v-checkin" onclick="doCheckIn()">📍 เช็คอิน</button>
+      <button class="btn btn-primary btn-block" id="v-checkin" onclick="doCheckIn()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>เช็คอิน</button>
       <div id="v-active" class="hidden"><span class="pill good">เช็คอินแล้ว</span> <span id="v-active-name"></span></div>
     </div>
     <div class="card stack" style="margin-bottom:12px" id="v-note-card">
@@ -239,7 +266,7 @@
       <input class="inp" id="c-phone" type="tel" placeholder="เบอร์โทร">
       <input class="inp" id="c-tax" inputmode="numeric" placeholder="เลขประจำตัวผู้เสียภาษี">
       <textarea class="inp" id="c-addr" rows="2" placeholder="ที่อยู่"></textarea>
-      <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" onclick="captureCustGps()">📍 จับพิกัด</button><span class="muted" id="c-gps">ยังไม่จับพิกัด</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" onclick="captureCustGps()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>จับพิกัด</button><span class="muted" id="c-gps">ยังไม่จับพิกัด</span></div>
       <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="toggleAddCust(false)">ยกเลิก</button><button class="btn btn-green" style="flex:2" id="c-save" onclick="submitCust()">บันทึกลูกค้า</button></div>
     </div>
     <div class="stack" id="c-list"></div>
@@ -253,15 +280,15 @@
     </div>
     <div class="detail hidden" id="cb-detail"></div>
     <div id="cb-err"></div>
-    <button class="btn btn-green btn-block" id="cb-save" style="margin-top:8px" onclick="submitSale()">✅ บันทึกการขาย</button>
+    <button class="btn btn-green btn-block" id="cb-save" style="margin-top:8px" onclick="submitSale()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.2 8.6 6.4 11.8l6.4-7"/></svg>บันทึกการขาย</button>
   </div></div>
 
   <nav class="tabs">
-    <button data-tab="home" onclick="gotoTab('home')" class="on"><span class="ic">🏠</span>หน้าแรก</button>
-    <button data-tab="sell" onclick="gotoTab('sell')"><span class="ic">🛒</span>ขาย</button>
-    <button data-tab="stock" onclick="gotoTab('stock')"><span class="ic">📦</span>สต็อก</button>
-    <button data-tab="visit" onclick="gotoTab('visit')"><span class="ic">📍</span>เยี่ยมร้าน</button>
-    <button data-tab="cust" onclick="gotoTab('cust')"><span class="ic">🏪</span>ลูกค้า</button>
+    <button data-tab="home" onclick="gotoTab('home')" class="on"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.2 8 2.8l5.5 4.4"/><path d="M4.3 6.6V13h7.4V6.6"/><path d="M6.8 13V9.6h2.4V13"/></svg></span>หน้าแรก</button>
+    <button data-tab="sell" onclick="gotoTab('sell')"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.4" cy="12.8" r="1.1"/><circle cx="11.6" cy="12.8" r="1.1"/><path d="M1.8 2.6h2.1l1.7 7.6h7l1.4-5.4H4.4"/></svg></span>ขาย</button>
+    <button data-tab="stock" onclick="gotoTab('stock')"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.6 13.4 5.3v5.4L8 13.4 2.6 10.7V5.3z"/><path d="M2.6 5.3 8 8l5.4-2.7M8 8v5.4"/></svg></span>สต็อก</button>
+    <button data-tab="visit" onclick="gotoTab('visit')"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.6"/></svg></span>เยี่ยมร้าน</button>
+    <button data-tab="cust" onclick="gotoTab('cust')"><span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 6.2 3.6 2.8h8.8l1 3.4"/><path d="M3.3 6.2v7h9.4v-7"/><path d="M6.4 13.2V9.4h3.2v3.8"/></svg></span>ลูกค้า</button>
   </nav>
 </div>
 
@@ -302,6 +329,14 @@ function getGPS(){
   });
 }
 function updateNet(){ const n = $('net'); if (!n) return; n.textContent = navigator.onLine ? 'ออนไลน์' : 'ออฟไลน์'; n.classList.toggle('off', !navigator.onLine); }
+
+/* ไอคอนเล็กในปุ่ม (ชุดเดียวกับไอคอนแท็บด้านล่าง) — เลี่ยง emoji เพราะหน้าตาต่างกันทุกเครื่อง */
+const MI = {
+  pin: '<svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>',
+  sync: '<svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7"/><path d="M13.4 2.9v3.3H10.1"/></svg>',
+  check: '<svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.2 8.6 6.4 11.8l6.4-7"/></svg>',
+  box: '<svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.6 13.4 5.3v5.4L8 13.4 2.6 10.7V5.3z"/><path d="M2.6 5.3 8 8l5.4-2.7M8 8v5.4"/></svg>'
+};
 
 /* ── มุมมอง ปกติ / กระชับ (มีเหมือนกันทุกแอปตามที่ผู้ใช้กำหนดเป็นมาตรฐาน) ── */
 function applyDensity(mode){
@@ -403,13 +438,13 @@ async function refreshData(silent){
   } catch (e) { if (!silent) toast('ดึงข้อมูลไม่ได้: ' + e.message, 'err'); return false; }
 }
 async function syncNow(){
-  const b = $('sync-btn'); b.disabled = true; b.textContent = '⏳ กำลัง Sync...';
+  const b = $('sync-btn'); b.disabled = true; b.textContent = 'กำลัง Sync...';
   try {
     if (!navigator.onLine) { toast('ไม่มีสัญญาณ', 'err'); return; }
     const q = await flushQueue();
     if (await refreshData(false)) toast('Sync สำเร็จ' + (q ? ' · ' + q.msg : ''), q && q.bad ? 'err' : 'ok');
     loadDashboard();
-  } finally { b.disabled = false; b.textContent = '🔄 Sync ข้อมูล'; renderHome(); }
+  } finally { b.disabled = false; b.innerHTML = MI.sync + 'Sync ข้อมูล'; renderHome(); }
 }
 
 /* ══════════════ แท็บ ══════════════ */
@@ -572,13 +607,13 @@ function renderCartBar(){
       '<div class="row"><button class="btn btn-sm" onclick="clearCart()">ล้างตะกร้า</button><span></span></div>';
   }
   const save = $('cb-save'); save.disabled = !!err;
-  save.textContent = navigator.onLine ? '✅ บันทึกการขาย' : '📦 บันทึกเข้าคิว (ออฟไลน์)';
+  save.innerHTML = navigator.onLine ? MI.check + 'บันทึกการขาย' : MI.box + 'บันทึกเข้าคิว (ออฟไลน์)';
 }
 function clearCart(){ if (!confirm('ล้างตะกร้าทั้งหมด?')) return; CART = []; CART_OPEN = false; renderProducts(); cartChanged(); }
 async function submitSale(){
   if (!CART.length) return;
   const btn = $('cb-save'); if (btn.disabled) return;
-  btn.disabled = true; const label = btn.textContent; btn.textContent = '⏳ กำลังบันทึก...';
+  btn.disabled = true; const label = btn.innerHTML; btn.textContent = 'กำลังบันทึก...';   // เก็บ innerHTML เพราะปุ่มมีไอคอน SVG อยู่ข้างใน
   try {
     const gps = await getGPS();
     const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: $('s-office').checked ? 'office_delivery' : 'immediate',
@@ -598,7 +633,7 @@ async function submitSale(){
     if (!r.success) { toast(r.message || 'บันทึกไม่สำเร็จ', 'err'); return; }
     afterSale(); toast('บิล ' + (r.orderCode || '') + ' · ฿' + baht(r.total), 'ok');
     refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
-  } finally { btn.disabled = false; btn.textContent = label; renderCartBar(); }
+  } finally { btn.disabled = false; btn.innerHTML = label; renderCartBar(); }
 }
 function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
@@ -648,7 +683,7 @@ function renderVisit(){
 }
 async function doCheckIn(){
   const cid = Number($('v-cust').value); if (!cid) return toast('เลือกร้านก่อน', 'err');
-  const btn = $('v-checkin'); btn.disabled = true; btn.textContent = '⏳ กำลังเช็คอิน...';
+  const btn = $('v-checkin'); btn.disabled = true; btn.textContent = 'กำลังเช็คอิน...';
   try {
     const gps = await getGPS();
     const r = await api('checkInVisit', { customerId: cid, lat: gps.lat, lng: gps.lng });
@@ -656,7 +691,7 @@ async function doCheckIn(){
     VISIT = { visitId: r.visitId, customerId: cid, name: custName(cid), day: new Date().toDateString() }; lsSet('visit', VISIT);
     toast('เช็คอินแล้ว', 'ok'); renderVisit();
   } catch (e) { toast('เช็คอินไม่ได้: ' + e.message, 'err'); }
-  finally { btn.disabled = false; btn.textContent = '📍 เช็คอิน'; }
+  finally { btn.disabled = false; btn.innerHTML = MI.pin + 'เช็คอิน'; }
 }
 async function submitNote(){
   const note = $('v-note').value.trim(); if (!note) return toast('กรอกบันทึกก่อน', 'err');
@@ -678,11 +713,11 @@ function renderCustomers(){
   const q = $('c-q').value.trim().toLowerCase();
   const list = DATA.customers.filter(c => !q || String(c.name).toLowerCase().includes(q) || String(c.phone || '').includes(q));
   $('c-list').innerHTML = list.length ? list.map(c => '<div class="prod"><div style="display:flex;justify-content:space-between;gap:8px"><div><div class="nm">'+esc(c.name)+'</div><div class="sub">'+esc(c.phone || '-')+' · '+esc(c.address || '-')+'</div></div>' +
-    (c.lat ? '<a class="btn btn-sm" href="https://maps.google.com/?q='+encodeURIComponent(c.lat+','+c.lng)+'" target="_blank" rel="noopener">📍 แผนที่</a>' : '') + '</div></div>').join('')
+    (c.lat ? '<a class="btn btn-sm" href="https://maps.google.com/?q='+encodeURIComponent(c.lat+','+c.lng)+'" target="_blank" rel="noopener"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>แผนที่</a>' : '') + '</div></div>').join('')
     : '<div class="empty">' + (DATA.customers.length ? 'ไม่พบลูกค้า' : 'ยังไม่มีลูกค้า — กด + เพิ่ม หรือ Sync ที่หน้าแรก') + '</div>';
 }
 function toggleAddCust(on){ $('c-add').classList.toggle('hidden', !on); if (on) $('c-name').focus(); }
-async function captureCustGps(){ $('c-gps').textContent = 'กำลังจับพิกัด...'; const g = await getGPS(); if (g.lat) { CUST_GPS = g; $('c-gps').textContent = '✅ ' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5); } else $('c-gps').textContent = 'จับพิกัดไม่ได้'; }
+async function captureCustGps(){ $('c-gps').textContent = 'กำลังจับพิกัด...'; const g = await getGPS(); if (g.lat) { CUST_GPS = g; $('c-gps').textContent = 'บันทึกพิกัดแล้ว ' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5); } else $('c-gps').textContent = 'จับพิกัดไม่ได้'; }
 async function submitCust(){
   const name = $('c-name').value.trim(); if (!name) return toast('กรอกชื่อลูกค้าก่อน', 'err');
   const btn = $('c-save'); btn.disabled = true;
