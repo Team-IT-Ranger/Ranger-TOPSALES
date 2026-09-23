@@ -102,6 +102,23 @@
   .toast.err{ background:var(--red); }
   .toast.ok{ background:var(--green); }
   .empty{ text-align:center; color:var(--ink-faint); padding:28px 8px; font-size:13.5px; }
+
+  /* มุมมองกระชับ — เห็นสินค้า/รายการต่อหน้าจอมากขึ้น (ปุ่มสลับอยู่ที่การ์ด "ข้อมูลในเครื่อง" หน้าแรก)
+     จำค่าไว้ใน localStorage เหมือนฝั่งแอดมิน */
+  body.density-compact{ font-size:14px; }
+  body.density-compact .screen{ padding:10px 12px; }
+  body.density-compact .prod{ padding:8px 10px; }
+  body.density-compact .prod .nm{ font-size:13.5px; }
+  body.density-compact .prod .ctl{ margin-top:6px; }
+  body.density-compact .step button{ width:34px; height:34px; font-size:17px; }
+  body.density-compact .step input{ width:44px; padding:6px 2px; }
+  body.density-compact .stack{ gap:7px; }
+  body.density-compact .card{ padding:11px; }
+  body.density-compact .row{ padding:6px 0; font-size:13px; }
+  body.density-compact .kpi{ padding:8px; }
+  body.density-compact .kpi .v{ font-size:16px; }
+  body.density-compact .inp{ padding:8px 10px; font-size:14px; }
+  body.density-compact h2{ font-size:16px; margin:2px 0 10px; }
 </style>
 </head>
 <body>
@@ -158,6 +175,7 @@
       <div class="row"><span>Sync ล่าสุด</span><span id="h-sync">-</span></div>
       <div class="row"><span>บิลรอส่ง (ออฟไลน์)</span><span id="h-queue">0</span></div>
       <div id="h-queue-list"></div>
+      <div class="row"><span>มุมมอง</span><button class="btn btn-sm" id="density-btn" onclick="toggleDensity()">ปกติ</button></div>
       <button class="btn btn-primary btn-block" id="sync-btn" style="margin-top:10px" onclick="syncNow()">🔄 Sync ข้อมูล</button>
     </div>
     <div class="card"><h3>ขายดีวันนี้</h3><div id="h-top"><div class="empty">-</div></div></div>
@@ -284,6 +302,19 @@ function getGPS(){
   });
 }
 function updateNet(){ const n = $('net'); if (!n) return; n.textContent = navigator.onLine ? 'ออนไลน์' : 'ออฟไลน์'; n.classList.toggle('off', !navigator.onLine); }
+
+/* ── มุมมอง ปกติ / กระชับ (มีเหมือนกันทุกแอปตามที่ผู้ใช้กำหนดเป็นมาตรฐาน) ── */
+function applyDensity(mode){
+  const compact = mode === 'compact';
+  document.body.classList.toggle('density-compact', compact);
+  const b = $('density-btn'); if (b) b.textContent = compact ? 'กระชับ' : 'ปกติ';
+}
+function toggleDensity(){
+  const next = document.body.classList.contains('density-compact') ? 'normal' : 'compact';
+  lsSet('density', next); applyDensity(next);
+  toast('มุมมอง' + (next === 'compact' ? 'กระชับ' : 'ปกติ'), 'ok');
+}
+applyDensity(lsGet('density', 'normal'));
 addEventListener('online', () => { updateNet(); cartChanged(); });
 addEventListener('offline', () => { updateNet(); cartChanged(); });
 

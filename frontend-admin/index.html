@@ -9,16 +9,22 @@
   /* ===== TOPSHOP theme — น้ำเงิน/เขียวพาสเทลเป็นหลัก ตัดด้วยแดง/ดำพาสเทล
      โครง sidebar (group/subgroup/action, ยืดหด, ปักหมุด, แผงลอย) คัดลอกจาก Hippo Village ===== */
   :root{
-    --ground:#F2F7F5; --surface:#FFFFFF; --surface-2:#E8F1EE;
-    --ink:#161C1F; --ink-soft:#57696A; --ink-faint:#8FA09E; --border:#D7E4E1;
-    --blue:#3E6BB0; --blue-soft:#DCE9FB; --blue-pale:#EEF4FD;
-    --green:#3E8F68; --green-soft:#DCF1E6;
-    --red:#B5544C; --red-soft:#FBE2DF;
-    --grey-soft:#E8ECEA;
-    /* ยืดหด sidebar/กลุ่มเมนู — จงใจให้ช้า "อ้อยอิ่ง" มากๆ ตามที่ขอ (รอบ 2) ไม่ใช่ transition ปกติทั่วไป */
-    --sb-w:264px; --sb-cw:76px; --sb-dur:3s; --sb-ease:cubic-bezier(.19,1,.22,1);
-    --sg-open-dur:2.6s; --sg-close-dur:3s; --sg-ease:cubic-bezier(.19,1,.22,1);
-    --fly-in-dur:1.4s; --fly-out-dur:1.2s;
+    /* พาเลตต์ light/minimal (ปรับโฉม 2026-09-23): พื้นขาวอมฟ้าจาง ตัวอักษรโทนกรมท่า ฟ้าเดียวเป็นสีหลัก
+       ของเดิมเป็นเทาอมเขียว (#F2F7F5/#D7E4E1) ซึ่งทำให้ทั้งหน้าดูขุ่น */
+    --ground:#F6F8FC; --surface:#FFFFFF; --surface-2:#F1F5FA;
+    --ink:#0F1B2D; --ink-soft:#5B6B84; --ink-faint:#94A2B8; --border:#E4E9F1;
+    --blue:#2B63D9; --blue-soft:#DEE9FD; --blue-pale:#F1F6FE;
+    --green:#1F8A5F; --green-soft:#DFF3E9;
+    --red:#C4443C; --red-soft:#FDE7E5;
+    --amber:#B4741A; --amber-soft:#FCEEDA;
+    --grey-soft:#EEF1F6;
+    --shadow-sm:0 1px 2px rgba(15,27,45,.05); --shadow-md:0 18px 40px -22px rgba(15,27,45,.35);
+    --r-card:14px; --r-ctl:10px;
+    /* ยืดหด sidebar/กลุ่มเมนู — เดิมจงใจทำช้า "อ้อยอิ่ง" 3 วินาที ผู้ใช้สั่งเปลี่ยนเป็น 0.25 วิ (2026-09-23)
+       ให้เข้ากับธีม light/minimal ที่ควรตอบสนองไว */
+    --sb-w:264px; --sb-cw:76px; --sb-dur:.25s; --sb-ease:cubic-bezier(.4,0,.2,1);
+    --sg-open-dur:.25s; --sg-close-dur:.2s; --sg-ease:cubic-bezier(.4,0,.2,1);
+    --fly-in-dur:.16s; --fly-out-dur:.12s;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--ground);color:var(--ink);font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;font-size:14px}
@@ -109,7 +115,9 @@
   .sb-group-hd:hover{ color:rgba(255,255,255,.8); }
   .sb-group-hd.is-open{ color:#fff; }
   .sb-group-num{ font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--green); opacity:.9; flex-shrink:0; }
-  .sb-group-icon{ font-size:14px; flex-shrink:0; }
+  .sb-group-icon{ font-size:14px; flex-shrink:0; display:flex; align-items:center; }
+  .ic{ width:16px; height:16px; flex-shrink:0; display:block; }
+  .si{ display:flex; align-items:center; }
   .sb-group-label{ flex:1; }
   .sb-group-chev{ font-size:10px; opacity:.5; transition:transform var(--sg-open-dur) var(--sg-ease); margin-left:auto; }
   body.sb-collapsed .sb-group-hd{ justify-content:center; padding:8px 0; }
@@ -220,6 +228,129 @@
   .toast{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:10px 18px; border-radius:9px; font-size:13px; display:none; z-index:80; box-shadow:0 8px 24px -8px rgba(0,0,0,.3); }
   .toast.err{ background:var(--red); }
 
+  /* ══════════ ปรับโฉม light / minimal (2026-09-23) ══════════
+     วางไว้ท้ายสุดเพื่อทับกฎเดิมทั้งหมด — ถอยกลับธีมเดิมได้ด้วยการลบบล็อกนี้ + คืนค่า :root
+     หลักการ: พื้นขาว, เส้นบางแทนเงา, ฟ้าเดียวเป็นสีเน้น, ตัวอักษรใหญ่ขึ้น, ช่องไฟกว้างขึ้น */
+  body{ font-size:15px; -webkit-font-smoothing:antialiased; }
+  button{ font-size:13.5px; }
+
+  /* แถบ UAT: ยังต้องเห็นชัด แต่ไม่ต้องแดงทั้งแถบจนกลบทุกอย่าง */
+  #env-banner{ background:var(--amber-soft); color:#7A4E10; border-bottom:1px solid #F0D9B0; font:700 11.5px 'Kanit',sans-serif; padding:4px 8px; letter-spacing:.02em; }
+
+  /* ── Sidebar: ขาวล้วน เมนูที่เลือกเป็นชิปฟ้าอ่อน ── */
+  .sidebar{ background:var(--surface); color:var(--ink); border-right:1px solid var(--border); box-shadow:none; }
+  .sb-header{ border-bottom:1px solid var(--border); }
+  .sb-logo-mark{ background:var(--blue-pale); color:var(--blue); border-radius:12px; }
+  .sb-logo-txt{ color:var(--ink); font-size:16px; letter-spacing:-.01em; }
+  .sb-ctrl-btn{ background:var(--surface-2); color:var(--ink-faint); }
+  .sb-ctrl-btn:hover{ background:var(--grey-soft); color:var(--ink-soft); }
+  .sb-ctrl-btn.is-pinned{ background:var(--blue-pale); color:var(--blue); }
+  .sb-company{ border-bottom:1px solid var(--border); }
+  .sb-co-mark{ background:var(--blue); border-radius:8px; }
+  .sb-co-name{ color:var(--ink-soft); }
+  .sb-nav::-webkit-scrollbar-thumb{ background:#D9E0EA; border-radius:3px; }
+
+  .sb-group-hd{ color:var(--ink-faint); text-transform:none; letter-spacing:.01em; font-size:11.5px; font-weight:700; padding:8px 14px; }
+  .sb-group-hd:hover{ color:var(--ink-soft); }
+  .sb-group-hd.is-open{ color:var(--ink); }
+  .sb-group-num{ color:var(--blue); opacity:.75; }
+  .sb-subgroup-hd{ color:var(--ink-soft); font-size:13.5px; border-radius:var(--r-ctl); }
+  .sb-subgroup-hd:hover{ background:var(--surface-2); color:var(--ink); }
+  .sb-subgroup-hd.is-open{ background:var(--blue-pale); color:var(--blue); font-weight:700; }
+  .sb-subgroup-num{ opacity:.8; }
+  .sb-action{ color:var(--ink-soft); font-size:13.5px; border-radius:var(--r-ctl); padding:8px 10px; }
+  .sb-action:hover{ background:var(--surface-2); color:var(--ink); }
+  .sb-action.active{ background:var(--blue-pale); color:var(--blue); font-weight:700; }
+  .sb-action-num{ color:var(--blue); opacity:.6; }
+  .sb-action.active .sb-action-num{ color:var(--blue); opacity:1; }
+  .sb-item-standalone{ color:var(--ink-soft); border-radius:var(--r-ctl); }
+  .sb-item-standalone:hover{ background:var(--surface-2); color:var(--ink); }
+  .sb-item-standalone.active{ background:var(--blue-pale); color:var(--blue); }
+  .sb-fly{ background:var(--surface); border:1px solid var(--border); border-radius:0 var(--r-card) var(--r-card) 0; box-shadow:var(--shadow-md); }
+  .sb-fly::before{ color:var(--ink-faint); border-bottom:1px solid var(--border); }
+  .soon-dot{ background:var(--amber); }
+
+  /* ── Topbar + พื้นที่เนื้อหา ── */
+  header.topbar{ height:60px; padding:0 20px 0 28px; position:sticky; top:0; z-index:20; gap:14px; }
+  .crumb{ font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .top-right{ flex-wrap:nowrap; white-space:nowrap; }
+  .top-right #who-name,.top-right #who-role,.top-right #who-tenant{ overflow:hidden; text-overflow:ellipsis; max-width:220px; }
+  /* จอแคบ: ซ่อนชื่อ/บทบาทผู้ใช้ (ดูได้จากรูปโปรไฟล์อยู่แล้ว) เหลือปุ่มที่ต้องกดจริง */
+  @media (max-width:1180px){ .top-right #who-name,.top-right #who-role,.top-right #who-tenant{ display:none; } }
+  .avatar{ width:30px; height:30px; background:var(--blue); font-size:12px; }
+  main.content{ padding:26px 32px 72px; max-width:1280px; margin:0 auto; }
+  .view-head{ margin-bottom:20px; }
+  .view-head h1{ font-size:20px; letter-spacing:-.01em; }
+  .view-head p{ font-size:13px; }
+
+  /* ── ตาราง: โปร่งขึ้น หัวตารางไม่ uppercase (ภาษาไทยไม่ได้ประโยชน์ แถมอังกฤษดูแข็ง) ── */
+  .table-wrap{ border-radius:var(--r-card); box-shadow:var(--shadow-sm); }
+  table{ font-size:14px; }
+  th{ background:var(--surface); color:var(--ink-soft); font-size:12px; font-weight:700; text-transform:none; letter-spacing:.01em; padding:12px 14px; border-bottom:1px solid var(--border); }
+  td{ padding:12px 14px; }
+  tr.clickable-row:hover td{ background:var(--blue-pale); }
+  .empty-row td{ padding:28px 12px; font-size:13.5px; }
+
+  /* ── ชิปสถานะ ── */
+  .pill{ font-size:11.5px; padding:4px 10px; font-weight:700; }
+  .pill.wait{ background:var(--amber-soft); color:var(--amber); }
+  .pill.off{ background:var(--grey-soft); color:var(--ink-faint); }
+
+  /* ── การ์ด / ฟอร์ม / ปุ่ม ── */
+  .panel,.form-card,.soon-panel{ border-radius:var(--r-card); box-shadow:var(--shadow-sm); }
+  .form-card{ padding:20px 22px; margin-top:16px; }
+  .form-card h3,.panel h3{ font-size:14.5px; }
+  .form-card .form-hint{ font-size:12.5px; }
+  /* KPI: เลิกใช้แถบสีบนหัวการ์ด (แดง/เขียวสลับกันโดยไม่มีความหมาย) เหลือการ์ดขาวเรียบ ๆ เน้นที่ตัวเลข */
+  .kpi,.kpi:nth-child(2),.kpi:nth-child(3),.kpi:nth-child(4){ border-top:1px solid var(--border); }
+  .kpi{ border-radius:var(--r-card); padding:16px 18px; box-shadow:var(--shadow-sm); }
+  .kpi .val{ font-size:24px; letter-spacing:-.02em; }
+  .kpi .lbl{ font-size:12px; }
+  .activity-row{ padding:10px 0; font-size:13.5px; }
+  .btn{ height:36px; padding:0 14px; border-radius:var(--r-ctl); font-size:13.5px; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:background .12s,border-color .12s,color .12s; }
+  .btn:hover{ background:var(--surface-2); }
+  .btn-primary:hover{ background:#2455BE; border-color:#2455BE; }
+  .btn-ghost:hover{ background:var(--surface-2); }
+  .btn-sm{ height:30px; padding:0 11px; font-size:12.5px; }
+  .field input,.field select,.field textarea,.inp{ border-radius:var(--r-ctl); padding:9px 12px; font-size:14px; }
+  .field input:focus,.field select:focus,.field textarea:focus,.plm-row input:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
+  .field label{ font-size:12px; }
+  .form-actions{ margin-top:18px; padding-top:16px; }
+  .modal-box{ border-radius:16px; box-shadow:var(--shadow-md); padding:22px 24px; }
+  .modal-bg{ background:rgba(15,27,45,.35); }
+  .toast{ border-radius:var(--r-ctl); box-shadow:var(--shadow-md); }
+  .login-card{ border-radius:18px; box-shadow:var(--shadow-md); }
+
+  /* ── มุมมองกระชับ (compact): บีบระยะ/ขนาดตัวอักษรให้เห็นข้อมูลต่อหน้าจอมากขึ้น ──
+     เปิด/ปิดด้วยปุ่ม "มุมมอง" บนแถบบน · จำค่าไว้ใน localStorage ต่อเครื่องต่อผู้ใช้
+     แก้เฉพาะระยะกับขนาด ไม่แตะสี/โครง — สลับไปมาได้ตลอดโดยหน้าไม่เพี้ยน */
+  body.density-compact{ font-size:13.5px; }
+  body.density-compact main.content{ padding:16px 20px 48px; }
+  body.density-compact .view-head{ margin-bottom:12px; }
+  body.density-compact .view-head h1{ font-size:17.5px; }
+  body.density-compact .view-head p{ font-size:12px; }
+  body.density-compact table{ font-size:13px; }
+  body.density-compact th{ padding:7px 10px; font-size:11.5px; }
+  body.density-compact td{ padding:7px 10px; }
+  body.density-compact .empty-row td{ padding:16px 10px; }
+  body.density-compact .btn{ height:31px; padding:0 11px; font-size:12.5px; }
+  body.density-compact .btn-sm{ height:26px; padding:0 9px; font-size:12px; }
+  body.density-compact .form-card{ padding:14px 16px; margin-top:10px; }
+  body.density-compact .form-grid{ gap:9px; }
+  body.density-compact .field input,body.density-compact .field select,body.density-compact .field textarea,body.density-compact .inp{ padding:6px 10px; font-size:13px; }
+  body.density-compact .kpi{ padding:11px 13px; }
+  body.density-compact .kpi .val{ font-size:19px; }
+  body.density-compact .kpi-row{ gap:9px; margin-bottom:12px; }
+  body.density-compact .activity-row{ padding:6px 0; font-size:12.5px; }
+  body.density-compact .panel{ padding:13px; }
+  body.density-compact .sb-action{ padding:5px 10px; font-size:13px; }
+  body.density-compact .sb-subgroup-hd{ padding:5px 12px 5px 18px; font-size:13px; }
+  body.density-compact .sb-group-hd{ padding:6px 14px; }
+  body.density-compact .modal-box{ padding:16px 18px; }
+  body.density-compact .plm-row{ margin-bottom:4px; }
+  body.density-compact .plm-row input{ padding:5px 8px; font-size:12.5px; }
+  body.density-compact header.topbar{ height:52px; }
+
   /* modal กรอก/แก้ชุดราคา */
   .modal-bg{ position:fixed; inset:0; background:rgba(22,28,31,.45); display:none; align-items:flex-start; justify-content:center; z-index:60; overflow-y:auto; padding:40px 16px; }
   .modal-box{ background:var(--surface); border-radius:12px; width:100%; max-width:720px; padding:20px 22px; box-shadow:0 20px 50px -12px rgba(0,0,0,.35); }
@@ -296,7 +427,7 @@
       </div>
       <nav class="sb-nav" id="sb-nav">
         <button class="sb-item-standalone active" data-view="dashboard" onclick="gotoView('dashboard')">
-          <span class="si">🏠</span><span class="si-lbl">ภาพรวม</span>
+          <span class="si"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.2 8 2.8l5.5 4.4"/><path d="M4.3 6.6V13h7.4V6.6"/><path d="M6.8 13V9.6h2.4V13"/></svg></span><span class="si-lbl">ภาพรวม</span>
         </button>
         <div id="nav-groups"></div>
       </nav>
@@ -308,6 +439,7 @@
         <div class="top-right">
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
           <button class="btn btn-sm" id="switch-company-btn" style="display:none" onclick="backToPicker()">↔ เปลี่ยนบริษัท</button>
+          <button class="btn btn-sm" id="density-btn" onclick="toggleDensity()" title="สลับความแน่นของหน้าจอ (ปกติ / กระชับ)">ปกติ</button>
           <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
           <div class="avatar" id="who-avatar">-</div>
@@ -1147,57 +1279,76 @@ function enterApp(){
   gotoView('dashboard');
 }
 
+/* ไอคอนเมนูเป็น inline SVG เส้นบาง (เดิมใช้ emoji ซึ่งหน้าตาต่างกันทุกเครื่อง/ทุก OS และดูไม่เข้าชุดกับธีม minimal)
+   ใช้ currentColor จึงเปลี่ยนสีตามสถานะเมนู (ปกติ/hover/active) ได้เอง */
+const ICONS = {
+  home:     '<path d="M2.5 7.2 8 2.8l5.5 4.4"/><path d="M4.3 6.6V13h7.4V6.6"/><path d="M6.8 13V9.6h2.4V13"/>',
+  building: '<rect x="2.8" y="2.6" width="6.4" height="10.6" rx="1"/><path d="M9.2 6.6h3a1 1 0 0 1 1 1v5.6"/><path d="M5 5.2h2M5 7.6h2M5 10h2"/>',
+  receipt:  '<path d="M4 2.6h8v10.8l-2-1.2-2 1.2-2-1.2-2 1.2z"/><path d="M6 5.8h4M6 8.4h4"/>',
+  users:    '<circle cx="6" cy="5.8" r="2.2"/><path d="M2.6 13c.4-2.2 1.8-3.4 3.4-3.4s3 1.2 3.4 3.4"/><path d="M10.6 4.1a2 2 0 0 1 0 3.9"/><path d="M11.5 9.8c1.1.5 1.8 1.6 1.9 3.2"/>',
+  store:    '<path d="M2.6 6.2 3.6 2.8h8.8l1 3.4"/><path d="M3.3 6.2v7h9.4v-7"/><path d="M6.4 13.2V9.4h3.2v3.8"/>',
+  box:      '<path d="M8 2.6 13.4 5.3v5.4L8 13.4 2.6 10.7V5.3z"/><path d="M2.6 5.3 8 8l5.4-2.7M8 8v5.4"/>',
+  truck:    '<path d="M1.8 4.2h7.2v6.4H1.8z"/><path d="M9 6.6h2.6l2.6 2.4v1.6H9z"/><circle cx="4.6" cy="11.8" r="1.2"/><circle cx="11.4" cy="11.8" r="1.2"/>',
+  tag:      '<path d="M7.4 2.6H13v5.6l-5.8 5.8a1 1 0 0 1-1.4 0L2 10.2a1 1 0 0 1 0-1.4z"/><circle cx="10.2" cy="5.4" r="1"/>',
+  coin:     '<circle cx="8" cy="8" r="5.4"/><path d="M9.9 6.1c-.4-.6-1-.9-1.9-.9-1 0-1.8.5-1.8 1.3 0 1.9 3.8.9 3.8 2.8 0 .9-.9 1.4-2 1.4-.9 0-1.6-.3-2-1"/><path d="M8 4.2v7.6"/>',
+  gear:     '<circle cx="8" cy="8" r="2.1"/><path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6"/>',
+  cart:     '<circle cx="6.4" cy="12.8" r="1.1"/><circle cx="11.6" cy="12.8" r="1.1"/><path d="M1.8 2.6h2.1l1.7 7.6h7l1.4-5.4H4.4"/>',
+  book:     '<path d="M3 3.4A1.4 1.4 0 0 1 4.4 2H13v9.6H4.4A1.4 1.4 0 0 0 3 13z"/><path d="M3 11.6V13h10"/><path d="M5.8 5h4.4M5.8 7.4h4.4"/>',
+  chart:    '<path d="M2.6 13.2V8.6M6.2 13.2V4.8M9.8 13.2v-3.2M13.4 13.2V6.8"/>'
+};
+const navIcon = name => '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
+
 /* ══════════════ เมนู — เลข group.subgroup.action ตามโครง Hippo Village ══════════════ */
 const NAV = {
   tenant: { groups: [
-    { n:'1', icon:'🏢', label:'ข้อมูลตัวแทน', subs:[
+    { n:'1', icon:'building', label:'ข้อมูลตัวแทน', subs:[
       { n:'1.1', label:'ข้อมูลบริษัท', items:[ {n:'1.1.1', label:'ข้อมูลบริษัท', view:'companyprofile', ready:true} ] },
       { n:'1.2', label:'บัญชีแอดมิน', items:[ {n:'1.2.1', label:'ผู้ใช้งานระบบ', view:'adminusers', ready:true} ] }
     ]},
-    { n:'2', icon:'🧾', label:'งานขาย', subs:[
+    { n:'2', icon:'receipt', label:'งานขาย', subs:[
       { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', ready:true} ] }
     ]},
-    { n:'3', icon:'👥', label:'บุคลากรและเขตขาย', subs:[
+    { n:'3', icon:'users', label:'บุคลากรและเขตขาย', subs:[
       { n:'3.1', label:'พนักงานขาย', items:[ {n:'3.1.1', label:'รายชื่อพนักงาน', view:'staff', ready:true} ] },
       { n:'3.2', label:'เขตการขาย', items:[ {n:'3.2.1', label:'ผังเขตการขาย', view:'v-zone', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
     ]},
-    { n:'4', icon:'🏪', label:'ลูกค้าและเอกสาร', subs:[
+    { n:'4', icon:'store', label:'ลูกค้าและเอกสาร', subs:[
       { n:'4.1', label:'ลูกค้า', items:[ {n:'4.1.1', label:'รายชื่อลูกค้า', view:'customers', ready:true} ] },
       { n:'4.2', label:'เลขที่เอกสาร', items:[ {n:'4.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', ready:true} ] }
     ]},
-    { n:'5', icon:'📦', label:'คลังสินค้า', subs:[
+    { n:'5', icon:'box', label:'คลังสินค้า', subs:[
       { n:'5.1', label:'เคลื่อนไหวสินค้า', items:[
         {n:'5.1.1', label:'รับสินค้าเข้าคลัง', view:'v-recv', ready:false, soon:'รับสินค้าเข้าคลัง', desc:'ใบรับสินค้าเข้าคลังแบบมีเลขเอกสารทางการ ผูกกับใบสั่งซื้อ'},
         {n:'5.1.2', label:'โอนย้ายคลัง', view:'v-transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
       ]},
       { n:'5.2', label:'เบิกจ่าย', items:[ {n:'5.2.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
     ]},
-    { n:'6', icon:'🚚', label:'การจัดส่งและรายงาน', subs:[
+    { n:'6', icon:'truck', label:'การจัดส่งและรายงาน', subs:[
       { n:'6.1', label:'การจัดส่ง', items:[ {n:'6.1.1', label:'สถานะการจัดส่ง', view:'v-ship', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
       { n:'6.2', label:'รายงาน', items:[ {n:'6.2.1', label:'รายงานการขาย', view:'v-report1', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
     ]}
   ]},
   owner: { groups: [
-    { n:'1', icon:'🏷️', label:'สินค้าและโปรโมชั่น', subs:[
+    { n:'1', icon:'tag', label:'สินค้าและโปรโมชั่น', subs:[
       { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', ready:true} ] },
       { n:'1.2', label:'โปรโมชั่น', items:[ {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', ready:true} ] }
     ]},
-    { n:'2', icon:'🧾', label:'งานขาย', subs:[
+    { n:'2', icon:'receipt', label:'งานขาย', subs:[
       { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', ready:true} ] }
     ]},
-    { n:'3', icon:'💰', label:'ราคาและส่วนลด', subs:[
+    { n:'3', icon:'coin', label:'ราคาและส่วนลด', subs:[
       { n:'3.1', label:'ชุดราคา', items:[ {n:'3.1.1', label:'ชุดราคาและส่วนลด', view:'pricelists', ready:true} ] }
     ]},
-    { n:'4', icon:'⚙️', label:'ข้อมูลกลาง', subs:[
+    { n:'4', icon:'gear', label:'ข้อมูลกลาง', subs:[
       { n:'4.1', label:'กลุ่มลูกค้า', items:[ {n:'4.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', ready:true} ] },
       { n:'4.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'4.2.1', label:'รายการช่องทาง', view:'distchannels', ready:true} ] },
       { n:'4.3', label:'ประเภทการชำระเงิน', items:[ {n:'4.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', ready:true} ] }
     ]},
-    { n:'5', icon:'🏢', label:'เครือข่ายตัวแทน', subs:[
+    { n:'5', icon:'building', label:'เครือข่ายตัวแทน', subs:[
       { n:'5.1', label:'ตัวแทนจำหน่าย', items:[ {n:'5.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
       { n:'5.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'5.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
     ]},
-    { n:'6', icon:'🛒', label:'งานซื้อ', subs:[
+    { n:'6', icon:'cart', label:'งานซื้อ', subs:[
       { n:'6.1', label:'ใบขอซื้อ', items:[ {n:'6.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', ready:true} ] },
       { n:'6.2', label:'ใบสั่งซื้อ', items:[ {n:'6.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', ready:true} ] },
       { n:'6.3', label:'ข้อมูลตั้งต้น', items:[
@@ -1205,16 +1356,16 @@ const NAV = {
         {n:'6.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', ready:true}
       ]}
     ]},
-    { n:'7', icon:'📦', label:'คลังสินค้ากลาง', subs:[
+    { n:'7', icon:'box', label:'คลังสินค้ากลาง', subs:[
       { n:'7.1', label:'รับของ', items:[ {n:'7.1.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', ready:true} ] },
       { n:'7.2', label:'ยอดคงเหลือ', items:[ {n:'7.2.1', label:'สต็อกคลังกลาง', view:'warehousestock', ready:true} ] }
     ]},
-    { n:'8', icon:'📒', label:'บัญชี', subs:[
+    { n:'8', icon:'book', label:'บัญชี', subs:[
       { n:'8.1', label:'เจ้าหนี้', items:[ {n:'8.1.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', ready:true} ] },
       { n:'8.2', label:'ลูกหนี้', items:[ {n:'8.2.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', ready:true} ] },
       { n:'8.3', label:'บัญชีทั่วไป', items:[ {n:'8.3.1', label:'สมุดรายวัน/งบทดลอง', view:'glbooks', ready:true} ] }
     ]},
-    { n:'9', icon:'📈', label:'รายงาน', subs:[
+    { n:'9', icon:'chart', label:'รายงาน', subs:[
       { n:'9.1', label:'ยอดขาย', items:[ {n:'9.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
     ]}
   ]}
@@ -1321,7 +1472,7 @@ function renderNav(){
     }).join('');
     return '<div class="sb-group">' +
       '<div class="sb-group-hd" onclick="toggleGroup(\''+gid+'\')">' +
-        '<span class="sb-group-num">'+g.n+'</span><span class="sb-group-icon">'+g.icon+'</span>' +
+        '<span class="sb-group-num">'+g.n+'</span><span class="sb-group-icon">'+navIcon(g.icon)+'</span>' +
         '<span class="sb-group-label">'+esc(g.label)+'</span><span class="sb-group-chev">▾</span>' +
       '</div>' +
       '<div class="sb-group-body sg-closed" id="'+gid+'">'+subsHtml+'</div>' +
@@ -3530,6 +3681,33 @@ async function openAccountsList(){
     acctsCache.map(a => '<tr><td class="mono-data">'+esc(a.code)+'</td><td>'+esc(a.name)+'</td><td>'+esc(a.acctType)+'</td></tr>').join('') +
     '</tbody></table></div><div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
 }
+
+/* ── มุมมอง ปกติ / กระชับ ──
+   จำค่าไว้ในเครื่อง (ไม่ผูกกับบัญชี) และใส่คลาสตั้งแต่ก่อนวาดหน้าแรก ไม่ให้หน้ากระพริบเปลี่ยนขนาด */
+const LS_DENSITY = 'topshop_density';
+function applyDensity(mode){
+  const compact = mode === 'compact';
+  document.body.classList.toggle('density-compact', compact);
+  const btn = document.getElementById('density-btn');
+  if (btn) {
+    // ไอคอนบอก "โหมดที่กำลังใช้อยู่": 3 เส้นห่าง = ปกติ, 4 เส้นชิด = กระชับ
+    btn.innerHTML = '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">' +
+      (compact ? '<path d="M3 4h10M3 6.7h10M3 9.3h10M3 12h10"/>' : '<path d="M3 4.5h10M3 8h10M3 11.5h10"/>') + '</svg>' +
+      (compact ? 'กระชับ' : 'ปกติ');
+    btn.title = 'มุมมองตอนนี้: ' + (compact ? 'กระชับ' : 'ปกติ') + ' — กดเพื่อสลับ';
+  }
+}
+function toggleDensity(){
+  const next = document.body.classList.contains('density-compact') ? 'normal' : 'compact';
+  try { localStorage.setItem(LS_DENSITY, next); } catch (e) {}
+  applyDensity(next);
+  toast('มุมมอง' + (next === 'compact' ? 'กระชับ' : 'ปกติ'));
+}
+(function initDensity(){
+  let saved = 'normal';
+  try { saved = localStorage.getItem(LS_DENSITY) || 'normal'; } catch (e) {}
+  applyDensity(saved);
+})();
 
 /* ── สภาพแวดล้อม ── */
 (function initEnv(){
