@@ -314,7 +314,7 @@ function toggleDensity(){
   lsSet('density', next); applyDensity(next);
   toast('มุมมอง' + (next === 'compact' ? 'กระชับ' : 'ปกติ'), 'ok');
 }
-applyDensity(lsGet('density', 'normal'));
+applyDensity(lsGet('density', 'compact'));   // ค่าเริ่มต้น = กระชับ ตามที่ผู้ใช้กำหนด
 addEventListener('online', () => { updateNet(); cartChanged(); });
 addEventListener('offline', () => { updateNet(); cartChanged(); });
 

@@ -293,6 +293,10 @@
 
   /* ── ชิปสถานะ ── */
   .pill{ font-size:11.5px; padding:4px 10px; font-weight:700; }
+  .field .unit,.kpi .sub,.soon-panel .tag,.fieldset legend{ font-size:11.5px; }
+  /* ตัวเลขเงินชิดขวาเสมอ (มาตรฐานงานบัญชี — อ่านหลักหน่วย/สิบ/ร้อยเทียบกันได้ทันที)
+     ใส่คลาสให้อัตโนมัติด้วย initMoneyAlign() ท้ายไฟล์ จึงครอบคลุมตารางที่เพิ่มใหม่ในอนาคตด้วย */
+  th.num,td.num{ text-align:right; }
   .pill.wait{ background:var(--amber-soft); color:var(--amber); }
   .pill.off{ background:var(--grey-soft); color:var(--ink-faint); }
 
@@ -312,6 +316,13 @@
   .btn-primary:hover{ background:#2455BE; border-color:#2455BE; }
   .btn-ghost:hover{ background:var(--surface-2); }
   .btn-sm{ height:30px; padding:0 11px; font-size:12.5px; }
+  /* กฎกลาง: ช่องกรอกทุกตัวในทุกหน้าหน้าตาเดียวกัน แม้จะไม่ได้ใส่คลาส (เดิมบางหน้าใช้ <select>/<input> เปล่า ๆ
+     เลยได้หน้าตา default ของเบราว์เซอร์ มุมเหลี่ยม ไม่มีกรอบ ดูหลุดจากหน้าอื่น) */
+  .view input:not([type=checkbox]):not([type=radio]):not([type=file]),.view select,.view textarea{
+    border:1px solid var(--border); border-radius:var(--r-ctl); padding:8px 11px; font-size:14px;
+    background:var(--surface); color:var(--ink); font-family:inherit; }
+  .view select{ padding-right:26px; }
+  .view input:focus,.view select:focus,.view textarea:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
   .field input,.field select,.field textarea,.inp{ border-radius:var(--r-ctl); padding:9px 12px; font-size:14px; }
   .field input:focus,.field select:focus,.field textarea:focus,.plm-row input:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
   .field label{ font-size:12px; }
@@ -330,7 +341,10 @@
   body.density-compact .view-head h1{ font-size:17.5px; }
   body.density-compact .view-head p{ font-size:12px; }
   body.density-compact table{ font-size:13px; }
-  body.density-compact th{ padding:7px 10px; font-size:11.5px; }
+  body.density-compact th{ padding:7px 10px; font-size:12px; }
+  /* พื้นตัวอักษรขั้นต่ำในโหมดกระชับ: ห้ามเล็กกว่า 11.5px จะอ่านยากเกินไป (ภาษาไทยมีสระบน-ล่าง) */
+  body.density-compact .unit,body.density-compact .kpi .sub,body.density-compact .sub,
+  body.density-compact .fieldset legend,body.density-compact .soon-panel .tag{ font-size:11.5px; }
   body.density-compact td{ padding:7px 10px; }
   body.density-compact .empty-row td{ padding:16px 10px; }
   body.density-compact .btn{ height:31px; padding:0 11px; font-size:12.5px; }
@@ -3682,6 +3696,34 @@ async function openAccountsList(){
     '</tbody></table></div><div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
 }
 
+/* ── ตัวเลขเงินชิดขวาอัตโนมัติ ──
+   ทุกช่องตารางที่ขึ้นต้นด้วย ฿ จะถูกใส่คลาส .num ให้เอง และหัวคอลัมน์ตรงกันก็ชิดขวาตาม
+   (ทำเป็น observer แทนการไล่แก้ทุก renderer — ตารางใหม่ที่เพิ่มทีหลังได้ผลเหมือนกันโดยไม่ต้องจำ) */
+(function initMoneyAlign(){
+  const isMoney = el => /^\s*[-]?฿/.test(el.textContent);
+  const tag = () => {
+    document.querySelectorAll('#app-screen table').forEach(t => {
+      const head = t.tHead && t.tHead.rows[0];
+      const cols = new Set();
+      t.querySelectorAll('tbody td').forEach(td => {
+        if (!isMoney(td)) return;
+        td.classList.add('num');                       // ตัวเซลล์เอง ชิดขวาได้เสมอ
+        // หัวคอลัมน์: เชื่อเฉพาะแถวที่ "จำนวนช่องเท่าหัวตารางเป๊ะ และไม่มีเซลล์ผสาน"
+        // ตารางชุดราคาใช้ rowspan ทำให้แถวถัดมามีช่องน้อยกว่า ถ้านับดื้อ ๆ หัวคอลัมน์จะเลื่อนไปผิดช่อง
+        const row = td.parentElement;
+        if (!head || row.cells.length !== head.cells.length) return;
+        if ([...row.cells].some(c => c.colSpan > 1 || c.rowSpan > 1)) return;
+        cols.add([...row.cells].indexOf(td));
+      });
+      if (head && ![...head.cells].some(c => c.colSpan > 1)) cols.forEach(i => { if (head.cells[i]) head.cells[i].classList.add('num'); });
+    });
+  };
+  let timer;
+  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(tag, 30); })
+    .observe(document.body, { childList: true, subtree: true });
+  tag();
+})();
+
 /* ── มุมมอง ปกติ / กระชับ ──
    จำค่าไว้ในเครื่อง (ไม่ผูกกับบัญชี) และใส่คลาสตั้งแต่ก่อนวาดหน้าแรก ไม่ให้หน้ากระพริบเปลี่ยนขนาด */
 const LS_DENSITY = 'topshop_density';
@@ -3704,8 +3746,9 @@ function toggleDensity(){
   toast('มุมมอง' + (next === 'compact' ? 'กระชับ' : 'ปกติ'));
 }
 (function initDensity(){
-  let saved = 'normal';
-  try { saved = localStorage.getItem(LS_DENSITY) || 'normal'; } catch (e) {}
+  let saved = 'compact';
+  // ค่าเริ่มต้นของผู้ใช้รายนี้คือ 'กระชับ' เสมอ (เครื่องใหม่/ล้างแคชก็ยังได้กระชับ) เปลี่ยนเองได้ที่ปุ่มบนแถบบน
+  try { saved = localStorage.getItem(LS_DENSITY) || 'compact'; } catch (e) { saved = 'compact'; }
   applyDensity(saved);
 })();
 
