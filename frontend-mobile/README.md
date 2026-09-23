@@ -2,8 +2,11 @@
 
 แอปพนักงานขาย (หน่วยรถ Cash Van / พนักงานขายตรง) เปิดใน LINE ผ่าน LIFF — static site ไฟล์เดียว
 (`index.html` + `config.js`, ไม่มี build, ไม่มี framework) ต่อยอดจาก `_legacy-standalone-liff-app/`
-เรียก backend (`../backend/`) ผ่าน `doPost` กลุ่ม **Mobile**: `{ action, lineUserId, payload }`
+เรียก backend (`../backend/`) ผ่าน `doPost` กลุ่ม **Mobile**: `{ action, lineUserId, idToken, payload }`
 (action ทั้งหมดอยู่ใน `ACTION_MAP` ของ `backend/05_router.gs`)
+`idToken` = `liff.getIDToken()` — backend ยืนยันกับ LINE แล้วใช้ `sub` เป็นตัวตนจริง ไม่ได้เชื่อ `lineUserId`
+ที่เราส่งไป (ดู `backend/27_line_auth.gs`) · token หมดอายุ (ปกติ ~1 ชม.) backend ตอบ `needLogin`
+แล้ว `api()` ขอ token ใหม่จาก LIFF ให้เองแล้วลองซ้ำหนึ่งครั้ง
 
 ## Deploy
 
@@ -17,7 +20,8 @@ GitHub Pages ด้วย workflow เดียวกับ Admin App (`.github/
 
 1. LINE Developers Console → channel แบบ **LINE Login** → แท็บ LIFF → Add
    - Endpoint URL: `https://<pages>/mobile-uat/` (ตัว UAT) / `https://<pages>/mobile/` (ตัว production) — สร้างแยก 2 ตัว
-   - Size: Full · Scope: `profile` (+ `openid`)
+   - Size: Full · Scope: **ต้องติ๊ก `openid` ด้วย** (นอกจาก `profile`) ไม่งั้น `liff.getIDToken()` คืนค่าว่าง
+     และแอปจะพาผู้ใช้ไปล็อกอินใหม่วนไป
 2. เอา LIFF ID ที่ได้ใส่ `LIFF_IDS.uat` / `LIFF_IDS.prod` ใน `config.js` แล้ว push
 3. ยังว่าง = production เปิดแล้วขึ้นข้อความ "ยังไม่ได้ตั้งค่า LIFF ID" (ไม่พัง ไม่ไปแตะข้อมูล)
 
@@ -26,6 +30,10 @@ GitHub Pages ด้วย workflow เดียวกับ Admin App (`.github/
 `http://localhost:5502/?devLineUserId=U...` (preview config `frontend-mobile` ใน `.claude/launch.json`)
 หรือ `.../mobile-uat/?devLineUserId=U...` — ใช้ LINE user id นั้นเรียก backend UAT ตรงๆ
 production ไม่มีทางเข้านี้ (โค้ดเช็ค `ENV === 'uat'`)
+
+โหมดนี้ไม่มี ID token → backend ต้องยอมรับคำขอที่ยังไม่ยืนยัน ซึ่ง **UAT เปิดไว้เป็นค่าเริ่มต้น**
+(`ENV_NAME='uat'`) · ถ้าอยากทดสอบแบบเข้มเหมือน production ให้ตั้ง Script Property
+`ALLOW_UNVERIFIED_LINE_LOGIN='FALSE'` แล้วทดสอบผ่านแอป LINE จริงเท่านั้น
 
 ## หน้าจอ
 
@@ -51,8 +59,9 @@ production ไม่มีทางเข้านี้ (โค้ดเช็�
 ## ยังไม่ได้ทำ / ข้อควรรู้
 
 - LIFF ID ทั้งสอง env (ข้างบน)
-- **backend เชื่อ `lineUserId` ที่ client ส่งมาโดยไม่ตรวจ** — ใครรู้ user id ของพนักงานก็ยิง action แทนได้
-  ก่อนใช้จริงควรให้แอปส่ง `liff.getIDToken()` แล้ว backend verify กับ LINE (`/oauth2/v2.1/verify`) ก่อนเชื่อ
+- ~~backend เชื่อ `lineUserId` ที่ client ส่งมาโดยไม่ตรวจ~~ **แก้แล้ว 2026-09-24** — แอปส่ง `idToken` ทุกคำขอ
+  และ backend ยืนยันกับ LINE ก่อนเสมอ (`backend/27_line_auth.gs`) · สิ่งที่ยังต้องทำคือตั้ง Script Property
+  `LINE_LOGIN_CHANNEL_ID` (ถ้าต่างจาก `LINE_CHANNEL_ID`) และติ๊ก scope `openid` ใน LIFF app
 - `recordSale` ไม่มี idempotency key — ถ้าจะให้คิวออฟไลน์ส่งซ้ำได้ปลอดภัย ควรเพิ่ม `clientRef` ที่ backend กันบิลซ้ำ
 - ของแถม (ของแถมตามชุดราคา) — พักไว้ตามลำดับความสำคัญของผู้ใช้; เพดานแพ็คต่อร้าน (ไม่เกิน 4 แพ็ค) ยังไม่ทำ
 

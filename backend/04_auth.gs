@@ -5,7 +5,10 @@
  *
  * doPost(e) เป็นทางเข้าเดียวของทุก action แยกเป็น 3 กลุ่มตามการยืนยันตัวตน:
  *  1) Public   — ยังไม่มีตัวตน (lineLoginUrl, lineExchangeCode, registerUser, checkUser, adminLogin)
- *  2) Mobile   — ต้องมี lineUserId ที่อนุมัติแล้ว (ดู ACTION_MAP + _handleMobileActionCore ใน 05_router.gs)
+ *  2) Mobile   — ต้องมีตัวตน LINE ที่ยืนยันแล้วและได้รับอนุมัติ (ดู ACTION_MAP + _handleMobileActionCore ใน 05_router.gs)
+ *
+ * ตัวตนของฝั่ง Mobile มาจาก `idToken` ที่ LIFF ออกให้ ไม่ใช่ `lineUserId` ที่หน้าเว็บพิมพ์มาเอง —
+ * ทุกทางเข้าที่ผูกกับตัวตน LINE ต้องผ่าน resolveLineIdentity() ใน 27_line_auth.gs เสมอ
  *  3) Admin    — ต้องมี token ที่ valid (ดู ADMIN_ACTION_MAP + _handleAdminActionCore ใน 05_router.gs)
  */
 
@@ -86,8 +89,11 @@ function checkUser(lineUid) {
   return { exists: false };
 }
 
-// userData: { lineUid, name, schema(=tenantId) }
+// userData: { lineUid, name, schema(=tenantId) } — lineUid ถูกแทนที่ด้วยตัวตนที่ยืนยันแล้วใน doPost
 function registerUser(userData) {
+  if (!userData || !userData.lineUid) return { success: false, message: 'ไม่พบตัวตนผู้ใช้' };
+  var existing = checkUser(userData.lineUid);   // กดสมัครซ้ำ/เน็ตกระตุก แล้วได้แถวซ้ำกันในชีต
+  if (existing.exists) return { success: true, already: true, message: 'บัญชีนี้ลงทะเบียนไว้แล้ว (สถานะ: ' + (existing.status || '-') + ')' };
   centralAppend('liff_users', {
     line_user_id: userData.lineUid,
     display_name: userData.name,
@@ -177,14 +183,25 @@ function doPost(e) {
   // ── 1) Public: ยังไม่มีตัวตน ──
   if (action === 'lineLoginUrl')    return _jsonOutput({ success: true, url: buildLoginUrl(payload.redirectUrl || getConfig().ENDPOINT_URL) });
   if (action === 'lineExchangeCode') return _jsonOutput(_lineExchangeCode(payload));
-  if (action === 'checkUser')       return _jsonOutput(checkUser(payload.lineUid));
-  if (action === 'registerUser')    return _jsonOutput(registerUser(payload));
+  // checkUser/registerUser ผูกกับตัวตน LINE → ยึด lineUid ที่ยืนยันแล้วเท่านั้น (กันสมัครสวมรอยคนอื่น)
+  if (action === 'checkUser' || action === 'registerUser') {
+    var lineId = resolveLineIdentity(body);
+    if (!lineId.ok) return _jsonOutput({ success: false, message: lineId.message, authError: !!lineId.authError, needLogin: !!lineId.needLogin });
+    payload.lineUid = lineId.lineUserId;
+    if (action === 'checkUser') return _jsonOutput(checkUser(payload.lineUid));
+    if (lineId.verified && lineId.name && !payload.name) payload.name = lineId.name;
+    return _jsonOutput(registerUser(payload));
+  }
   if (action === 'listActiveTenants') return _jsonOutput(listActiveTenants());
   if (action === 'adminLogin')      return _jsonOutput(adminLogin(payload));
   if (action === 'adminLogout')     return _jsonOutput(adminLogout(body.token));
 
-  // ── 2) Mobile: ต้องมี lineUserId ที่อนุมัติแล้ว ──
-  if (ACTION_MAP[action]) return _jsonOutput(_handleMobileActionCore(body.lineUserId, action, payload));
+  // ── 2) Mobile: ต้องเป็นตัวตน LINE ที่ยืนยันแล้ว และได้รับอนุมัติ ──
+  if (ACTION_MAP[action]) {
+    var mobileId = resolveLineIdentity(body);
+    if (!mobileId.ok) return _jsonOutput({ success: false, message: mobileId.message, authError: true, needLogin: !!mobileId.needLogin });
+    return _jsonOutput(_handleMobileActionCore(mobileId.lineUserId, action, payload));
+  }
 
   // ── 3) Admin: ต้องมี token ที่ valid ──
   if (ADMIN_ACTION_MAP[action]) {

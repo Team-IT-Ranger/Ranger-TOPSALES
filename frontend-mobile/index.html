@@ -8,7 +8,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <!--
   แอปมือถือพนักงานขาย (LINE LIFF) — ต่อยอดจาก _legacy-standalone-liff-app/ ให้เข้ากับ backend ใหม่
-  - เรียก backend ผ่าน doPost กลุ่ม Mobile: { action, lineUserId, payload } (ACTION_MAP ใน backend/05_router.gs)
+  - เรียก backend ผ่าน doPost กลุ่ม Mobile: { action, lineUserId, idToken, payload } (ACTION_MAP ใน backend/05_router.gs)
+    idToken = LINE ID token จาก liff.getIDToken() — backend ยึดตัวตนจากอันนี้ ไม่ใช่ lineUserId ที่เราส่งไป
+    (ดู 27_line_auth.gs) · หมดอายุเมื่อไหร่ backend ตอบ needLogin แล้วเราขอ token ใหม่ให้เองใน api()
   - ราคาคิดฝั่งเซิร์ฟเวอร์เสมอ (quoteSale ก่อนกดขาย / recordSale ตอนบันทึก) — แอปไม่เชื่อราคาตัวเอง
   - ไม่มีสัญญาณ: บิลเข้าคิวใน localStorage แล้วส่งตอน Sync (บิลที่ส่งไม่ผ่านยังอยู่ในคิว ไม่หายเงียบ)
 -->
@@ -308,18 +310,38 @@ function show(id){ ['scr-loading','scr-register','scr-pending','scr-app'].forEac
 function setLoad(txt, spin = true, extraHtml = ''){ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
 
 let ME = { lineUserId: '', name: '', pictureUrl: '', role: '', tenantId: '' };
+let ID_TOKEN = '';           // LINE ID token — ไม่เก็บลง localStorage (อายุสั้นและเป็นข้อมูลยืนยันตัวตน)
+let IN_LIFF = false;         // เปิดผ่าน LIFF จริง (ไม่ใช่โหมดทดสอบ ?devLineUserId=)
 let DATA = { products: [], customers: [] };
 
-// เรียก backend — กลุ่ม Mobile ต้องแนบ lineUserId เสมอ · text/plain เลี่ยง CORS preflight (ดู backend/README.md)
+// เรียก backend — แนบ idToken ของ LINE ทุกครั้ง (backend ยืนยันกับ LINE แล้วใช้ sub เป็นตัวตนจริง)
+// text/plain เลี่ยง CORS preflight (ดู backend/README.md)
 // เน็ตหลุด/หมดเวลา = throw (ผู้เรียกตัดสินใจเองว่าจะเข้าคิวหรือแจ้งผู้ใช้) · backend ตอบ error = { success:false, message }
-async function api(action, payload, timeoutMs = 45000){
+async function api(action, payload, timeoutMs = 45000, retriedAuth = false){
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeoutMs);
+  let out;
   try {
     const res = await fetch(CFG.BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, lineUserId: ME.lineUserId, payload: payload || {} }), signal: ctl.signal });
+      body: JSON.stringify({ action, lineUserId: ME.lineUserId, idToken: ID_TOKEN, payload: payload || {} }), signal: ctl.signal });
     const txt = await res.text();
-    try { return JSON.parse(txt); } catch (e) { throw new Error('เซิร์ฟเวอร์ตอบผิดรูปแบบชั่วคราว'); }   // Apps Script บางทีตอบหน้า HTML
+    try { out = JSON.parse(txt); } catch (e) { throw new Error('เซิร์ฟเวอร์ตอบผิดรูปแบบชั่วคราว'); }   // Apps Script บางทีตอบหน้า HTML
   } finally { clearTimeout(t); }
+  // ID token หมดอายุระหว่างใช้งาน (ปกติ ~1 ชม.) → ขอใหม่แล้วลองซ้ำครั้งเดียว
+  if (out && out.needLogin && !retriedAuth && await refreshIdToken()) return api(action, payload, timeoutMs, true);
+  return out;
+}
+
+// ขอ ID token ใหม่จาก LIFF — ได้ token ใหม่ = true · ต้องล็อกอิน LINE ใหม่ = พาไปหน้าล็อกอินแล้วคืน false
+async function refreshIdToken(){
+  if (!IN_LIFF || !window.liff) return false;
+  try {
+    const fresh = liff.getIDToken();
+    if (fresh && fresh !== ID_TOKEN) { ID_TOKEN = fresh; return true; }
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return false; }
+    liff.logout();                                   // token หมดอายุจริง — ให้ LINE ออกใบใหม่
+    liff.login({ redirectUri: location.href });
+  } catch (e) { /* อยู่นอก LIFF หรือ SDK มีปัญหา — ปล่อยให้ผู้เรียกแจ้งผู้ใช้เอง */ }
+  return false;
 }
 function getGPS(){
   return new Promise(r => {
@@ -364,13 +386,16 @@ async function boot(){
   try {
     // โหมดทดสอบ (UAT เท่านั้น): เปิดในเบราว์เซอร์ธรรมดาด้วย ?devLineUserId=... แทน LINE — production ไม่มีทางเข้านี้
     const dev = new URLSearchParams(location.search).get('devLineUserId');
-    if (ENV === 'uat' && dev) { ME.lineUserId = dev; ME.name = 'ทดสอบ …' + dev.slice(-6); }
+    if (ENV === 'uat' && dev) { ME.lineUserId = dev; ME.name = 'ทดสอบ …' + dev.slice(-6); }   // backend ต้องตั้ง ALLOW_UNVERIFIED_LINE_LOGIN='TRUE' ถึงจะเข้าได้
     else {
       if (!CFG.LIFF_ID) return setLoad('ยังไม่ได้ตั้งค่า LIFF ID ของสภาพแวดล้อม ' + String(ENV).toUpperCase() + ' (frontend-mobile/config.js)', false);
       setLoad('เชื่อมต่อ LINE...');
       await loadLiffSdk();
       await liff.init({ liffId: CFG.LIFF_ID });
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+      IN_LIFF = true;
+      ID_TOKEN = liff.getIDToken() || '';
+      if (!ID_TOKEN) { liff.logout(); liff.login({ redirectUri: location.href }); return; }   // ล็อกอินค้างจากรุ่นก่อนที่ยังไม่มี openid
       const p = await liff.getProfile();
       ME.lineUserId = p.userId; ME.name = p.displayName; ME.pictureUrl = p.pictureUrl || '';
     }

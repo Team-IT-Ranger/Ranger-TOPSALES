@@ -83,6 +83,23 @@ it fills the gaps around them.
 - ยังไม่ได้ทำ: แก้ไข/ยกเลิกใบรับของ (GR) หลังลงบัญชีแล้ว, ตัดต้นทุนขาย (COGS 5100) ตอนขายออกจากคลังกลาง,
   งบกำไรขาดทุน/งบดุล (มีแต่งบทดลอง), ปิดงวดบัญชี, ภาษีหัก ณ ที่จ่าย, multi-currency.
 
+## ตัวตนของแอปมือถือ (LINE ID token, added 2026-09-24)
+
+- แอปมือถือแนบ `idToken` (`liff.getIDToken()`) ไปกับ **ทุก** คำขอ · backend ยืนยันกับ LINE
+  (`https://api.line.me/oauth2/v2.1/verify`) แล้วใช้ `sub` เป็นตัวตนจริง — `lineUserId` ที่ client ส่งมา
+  เป็นแค่ข้อมูลประกอบ ถ้าไม่ตรงกับ token จะถูกปฏิเสธ (`resolveLineIdentity` ใน `backend/27_line_auth.gs`)
+- ครอบคลุมทั้งกลุ่ม Mobile (`ACTION_MAP`) และ `checkUser`/`registerUser` — สมัครแทนคนอื่นไม่ได้แล้ว
+  และ `registerUser` กันแถวซ้ำด้วย (กดสมัครซ้ำ/เน็ตกระตุกเคยได้ 2 แถว)
+- ผลการยืนยันถูกแคชตามอายุ token (สูงสุด 30 นาที) ด้วย CacheService — ไม่ได้ยิง LINE ทุกคำขอ
+- **ความเข้มขึ้นกับ env**: `ALLOW_UNVERIFIED_LINE_LOGIN` ไม่ได้ตั้ง = ยอมรับคำขอที่ไม่มี token เฉพาะเมื่อ
+  `ENV_NAME='uat'` (เพื่อให้โหมดทดสอบ `?devLineUserId=` ยังใช้ได้) · production (ไม่ได้ตั้ง `ENV_NAME`) เข้มเสมอ ·
+  ตั้ง `'FALSE'` เพื่อบังคับเข้มบน UAT ด้วย
+- ยังไม่ได้ตั้ง `LINE_LOGIN_CHANNEL_ID`/`LINE_CHANNEL_ID` = ยืนยันไม่ได้ → ระบบยอมรับแบบเดิมและเขียน log เตือน
+  (ไม่ล้มทั้งระบบเพราะลืมตั้งค่า) — ตั้งให้ครบแล้วจะเข้มเองอัตโนมัติ
+- LIFF app **ต้องติ๊ก scope `openid`** ไม่งั้น `getIDToken()` คืนค่าว่าง แอปจะพาไปล็อกอินใหม่วนไป
+- token หมดอายุ (~1 ชม.) → backend ตอบ `needLogin` · `api()` ในแอปขอ token ใหม่จาก LIFF แล้วลองซ้ำครั้งเดียว
+  (ถ้าขอใหม่ไม่ได้ก็ `liff.logout()` + `liff.login()` — ไม่วนยิง backend ซ้ำ)
+
 ## ที่เก็บไฟล์ฐานข้อมูลบน Drive (added 2026-09-23)
 
 - โครงสร้าง: `<root>/db_<env>/TNKI/` = Central Sheet + ฐานข้อมูลบริษัทเจ้าของสินค้า (tenant `HOUSE`) ·
@@ -207,6 +224,8 @@ it fills the gaps around them.
   Sheets แปลงสตริง `'TRUE'` เป็น boolean `true`.
 - `node .dev/test-roles.js` — unit tests ของระบบบทบาท/สิทธิ์ (`26_roles.gs`): สร้าง/แก้/ลบบทบาท, กติกากันยกระดับ
   สิทธิ์เกินของตัวเอง, ขอบเขตบทบาทของตัวแทน, `resolveAssignableRole`.
+- `node .dev/test-line-auth.js` — unit tests ของการยืนยัน LINE ID token (`27_line_auth.gs`) ด้วย UrlFetchApp จำลอง:
+  token ของแอปอื่น/หมดอายุ/ปลอมต้องไม่ผ่าน, สวมรอย lineUserId คนอื่นไม่ได้, แคชไม่ยิงซ้ำ, ความเข้มตาม env.
 - `UAT_URL='<uat exec url>' node .dev/uat-sale-e2e.js` — full end-to-end test against the live UAT
   backend (creates a throwaway test tenant/customer/staff, runs pricing + sales-order scenarios
   through both the mobile and admin action surfaces). Refuses to run against the production URL as a
@@ -259,7 +278,8 @@ On UAT only (user testing on `/admin-uat/`):
 
 Pending / not started:
 - LIFF IDs for both environments (LINE Developers Console → `frontend-mobile/config.js`).
-- Mobile auth hardening: backend trusts the client-sent `lineUserId`; should verify a LIFF ID token.
+- ทดสอบ LIFF จริงบนมือถือหลังเปิดใช้การยืนยัน ID token (ดูหัวข้อ "ตัวตนของแอปมือถือ") — ต้องติ๊ก scope
+  `openid` ใน LIFF app ก่อน ไม่งั้น `liff.getIDToken()` ว่างและแอปจะวนล็อกอิน
 - บัญชีของตัวแทนจำหน่าย (สมุดแยกของตัวแทนเอง) — ตอนนี้ตัวแทนซื้อของและเก็บสต็อกได้ แต่ไม่มีเจ้าหนี้/สมุดบัญชี
 - โอนย้าย/เบิกจ่ายสต็อกของตัวแทนแบบมีเอกสาร (เมนู 6.3/6.4 ฝั่งตัวแทนยังเป็น "เร็วๆ นี้")
 - Minor open items noted in code comments: 10505's base unit was imported as ชิ้น but is probably
