@@ -810,6 +810,160 @@
         </section>
 
         <!-- ═══ SOON ═══ -->
+        <!-- ═══ งานซื้อ: ผู้ขาย ═══ -->
+        <section class="view" id="view-vendors">
+          <div class="view-head">
+            <div><h1>ผู้ขาย / ผู้จัดจำหน่าย</h1><p>ทะเบียนผู้ขายสำหรับใบสั่งซื้อและระบบเจ้าหนี้ — เครดิตเทอมใช้คำนวณวันครบกำหนดชำระอัตโนมัติ</p></div>
+            <button class="btn btn-primary" onclick="openVendorForm()">+ เพิ่มผู้ขาย</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>รหัส</th><th>ชื่อผู้ขาย</th><th>ผู้ติดต่อ</th><th>โทร</th><th>เครดิต (วัน)</th><th>สถานะ</th></tr></thead>
+            <tbody id="vendors-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <!-- ═══ งานซื้อ: สายอนุมัติ ═══ -->
+        <section class="view" id="view-approvalflows">
+          <div class="view-head">
+            <div><h1>สายอนุมัติใบขอซื้อ</h1><p>ออกแบบขั้นตอน เงื่อนไขวงเงิน และจำนวนผู้อนุมัติที่ต้องผ่านในแต่ละขั้น — ใบขอซื้อจะเลือกสายให้เองตามวงเงินรวม</p></div>
+            <button class="btn btn-primary" onclick="openFlowForm()">+ เพิ่มสายอนุมัติ</button>
+          </div>
+          <div id="flows-list"><p class="form-hint">กำลังโหลด...</p></div>
+        </section>
+
+        <!-- ═══ งานซื้อ: ใบขอซื้อ ═══ -->
+        <section class="view" id="view-purchasereqs">
+          <div class="view-head">
+            <div><h1>ใบขอซื้อ (PR)</h1><p>ขอซื้อ → ส่งอนุมัติตามสายที่ตั้งไว้ → อนุมัติครบแล้วจึงออกใบสั่งซื้อได้</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn" id="pr-filter-mine" onclick="togglePrWaiting()">เฉพาะที่รอฉันอนุมัติ</button>
+              <button class="btn btn-primary" onclick="openPrForm(null)">+ เปิดใบขอซื้อ</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>ผู้ขอ</th><th>แผนก</th><th>ต้องการใช้</th><th>รายการ</th><th>ยอด (ไม่รวม VAT)</th><th>สถานะ</th></tr></thead>
+            <tbody id="prs-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <section class="view" id="view-prdetail">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="gotoView('purchasereqs')">← กลับ</button>
+              <div><h1 id="prd-title">ใบขอซื้อ</h1><p id="prd-meta"></p></div>
+            </div>
+            <div id="prd-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
+          <div id="prd-warn"></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>#</th><th>สินค้า / รายละเอียด</th><th>จำนวน</th><th>หน่วย</th><th>ราคา/หน่วย</th><th>จำนวนเงิน</th><th>ออก PO แล้ว</th></tr></thead>
+            <tbody id="prd-body"></tbody>
+          </table></div>
+          <div class="form-card"><h3>ความคืบหน้าการอนุมัติ</h3><div id="prd-steps"></div></div>
+        </section>
+
+        <!-- ═══ งานซื้อ: ใบสั่งซื้อ ═══ -->
+        <section class="view" id="view-purchaseorders">
+          <div class="view-head">
+            <div><h1>ใบสั่งซื้อ (PO)</h1><p>เปิดตรงก็ได้ หรือดึงรายการจากใบขอซื้อที่อนุมัติแล้วก็ได้ — ส่งให้ผู้ขายแล้วจึงรับของเข้าคลังได้</p></div>
+            <button class="btn btn-primary" onclick="openPoForm(null)">+ เปิดใบสั่งซื้อ</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>ผู้ขาย</th><th>วันที่สั่ง</th><th>กำหนดรับ</th><th>ยอดรวม</th><th>รับแล้ว</th><th>สถานะ</th></tr></thead>
+            <tbody id="pos-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <section class="view" id="view-podetail">
+          <div class="view-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button class="btn btn-sm" onclick="gotoView('purchaseorders')">← กลับ</button>
+              <div><h1 id="pod-title">ใบสั่งซื้อ</h1><p id="pod-meta"></p></div>
+            </div>
+            <div id="pod-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>#</th><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>ราคา/หน่วย</th><th>จำนวนเงิน</th><th>รับแล้ว</th><th>ค้างรับ</th></tr></thead>
+            <tbody id="pod-body"></tbody>
+          </table></div>
+          <div class="form-card"><h3>ใบรับของ</h3><div id="pod-receipts"></div></div>
+          <div class="form-card"><h3>ใบแจ้งหนี้ (เจ้าหนี้)</h3><div id="pod-bills"></div></div>
+        </section>
+
+        <!-- ═══ คลังกลาง ═══ -->
+        <section class="view" id="view-goodsreceipts">
+          <div class="view-head">
+            <div><h1>ใบรับของเข้าคลัง</h1><p>รับของจากใบสั่งซื้อ — ระบบเพิ่มสต็อกคลังกลาง คิดต้นทุนเฉลี่ย และลงบัญชีสินค้าคงเหลือให้อัตโนมัติ</p></div>
+            <button class="btn" onclick="gotoView('purchaseorders')">ไปหน้าใบสั่งซื้อเพื่อรับของ</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>วันที่รับ</th><th>ใบสั่งซื้อ</th><th>ผู้ขาย</th><th>รายการ</th><th>มูลค่า</th><th>ตั้งหนี้แล้ว</th></tr></thead>
+            <tbody id="grs-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <section class="view" id="view-warehousestock">
+          <div class="view-head">
+            <div><h1>ยอดคงเหลือคลังกลาง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>คลัง</th><th>คงเหลือ</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
+            <tbody id="ws-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card" id="ws-ledger-card" style="display:none"><h3 id="ws-ledger-title">ความเคลื่อนไหว</h3><div id="ws-ledger"></div></div>
+        </section>
+
+        <!-- ═══ บัญชี: เจ้าหนี้ ═══ -->
+        <section class="view" id="view-apbills">
+          <div class="view-head">
+            <div><h1>เจ้าหนี้ (AP)</h1><p>ตั้งหนี้จากใบรับของหรือค่าใช้จ่ายทั่วไป แล้วจ่ายเงินตัดได้หลายใบในครั้งเดียว</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn" onclick="openApAging()">รายงานอายุหนี้</button>
+              <button class="btn" onclick="openApManualForm()">+ ตั้งหนี้ค่าใช้จ่าย</button>
+              <button class="btn btn-primary" onclick="openApPayForm()">จ่ายเงิน</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>ผู้ขาย</th><th>อ้างอิง</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>จ่ายแล้ว</th><th>คงค้าง</th><th>สถานะ</th></tr></thead>
+            <tbody id="ap-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card" id="ap-aging-card" style="display:none"><h3>อายุหนี้เจ้าหนี้</h3><div id="ap-aging"></div></div>
+        </section>
+
+        <!-- ═══ บัญชี: ลูกหนี้ ═══ -->
+        <section class="view" id="view-arinvoices">
+          <div class="view-head">
+            <div><h1>ลูกหนี้ (AR)</h1><p>ออกใบแจ้งหนี้จากบิลขายเครดิต (หรือกรอกเอง) แล้วบันทึกรับชำระ</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn" onclick="openArAging()">รายงานอายุหนี้</button>
+              <button class="btn" onclick="openArInvoiceForm()">+ ออกใบแจ้งหนี้</button>
+              <button class="btn btn-primary" onclick="openArReceiveForm()">รับชำระ</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>รับแล้ว</th><th>คงค้าง</th><th>สถานะ</th></tr></thead>
+            <tbody id="ar-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card" id="ar-aging-card" style="display:none"><h3>อายุหนี้ลูกหนี้</h3><div id="ar-aging"></div></div>
+        </section>
+
+        <!-- ═══ บัญชี: แยกประเภท ═══ -->
+        <section class="view" id="view-glbooks">
+          <div class="view-head">
+            <div><h1>บัญชีแยกประเภท</h1><p>สมุดรายวันทุกใบ (ระบบลงให้อัตโนมัติจากงานซื้อ/รับของ/เจ้าหนี้/ลูกหนี้) และงบทดลอง</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn" onclick="loadTrialBalance()">งบทดลอง</button>
+              <button class="btn" onclick="openAccountsList()">ผังบัญชี</button>
+              <button class="btn btn-primary" onclick="openJournalForm()">+ ลงใบสำคัญเอง</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>วันที่</th><th>ที่มา</th><th>คำอธิบาย</th><th>ยอด</th><th>สถานะ</th></tr></thead>
+            <tbody id="gl-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+          <div class="form-card" id="gl-tb-card" style="display:none"><h3>งบทดลอง</h3><div id="gl-tb"></div></div>
+        </section>
+
         <section class="view" id="view-soon">
           <div class="soon-panel">
             <div class="tag">เร็วๆ นี้</div>
@@ -1032,8 +1186,25 @@ const NAV = {
       { n:'5.1', label:'ตัวแทนจำหน่าย', items:[ {n:'5.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
       { n:'5.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'5.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
     ]},
-    { n:'6', icon:'📈', label:'รายงาน', subs:[
-      { n:'6.1', label:'ยอดขาย', items:[ {n:'6.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
+    { n:'6', icon:'🛒', label:'งานซื้อ', subs:[
+      { n:'6.1', label:'ใบขอซื้อ', items:[ {n:'6.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', ready:true} ] },
+      { n:'6.2', label:'ใบสั่งซื้อ', items:[ {n:'6.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', ready:true} ] },
+      { n:'6.3', label:'ข้อมูลตั้งต้น', items:[
+        {n:'6.3.1', label:'ผู้ขาย/ผู้จัดจำหน่าย', view:'vendors', ready:true},
+        {n:'6.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', ready:true}
+      ]}
+    ]},
+    { n:'7', icon:'📦', label:'คลังสินค้ากลาง', subs:[
+      { n:'7.1', label:'รับของ', items:[ {n:'7.1.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', ready:true} ] },
+      { n:'7.2', label:'ยอดคงเหลือ', items:[ {n:'7.2.1', label:'สต็อกคลังกลาง', view:'warehousestock', ready:true} ] }
+    ]},
+    { n:'8', icon:'📒', label:'บัญชี', subs:[
+      { n:'8.1', label:'เจ้าหนี้', items:[ {n:'8.1.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', ready:true} ] },
+      { n:'8.2', label:'ลูกหนี้', items:[ {n:'8.2.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', ready:true} ] },
+      { n:'8.3', label:'บัญชีทั่วไป', items:[ {n:'8.3.1', label:'สมุดรายวัน/งบทดลอง', view:'glbooks', ready:true} ] }
+    ]},
+    { n:'9', icon:'📈', label:'รายงาน', subs:[
+      { n:'9.1', label:'ยอดขาย', items:[ {n:'9.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
     ]}
   ]}
 };
@@ -1157,7 +1328,10 @@ const LOADERS = {
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
   companyprofile: loadCompanyProfile, adminusers: loadAdminUsers, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
-  salesorders: loadSalesOrders
+  salesorders: loadSalesOrders,
+  vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
+  purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
+  apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks
 };
 function gotoView(view){
   let elId = 'soon', label = view, meta = findMeta(view);
@@ -2574,6 +2748,717 @@ async function changeMyPasswordUI(){
   if (!r.success) { toast(r.message, true); return; }
   toast('เปลี่ยนรหัสผ่านสำเร็จ');
   ['cpw-current','cpw-new','cpw-confirm'].forEach(id => document.getElementById(id).value = '');
+}
+
+/* ══════════════ งานซื้อ (20–22_*.gs) และบัญชี (23_accounting.gs) ══════════════
+   ใช้ modal/ตัวช่วยชุดเดียวกับหน้าชุดราคา (plModal / plBusy / plModalActions / plField)
+   ทุกหน้าเก็บ cache ไว้ในตัวแปรของตัวเอง — บันทึกเสร็จแก้ cache แล้ววาดใหม่ ไม่โหลดทั้งลิสต์ซ้ำ (กติกาข้อ 4) */
+let vendorsCache = [], flowsCache = [], prsCache = [], posCache = [], grsCache = [], apCache = [], arCache = [], glCache = [], warehousesCache = [];
+let currentPrId = null, currentPoId = null, prWaitingOnly = false;
+const bahtPlain = n => (parseFloat(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dash = v => v ? esc(v) : '—';
+const PR_ST = { draft:['off','ร่าง'], pending:['wait','รออนุมัติ'], approved:['ok','อนุมัติแล้ว'], rejected:['wait','ตีกลับ'], cancelled:['off','ยกเลิก'], closed:['off','ปิดแล้ว'] };
+const PO_ST = { draft:['off','ร่าง'], sent:['wait','ส่งผู้ขายแล้ว'], partial:['wait','รับบางส่วน'], received:['ok','รับครบแล้ว'], cancelled:['off','ยกเลิก'] };
+const DOC_ST = { open:['wait','ค้างชำระ'], partial:['wait','ชำระบางส่วน'], paid:['ok','ชำระครบ'], void:['off','ยกเลิก'], posted:['ok','ลงบัญชีแล้ว'], voided:['off','กลับรายการ'] };
+const pill2 = (map, st) => { const v = map[st] || ['off', st]; return '<span class="pill '+v[0]+'">'+esc(v[1])+'</span>'; };
+const rowsOrEmpty = (html, cols, msg) => html || ('<tr class="empty-row"><td colspan="'+cols+'">'+esc(msg)+'</td></tr>');
+async function ensureVendors(){ if (!vendorsCache.length) { const r = await callApi('listVendors', {}); if (r.success) vendorsCache = r.data; } return vendorsCache; }
+async function ensureWarehouses(){ if (!warehousesCache.length) { const r = await callApi('listWarehouses', {}); if (r.success) warehousesCache = r.data; } return warehousesCache; }
+const optsOf = (arr, idF, labF, sel) => arr.map(x => '<option value="'+esc(x[idF])+'"'+(String(x[idF])===String(sel)?' selected':'')+'>'+esc(x[labF])+'</option>').join('');
+
+/* ── ผู้ขาย ── */
+async function loadVendors(){
+  const body = document.getElementById('vendors-body');
+  if (vendorsCache.length) renderVendors(); else body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  const r = await callApi('listVendors', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  vendorsCache = r.data; renderVendors();
+}
+function renderVendors(){
+  document.getElementById('vendors-body').innerHTML = rowsOrEmpty(vendorsCache.map(v =>
+    '<tr class="clickable-row" onclick="openVendorForm('+v.id+')"><td class="mono-data">'+dash(v.code)+'</td><td>'+esc(v.name)+'</td>' +
+    '<td>'+dash(v.contactName)+'</td><td class="mono-data">'+dash(v.phone)+'</td><td class="mono-data">'+v.paymentTermsDays+'</td>' +
+    '<td>'+(v.isActive?'<span class="pill ok">ใช้งาน</span>':'<span class="pill off">ปิด</span>')+'</td></tr>').join(''), 6, 'ยังไม่มีผู้ขาย — กด "เพิ่มผู้ขาย"');
+}
+function openVendorForm(id){
+  const v = id ? vendorsCache.find(x => x.id === id) || {} : {};
+  plModal('<h3>'+(id?'แก้ไขผู้ขาย':'เพิ่มผู้ขาย')+'</h3>' +
+    '<div class="form-grid g2">' + plField('รหัสผู้ขาย', '<input id="vf-code" value="'+plVal(v.code)+'">') + plField('ชื่อผู้ขาย *', '<input id="vf-name" value="'+plVal(v.name)+'">') + '</div>' +
+    '<div class="form-grid g2">' + plField('เลขประจำตัวผู้เสียภาษี', '<input id="vf-tax" value="'+plVal(v.taxId)+'">') + plField('สาขา', '<input id="vf-branch" value="'+plVal(v.branchCode)+'">') + '</div>' +
+    '<div class="form-grid g2">' + plField('ผู้ติดต่อ', '<input id="vf-contact" value="'+plVal(v.contactName)+'">') + plField('โทรศัพท์', '<input id="vf-phone" value="'+plVal(v.phone)+'">') + '</div>' +
+    '<div class="form-grid g2">' + plField('อีเมล', '<input id="vf-email" value="'+plVal(v.email)+'">') + plField('เครดิตเทอม (วัน)', '<input id="vf-terms" type="number" min="0" value="'+(v.paymentTermsDays!=null?v.paymentTermsDays:0)+'">') + '</div>' +
+    plField('ที่อยู่', '<input id="vf-addr" value="'+plVal(v.address)+'">') +
+    '<div class="form-grid g2">' + plField('ธนาคาร', '<input id="vf-bank" value="'+plVal(v.bankName)+'">') + plField('เลขบัญชี', '<input id="vf-acct" value="'+plVal(v.bankAccountNo)+'">') + '</div>' +
+    '<label class="toggle-row"><input type="checkbox" id="vf-active"'+(!id || v.isActive ? ' checked' : '')+'> เปิดใช้งาน</label>' +
+    plModalActions('submitVendor('+(id||'null')+')', 'บันทึก'));
+}
+function submitVendor(id){ return plBusy(async () => {
+  const val = x => document.getElementById(x).value.trim();
+  if (!val('vf-name')) return plModalErr('กรุณาระบุชื่อผู้ขาย');
+  const r = await callApi('saveVendor', { id: id || undefined, code: val('vf-code'), name: val('vf-name'), taxId: val('vf-tax'),
+    branchCode: val('vf-branch'), contactName: val('vf-contact'), phone: val('vf-phone'), email: val('vf-email'),
+    paymentTermsDays: Number(val('vf-terms')) || 0, address: val('vf-addr'), bankName: val('vf-bank'), bankAccountNo: val('vf-acct'),
+    isActive: document.getElementById('vf-active').checked });
+  if (!r.success) return plModalErr(r.message);
+  const i = vendorsCache.findIndex(x => x.id === r.vendor.id);
+  if (i >= 0) vendorsCache[i] = r.vendor; else vendorsCache.push(r.vendor);
+  plModalClose(); renderVendors(); toast('บันทึกผู้ขายแล้ว');
+}); }
+
+/* ── สายอนุมัติ ── */
+async function loadApprovalFlows(){
+  const box = document.getElementById('flows-list');
+  const r = await callApi('listApprovalFlows', { docType: 'PR' });
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  flowsCache = r.data; renderFlows();
+}
+function renderFlows(){
+  const box = document.getElementById('flows-list');
+  if (!flowsCache.length) { box.innerHTML = '<div class="soon-panel"><p>ยังไม่มีสายอนุมัติ — ถ้าไม่ตั้งค่า ใบขอซื้อทุกใบจะถูกอนุมัติอัตโนมัติ</p></div>'; return; }
+  box.innerHTML = flowsCache.map(f =>
+    '<div class="form-card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+      '<div><h3 style="margin:0">'+esc(f.name)+' '+(f.isActive?'<span class="pill ok">ใช้งาน</span>':'<span class="pill off">ปิด</span>')+'</h3>' +
+      '<p class="form-hint" style="margin:4px 0 0">วงเงิน ฿'+bahtPlain(f.minAmount)+' ถึง '+(f.maxAmount==null?'ไม่จำกัด':'฿'+bahtPlain(f.maxAmount))+'</p></div>' +
+      '<div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="openFlowForm('+f.id+')">แก้ไข</button>' +
+      '<button class="btn btn-sm btn-ghost" onclick="deleteFlow('+f.id+')">ลบ</button></div></div>' +
+      '<div style="margin-top:10px">' + f.steps.map(s =>
+        '<div class="activity-row"><span><b>ขั้น '+s.stepNo+'</b> '+esc(s.name)+' — '+(s.approverType==='role'?'ตำแหน่ง':'รายชื่อ')+' '+esc(s.approverRef)+'</span>' +
+        '<span class="amt">ต้องอนุมัติ '+s.requiredApprovals+' คน</span></div>').join('') + '</div></div>').join('');
+}
+function flowStepRow(s){
+  s = s || {};
+  return '<div class="plm-row" style="grid-template-columns:1.2fr .8fr 1.2fr .8fr 34px">' +
+    '<input class="fs-name" placeholder="ชื่อขั้น เช่น ผู้จัดการ" value="'+plVal(s.name)+'">' +
+    '<select class="fs-type"><option value="role"'+(s.approverType!=='user'?' selected':'')+'>ตามตำแหน่ง</option><option value="user"'+(s.approverType==='user'?' selected':'')+'>ระบุรายชื่อ</option></select>' +
+    '<input class="fs-ref" placeholder="owner_admin หรือ 3,5" value="'+plVal(s.approverRef)+'">' +
+    '<input class="fs-req" type="number" min="1" placeholder="กี่คน" value="'+(s.requiredApprovals||1)+'">' +
+    '<button class="btn btn-sm btn-ghost" onclick="this.parentNode.remove()">✕</button></div>';
+}
+function openFlowForm(id){
+  const f = id ? flowsCache.find(x => x.id === id) || {} : {};
+  const steps = (f.steps && f.steps.length) ? f.steps : [{}];
+  plModal('<h3>'+(id?'แก้ไขสายอนุมัติ':'เพิ่มสายอนุมัติ')+'</h3>' +
+    '<p class="form-hint">ใบขอซื้อจะเลือกสายที่ "วงเงินรวมเข้าช่วง" โดยอัตโนมัติ — ถ้าเข้าหลายสาย ใช้สายที่วงเงินขั้นต่ำสูงกว่า</p>' +
+    plField('ชื่อสาย *', '<input id="ff-name" value="'+plVal(f.name)+'">') +
+    '<div class="form-grid g2">' + plField('วงเงินตั้งแต่ (บาท)', '<input id="ff-min" type="number" min="0" step="0.01" value="'+(f.minAmount!=null?f.minAmount:0)+'">') +
+      plField('ถึง (เว้นว่าง = ไม่จำกัด)', '<input id="ff-max" type="number" min="0" step="0.01" value="'+(f.maxAmount!=null?f.maxAmount:'')+'">') + '</div>' +
+    '<h4>ขั้นตอนการอนุมัติ</h4>' +
+    '<div class="plm-row head" style="grid-template-columns:1.2fr .8fr 1.2fr .8fr 34px"><span>ชื่อขั้น</span><span>ผู้อนุมัติแบบ</span><span>ตำแหน่ง/รายชื่อ (คั่นด้วย ,)</span><span>ต้องอนุมัติกี่คน</span><span></span></div>' +
+    '<div id="ff-steps">' + steps.map(flowStepRow).join('') + '</div>' +
+    '<button class="btn btn-sm" onclick="document.getElementById(\'ff-steps\').insertAdjacentHTML(\'beforeend\', flowStepRow())">+ เพิ่มขั้น</button>' +
+    '<label class="toggle-row" style="margin-top:12px"><input type="checkbox" id="ff-active"'+(!id || f.isActive ? ' checked' : '')+'> เปิดใช้งาน</label>' +
+    plModalActions('submitFlow('+(id||'null')+')', 'บันทึก'));
+}
+function submitFlow(id){ return plBusy(async () => {
+  const name = document.getElementById('ff-name').value.trim();
+  if (!name) return plModalErr('กรุณาตั้งชื่อสาย');
+  const num = el => el.value.trim() === '' ? null : Number(el.value);
+  const steps = [...document.querySelectorAll('#ff-steps .plm-row')].map(r => ({ name: r.querySelector('.fs-name').value.trim(),
+    approverType: r.querySelector('.fs-type').value, approverRef: r.querySelector('.fs-ref').value.trim(),
+    requiredApprovals: Number(r.querySelector('.fs-req').value) || 1 })).filter(s => s.approverRef);
+  if (!steps.length) return plModalErr('ต้องมีขั้นอนุมัติอย่างน้อย 1 ขั้น (ระบุผู้อนุมัติด้วย)');
+  const r = await callApi('saveApprovalFlow', { id: id || undefined, docType: 'PR', name: name,
+    minAmount: num(document.getElementById('ff-min')) || 0, maxAmount: num(document.getElementById('ff-max')),
+    isActive: document.getElementById('ff-active').checked, steps });
+  if (!r.success) return plModalErr(r.message);
+  const i = flowsCache.findIndex(x => x.id === r.flow.id);
+  if (i >= 0) flowsCache[i] = r.flow; else flowsCache.push(r.flow);
+  plModalClose(); renderFlows(); toast('บันทึกสายอนุมัติแล้ว');
+}); }
+async function deleteFlow(id){
+  if (!confirm('ลบสายอนุมัตินี้?')) return;
+  const r = await callApi('deleteApprovalFlow', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  flowsCache = flowsCache.filter(f => f.id !== id); renderFlows(); toast('ลบแล้ว');
+}
+
+/* ── ใบขอซื้อ ── */
+function togglePrWaiting(){ prWaitingOnly = !prWaitingOnly;
+  document.getElementById('pr-filter-mine').classList.toggle('btn-primary', prWaitingOnly); loadPurchaseReqs(); }
+async function loadPurchaseReqs(){
+  const body = document.getElementById('prs-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  const r = await callApi('listPurchaseRequisitions', prWaitingOnly ? { waitingForMe: true } : {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  prsCache = r.data; renderPrs();
+}
+function renderPrs(){
+  document.getElementById('prs-body').innerHTML = rowsOrEmpty(prsCache.map(p =>
+    '<tr class="clickable-row" onclick="openPrDetail('+p.id+')"><td class="mono-data">'+esc(p.prNo)+'</td><td>'+dash(p.requesterName)+'</td>' +
+    '<td>'+dash(p.department)+'</td><td class="mono-data">'+dash(p.needByDate)+'</td><td>'+p.itemCount+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(p.totalExVat)+'</td><td>'+pill2(PR_ST, p.status)+(p.status==='pending'?' <span class="unit">ขั้น '+p.currentStep+'</span>':'')+'</td></tr>').join(''),
+    7, prWaitingOnly ? 'ไม่มีใบที่รอคุณอนุมัติ' : 'ยังไม่มีใบขอซื้อ');
+}
+async function openPrDetail(id){
+  currentPrId = id;
+  _switchProductView('view-prdetail', 'ใบขอซื้อ');
+  document.getElementById('prd-body').innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  const r = await callApi('getPurchaseRequisition', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  renderPrDetail(r.pr);
+}
+function renderPrDetail(pr){
+  PRD = pr;
+  document.getElementById('prd-title').textContent = 'ใบขอซื้อ ' + pr.prNo;
+  document.getElementById('prd-meta').innerHTML = 'ผู้ขอ: <b>'+esc(pr.requesterName||'-')+'</b> · แผนก '+esc(pr.department||'-')+' · ยอด ฿'+bahtPlain(pr.totalExVat)+' · '+pill2(PR_ST, pr.status)+
+    (pr.flowName?' · สาย "'+esc(pr.flowName)+'"':'') + (pr.needByDate?' · ต้องการใช้ '+esc(pr.needByDate):'');
+  const b = (label, fn, cls) => '<button class="btn '+(cls||'btn-sm')+'" onclick="'+fn+'">'+label+'</button>';
+  let acts = '';
+  if (pr.canEdit) acts += b('แก้ไข', 'openPrForm(PRD)') + b('ส่งขออนุมัติ', 'submitPr()', 'btn-primary btn-sm');
+  if (pr.canApprove) acts += b('✓ อนุมัติ', "decidePr('approve')", 'btn-primary btn-sm') + b('✕ ตีกลับ', "decidePr('reject')");
+  if (pr.status === 'approved') acts += b('ออกใบสั่งซื้อ', 'openPoForm(null, PRD.id)', 'btn-primary btn-sm');
+  if (['draft','pending','approved','rejected'].indexOf(pr.status) !== -1) acts += b('ยกเลิกใบ', 'cancelPr()');
+  document.getElementById('prd-actions').innerHTML = acts;
+  document.getElementById('prd-body').innerHTML = rowsOrEmpty(pr.items.map(it =>
+    '<tr><td>'+it.lineNo+'</td><td class="wrap">'+esc(it.description)+'</td><td class="mono-data">'+it.qty+'</td><td>'+dash(it.unitCode)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(it.unitPrice)+'</td><td class="mono-data">฿'+bahtPlain(it.amount)+'</td>' +
+    '<td class="mono-data">'+(it.poQty||0)+'</td></tr>').join(''), 7, 'ไม่มีรายการ');
+  const done = {};
+  pr.approvals.forEach(a => { (done[a.stepNo] = done[a.stepNo] || []).push(a); });
+  document.getElementById('prd-steps').innerHTML = (pr.steps && pr.steps.length) ? pr.steps.map(s => {
+    const list = done[s.stepNo] || [];
+    const okCount = list.filter(a => a.decision === 'approved').length;
+    const state = list.some(a => a.decision === 'rejected') ? '<span class="pill wait">ตีกลับ</span>'
+      : (okCount >= s.requiredApprovals ? '<span class="pill ok">ผ่าน</span>'
+      : (pr.status === 'pending' && pr.currentStep === s.stepNo ? '<span class="pill wait">กำลังรอ</span>' : '<span class="pill off">รอคิว</span>'));
+    return '<div class="activity-row"><span><b>ขั้น '+s.stepNo+'</b> '+esc(s.name)+' — ผู้อนุมัติ: '+esc(s.approverNames.join(', '))+
+      ' (ต้อง '+s.requiredApprovals+' คน) '+state+
+      (list.length ? '<br>'+list.map(a => '<span class="unit">'+(a.decision==='approved'?'✓':'✕')+' '+esc(a.approverName||a.approverUserId)+' '+esc(a.decidedAt)+(a.comment?' — '+esc(a.comment):'')+'</span>').join('<br>') : '') +
+      '</span></div>';
+  }).join('') : '<p class="form-hint">ไม่มีสายอนุมัติ (อนุมัติอัตโนมัติ)</p>';
+}
+let PRD = null;
+function prItemRow(it){
+  it = it || {};
+  return '<div class="plm-row" style="grid-template-columns:2fr .7fr .6fr .8fr 34px">' +
+    '<input class="pi-desc" placeholder="สินค้า/รายละเอียด" value="'+plVal(it.description)+'" data-pid="'+plVal(it.productId)+'" list="pr-products" oninput="prPickProduct(this)">' +
+    '<input class="pi-qty" type="number" min="0" step="0.01" placeholder="จำนวน" value="'+plVal(it.qty)+'">' +
+    '<input class="pi-unit" placeholder="หน่วย" value="'+plVal(it.unitCode)+'">' +
+    '<input class="pi-price" type="number" min="0" step="0.01" placeholder="ราคา/หน่วย" value="'+plVal(it.unitPrice)+'">' +
+    '<button class="btn btn-sm btn-ghost" onclick="this.parentNode.remove()">✕</button></div>';
+}
+function prPickProduct(input){
+  const p = productsCache.find(x => (x.product_code + ' ' + x.name) === input.value || x.name === input.value);
+  if (p) { input.dataset.pid = p.record_id; input.value = p.name; const u = input.parentNode.querySelector('.pi-unit'); if (!u.value) u.value = p.unit || 'ชิ้น'; }
+  else input.dataset.pid = '';
+}
+async function openPrForm(pr){
+  await ensureProductsForSale();
+  const items = (pr && pr.items && pr.items.length) ? pr.items : [{}];
+  plModal('<h3>'+(pr?'แก้ไขใบขอซื้อ '+esc(pr.prNo):'เปิดใบขอซื้อ')+'</h3>' +
+    '<p class="form-hint">พิมพ์ชื่อ/รหัสสินค้าแล้วเลือกจากรายการ หรือพิมพ์รายละเอียดเองสำหรับของที่ยังไม่มีในระบบ</p>' +
+    '<datalist id="pr-products">' + productsCache.slice(0, 500).map(p => '<option value="'+esc(p.product_code + ' ' + p.name)+'">').join('') + '</datalist>' +
+    '<div class="form-grid g2">' + plField('แผนก/หน่วยงาน', '<input id="prf-dept" value="'+plVal(pr && pr.department)+'">') +
+      plField('ต้องการใช้ภายใน', '<input type="date" id="prf-need" value="'+plVal(pr && pr.needByDate)+'">') + '</div>' +
+    plField('หมายเหตุ', '<input id="prf-note" value="'+plVal(pr && pr.note)+'">') +
+    '<h4>รายการที่ขอซื้อ</h4>' +
+    '<div class="plm-row head" style="grid-template-columns:2fr .7fr .6fr .8fr 34px"><span>สินค้า/รายละเอียด</span><span>จำนวน</span><span>หน่วย</span><span>ราคา/หน่วย</span><span></span></div>' +
+    '<div id="prf-items">' + items.map(prItemRow).join('') + '</div>' +
+    '<button class="btn btn-sm" onclick="document.getElementById(\'prf-items\').insertAdjacentHTML(\'beforeend\', prItemRow())">+ เพิ่มรายการ</button>' +
+    plModalActions('submitPr2('+(pr?pr.id:'null')+')', 'บันทึกใบขอซื้อ'));
+}
+function collectPrItems(){
+  return [...document.querySelectorAll('#prf-items .plm-row')].map(r => ({
+    productId: r.querySelector('.pi-desc').dataset.pid || '', description: r.querySelector('.pi-desc').value.trim(),
+    qty: Number(r.querySelector('.pi-qty').value) || 0, unitCode: r.querySelector('.pi-unit').value.trim(),
+    unitPrice: Number(r.querySelector('.pi-price').value) || 0
+  })).filter(it => it.description || it.qty);
+}
+function submitPr2(id){ return plBusy(async () => {
+  const items = collectPrItems();
+  if (!items.length) return plModalErr('ต้องมีรายการอย่างน้อย 1 รายการ');
+  const r = await callApi('savePurchaseRequisition', { id: id || undefined, department: document.getElementById('prf-dept').value.trim(),
+    needByDate: document.getElementById('prf-need').value, note: document.getElementById('prf-note').value.trim(), items });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); currentPrId = r.pr.id;
+  const i = prsCache.findIndex(x => x.id === r.pr.id);
+  if (i >= 0) Object.assign(prsCache[i], { totalExVat: r.pr.totalExVat, itemCount: r.pr.items.length, status: r.pr.status });
+  _switchProductView('view-prdetail', 'ใบขอซื้อ'); renderPrDetail(r.pr); toast('บันทึกใบขอซื้อแล้ว');
+}); }
+async function submitPr(){
+  const r = await callApi('submitPurchaseRequisition', { id: currentPrId });
+  if (!r.success) { toast(r.message, true); return; }
+  renderPrDetail(r.pr); prsCache = []; toast(r.message || 'ส่งขออนุมัติแล้ว');
+}
+async function decidePr(decision){
+  const comment = prompt(decision === 'approve' ? 'ความเห็น (ไม่บังคับ)' : 'เหตุผลที่ตีกลับ');
+  if (decision === 'reject' && comment === null) return;
+  const r = await callApi('decidePurchaseRequisition', { id: currentPrId, decision, comment: comment || '' });
+  if (!r.success) { toast(r.message, true); return; }
+  renderPrDetail(r.pr); prsCache = []; toast(r.message || 'บันทึกแล้ว');
+}
+async function cancelPr(){
+  const reason = prompt('เหตุผลที่ยกเลิก'); if (reason === null) return;
+  const r = await callApi('cancelPurchaseRequisition', { id: currentPrId, reason });
+  if (!r.success) { toast(r.message, true); return; }
+  renderPrDetail(r.pr); prsCache = []; toast('ยกเลิกแล้ว');
+}
+
+/* ── ใบสั่งซื้อ ── */
+async function loadPurchaseOrders(){
+  const body = document.getElementById('pos-body');
+  if (posCache.length) renderPos(); else body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  const r = await callApi('listPurchaseOrders', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  posCache = r.data; renderPos();
+}
+function renderPos(){
+  document.getElementById('pos-body').innerHTML = rowsOrEmpty(posCache.map(p =>
+    '<tr class="clickable-row" onclick="openPoDetail('+p.id+')"><td class="mono-data">'+esc(p.poNo)+'</td><td>'+esc(p.vendorName)+'</td>' +
+    '<td class="mono-data">'+dash(p.orderDate)+'</td><td class="mono-data">'+dash(p.expectedDate)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(p.total)+'</td><td class="mono-data">'+p.receivedPct+'%</td><td>'+pill2(PO_ST, p.status)+'</td></tr>').join(''),
+    7, 'ยังไม่มีใบสั่งซื้อ');
+}
+let POD = null;
+async function openPoDetail(id){
+  currentPoId = id; _switchProductView('view-podetail', 'ใบสั่งซื้อ');
+  document.getElementById('pod-body').innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+  const r = await callApi('getPurchaseOrder', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  renderPoDetail(r.po);
+}
+function renderPoDetail(po){
+  POD = po;
+  document.getElementById('pod-title').textContent = 'ใบสั่งซื้อ ' + po.poNo;
+  document.getElementById('pod-meta').innerHTML = 'ผู้ขาย <b>'+esc(po.vendorName)+'</b> · สั่ง '+esc(po.orderDate)+(po.expectedDate?' · กำหนดรับ '+esc(po.expectedDate):'')+
+    ' · ยอด ฿'+bahtPlain(po.total)+' (ก่อน VAT ฿'+bahtPlain(po.subtotalExVat)+' + VAT ฿'+bahtPlain(po.vatAmount)+') · '+pill2(PO_ST, po.status)+
+    (po.prNo?' · จากใบขอซื้อ '+esc(po.prNo):'');
+  const b = (label, fn, cls) => '<button class="btn '+(cls||'btn-sm')+'" onclick="'+fn+'">'+label+'</button>';
+  let acts = '';
+  if (po.status === 'draft') acts += b('แก้ไข', 'openPoForm(POD)') + b('ส่งให้ผู้ขาย', 'issuePo()', 'btn-primary btn-sm');
+  if (po.status === 'sent' || po.status === 'partial') acts += b('รับของเข้าคลัง', 'openReceiveForm()', 'btn-primary btn-sm');
+  if (po.status !== 'cancelled' && po.status !== 'received') acts += b('ยกเลิกใบ', 'cancelPo()');
+  document.getElementById('pod-actions').innerHTML = acts;
+  document.getElementById('pod-body').innerHTML = rowsOrEmpty(po.items.map(it =>
+    '<tr><td>'+it.lineNo+'</td><td class="wrap">'+(it.productCode?'<span class="mono-data">'+esc(it.productCode)+'</span> ':'')+esc(it.description)+'</td>' +
+    '<td class="mono-data">'+it.qty+'</td><td>'+dash(it.unitCode)+(it.unitFactor>1?' <span class="unit">×'+it.unitFactor+'</span>':'')+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(it.unitPrice)+'</td><td class="mono-data">฿'+bahtPlain(it.amount)+'</td>' +
+    '<td class="mono-data">'+it.receivedQty+'</td><td class="mono-data">'+it.remainQty+'</td></tr>').join(''), 8, 'ไม่มีรายการ');
+  document.getElementById('pod-receipts').innerHTML = po.receipts.length ? po.receipts.map(g =>
+    '<div class="activity-row"><span><b>'+esc(g.grNo)+'</b> '+esc(g.receiveDate)+' · '+g.itemCount+' รายการ</span>' +
+    '<span><button class="btn btn-sm" onclick="billFromGr('+g.id+')">ตั้งหนี้</button></span></div>').join('')
+    : '<p class="form-hint">ยังไม่มีการรับของ</p>';
+  document.getElementById('pod-bills').innerHTML = po.bills.length ? po.bills.map(x =>
+    '<div class="activity-row"><span>'+esc(x.billNo)+'</span><span class="amt">฿'+bahtPlain(x.total)+' '+pill2(DOC_ST, x.status)+'</span></div>').join('')
+    : '<p class="form-hint">ยังไม่ได้ตั้งหนี้</p>';
+}
+function poItemRow(it){
+  it = it || {};
+  return '<div class="plm-row" style="grid-template-columns:1.8fr .6fr .6fr .5fr .8fr 34px" data-pritem="'+plVal(it.prItemId)+'">' +
+    '<input class="oi-desc" placeholder="สินค้า/รายละเอียด" value="'+plVal(it.description)+'" data-pid="'+plVal(it.productId)+'" list="po-products" oninput="poPickProduct(this)">' +
+    '<input class="oi-qty" type="number" min="0" step="0.01" placeholder="จำนวน" value="'+plVal(it.qty)+'">' +
+    '<input class="oi-unit" placeholder="หน่วย" value="'+plVal(it.unitCode)+'">' +
+    '<input class="oi-factor" type="number" min="0" step="0.01" placeholder="ตัวคูณ" value="'+(it.unitFactor||1)+'" title="จำนวนหน่วยฐานต่อ 1 หน่วยสั่งซื้อ เช่น 1 ลัง = 20 ชิ้น">' +
+    '<input class="oi-price" type="number" min="0" step="0.01" placeholder="ราคา/หน่วย" value="'+plVal(it.unitPrice)+'">' +
+    '<button class="btn btn-sm btn-ghost" onclick="this.parentNode.remove()">✕</button></div>';
+}
+function poPickProduct(input){
+  const p = productsCache.find(x => (x.product_code + ' ' + x.name) === input.value || x.name === input.value);
+  if (p) { input.dataset.pid = p.record_id; input.value = p.name; const u = input.parentNode.querySelector('.oi-unit'); if (!u.value) u.value = p.unit || 'ชิ้น'; }
+  else input.dataset.pid = '';
+}
+async function openPoForm(po, fromPrId){
+  await Promise.all([ensureProductsForSale(), ensureVendors(), ensureWarehouses()]);
+  let items = (po && po.items && po.items.length) ? po.items : [{}];
+  let prLines = [];
+  if (fromPrId) {
+    const r = await callApi('listApprovedPrLines', {});
+    if (r.success) prLines = r.data.filter(l => String(l.prId) === String(fromPrId));
+    if (prLines.length) items = prLines.map(l => ({ prItemId: l.prItemId, productId: l.productId, description: l.description,
+      qty: l.remainQty, unitCode: l.unitCode, unitFactor: 1, unitPrice: l.unitPrice }));
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  plModal('<h3>'+(po?'แก้ไขใบสั่งซื้อ '+esc(po.poNo):(fromPrId?'ออกใบสั่งซื้อจากใบขอซื้อ':'เปิดใบสั่งซื้อ'))+'</h3>' +
+    '<datalist id="po-products">' + productsCache.slice(0, 500).map(p => '<option value="'+esc(p.product_code + ' ' + p.name)+'">').join('') + '</datalist>' +
+    '<div class="form-grid">' +
+      plField('ผู้ขาย *', '<select id="pof-vendor">' + optsOf(vendorsCache.filter(v => v.isActive), 'id', 'name', po && po.vendorId) + '</select>') +
+      plField('คลังที่รับเข้า', '<select id="pof-wh">' + optsOf(warehousesCache, 'id', 'name', po && po.warehouseId) + '</select>') +
+      plField('ภาษีมูลค่าเพิ่ม', '<select id="pof-vat"><option value="excluded"'+(!po||po.vatType==='excluded'?' selected':'')+'>ราคายังไม่รวม VAT 7%</option>' +
+        '<option value="included"'+(po&&po.vatType==='included'?' selected':'')+'>ราคารวม VAT แล้ว</option>' +
+        '<option value="none"'+(po&&po.vatType==='none'?' selected':'')+'>ไม่มี VAT</option></select>') +
+    '</div>' +
+    '<div class="form-grid g2">' + plField('วันที่สั่งซื้อ', '<input type="date" id="pof-date" value="'+plVal((po&&po.orderDate)||today)+'">') +
+      plField('กำหนดรับ', '<input type="date" id="pof-exp" value="'+plVal(po&&po.expectedDate)+'">') + '</div>' +
+    plField('หมายเหตุ', '<input id="pof-note" value="'+plVal(po&&po.note)+'">') +
+    '<h4>รายการสั่งซื้อ</h4>' +
+    '<div class="plm-row head" style="grid-template-columns:1.8fr .6fr .6fr .5fr .8fr 34px"><span>สินค้า</span><span>จำนวน</span><span>หน่วย</span><span>ตัวคูณหน่วยฐาน</span><span>ราคา/หน่วย</span><span></span></div>' +
+    '<div id="pof-items">' + items.map(poItemRow).join('') + '</div>' +
+    '<button class="btn btn-sm" onclick="document.getElementById(\'pof-items\').insertAdjacentHTML(\'beforeend\', poItemRow())">+ เพิ่มรายการ</button>' +
+    plModalActions('submitPo('+(po?po.id:'null')+')', 'บันทึกใบสั่งซื้อ'));
+}
+function submitPo(id){ return plBusy(async () => {
+  const items = [...document.querySelectorAll('#pof-items .plm-row')].map(r => ({
+    prItemId: r.dataset.pritem || '', productId: r.querySelector('.oi-desc').dataset.pid || '',
+    description: r.querySelector('.oi-desc').value.trim(), qty: Number(r.querySelector('.oi-qty').value) || 0,
+    unitCode: r.querySelector('.oi-unit').value.trim(), unitFactor: Number(r.querySelector('.oi-factor').value) || 1,
+    unitPrice: Number(r.querySelector('.oi-price').value) || 0
+  })).filter(it => it.description || it.qty);
+  if (!items.length) return plModalErr('ต้องมีรายการอย่างน้อย 1 รายการ');
+  const r = await callApi('savePurchaseOrder', { id: id || undefined, vendorId: document.getElementById('pof-vendor').value,
+    warehouseId: document.getElementById('pof-wh').value, orderDate: document.getElementById('pof-date').value,
+    expectedDate: document.getElementById('pof-exp').value, vatType: document.getElementById('pof-vat').value,
+    note: document.getElementById('pof-note').value.trim(), items });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); posCache = []; currentPoId = r.po.id;
+  _switchProductView('view-podetail', 'ใบสั่งซื้อ'); renderPoDetail(r.po); toast('บันทึกใบสั่งซื้อแล้ว');
+}); }
+async function issuePo(){
+  if (!confirm('ส่งใบสั่งซื้อนี้ให้ผู้ขาย? (ส่งแล้วแก้ไม่ได้)')) return;
+  const r = await callApi('issuePurchaseOrder', { id: currentPoId });
+  if (!r.success) { toast(r.message, true); return; }
+  renderPoDetail(r.po); posCache = []; toast(r.message || 'ส่งแล้ว');
+}
+async function cancelPo(){
+  const reason = prompt('เหตุผลที่ยกเลิก'); if (reason === null) return;
+  const r = await callApi('cancelPurchaseOrder', { id: currentPoId, reason });
+  if (!r.success) { toast(r.message, true); return; }
+  renderPoDetail(r.po); posCache = []; toast('ยกเลิกแล้ว');
+}
+async function openReceiveForm(){
+  await ensureWarehouses();
+  const po = POD, today = new Date().toISOString().slice(0, 10);
+  const rows = po.items.filter(it => it.remainQty > 0);
+  if (!rows.length) { toast('รับของครบแล้ว', true); return; }
+  plModal('<h3>รับของเข้าคลัง — ' + esc(po.poNo) + '</h3>' +
+    '<p class="form-hint">ใส่จำนวนที่รับจริงในหน่วยสั่งซื้อ (รับไม่ครบได้ ค้างไว้รับรอบหน้า) — ระบบจะเพิ่มสต็อก คิดต้นทุนเฉลี่ย และลงบัญชีให้</p>' +
+    '<div class="form-grid g2">' + plField('วันที่รับ', '<input type="date" id="rc-date" value="'+today+'">') +
+      plField('คลัง', '<select id="rc-wh">' + optsOf(warehousesCache, 'id', 'name', po.warehouseId) + '</select>') + '</div>' +
+    '<div class="plm-row head" style="grid-template-columns:2fr .8fr .8fr"><span>สินค้า</span><span>ค้างรับ</span><span>รับครั้งนี้</span></div>' +
+    rows.map(it => '<div class="plm-row" style="grid-template-columns:2fr .8fr .8fr" data-item="'+it.id+'">' +
+      '<span>'+esc(it.description)+'</span><span class="mono-data">'+it.remainQty+' '+esc(it.unitCode||'')+'</span>' +
+      '<input class="rc-qty" type="number" min="0" step="0.01" max="'+it.remainQty+'" value="'+it.remainQty+'"></div>').join('') +
+    plField('หมายเหตุ', '<input id="rc-note">') +
+    plModalActions('submitReceive()', 'บันทึกรับของ'));
+}
+function submitReceive(){ return plBusy(async () => {
+  const items = [...document.querySelectorAll('#pl-modal .plm-row[data-item]')].map(r => ({
+    poItemId: r.dataset.item, qty: Number(r.querySelector('.rc-qty').value) || 0 })).filter(it => it.qty > 0);
+  if (!items.length) return plModalErr('ยังไม่ได้ใส่จำนวนที่รับ');
+  const r = await callApi('receiveGoods', { poId: currentPoId, warehouseId: document.getElementById('rc-wh').value,
+    receiveDate: document.getElementById('rc-date').value, note: document.getElementById('rc-note').value.trim(), items });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); posCache = []; grsCache = [];
+  renderPoDetail(r.po); toast(r.message || 'รับของแล้ว');
+}); }
+async function billFromGr(grId){
+  const inv = prompt('เลขที่ใบแจ้งหนี้ของผู้ขาย (ไม่บังคับ)');
+  if (inv === null) return;
+  const r = await callApi('createApBillFromGr', { grId, vendorInvoiceNo: inv });
+  if (!r.success) { toast(r.message, true); return; }
+  apCache = []; toast(r.message);
+  const d = await callApi('getPurchaseOrder', { id: currentPoId });
+  if (d.success) renderPoDetail(d.po);
+}
+
+/* ── คลังกลาง ── */
+async function loadGoodsReceipts(){
+  const body = document.getElementById('grs-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  const r = await callApi('listGoodsReceipts', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  grsCache = r.data;
+  body.innerHTML = rowsOrEmpty(grsCache.map(g =>
+    '<tr><td class="mono-data">'+esc(g.grNo)+'</td><td class="mono-data">'+esc(g.receiveDate)+'</td>' +
+    '<td class="clickable-row" onclick="openPoDetail('+g.poId+')">'+dash(g.poNo)+'</td><td>'+dash(g.vendorName)+'</td>' +
+    '<td>'+g.itemCount+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
+    '<td>'+(g.billNo ? '<span class="pill ok">'+esc(g.billNo)+'</span>' : '<button class="btn btn-sm" onclick="billFromGrList('+g.id+')">ตั้งหนี้</button>')+'</td></tr>').join(''),
+    7, 'ยังไม่มีใบรับของ');
+}
+async function billFromGrList(grId){
+  const inv = prompt('เลขที่ใบแจ้งหนี้ของผู้ขาย (ไม่บังคับ)'); if (inv === null) return;
+  const r = await callApi('createApBillFromGr', { grId, vendorInvoiceNo: inv });
+  if (!r.success) { toast(r.message, true); return; }
+  apCache = []; toast(r.message); loadGoodsReceipts();
+}
+async function loadWarehouseStock(){
+  const body = document.getElementById('ws-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+  const r = await callApi('listWarehouseStock', { nonZeroOnly: false });
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
+  document.getElementById('ws-summary').innerHTML = 'มูลค่าสินค้าคงเหลือรวม <b>฿'+bahtPlain(r.totalValue)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก) — ตรงกับบัญชีสินค้าคงเหลือ 1300';
+  body.innerHTML = rowsOrEmpty(r.data.map(s =>
+    '<tr><td class="mono-data">'+dash(s.productCode)+'</td><td>'+esc(s.productName)+'</td><td>'+esc(s.warehouseName)+'</td>' +
+    '<td class="mono-data">'+s.qty+'</td><td>'+esc(s.unit)+'</td><td class="mono-data">฿'+bahtPlain(s.avgCost)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(s.value)+'</td>' +
+    '<td><button class="btn btn-sm" onclick="showLedger('+s.productId+',\''+esc(s.productName)+'\')">ความเคลื่อนไหว</button></td></tr>').join(''),
+    8, 'ยังไม่มีสินค้าในคลัง — รับของจากใบสั่งซื้อก่อน');
+}
+async function showLedger(productId, name){
+  const card = document.getElementById('ws-ledger-card');
+  card.style.display = ''; document.getElementById('ws-ledger-title').textContent = 'ความเคลื่อนไหว — ' + name;
+  document.getElementById('ws-ledger').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listStockLedger', { productId, limit: 50 });
+  if (!r.success) { document.getElementById('ws-ledger').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  document.getElementById('ws-ledger').innerHTML = r.data.length ? r.data.map(l =>
+    '<div class="activity-row"><span>'+esc(l.createdAt)+' · '+esc(l.moveType)+' '+esc(l.note||'')+'</span>' +
+    '<span class="amt mono-data">'+(l.changeQty>0?'+':'')+l.changeQty+' → คงเหลือ '+l.balanceAfter+'</span></div>').join('')
+    : '<p class="form-hint">ไม่มีความเคลื่อนไหว</p>';
+}
+
+/* ── เจ้าหนี้ ── */
+async function loadApBills(){
+  const body = document.getElementById('ap-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr>';
+  const r = await callApi('listApBills', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  apCache = r.data;
+  body.innerHTML = rowsOrEmpty(apCache.map(b =>
+    '<tr><td class="mono-data">'+esc(b.billNo)+'</td><td>'+esc(b.vendorName)+'</td>' +
+    '<td class="mono-data">'+dash(b.vendorInvoiceNo || b.grNo || b.poNo)+'</td><td class="mono-data">'+esc(b.billDate)+'</td>' +
+    '<td class="mono-data">'+dash(b.dueDate)+'</td><td class="mono-data">฿'+bahtPlain(b.total)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(b.paidAmount)+'</td><td class="mono-data">฿'+bahtPlain(b.outstanding)+'</td>' +
+    '<td>'+pill2(DOC_ST, b.status)+'</td></tr>').join(''), 9, 'ยังไม่มีใบแจ้งหนี้เจ้าหนี้');
+}
+async function openApManualForm(){
+  await ensureVendors();
+  const today = new Date().toISOString().slice(0, 10);
+  plModal('<h3>ตั้งหนี้ค่าใช้จ่าย (ไม่ผูกใบสั่งซื้อ)</h3>' +
+    '<div class="form-grid g2">' + plField('ผู้ขาย *', '<select id="apm-vendor">'+optsOf(vendorsCache, 'id', 'name')+'</select>') +
+      plField('เลขที่ใบแจ้งหนี้ผู้ขาย', '<input id="apm-inv">') + '</div>' +
+    '<div class="form-grid g2">' + plField('วันที่', '<input type="date" id="apm-date" value="'+today+'">') +
+      plField('ครบกำหนด (เว้นว่าง = ตามเครดิตเทอม)', '<input type="date" id="apm-due">') + '</div>' +
+    '<div class="form-grid g2">' + plField('ยอดก่อน VAT *', '<input id="apm-sub" type="number" min="0" step="0.01">') +
+      plField('VAT (เว้นว่าง = 7% อัตโนมัติ)', '<input id="apm-vat" type="number" min="0" step="0.01">') + '</div>' +
+    plField('รายละเอียด', '<input id="apm-note" placeholder="เช่น ค่าขนส่งเดือน ก.ย.">') +
+    plModalActions('submitApManual()', 'ตั้งหนี้'));
+}
+function submitApManual(){ return plBusy(async () => {
+  const num = id => document.getElementById(id).value.trim() === '' ? null : Number(document.getElementById(id).value);
+  if (!(num('apm-sub') > 0)) return plModalErr('ยอดก่อน VAT ต้องมากกว่า 0');
+  const r = await callApi('createApBillManual', { vendorId: document.getElementById('apm-vendor').value,
+    vendorInvoiceNo: document.getElementById('apm-inv').value.trim(), billDate: document.getElementById('apm-date').value,
+    dueDate: document.getElementById('apm-due').value || undefined, subtotalExVat: num('apm-sub'), vatAmount: num('apm-vat'),
+    note: document.getElementById('apm-note').value.trim() });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message); loadApBills();
+}); }
+async function openApPayForm(){
+  await ensureVendors();
+  const open = (apCache.length ? apCache : (await callApi('listApBills', {})).data || []).filter(b => b.outstanding > 0);
+  if (!open.length) { toast('ไม่มีใบแจ้งหนี้ค้างชำระ', true); return; }
+  const vendors = [...new Set(open.map(b => String(b.vendorId)))].map(id => ({ id, name: (open.find(b => String(b.vendorId) === id) || {}).vendorName }));
+  const today = new Date().toISOString().slice(0, 10);
+  plModal('<h3>จ่ายเงินเจ้าหนี้</h3><p class="form-hint">เลือกผู้ขายแล้วใส่ยอดที่จ่ายในแต่ละใบ (ตัดได้หลายใบในครั้งเดียว)</p>' +
+    '<div class="form-grid">' + plField('ผู้ขาย', '<select id="app-vendor" onchange="renderApPayRows()">'+optsOf(vendors, 'id', 'name')+'</select>') +
+      plField('วันที่จ่าย', '<input type="date" id="app-date" value="'+today+'">') +
+      plField('วิธีจ่าย', '<select id="app-method"><option value="transfer">เงินโอน</option><option value="cash">เงินสด</option><option value="cheque">เช็ค</option></select>') + '</div>' +
+    '<div id="app-rows"></div>' + plField('หมายเหตุ', '<input id="app-note">') +
+    plModalActions('submitApPay()', 'บันทึกการจ่าย'));
+  APP_OPEN = open; renderApPayRows();
+}
+let APP_OPEN = [];
+function renderApPayRows(){
+  const vid = document.getElementById('app-vendor').value;
+  const rows = APP_OPEN.filter(b => String(b.vendorId) === String(vid));
+  document.getElementById('app-rows').innerHTML =
+    '<div class="plm-row head" style="grid-template-columns:1.4fr .8fr .8fr .8fr"><span>ใบแจ้งหนี้</span><span>ครบกำหนด</span><span>คงค้าง</span><span>จ่ายครั้งนี้</span></div>' +
+    rows.map(b => '<div class="plm-row" style="grid-template-columns:1.4fr .8fr .8fr .8fr" data-bill="'+b.id+'">' +
+      '<span class="mono-data">'+esc(b.billNo)+'</span><span class="mono-data">'+dash(b.dueDate)+'</span>' +
+      '<span class="mono-data">฿'+bahtPlain(b.outstanding)+'</span>' +
+      '<input class="app-amt" type="number" min="0" step="0.01" max="'+b.outstanding+'" value="'+b.outstanding+'"></div>').join('');
+}
+function submitApPay(){ return plBusy(async () => {
+  const allocations = [...document.querySelectorAll('#app-rows .plm-row[data-bill]')].map(r => ({
+    billId: r.dataset.bill, amount: Number(r.querySelector('.app-amt').value) || 0 })).filter(a => a.amount > 0);
+  if (!allocations.length) return plModalErr('ยังไม่ได้ใส่ยอดที่จ่าย');
+  const r = await callApi('payApBills', { vendorId: document.getElementById('app-vendor').value,
+    paymentDate: document.getElementById('app-date').value, method: document.getElementById('app-method').value,
+    note: document.getElementById('app-note').value.trim(), allocations });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message); loadApBills();
+}); }
+async function openApAging(){
+  const card = document.getElementById('ap-aging-card');
+  card.style.display = ''; document.getElementById('ap-aging').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('getApAging', {});
+  if (!r.success) { document.getElementById('ap-aging').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  document.getElementById('ap-aging').innerHTML = agingTable(r.data, 'ผู้ขาย');
+}
+function agingTable(rows, partyLabel){
+  if (!rows.length) return '<p class="form-hint">ไม่มียอดค้าง</p>';
+  return '<div class="table-wrap"><table><thead><tr><th>'+esc(partyLabel)+'</th><th>ยังไม่ถึงกำหนด</th><th>1-30 วัน</th><th>31-60</th><th>61-90</th><th>90+</th><th>รวม</th></tr></thead><tbody>' +
+    rows.map(a => '<tr><td>'+esc(a.partyName)+'</td><td class="mono-data">฿'+bahtPlain(a.notDue)+'</td><td class="mono-data">฿'+bahtPlain(a.d1_30)+'</td>' +
+      '<td class="mono-data">฿'+bahtPlain(a.d31_60)+'</td><td class="mono-data">฿'+bahtPlain(a.d61_90)+'</td>' +
+      '<td class="mono-data'+(a.d90plus>0?' ':'')+'">฿'+bahtPlain(a.d90plus)+'</td><td class="mono-data"><b>฿'+bahtPlain(a.total)+'</b></td></tr>').join('') +
+    '</tbody></table></div>';
+}
+
+/* ── ลูกหนี้ ── */
+async function loadArInvoices(){
+  const body = document.getElementById('ar-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr>';
+  const r = await callApi('listArInvoices', {});
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  arCache = r.data;
+  body.innerHTML = rowsOrEmpty(arCache.map(iv =>
+    '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td>'+esc(iv.customerName)+'</td><td class="mono-data">'+dash(iv.salesOrderId)+'</td>' +
+    '<td class="mono-data">'+esc(iv.invoiceDate)+'</td><td class="mono-data">'+dash(iv.dueDate)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(iv.total)+'</td><td class="mono-data">฿'+bahtPlain(iv.receivedAmount)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(iv.outstanding)+'</td><td>'+pill2(DOC_ST, iv.status)+'</td></tr>').join(''), 9, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
+}
+async function openArInvoiceForm(){
+  const today = new Date().toISOString().slice(0, 10);
+  const r = await callApi('listUninvoicedSalesOrders', {});
+  const orders = r.success ? r.data : [];
+  await ensureCustomers();
+  plModal('<h3>ออกใบแจ้งหนี้ลูกค้า</h3>' +
+    '<p class="form-hint">เลือกบิลขายเครดิตที่ยังไม่ได้ออกใบแจ้งหนี้ (ยอดมาจากบิลจริง) หรือเลือก "กรอกเอง" สำหรับรายการอื่น</p>' +
+    plField('บิลขาย', '<select id="arf-order" onchange="arToggleManual()"><option value="">— กรอกเอง —</option>' +
+      orders.map(o => '<option value="'+esc(o.id)+'" data-cust="'+esc(o.customerId)+'">'+esc(o.orderCode)+' · '+esc(o.customerName)+' · ฿'+bahtPlain(o.total)+'</option>').join('') + '</select>') +
+    '<div id="arf-manual">' +
+      plField('ลูกค้า', '<select id="arf-cust">'+optsOf(customersCache, 'record_id', 'name')+'</select>') +
+      '<div class="form-grid g2">' + plField('ยอดก่อน VAT', '<input id="arf-sub" type="number" min="0" step="0.01">') +
+        plField('VAT (เว้นว่าง = 7%)', '<input id="arf-vat" type="number" min="0" step="0.01">') + '</div>' +
+    '</div>' +
+    '<div class="form-grid g2">' + plField('วันที่', '<input type="date" id="arf-date" value="'+today+'">') +
+      plField('เครดิต (วัน)', '<input id="arf-days" type="number" min="0" value="30">') + '</div>' +
+    plField('หมายเหตุ', '<input id="arf-note">') +
+    plModalActions('submitArInvoice()', 'ออกใบแจ้งหนี้'));
+}
+function arToggleManual(){ document.getElementById('arf-manual').style.display = document.getElementById('arf-order').value ? 'none' : ''; }
+async function ensureCustomers(){ if (!customersCache.length) { const r = await callApi('listCustomersAdmin', {}); if (r.success) customersCache = r.data.filter(c => isOn(c.is_active)); } return customersCache; }
+function submitArInvoice(){ return plBusy(async () => {
+  const orderId = document.getElementById('arf-order').value;
+  const payload = { invoiceDate: document.getElementById('arf-date').value, dueDays: Number(document.getElementById('arf-days').value) || 30,
+    note: document.getElementById('arf-note').value.trim() };
+  if (orderId) payload.salesOrderId = orderId;
+  else {
+    payload.customerId = document.getElementById('arf-cust').value;
+    const sub = document.getElementById('arf-sub').value, vat = document.getElementById('arf-vat').value;
+    if (!(Number(sub) > 0)) return plModalErr('ยอดก่อน VAT ต้องมากกว่า 0');
+    payload.subtotalExVat = Number(sub);
+    if (vat.trim() !== '') payload.vatAmount = Number(vat);
+  }
+  const r = await callApi('createArInvoice', payload);
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message); loadArInvoices();
+}); }
+async function openArReceiveForm(){
+  const open = (arCache.length ? arCache : (await callApi('listArInvoices', {})).data || []).filter(iv => iv.outstanding > 0);
+  if (!open.length) { toast('ไม่มีใบแจ้งหนี้ค้างรับ', true); return; }
+  const custs = [...new Set(open.map(iv => String(iv.customerId)))].map(id => ({ id, name: (open.find(iv => String(iv.customerId) === id) || {}).customerName }));
+  const today = new Date().toISOString().slice(0, 10);
+  ARR_OPEN = open;
+  plModal('<h3>รับชำระจากลูกค้า</h3>' +
+    '<div class="form-grid">' + plField('ลูกค้า', '<select id="arr-cust" onchange="renderArRows()">'+optsOf(custs, 'id', 'name')+'</select>') +
+      plField('วันที่รับ', '<input type="date" id="arr-date" value="'+today+'">') +
+      plField('วิธีรับ', '<select id="arr-method"><option value="transfer">เงินโอน</option><option value="cash">เงินสด</option><option value="cheque">เช็ค</option></select>') + '</div>' +
+    '<div id="arr-rows"></div>' + plField('หมายเหตุ', '<input id="arr-note">') +
+    plModalActions('submitArReceive()', 'บันทึกรับชำระ'));
+  renderArRows();
+}
+let ARR_OPEN = [];
+function renderArRows(){
+  const cid = document.getElementById('arr-cust').value;
+  document.getElementById('arr-rows').innerHTML =
+    '<div class="plm-row head" style="grid-template-columns:1.4fr .8fr .8fr .8fr"><span>ใบแจ้งหนี้</span><span>ครบกำหนด</span><span>คงค้าง</span><span>รับครั้งนี้</span></div>' +
+    ARR_OPEN.filter(iv => String(iv.customerId) === String(cid)).map(iv =>
+      '<div class="plm-row" style="grid-template-columns:1.4fr .8fr .8fr .8fr" data-inv="'+iv.id+'">' +
+      '<span class="mono-data">'+esc(iv.invoiceNo)+'</span><span class="mono-data">'+dash(iv.dueDate)+'</span>' +
+      '<span class="mono-data">฿'+bahtPlain(iv.outstanding)+'</span>' +
+      '<input class="arr-amt" type="number" min="0" step="0.01" max="'+iv.outstanding+'" value="'+iv.outstanding+'"></div>').join('');
+}
+function submitArReceive(){ return plBusy(async () => {
+  const allocations = [...document.querySelectorAll('#arr-rows .plm-row[data-inv]')].map(r => ({
+    invoiceId: r.dataset.inv, amount: Number(r.querySelector('.arr-amt').value) || 0 })).filter(a => a.amount > 0);
+  if (!allocations.length) return plModalErr('ยังไม่ได้ใส่ยอดที่รับ');
+  const r = await callApi('receiveArPayment', { customerId: document.getElementById('arr-cust').value,
+    receiptDate: document.getElementById('arr-date').value, method: document.getElementById('arr-method').value,
+    note: document.getElementById('arr-note').value.trim(), allocations });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message); loadArInvoices();
+}); }
+async function openArAging(){
+  const card = document.getElementById('ar-aging-card');
+  card.style.display = ''; document.getElementById('ar-aging').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('getArAging', {});
+  if (!r.success) { document.getElementById('ar-aging').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  document.getElementById('ar-aging').innerHTML = agingTable(r.data, 'ลูกค้า');
+}
+
+/* ── บัญชีแยกประเภท ── */
+async function loadGlBooks(){
+  const body = document.getElementById('gl-body');
+  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  const r = await callApi('listJournals', { limit: 100 });
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  glCache = r.data;
+  body.innerHTML = rowsOrEmpty(glCache.map(j =>
+    '<tr class="clickable-row" onclick="openJournal('+j.id+')"><td class="mono-data">'+esc(j.journalNo)+'</td><td class="mono-data">'+esc(j.journalDate)+'</td>' +
+    '<td>'+esc(j.source)+'</td><td class="wrap">'+esc(j.memo)+'</td><td class="mono-data">฿'+bahtPlain(j.totalDebit)+'</td>' +
+    '<td>'+pill2(DOC_ST, j.status)+'</td></tr>').join(''), 6, 'ยังไม่มีใบสำคัญ');
+}
+async function openJournal(id){
+  const r = await callApi('getJournal', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  const j = r.journal;
+  plModal('<h3>ใบสำคัญ '+esc(j.journalNo)+' '+pill2(DOC_ST, j.status)+'</h3>' +
+    '<p class="form-hint">'+esc(j.journalDate)+' · '+esc(j.source)+' · '+esc(j.memo)+'</p>' +
+    '<div class="table-wrap"><table><thead><tr><th>บัญชี</th><th>คำอธิบาย</th><th>เดบิต</th><th>เครดิต</th></tr></thead><tbody>' +
+    j.lines.map(l => '<tr><td class="mono-data">'+esc(l.accountCode)+' '+esc(l.accountName)+'</td><td class="wrap">'+esc(l.description)+'</td>' +
+      '<td class="mono-data">'+(l.debit?'฿'+bahtPlain(l.debit):'')+'</td><td class="mono-data">'+(l.credit?'฿'+bahtPlain(l.credit):'')+'</td></tr>').join('') +
+    '<tr><td colspan="2"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(j.totalDebit)+'</b></td><td class="mono-data"><b>฿'+bahtPlain(j.totalCredit)+'</b></td></tr>' +
+    '</tbody></table></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
+    (j.status === 'posted' ? '<button class="btn btn-primary" id="plm-save" onclick="voidJournalUI('+j.id+')">กลับรายการ</button>' : '') + '</div>');
+}
+async function voidJournalUI(id){
+  const reason = prompt('เหตุผลที่กลับรายการ'); if (reason === null) return;
+  const r = await callApi('voidJournal', { id, reason });
+  if (!r.success) { toast(r.message, true); return; }
+  plModalClose(); toast(r.message); loadGlBooks();
+}
+function journalLineRow(){
+  return '<div class="plm-row" style="grid-template-columns:1.2fr 1.6fr .8fr .8fr 34px">' +
+    '<input class="jl-acct" placeholder="รหัสบัญชี" list="gl-accts">' +
+    '<input class="jl-desc" placeholder="คำอธิบาย">' +
+    '<input class="jl-dr" type="number" min="0" step="0.01" placeholder="เดบิต">' +
+    '<input class="jl-cr" type="number" min="0" step="0.01" placeholder="เครดิต">' +
+    '<button class="btn btn-sm btn-ghost" onclick="this.parentNode.remove()">✕</button></div>';
+}
+let acctsCache = [];
+async function ensureAccounts(){ if (!acctsCache.length) { const r = await callApi('listGlAccounts', {}); if (r.success) acctsCache = r.data; } return acctsCache; }
+async function openJournalForm(){
+  await ensureAccounts();
+  const today = new Date().toISOString().slice(0, 10);
+  plModal('<h3>ลงใบสำคัญเอง</h3><p class="form-hint">เดบิตรวมต้องเท่ากับเครดิตรวม ระบบจึงจะบันทึกให้</p>' +
+    '<datalist id="gl-accts">'+acctsCache.map(a => '<option value="'+esc(a.code)+'">'+esc(a.code+' '+a.name)+'</option>').join('')+'</datalist>' +
+    '<div class="form-grid g2">' + plField('วันที่', '<input type="date" id="jf-date" value="'+today+'">') + plField('คำอธิบาย', '<input id="jf-memo">') + '</div>' +
+    '<div class="plm-row head" style="grid-template-columns:1.2fr 1.6fr .8fr .8fr 34px"><span>บัญชี</span><span>คำอธิบาย</span><span>เดบิต</span><span>เครดิต</span><span></span></div>' +
+    '<div id="jf-lines">' + journalLineRow() + journalLineRow() + '</div>' +
+    '<button class="btn btn-sm" onclick="document.getElementById(\'jf-lines\').insertAdjacentHTML(\'beforeend\', journalLineRow())">+ เพิ่มบรรทัด</button>' +
+    plModalActions('submitJournal()', 'ลงบัญชี'));
+}
+function submitJournal(){ return plBusy(async () => {
+  const lines = [...document.querySelectorAll('#jf-lines .plm-row')].map(r => ({
+    accountCode: r.querySelector('.jl-acct').value.trim(), description: r.querySelector('.jl-desc').value.trim(),
+    debit: Number(r.querySelector('.jl-dr').value) || 0, credit: Number(r.querySelector('.jl-cr').value) || 0
+  })).filter(l => l.accountCode && (l.debit || l.credit));
+  if (lines.length < 2) return plModalErr('ต้องมีอย่างน้อย 2 บรรทัด');
+  const r = await callApi('postManualJournal', { date: document.getElementById('jf-date').value,
+    memo: document.getElementById('jf-memo').value.trim(), lines });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message); loadGlBooks();
+}); }
+async function loadTrialBalance(){
+  const card = document.getElementById('gl-tb-card');
+  card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('getTrialBalance', {});
+  if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  const balanced = Math.abs(r.totalDebit - r.totalCredit) < 0.01;
+  document.getElementById('gl-tb').innerHTML =
+    '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>ชื่อบัญชี</th><th>เดบิตรวม</th><th>เครดิตรวม</th><th>ยอดคงเหลือ</th></tr></thead><tbody>' +
+    r.data.map(a => '<tr><td class="mono-data">'+esc(a.code)+'</td><td>'+esc(a.name)+'</td><td class="mono-data">฿'+bahtPlain(a.debit)+'</td>' +
+      '<td class="mono-data">฿'+bahtPlain(a.credit)+'</td><td class="mono-data">฿'+bahtPlain(a.balance)+'</td></tr>').join('') +
+    '<tr><td colspan="2"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalDebit)+'</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalCredit)+'</b></td>' +
+    '<td>'+(balanced?'<span class="pill ok">สมดุล</span>':'<span class="pill wait">ไม่สมดุล</span>')+'</td></tr></tbody></table></div>';
+}
+async function openAccountsList(){
+  await ensureAccounts();
+  plModal('<h3>ผังบัญชี</h3><p class="form-hint">รหัสที่ระบบใช้ลงบัญชีอัตโนมัติ: 1300 สินค้าคงเหลือ · 2150 รับของยังไม่วางบิล · 2100 เจ้าหนี้ · 1200 ลูกหนี้ · 4100 รายได้ · 1400/2200 ภาษีซื้อ-ขาย</p>' +
+    '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>ชื่อบัญชี</th><th>ประเภท</th></tr></thead><tbody>' +
+    acctsCache.map(a => '<tr><td class="mono-data">'+esc(a.code)+'</td><td>'+esc(a.name)+'</td><td>'+esc(a.acctType)+'</td></tr>').join('') +
+    '</tbody></table></div><div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
 }
 
 /* ── สภาพแวดล้อม ── */

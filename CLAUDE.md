@@ -48,6 +48,30 @@ it fills the gaps around them.
 - Free goods (ของแถม) were deliberately deferred — the user's instruction was "finish discounts
   first." Don't build free-goods-on-price-lists without checking with the user first.
 
+## งานซื้อและบัญชี (added 2026-09-23, UAT only)
+
+- **Chain**: ใบขอซื้อ PR (`21_purchase_requisition.gs`) → อนุมัติ → ใบสั่งซื้อ PO (`22_purchase_order.gs`, เปิดตรง
+  ก็ได้) → รับของ GR → เข้าคลังกลาง → ตั้งหนี้ AP → จ่ายเงิน (`23_accounting.gs`). ทุกอย่างอยู่ Central Sheet
+  (ฝั่งบริษัท ไม่ใช่ข้อมูลตัวแทน) และใช้ `_withDocLock()` ทุก action ที่เขียนเอกสาร.
+- **Approval flows are data, not code**: `approval_flows` (doc_type × ช่วงวงเงิน) + `approval_flow_steps`
+  (ขั้น, ผู้อนุมัติแบบ role หรือ user list, `required_approvals` = ต้องกี่คนต่อขั้น). เลือกสายตอน submit จาก
+  ยอดรวม PR; เข้าหลายสาย → ใช้สายที่ `min_amount` สูงสุด. ไม่มีสายเข้าเงื่อนไข = อนุมัติอัตโนมัติ (บันทึกไว้ใน
+  ประวัติว่าระบบอนุมัติให้). ปฏิเสธคนเดียว = ตีกลับทั้งใบ; ส่งใหม่ล้างประวัติเดิมเพื่อให้การนับเริ่มใหม่.
+  `super_admin` อนุมัติแทนได้เสมอ (กันงานค้างเมื่อผู้อนุมัติไม่อยู่).
+- **Editing rules**: PR แก้ได้เฉพาะ draft/rejected · PO แก้ได้เฉพาะ draft (ส่งผู้ขายแล้วต้องยกเลิกแล้วเปิดใหม่) ·
+  ยกเลิก PO ที่รับของแล้วไม่ได้ · ยกเลิก PO ที่ release จาก PR แล้วจะคืนยอดค้างให้ PR เอง.
+- **หน่วยสั่งซื้อ vs หน่วยฐาน**: `po_items.unit_factor` = จำนวนหน่วยฐานต่อ 1 หน่วยสั่งซื้อ (สั่งเป็นลัง 20 ชิ้น →
+  factor 20). สต็อก/ต้นทุนทุกอย่างเก็บเป็นหน่วยฐาน. ต้นทุนเฉลี่ยถ่วงน้ำหนักคิดใหม่ทุกครั้งที่รับของ
+  (`_applyStockIn` ใน `22_purchase_order.gs`) — คลังกลางนี้แยกคนละเรื่องกับ `van_stock` ของตัวแทน.
+- **การลงบัญชีอัตโนมัติ** (รหัสอยู่ใน `GL_ACCT`, seed ผังบัญชีใน `00_setup_sheets.gs`):
+  รับของ → Dr 1300 สินค้าคงเหลือ / Cr 2150 GR-NI · ตั้งหนี้ → Dr 2150 + Dr 1400 ภาษีซื้อ / Cr 2100 เจ้าหนี้ ·
+  จ่ายเงิน → Dr 2100 / Cr 1120 (หรือ 1110 ถ้าเงินสด) · ใบแจ้งหนี้ลูกค้า → Dr 1200 / Cr 4100 + Cr 2200 ·
+  รับชำระ → Dr 1120 / Cr 1200. ทุกใบสำคัญบังคับเดบิต=เครดิต (`_postJournal`).
+- **ยกเลิกใบสำคัญ = กลับรายการ** (ออกใบใหม่ตรงข้าม) ไม่ลบของเดิม — งบทดลองจึงนับ**ทุก**ใบรวมใบที่ voided
+  แล้ว (ถ้าตัดใบเดิมออกด้วยจะหักซ้ำสองเท่า — เคยพลาดตรงนี้ เทสต์จับได้).
+- ยังไม่ได้ทำ: แก้ไข/ยกเลิกใบรับของ (GR) หลังลงบัญชีแล้ว, ตัดต้นทุนขาย (COGS 5100) ตอนขายออกจากคลังกลาง,
+  งบกำไรขาดทุน/งบดุล (มีแต่งบทดลอง), ปิดงวดบัญชี, ภาษีหัก ณ ที่จ่าย, multi-currency.
+
 ## Environment gotchas
 
 - Windows + Git Bash: `.gs`/`.js`/`.html` files are CRLF. Prefer the `Edit`/`Write` tools over shell
@@ -121,6 +145,8 @@ it fills the gaps around them.
 - `node .dev/test-pricelist-edit.js` — unit tests of the manual price-entry actions (create / clone /
   savePriceListLine / deletePriceListLine / savePriceListBillPromos) against in-memory fake sheets,
   including the draft-only rule and that saved rows price correctly through `priceCart()`.
+- `node .dev/test-purchasing-accounting.js` — unit tests ของงานซื้อ+บัญชีทั้งสาย (PR/อนุมัติหลายขั้น/PO/รับของ/
+  ต้นทุนเฉลี่ย/AP/AR/งบทดลอง) บนชีตจำลอง ไม่ยิงเน็ต — 109 assertions.
 - `UAT_URL='<uat exec url>' node .dev/uat-sale-e2e.js` — full end-to-end test against the live UAT
   backend (creates a throwaway test tenant/customer/staff, runs pricing + sales-order scenarios
   through both the mobile and admin action surfaces). Refuses to run against the production URL as a
@@ -148,6 +174,10 @@ On UAT only (user testing on `/admin-uat/`):
   (สร้างชุดราคาใหม่ / คัดลอกเป็นงวดใหม่) and detail pages (✎ แก้ไขราคา mode + per-line modal +
   bill-promo editor).
 
+- งานซื้อ + บัญชี (2026-09-23): ผู้ขาย/คลัง/สายอนุมัติ (`20_purchasing_master.gs`), ใบขอซื้อพร้อมสายอนุมัติ
+  หลายขั้น (`21`), ใบสั่งซื้อ + รับของเข้าคลังกลาง + ต้นทุนเฉลี่ย (`22`), บัญชีแยกประเภท/เจ้าหนี้/ลูกหนี้ +
+  งบทดลอง + อายุหนี้ (`23`) พร้อมเมนูแอดมินกลุ่ม 6–8. ทดสอบด้วย unit test ครบสาย (109 assertions) และ
+  ทดสอบ UI กับ mock backend แล้ว — **ยังไม่เคยรันกับ backend UAT จริง** (รอ deploy + ทดสอบ)
 - LINE LIFF mobile sales app scaffold (2026-09-22): `frontend-mobile/index.html` + `config.js`, deployed
   by the same Pages workflow to `/mobile-uat/` (and `/mobile/` once on `main`). Tested against a mock
   backend only — see `frontend-mobile/README.md` for screens, offline-queue rules and what's missing.

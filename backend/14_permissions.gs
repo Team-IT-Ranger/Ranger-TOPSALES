@@ -27,7 +27,12 @@ var MODULE_REGISTRY = [
   { code: 'promotions',     label: 'โปรโมชั่น',           scope: 'owner'  },
   { code: 'tenants',        label: 'ตัวแทนจำหน่าย',       scope: 'owner'  },
   { code: 'settings',       label: 'ข้อมูลกลาง (กลุ่มลูกค้า/ช่องทางจำหน่าย/ประเภทชำระเงิน)', scope: 'owner' },
-  { code: 'users_roles',    label: 'ผู้ใช้งานและสิทธิ์',   scope: 'both'   }
+  { code: 'users_roles',    label: 'ผู้ใช้งานและสิทธิ์',   scope: 'both'   },
+  // ── งานซื้อ / คลังกลาง / บัญชี (ฝั่งบริษัทเจ้าของสินค้า) ──
+  { code: 'vendors',        label: 'ผู้ขาย/ผู้จัดจำหน่าย',  scope: 'owner'  },
+  { code: 'purchasing',     label: 'ใบขอซื้อและใบสั่งซื้อ', scope: 'owner'  },
+  { code: 'inventory',      label: 'คลังสินค้ากลาง (รับเข้า/ยอดคงเหลือ)', scope: 'owner' },
+  { code: 'accounting',     label: 'บัญชี (แยกประเภท/ลูกหนี้/เจ้าหนี้)', scope: 'owner' }
 ];
 
 /**

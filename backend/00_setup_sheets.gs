@@ -7,7 +7,8 @@
 // สิทธิ์เริ่มต้นของ role มาตรฐาน (owner_admin/tenant_admin) — ต้องอยู่นอกฟังก์ชันเพื่อให้ ensureSchemaCurrent()
 // เอาไปรวมกับ CENTRAL_SHEETS คำนวณลายนิ้วมือด้วย (เพิ่มโมดูลใหม่ในนี้ = สคีมาเปลี่ยน ต้อง re-seed อัตโนมัติ)
 // customers/staff/sales อยู่ในนี้ด้วย เพราะบริษัทเจ้าของสินค้าเองก็ต้องเปิดบิลขายแทนตัวแทนได้ (เลือกลูกค้า/พนักงานที่จะตัดสต็อกให้)
-var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report', 'customers', 'staff', 'sales'];
+var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report', 'customers', 'staff', 'sales',
+  'vendors', 'purchasing', 'inventory', 'accounting'];
 var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles'];
 
 var CENTRAL_SHEETS = {
@@ -55,6 +56,58 @@ var CENTRAL_SHEETS = {
   payment_types: ['record_id','code','name','is_active'],
 
   discount_rules: ['record_id','name','scope','product_group_id','product_id','trigger_group_ids','customer_group_id','min_qty','min_amount','type','value','free_product_id','free_qty','priority','stackable','date_start','date_end','is_active'],
+
+  // ═══════════ งานซื้อ (PR → PO → รับของเข้าคลัง) — ดู 20_purchasing_master.gs, 21_purchase_requisition.gs, 22_purchase_order.gs ═══════════
+  // ทั้งหมดเป็นข้อมูล "ฝั่งบริษัทเจ้าของสินค้า" จึงอยู่ Central Sheet (ตัวแทนไม่ได้ซื้อของเอง)
+  vendors: ['record_id','vendor_code','name','tax_id','branch_code','contact_name','phone','email','address',
+    'payment_terms_days','credit_limit','bank_name','bank_account_no','is_active','note','created_at'],
+  warehouses: ['record_id','code','name','address','is_active','is_default','created_at'],
+  // ยอดคงเหลือต่อคลัง+สินค้า (หน่วยฐาน) · avg_cost = ต้นทุนเฉลี่ยถ่วงน้ำหนัก อัปเดตตอนรับของ
+  warehouse_stock: ['record_id','warehouse_id','product_id','qty','avg_cost','updated_at'],
+  // บัญชีคุมการเคลื่อนไหวสต็อกคลัง (ledger) — 1 แถว = 1 การเคลื่อนไหว ย้อนรอยได้เสมอ
+  stock_ledger: ['record_id','warehouse_id','product_id','change_qty','balance_after','unit_cost','move_type','ref_type','ref_id','note','created_by','created_at'],
+
+  // ── สายอนุมัติ: ออกแบบขั้นตอน (steps) เงื่อนไข (ช่วงวงเงิน) และจำนวนผู้อนุมัติต่อขั้นได้ ──
+  // approval_flows: 1 สาย = 1 ประเภทเอกสาร (PR) × ช่วงวงเงิน [min_amount, max_amount] (max ว่าง = ไม่จำกัด)
+  approval_flows: ['record_id','doc_type','name','min_amount','max_amount','is_active','note','created_at'],
+  // approver_type: 'role' (ทุกคนที่ถือ role นี้) | 'user' (ระบุ admin_users.record_id)
+  // approver_ref: role_code หรือ user id — ใส่หลายคนคั่นด้วย , ได้ · required_approvals = ต้องอนุมัติกี่คนจึงผ่านขั้นนี้
+  approval_flow_steps: ['record_id','flow_id','step_no','name','approver_type','approver_ref','required_approvals'],
+
+  purchase_requisitions: ['record_id','pr_no','requester_user_id','department','need_by_date','note','status',
+    'flow_id','current_step','total_ex_vat','created_at','submitted_at','decided_at','closed_at'],
+  pr_items: ['record_id','pr_id','line_no','product_id','description','qty','unit_code','unit_price','amount','po_qty','note'],
+  // ประวัติการตัดสินใจทุกครั้ง (ไม่ลบ ไม่ทับ) — ใช้ดูว่าใครอนุมัติขั้นไหนเมื่อไหร่
+  pr_approvals: ['record_id','pr_id','step_no','approver_user_id','decision','comment','decided_at'],
+
+  purchase_orders: ['record_id','po_no','vendor_id','pr_id','warehouse_id','status','order_date','expected_date',
+    'vat_type','subtotal_ex_vat','discount_ex_vat','vat_amount','total','note','created_by','created_at','closed_at'],
+  po_items: ['record_id','po_id','line_no','pr_item_id','product_id','description','qty','unit_code','unit_factor','unit_price','amount','received_qty'],
+
+  goods_receipts: ['record_id','gr_no','po_id','vendor_id','warehouse_id','receive_date','note','status','journal_id','created_by','created_at'],
+  gr_items: ['record_id','gr_id','po_item_id','product_id','qty','unit_code','unit_factor','base_qty','unit_cost','amount'],
+
+  // ═══════════ บัญชี (แยกประเภท / ลูกหนี้ / เจ้าหนี้) — ดู 23_accounting.gs ═══════════
+  // ผังบัญชีมาตรฐานอย่างย่อ seed ให้ตอน setup (แก้/เพิ่มเองได้) · acct_type: asset|liability|equity|income|expense
+  gl_accounts: ['code','name','acct_type','parent_code','is_active','note'],
+  // สมุดรายวัน: ทุกใบต้องเดบิต=เครดิต (postJournal บังคับ) · source: GL|AP|AR|INV
+  gl_journals: ['record_id','journal_no','journal_date','source','ref_type','ref_id','memo','status','total_debit','total_credit','created_by','created_at','voided_at'],
+  gl_journal_lines: ['record_id','journal_id','line_no','account_code','description','debit','credit','party_type','party_id'],
+
+  // เจ้าหนี้: ใบแจ้งหนี้จากผู้ขาย (ตั้งหนี้) + การจ่ายเงิน (1 การจ่าย ตัดได้หลายใบ)
+  ap_bills: ['record_id','bill_no','vendor_invoice_no','vendor_id','po_id','gr_id','bill_date','due_date',
+    'subtotal_ex_vat','vat_amount','total','paid_amount','status','journal_id','note','created_by','created_at'],
+  ap_payments: ['record_id','payment_no','vendor_id','payment_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
+  ap_payment_allocations: ['record_id','payment_id','bill_id','amount'],
+
+  // ลูกหนี้: ใบแจ้งหนี้ลูกค้า (ออกจากบิลขายเครดิตได้) + การรับชำระ
+  ar_invoices: ['record_id','invoice_no','customer_id','tenant_id','sales_order_id','invoice_date','due_date',
+    'subtotal_ex_vat','vat_amount','total','received_amount','status','journal_id','note','created_by','created_at'],
+  ar_receipts: ['record_id','receipt_no','customer_id','receipt_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
+  ar_receipt_allocations: ['record_id','receipt_id','invoice_id','amount'],
+
+  // ตัวนับเลขที่เอกสารระดับบริษัท (เอกสารของตัวแทนใช้ doc_number_counters ใน tenant sheet — ดู 12_docnum.gs)
+  central_doc_counters: ['doc_type','period_key','last_number'],
 
   roles: ['role_code','role_label','is_system'],
   role_permissions: ['role_code','module_code','can_view','can_edit'],
@@ -122,6 +175,8 @@ function setupCentralSheet() {
   _seedPaymentTypes();
   _seedProvinces();
   _seedRolesAndPermissions();
+  _seedGlAccounts();
+  _seedDefaultWarehouse();
 
   _setTextColumns(ss, 'price_lists', ['valid_from', 'valid_to']);   // กัน Sheets แปลงวันที่เป็น Date เอง (เขตเวลาไม่ตรงกัน = วันเลื่อน)
   clearRolePermissionsCache(); // ให้สิทธิ์ที่เพิ่งเติม (เช่น settings) มีผลทันที ไม่ต้องรอแคช 5 นาที
@@ -176,6 +231,41 @@ function _seedDistributionChannels() {
     [2, 'Credit Sales', 'พนักงานเข้าเยี่ยมจด Sales Order ส่งสำนักงานจัดส่งทีหลัง', 'TRUE'],
     [3, 'ขายหน้าคลัง', 'ลูกค้ามารับสินค้าที่คลังตัวแทนโดยตรง', 'TRUE']
   ].forEach(function(r) { sh.appendRow(r); });
+}
+
+// ผังบัญชีมาตรฐานอย่างย่อ (ภาษาไทย) — seed ครั้งเดียว แก้/เพิ่มบัญชีเองได้ทีหลัง
+// รหัสที่ระบบใช้อ้างอิงเองอยู่ใน GL_ACCT (23_accounting.gs) ถ้าจะเปลี่ยนรหัส ต้องแก้ที่นั่นด้วย
+function _seedGlAccounts() {
+  var sh = centralSheet('gl_accounts');
+  if (sh.getLastRow() > 1) return;
+  [
+    ['1000', 'สินทรัพย์', 'asset', '', 'TRUE', 'หมวดหลัก'],
+    ['1100', 'เงินสดและเงินฝากธนาคาร', 'asset', '1000', 'TRUE', ''],
+    ['1110', 'เงินสดในมือ', 'asset', '1100', 'TRUE', ''],
+    ['1120', 'เงินฝากธนาคาร', 'asset', '1100', 'TRUE', 'บัญชีรับ-จ่ายหลัก'],
+    ['1200', 'ลูกหนี้การค้า', 'asset', '1000', 'TRUE', 'คุมยอดจากระบบลูกหนี้'],
+    ['1300', 'สินค้าคงเหลือ', 'asset', '1000', 'TRUE', 'คุมยอดจากคลังสินค้า'],
+    ['1400', 'ภาษีซื้อ', 'asset', '1000', 'TRUE', 'VAT ซื้อ 7%'],
+    ['2000', 'หนี้สิน', 'liability', '', 'TRUE', 'หมวดหลัก'],
+    ['2100', 'เจ้าหนี้การค้า', 'liability', '2000', 'TRUE', 'คุมยอดจากระบบเจ้าหนี้'],
+    ['2150', 'รับของแล้วยังไม่ได้รับใบแจ้งหนี้', 'liability', '2000', 'TRUE', 'GR/NI — ตั้งตอนรับของ ล้างตอนตั้งหนี้'],
+    ['2200', 'ภาษีขาย', 'liability', '2000', 'TRUE', 'VAT ขาย 7%'],
+    ['3000', 'ส่วนของเจ้าของ', 'equity', '', 'TRUE', 'หมวดหลัก'],
+    ['3100', 'ทุนจดทะเบียน', 'equity', '3000', 'TRUE', ''],
+    ['3900', 'กำไรสะสม', 'equity', '3000', 'TRUE', ''],
+    ['4000', 'รายได้', 'income', '', 'TRUE', 'หมวดหลัก'],
+    ['4100', 'รายได้จากการขาย', 'income', '4000', 'TRUE', ''],
+    ['5000', 'ค่าใช้จ่าย', 'expense', '', 'TRUE', 'หมวดหลัก'],
+    ['5100', 'ต้นทุนขาย', 'expense', '5000', 'TRUE', ''],
+    ['5900', 'ค่าใช้จ่ายอื่น', 'expense', '5000', 'TRUE', 'ใช้กับใบแจ้งหนี้ที่ไม่ผูกสินค้า']
+  ].forEach(function(r) { sh.appendRow(r); });
+}
+
+// คลังกลาง 1 แห่งให้เริ่มใช้งานได้ทันที (เพิ่มคลังเองได้ที่เมนูคลังสินค้า)
+function _seedDefaultWarehouse() {
+  var sh = centralSheet('warehouses');
+  if (sh.getLastRow() > 1) return;
+  sh.appendRow([1, 'MAIN', 'คลังกลาง', '', 'TRUE', 'TRUE', nowStr()]);
 }
 
 function _seedPaymentTypes() {
