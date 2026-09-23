@@ -13,7 +13,7 @@
 function _docSeriesConfig(tenantId, docType) {
   var rows = tenantObjects(tenantId, 'doc_number_series');
   for (var i = 0; i < rows.length; i++) {
-    if (String(rows[i].doc_type) === String(docType) && (String(rows[i].is_active) === 'TRUE' || String(rows[i].is_active) === '1')) return rows[i];
+    if (String(rows[i].doc_type) === String(docType) && isFlagOn(rows[i].is_active)) return rows[i];
   }
   // ไม่มีตั้งค่าไว้ → ใช้ค่า default กลาง
   return { doc_type: docType, prefix: docType, date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' };

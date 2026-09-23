@@ -19,7 +19,7 @@ function _activeRules() {
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   return centralObjects('discount_rules')
     .filter(function(r) {
-      if (String(r.is_active) !== 'TRUE' && String(r.is_active) !== '1') return false;
+      if (!isFlagOn(r.is_active)) return false;
       if (r.date_start && String(r.date_start) > today) return false;
       if (r.date_end && String(r.date_end) < today) return false;
       return true;
@@ -38,7 +38,7 @@ function _activeRules() {
       freeProductId: parseInt(r.free_product_id) || 0,
       freeQty: parseFloat(r.free_qty) || 0,
       priority: parseInt(r.priority) || 100,
-      stackable: String(r.stackable) === 'TRUE' || String(r.stackable) === '1'
+      stackable: isFlagOn(r.stackable)
     }; })
     .sort(function(a, b) { return a.priority - b.priority; });
 }

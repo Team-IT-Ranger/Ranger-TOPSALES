@@ -27,13 +27,18 @@ function createAdminUser(session, payload) {
   var effTenantId = _effectiveTenantId(session, payload);
   var roleCode, tenantId;
   if (effTenantId) {
-    // ตัวแทน (หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทนอยู่): สร้างได้แค่ tenant_admin ของตัวแทนนั้นเท่านั้น กันยกระดับสิทธิ์/ข้ามตัวแทน
-    roleCode = 'tenant_admin';
+    // ฝั่งตัวแทน: ใช้ได้เฉพาะบทบาทกลาง tenant_admin หรือบทบาทที่ตัวแทนรายนี้สร้างเอง (กันยกระดับสิทธิ์/ข้ามตัวแทน)
+    roleCode = resolveAssignableRole(session, payload.roleCode || 'tenant_admin', effTenantId);
+    if (!roleCode) return { success: false, message: 'เลือกบทบาทไม่ถูกต้องสำหรับตัวแทนรายนี้' };
     tenantId = effTenantId;
   } else {
-    roleCode = VALID_ADMIN_ROLES.indexOf(payload.roleCode) !== -1 ? payload.roleCode : 'tenant_admin';
-    tenantId = roleCode === 'tenant_admin' ? String(payload.tenantId || '') : '';
-    if (roleCode === 'tenant_admin' && !tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่ายสำหรับบัญชีระดับตัวแทน' };
+    roleCode = resolveAssignableRole(session, payload.roleCode || 'tenant_admin', '');
+    if (!roleCode) return { success: false, message: 'เลือกบทบาทไม่ถูกต้อง (กำหนดบัญชี super_admin ผ่านหน้าจอไม่ได้)' };
+    // บทบาทที่ผูกกับตัวแทน (tenant_admin หรือบทบาทที่ตัวแทนสร้าง) ต้องระบุว่าเป็นของตัวแทนรายไหน
+    var roleRow = _roleByCode(roleCode);
+    var needsTenant = roleCode === 'tenant_admin' || String((roleRow && roleRow.tenant_id) || '') !== '';
+    tenantId = needsTenant ? String(payload.tenantId || (roleRow && roleRow.tenant_id) || '') : '';
+    if (needsTenant && !tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่ายสำหรับบัญชีระดับตัวแทน' };
   }
 
   var existing = centralObjects('admin_users');
@@ -64,6 +69,11 @@ function updateAdminUser(session, payload) {
     var fields = {};
     if (payload.displayName !== undefined) fields.display_name = payload.displayName;
     if (payload.status !== undefined) fields.status = payload.status;
+    if (payload.roleCode !== undefined) {
+      var r = resolveAssignableRole(session, payload.roleCode, effTenantId);
+      if (!r) return { success: false, message: 'เลือกบทบาทไม่ถูกต้องสำหรับตัวแทนรายนี้' };
+      fields.role_code = r;
+    }
     centralUpdate('admin_users', payload.id, fields);
     return { success: true };
   }
@@ -73,7 +83,11 @@ function updateAdminUser(session, payload) {
   var ownerFields = {};
   if (payload.displayName !== undefined) ownerFields.display_name = payload.displayName;
   if (payload.status !== undefined) ownerFields.status = payload.status;
-  if (payload.roleCode !== undefined && VALID_ADMIN_ROLES.indexOf(payload.roleCode) !== -1) ownerFields.role_code = payload.roleCode;
+  if (payload.roleCode !== undefined) {
+    var newRole = resolveAssignableRole(session, payload.roleCode, '');
+    if (!newRole) return { success: false, message: 'เลือกบทบาทไม่ถูกต้อง' };
+    ownerFields.role_code = newRole;
+  }
   if (payload.tenantId !== undefined) ownerFields.tenant_id = payload.tenantId;
   centralUpdate('admin_users', payload.id, ownerFields);
   return { success: true };

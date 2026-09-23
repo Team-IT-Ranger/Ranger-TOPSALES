@@ -97,6 +97,27 @@ function appendRowsToSheet(sh, objs) {
 }
 function centralAppendMany(name, objs) { return appendRowsToSheet(centralSheet(name), objs); }
 
+/* ═══════════ ค่า TRUE/FALSE จาก Google Sheets ═══════════
+ * กับดักที่เคยทำให้บั๊กเงียบมาก่อน: เราเขียนข้อความ 'TRUE' ลงชีต แต่ Sheets แปลงเป็น checkbox/boolean ให้เอง
+ * อ่านกลับมาจึงได้ boolean true → String(true) === 'true' ไม่ใช่ 'TRUE' → เงื่อนไขแบบ String(x) === 'TRUE' เป็นเท็จเสมอ
+ * (ผลที่เคยเกิด: โปรโมชั่นเดิมไม่เคยถูกใช้เลย, รายชื่อตัวแทนว่าง, ล็อกรหัสสินค้าไม่ทำงาน)
+ * ใช้ 3 ตัวนี้แทนการเทียบสตริงตรงๆ ทุกที่:
+ *   isFlagOn(v)  — จริงชัดเจน (true / 'TRUE' / 'true' / 1 / '1' / 'yes')
+ *   isFlagOff(v) — เท็จชัดเจน (false / 'FALSE' / 'false' / 0 / '0' / 'no')
+ *   isNotOff(v)  — "ยังไม่ถูกปิด" (ค่าว่าง/ไม่ได้ตั้ง = ถือว่าเปิด) ใช้กับคอลัมน์ที่ของเก่าไม่เคยกรอก
+ */
+function isFlagOn(v) {
+  if (v === true || v === 1) return true;
+  var s = String(v === null || v === undefined ? '' : v).trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'y';
+}
+function isFlagOff(v) {
+  if (v === false || v === 0) return true;
+  var s = String(v === null || v === undefined ? '' : v).trim().toLowerCase();
+  return s === 'false' || s === '0' || s === 'no' || s === 'n';
+}
+function isNotOff(v) { return !isFlagOff(v); }
+
 // ลบทุกแถวที่คอลัมน์ colName = value (ลบจากล่างขึ้นบน ไม่ให้เลขแถวเลื่อน)
 function deleteRowsWhere(sh, colName, value) {
   var data = sh.getDataRange().getValues();

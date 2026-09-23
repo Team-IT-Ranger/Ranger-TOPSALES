@@ -52,8 +52,18 @@ it fills the gaps around them.
 ## งานซื้อและบัญชี (added 2026-09-23, UAT only)
 
 - **Chain**: ใบขอซื้อ PR (`21_purchase_requisition.gs`) → อนุมัติ → ใบสั่งซื้อ PO (`22_purchase_order.gs`, เปิดตรง
-  ก็ได้) → รับของ GR → เข้าคลังกลาง → ตั้งหนี้ AP → จ่ายเงิน (`23_accounting.gs`). ทุกอย่างอยู่ Central Sheet
-  (ฝั่งบริษัท ไม่ใช่ข้อมูลตัวแทน) และใช้ `_withDocLock()` ทุก action ที่เขียนเอกสาร.
+  ก็ได้) → รับของ GR → เข้าคลัง → ตั้งหนี้ AP → จ่ายเงิน (`23_accounting.gs`). ทุกอย่างอยู่ Central Sheet และใช้
+  `_withDocLock()` ทุก action ที่เขียนเอกสาร.
+- **ใช้ได้ทั้งบริษัทและตัวแทน (2026-09-24)**: ตารางงานซื้อ/คลังทุกตัวมีคอลัมน์ `tenant_id` — ว่าง = ของบริษัท
+  เจ้าของสินค้า · มีค่า = ของตัวแทนรายนั้น. ทุก action อ่านผ่าน `_scoped()/_findScoped()` (`20_purchasing_master.gs`)
+  ที่คิด scope จาก `_purchaseScope()` = `_effectiveTenantId()` — **ห้ามเรียก `centralObjects()` ตรงๆ กับตารางกลุ่มนี้**
+  ไม่งั้นข้อมูลข้ามบริษัทกัน. ตัวแทนเห็นเฉพาะของตัวเอง · ฝั่งบริษัทสวมสิทธิ์เข้าไปทำแทนได้ด้วย `payload.tenantId`
+  (เหมือนโมดูลอื่น — `callApi` ในหน้าเว็บแนบให้อัตโนมัติเมื่อ Ultra Admin เลือกตัวแทน).
+  เลขเอกสารแยกเล่มต่อบริษัท: ตัวนับคีย์ `'PO@TNKN'` และเลขที่ออกมาเป็น `PO-TNKN-202609-0001`.
+  คลังของตัวแทนสร้างให้อัตโนมัติครั้งแรกที่ใช้ (`_ensureScopeWarehouse`).
+- **บัญชีเป็นสมุดของบริษัทเท่านั้น**: ใบรับของของตัวแทน **ไม่ลง** journal (journal_id ว่าง) และ `createApBillFromGr`
+  ปฏิเสธใบรับของที่มี `tenant_id` — ตัวแทนเป็นคนละนิติบุคคล จะเอาเข้างบบริษัทไม่ได้ (หน้าเว็บซ่อนปุ่ม "ตั้งหนี้"
+  ฝั่งตัวแทนด้วย). ถ้าจะทำบัญชีให้ตัวแทนต้องเป็นชุดสมุดแยกของเขาเอง — ยังไม่ได้ทำ.
 - **Approval flows are data, not code**: `approval_flows` (doc_type × ช่วงวงเงิน) + `approval_flow_steps`
   (ขั้น, ผู้อนุมัติแบบ role หรือ user list, `required_approvals` = ต้องกี่คนต่อขั้น). เลือกสายตอน submit จาก
   ยอดรวม PR; เข้าหลายสาย → ใช้สายที่ `min_amount` สูงสุด. ไม่มีสายเข้าเงื่อนไข = อนุมัติอัตโนมัติ (บันทึกไว้ใน
@@ -191,7 +201,12 @@ it fills the gaps around them.
 - `node .dev/test-drive-layout.js` — unit tests ของการจัดโฟลเดอร์ไฟล์ฐานข้อมูล (แยก env, TNKI, โฟลเดอร์ต่อตัวแทน,
   รันซ้ำไม่สร้างซ้ำ) ด้วย DriveApp จำลอง
 - `node .dev/test-purchasing-accounting.js` — unit tests ของงานซื้อ+บัญชีทั้งสาย (PR/อนุมัติหลายขั้น/PO/รับของ/
-  ต้นทุนเฉลี่ย/AP/AR/งบทดลอง) บนชีตจำลอง ไม่ยิงเน็ต — 109 assertions.
+  ต้นทุนเฉลี่ย/AP/AR/งบทดลอง/งบกำไรขาดทุน/งบดุล) บนชีตจำลอง ไม่ยิงเน็ต — รวมหมวดแยกข้อมูลตัวแทน
+  (ตัวแทนเปิด PR/PO/รับของเองได้ · บริษัทมองไม่เห็นของตัวแทนและกลับกัน · ไม่แตะบัญชีบริษัท).
+- `node .dev/test-flags.js` — unit tests ของ `isFlagOn/isFlagOff/isNotOff` (`02_helpers.gs`) และจุดที่เคยพังเพราะ
+  Sheets แปลงสตริง `'TRUE'` เป็น boolean `true`.
+- `node .dev/test-roles.js` — unit tests ของระบบบทบาท/สิทธิ์ (`26_roles.gs`): สร้าง/แก้/ลบบทบาท, กติกากันยกระดับ
+  สิทธิ์เกินของตัวเอง, ขอบเขตบทบาทของตัวแทน, `resolveAssignableRole`.
 - `UAT_URL='<uat exec url>' node .dev/uat-sale-e2e.js` — full end-to-end test against the live UAT
   backend (creates a throwaway test tenant/customer/staff, runs pricing + sales-order scenarios
   through both the mobile and admin action surfaces). Refuses to run against the production URL as a
@@ -225,9 +240,19 @@ On UAT only (user testing on `/admin-uat/`):
   bill-promo editor).
 
 - งานซื้อ + บัญชี (2026-09-23): ผู้ขาย/คลัง/สายอนุมัติ (`20_purchasing_master.gs`), ใบขอซื้อพร้อมสายอนุมัติ
-  หลายขั้น (`21`), ใบสั่งซื้อ + รับของเข้าคลังกลาง + ต้นทุนเฉลี่ย (`22`), บัญชีแยกประเภท/เจ้าหนี้/ลูกหนี้ +
-  งบทดลอง + อายุหนี้ (`23`) พร้อมเมนูแอดมินกลุ่ม 6–8. ทดสอบด้วย unit test ครบสาย (109 assertions) และ
-  ทดสอบ UI กับ mock backend แล้ว — **ยังไม่เคยรันกับ backend UAT จริง** (รอ deploy + ทดสอบ)
+  หลายขั้น (`21`), ใบสั่งซื้อ + รับของเข้าคลัง + ต้นทุนเฉลี่ย (`22`), บัญชีแยกประเภท/เจ้าหนี้/ลูกหนี้ +
+  งบทดลอง/งบกำไรขาดทุน/งบดุล + อายุหนี้ (`23`). ทดสอบด้วย unit test ครบสายและ UI กับ mock backend แล้ว —
+  **ยังไม่เคยรันกับ backend UAT จริง** (รอ deploy + ทดสอบ)
+- แก้บั๊ก boolean/string ทั้งระบบ (2026-09-24): `isFlagOn/isFlagOff/isNotOff` ใน `02_helpers.gs` แทนการเทียบ
+  `String(x) === 'TRUE'` ทุกจุด (13 แห่งใน `04/06/07/10/11/12/14/17/19`) — โปรโมชั่นเก่าที่ไม่เคยทำงานจะเริ่ม
+  ทำงานแล้ว และสินค้า/ลูกค้าที่ปิดใช้งานจะไม่โผล่ในแอปมือถืออีก
+- ข้อมูลบริษัท + ระบบบทบาท/สิทธิ์ (2026-09-24): `25_company.gs` (เมนู ตั้งค่าระบบ → ข้อมูลบริษัท — ชื่อบริษัทนี้
+  ไปแสดงเป็นตัวเลือกบริษัทด้านบนแทนคำว่า "บริษัทเจ้าของสินค้า" และไม่มีรายการ HOUSE ซ้ำในลิสต์ตัวแทนอีก) และ
+  `26_roles.gs` (กลุ่มเมนู "ผู้ใช้งานและสิทธิ์" — แอดมินแต่ละบริษัทสร้างบทบาทและติ๊กสิทธิ์ดู/แก้ รายโมดูลได้เอง
+  โดยให้สิทธิ์เกินที่ตัวเองมีไม่ได้ และบทบาทของระบบแก้ไม่ได้ ต้องคัดลอกก่อน)
+- งานซื้อสำหรับตัวแทนจำหน่าย (2026-09-24): ตัวแทนซื้อของเข้าคลังตัวเองได้ครบสาย PR → อนุมัติ → PO → รับของ →
+  สต็อก/ต้นทุนเฉลี่ย โดยข้อมูลแยกด้วย `tenant_id` (ดูหัวข้องานซื้อด้านบน) พร้อมเมนูฝั่งตัวแทนกลุ่ม 5 งานซื้อ
+  และกลุ่ม 6 คลังสินค้า
 - LINE LIFF mobile sales app scaffold (2026-09-22): `frontend-mobile/index.html` + `config.js`, deployed
   by the same Pages workflow to `/mobile-uat/` (and `/mobile/` once on `main`). Tested against a mock
   backend only — see `frontend-mobile/README.md` for screens, offline-queue rules and what's missing.
@@ -235,13 +260,8 @@ On UAT only (user testing on `/admin-uat/`):
 Pending / not started:
 - LIFF IDs for both environments (LINE Developers Console → `frontend-mobile/config.js`).
 - Mobile auth hardening: backend trusts the client-sent `lineUserId`; should verify a LIFF ID token.
-- Several backend checks compare booleans as strings (`String(x.is_active) === 'TRUE'` /
-  `!== 'FALSE'`), but Sheets turns the written string `'TRUE'` into boolean `true` (verified on UAT
-  tenants). Affected: `06_bootstrap.gs` (inactive products/customers still shown on mobile, admin
-  dashboard tenant count), `11_promotions.gs` (legacy discount rules never apply), `12_docnum.gs`,
-  `has_transactions` checks in `07_sales.gs`/`10_master_data.gs`/`19_sales_admin.gs` (product-code
-  lock never engages). Fixing changes live behaviour (promotions would start applying) — ask the user
-  first. `listActiveTenants` was already fixed.
+- บัญชีของตัวแทนจำหน่าย (สมุดแยกของตัวแทนเอง) — ตอนนี้ตัวแทนซื้อของและเก็บสต็อกได้ แต่ไม่มีเจ้าหนี้/สมุดบัญชี
+- โอนย้าย/เบิกจ่ายสต็อกของตัวแทนแบบมีเอกสาร (เมนู 6.3/6.4 ฝั่งตัวแทนยังเป็น "เร็วๆ นี้")
 - Minor open items noted in code comments: 10505's base unit was imported as ชิ้น but is probably
   แผ่น/ซอง; a per-shop pack quantity cap (ไม่เกิน 4 แพ็ค) isn't implemented; free goods (ของแถม) are
   deferred per the user's own prioritization.

@@ -103,7 +103,7 @@ function registerUser(userData) {
 // เป็น action สาธารณะ (ยังไม่ล็อกอิน) → คืนเฉพาะ id/ชื่อ/ภาค ห้ามคืนทั้งแถว (มี sheet_file_id ของตัวแทน)
 // is_active: เขียนเป็นข้อความ 'TRUE' แต่ Sheets แปลงเป็น boolean true เอง อ่านกลับมาได้ true → ใช้ _isTrue (17_pricing.gs)
 function listActiveTenants() {
-  var rows = centralObjects('tenants').filter(function(t) { return _isTrue(t.is_active) || String(t.is_active) === '1'; });
+  var rows = centralObjects('tenants').filter(function(t) { return isFlagOn(t.is_active); });
   return { success: true, data: rows.map(function(t) { return { tenant_id: t.tenant_id, name: t.name, region: t.region || '' }; }) };
 }
 

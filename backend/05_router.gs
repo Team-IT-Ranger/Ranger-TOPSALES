@@ -103,6 +103,13 @@ var ADMIN_ACTION_MAP = {
   updateDocSeries:        updateDocSeries,
   previewDocNumber:       previewDocNumberAdmin,
 
+  getCompanyProfile:      getCompanyProfile,
+  saveCompanyProfile:     saveCompanyProfile,
+  getMyPermissions:       getMyPermissions,
+  listRolesWithPermissions: listRolesWithPermissions,
+  saveRole:               saveRole,
+  deleteRole:             deleteRole,
+
   createTenant:           createTenant,
   getDatabaseLayout:      getDatabaseLayout,
   organizeDatabaseFiles:  organizeDatabaseFiles,

@@ -96,7 +96,7 @@ function listTenants(session) {
   var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
   return { success: true, data: centralObjects('tenants').map(function(t) {
     return {
-      tenantId: t.tenant_id, name: t.name, region: t.region, isActive: t.is_active,
+      tenantId: t.tenant_id, name: t.name, region: t.region, isActive: isFlagOn(t.is_active), isHouse: isFlagOn(t.is_house),
       sheetUrl: 'https://docs.google.com/spreadsheets/d/' + t.sheet_file_id,
       address: t.address || '', taxId: t.tax_id || '', branchCode: t.branch_code || '',
       phone: t.phone || '', email: t.email || '', logoUrl: t.logo_url || ''

@@ -45,7 +45,7 @@ function listPurchaseRequisitions(session, payload) {
   centralObjects('approval_flows').forEach(function(f) { flows[String(f.record_id)] = f.name; });
   var itemsByPr = {};
   centralObjects('pr_items').forEach(function(it) { (itemsByPr[String(it.pr_id)] = itemsByPr[String(it.pr_id)] || []).push(it); });
-  var rows = centralObjects('purchase_requisitions');
+  var rows = _scoped('purchase_requisitions', _purchaseScope(session, payload));
   if (payload.status) rows = rows.filter(function(pr) { return String(pr.status) === String(payload.status); });
   // "รออนุมัติโดยฉัน" — ใบที่ค้างอยู่ขั้นที่ผู้ใช้คนนี้มีสิทธิ์กด และยังไม่เคยกดในขั้นนั้น
   if (payload.waitingForMe) rows = rows.filter(function(pr) { return _pendingForUser(pr, session); });
@@ -69,7 +69,7 @@ function _pendingForUser(pr, session) {
 
 function getPurchaseRequisition(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'view'); if (err) return err;
-  var pr = _findById('purchase_requisitions', payload.id);
+  var pr = _findScoped('purchase_requisitions', payload.id, _purchaseScope(session, payload));
   if (!pr) return { success: false, message: 'ไม่พบใบขอซื้อนี้' };
   var names = _adminNames();
   var flow = pr.flow_id ? _findById('approval_flows', pr.flow_id) : null;
@@ -108,10 +108,11 @@ function savePurchaseRequisition(session, payload) {
   if (payload.needByDate && !_validDate(payload.needByDate)) return { success: false, message: 'วันที่ต้องการใช้ต้องเป็น yyyy-mm-dd' };
   var total = _money(items.reduce(function(s, it) { return s + it.qty * it.unitPrice; }, 0));
 
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
     var prId = payload.id, existing = null;
     if (prId) {
-      existing = _findById('purchase_requisitions', prId);
+      existing = _findScoped('purchase_requisitions', prId, scope);
       if (!existing) return { success: false, message: 'ไม่พบใบขอซื้อนี้' };
       if (existing.status !== 'draft' && existing.status !== 'rejected')
         return { success: false, message: 'แก้ได้เฉพาะใบร่างหรือใบที่ถูกตีกลับ — ใบที่รออนุมัติ/อนุมัติแล้วห้ามแก้ (ผู้อนุมัติต้องเห็นตรงกับที่ตัดสินใจ)' };
@@ -124,7 +125,8 @@ function savePurchaseRequisition(session, payload) {
     } else {
       prId = centralNextId('purchase_requisitions');
       head.record_id = prId;
-      head.pr_no = _nextCentralDocNo('PR');
+      head.tenant_id = scope;
+      head.pr_no = _nextCentralDocNo('PR', scope);
       head.requester_user_id = session.adminUserId;
       head.status = 'draft'; head.flow_id = ''; head.current_step = 0;
       head.created_at = nowStr(); head.submitted_at = ''; head.decided_at = ''; head.closed_at = '';
@@ -135,35 +137,36 @@ function savePurchaseRequisition(session, payload) {
       return { record_id: itemId + i, pr_id: prId, line_no: it.lineNo, product_id: it.productId, description: it.description,
         qty: it.qty, unit_code: it.unitCode, unit_price: _money(it.unitPrice), amount: _money(it.qty * it.unitPrice), po_qty: 0, note: it.note };
     }));
-    return getPurchaseRequisition(session, { id: prId });
+    return getPurchaseRequisition(session, { id: prId, tenantId: scope });
   });
 }
 
 // payload: { id } — ส่งขออนุมัติ: หาสายตามวงเงิน แล้วตั้งสถานะ pending ที่ขั้น 1 (ไม่มีสาย = อนุมัติอัตโนมัติ)
 function submitPurchaseRequisition(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var pr = _findById('purchase_requisitions', payload.id);
+    var pr = _findScoped('purchase_requisitions', payload.id, scope);
     if (!pr) return { success: false, message: 'ไม่พบใบขอซื้อนี้' };
     if (pr.status !== 'draft' && pr.status !== 'rejected') return { success: false, message: 'ส่งขออนุมัติได้เฉพาะใบร่างหรือใบที่ถูกตีกลับ' };
     if (!_childrenOf('pr_items', 'pr_id', pr.record_id).length) return { success: false, message: 'ใบขอซื้อนี้ยังไม่มีรายการ' };
-    var resolved = _resolveApprovalFlow('PR', pr.total_ex_vat);
+    var resolved = _resolveApprovalFlow('PR', pr.total_ex_vat, scope);
     // ส่งใหม่หลังถูกตีกลับ: ล้างประวัติเดิมออกก่อน ให้การนับ "จำนวนผู้อนุมัติ" ของรอบใหม่เริ่มจากศูนย์
     _deleteRowsMatching(centralSheet('pr_approvals'), function(o) { return String(o.pr_id) === String(pr.record_id); });
     if (!resolved) {
       centralUpdate('purchase_requisitions', pr.record_id, { status: 'approved', flow_id: '', current_step: 0, submitted_at: nowStr(), decided_at: nowStr() });
       centralAppend('pr_approvals', { record_id: centralNextId('pr_approvals'), pr_id: pr.record_id, step_no: 0,
         approver_user_id: session.adminUserId, decision: 'approved', comment: 'ไม่มีสายอนุมัติที่เข้าเงื่อนไขวงเงินนี้ — ระบบอนุมัติอัตโนมัติ', decided_at: nowStr() });
-      return _withPrResult(session, pr.record_id, 'ไม่มีสายอนุมัติที่เข้าเงื่อนไข — อนุมัติอัตโนมัติแล้ว');
+      return _withPrResult(session, pr.record_id, 'ไม่มีสายอนุมัติที่เข้าเงื่อนไข — อนุมัติอัตโนมัติแล้ว', scope);
     }
     centralUpdate('purchase_requisitions', pr.record_id, { status: 'pending', flow_id: resolved.flow.record_id, current_step: 1,
       submitted_at: nowStr(), decided_at: '' });
-    return _withPrResult(session, pr.record_id, 'ส่งขออนุมัติแล้ว (สาย "' + resolved.flow.name + '")');
+    return _withPrResult(session, pr.record_id, 'ส่งขออนุมัติแล้ว (สาย "' + resolved.flow.name + '")', scope);
   });
 }
 
-function _withPrResult(session, prId, message) {
-  var r = getPurchaseRequisition(session, { id: prId });
+function _withPrResult(session, prId, message, scope) {
+  var r = getPurchaseRequisition(session, { id: prId, tenantId: scope || '' });
   if (r.success) r.message = message;
   return r;
 }
@@ -176,8 +179,9 @@ function decidePurchaseRequisition(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
   var decision = payload.decision === 'reject' ? 'rejected' : (payload.decision === 'approve' ? 'approved' : null);
   if (!decision) return { success: false, message: 'ระบุการตัดสินใจไม่ถูกต้อง' };
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var pr = _findById('purchase_requisitions', payload.id);
+    var pr = _findScoped('purchase_requisitions', payload.id, scope);
     if (!pr) return { success: false, message: 'ไม่พบใบขอซื้อนี้' };
     if (pr.status !== 'pending') return { success: false, message: 'ใบนี้ไม่ได้อยู่ระหว่างรออนุมัติ' };
     var steps = _childrenOf('approval_flow_steps', 'flow_id', pr.flow_id).sort(function(a, b) { return _int(a.step_no) - _int(b.step_no); });
@@ -193,26 +197,27 @@ function decidePurchaseRequisition(session, payload) {
 
     if (decision === 'rejected') {
       centralUpdate('purchase_requisitions', pr.record_id, { status: 'rejected', decided_at: nowStr() });
-      return _withPrResult(session, pr.record_id, 'ตีกลับใบขอซื้อแล้ว');
+      return _withPrResult(session, pr.record_id, 'ตีกลับใบขอซื้อแล้ว', scope);
     }
     var approvedCount = mine.filter(function(a) { return a.decision === 'approved'; }).length + 1;
     var need = Math.max(1, _int(step.required_approvals) || 1);
-    if (approvedCount < need) return _withPrResult(session, pr.record_id, 'อนุมัติแล้ว ' + approvedCount + '/' + need + ' คนในขั้นนี้');
+    if (approvedCount < need) return _withPrResult(session, pr.record_id, 'อนุมัติแล้ว ' + approvedCount + '/' + need + ' คนในขั้นนี้', scope);
     var nextStep = steps.filter(function(s) { return _int(s.step_no) > _int(pr.current_step); })[0];
     if (nextStep) {
       centralUpdate('purchase_requisitions', pr.record_id, { current_step: _int(nextStep.step_no) });
-      return _withPrResult(session, pr.record_id, 'ผ่านขั้นนี้แล้ว → ส่งต่อขั้น ' + _int(nextStep.step_no) + ' (' + (nextStep.name || '') + ')');
+      return _withPrResult(session, pr.record_id, 'ผ่านขั้นนี้แล้ว → ส่งต่อขั้น ' + _int(nextStep.step_no) + ' (' + (nextStep.name || '') + ')', scope);
     }
     centralUpdate('purchase_requisitions', pr.record_id, { status: 'approved', decided_at: nowStr() });
-    return _withPrResult(session, pr.record_id, 'อนุมัติครบทุกขั้นแล้ว — ออกใบสั่งซื้อได้');
+    return _withPrResult(session, pr.record_id, 'อนุมัติครบทุกขั้นแล้ว — ออกใบสั่งซื้อได้', scope);
   });
 }
 
 // payload: { id, reason? } — ยกเลิกใบ (ที่ยังไม่ออก PO)
 function cancelPurchaseRequisition(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var pr = _findById('purchase_requisitions', payload.id);
+    var pr = _findScoped('purchase_requisitions', payload.id, scope);
     if (!pr) return { success: false, message: 'ไม่พบใบขอซื้อนี้' };
     if (pr.status === 'cancelled') return { success: false, message: 'ใบนี้ถูกยกเลิกไปแล้ว' };
     if (pr.status === 'closed') return { success: false, message: 'ใบนี้ออกใบสั่งซื้อครบแล้ว ยกเลิกไม่ได้' };
@@ -220,15 +225,15 @@ function cancelPurchaseRequisition(session, payload) {
     if (released) return { success: false, message: 'ใบนี้ออกใบสั่งซื้อไปบางส่วนแล้ว ยกเลิกไม่ได้ — ให้ยกเลิกที่ใบสั่งซื้อแทน' };
     centralUpdate('purchase_requisitions', pr.record_id, { status: 'cancelled', decided_at: nowStr(),
       note: String(pr.note || '') + (payload.reason ? ('\nยกเลิก: ' + payload.reason) : '') });
-    return _withPrResult(session, pr.record_id, 'ยกเลิกใบขอซื้อแล้ว');
+    return _withPrResult(session, pr.record_id, 'ยกเลิกใบขอซื้อแล้ว', scope);
   });
 }
 
 // ใบขอซื้อที่อนุมัติแล้วและยังมีของค้างไม่ได้ออก PO — ใช้เป็นตัวเลือกตอนเปิดใบสั่งซื้อ
-function listApprovedPrLines(session) {
+function listApprovedPrLines(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'view'); if (err) return err;
   var prs = {};
-  centralObjects('purchase_requisitions').forEach(function(pr) { if (pr.status === 'approved') prs[String(pr.record_id)] = pr; });
+  _scoped('purchase_requisitions', _purchaseScope(session, payload)).forEach(function(pr) { if (pr.status === 'approved') prs[String(pr.record_id)] = pr; });
   var products = {};
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
   var out = [];

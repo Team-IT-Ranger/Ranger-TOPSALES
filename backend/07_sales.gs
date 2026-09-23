@@ -156,7 +156,7 @@ function recordSale(user, payload) {
   freeGoods.forEach(function(f) { soldProductIds[String(f.productId)] = true; });
   Object.keys(soldProductIds).forEach(function(pid) {
     var p = productMap[pid];
-    if (p && String(p.has_transactions) !== 'TRUE') centralUpdate('products', pid, { has_transactions: 'TRUE' });
+    if (p && !isFlagOn(p.has_transactions)) centralUpdate('products', pid, { has_transactions: 'TRUE' });
   });
 
   cacheClearUser(user.lineUserId);

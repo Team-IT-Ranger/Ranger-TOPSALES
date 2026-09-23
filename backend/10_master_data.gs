@@ -143,7 +143,7 @@ function updateProduct(session, payload) {
     if (!productCode) return { success: false, message: 'กรุณากรอกรหัสสินค้า (product_code) — เป็นเลขประจำตัวสินค้า จำเป็นต้องมี' };
     var existing = _productById(payload.id);
     var isRealChange = existing && String(existing.product_code || '').trim().toLowerCase() !== productCode.toLowerCase();
-    if (isRealChange && existing && String(existing.has_transactions) === 'TRUE') {
+    if (isRealChange && existing && isFlagOn(existing.has_transactions)) {
       return { success: false, message: 'เปลี่ยนรหัสสินค้าไม่ได้ — มีรายการขายเกิดขึ้นกับรหัส "' + existing.product_code + '" แล้ว (เอกสาร/รายงานเก่าจะอ้างรหัสผิดถ้าเปลี่ยน)' };
     }
     if (isRealChange) {

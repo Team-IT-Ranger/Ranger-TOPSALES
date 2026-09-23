@@ -29,9 +29,9 @@ var MODULE_REGISTRY = [
   { code: 'settings',       label: 'ข้อมูลกลาง (กลุ่มลูกค้า/ช่องทางจำหน่าย/ประเภทชำระเงิน)', scope: 'owner' },
   { code: 'users_roles',    label: 'ผู้ใช้งานและสิทธิ์',   scope: 'both'   },
   // ── งานซื้อ / คลังกลาง / บัญชี (ฝั่งบริษัทเจ้าของสินค้า) ──
-  { code: 'vendors',        label: 'ผู้ขาย/ผู้จัดจำหน่าย',  scope: 'owner'  },
-  { code: 'purchasing',     label: 'ใบขอซื้อและใบสั่งซื้อ', scope: 'owner'  },
-  { code: 'inventory',      label: 'คลังสินค้ากลาง (รับเข้า/ยอดคงเหลือ)', scope: 'owner' },
+  { code: 'vendors',        label: 'ผู้ขาย/ผู้จัดจำหน่าย',  scope: 'both'   },
+  { code: 'purchasing',     label: 'ใบขอซื้อและใบสั่งซื้อ', scope: 'both'   },
+  { code: 'inventory',      label: 'คลังสินค้า (รับเข้า/ยอดคงเหลือ)', scope: 'both' },
   { code: 'accounting',     label: 'บัญชี (แยกประเภท/ลูกหนี้/เจ้าหนี้)', scope: 'owner' }
 ];
 
@@ -88,7 +88,7 @@ function hasPermission(adminUser, moduleCode, action) {
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i].role_code) === String(adminUser.role_code) && String(rows[i].module_code) === String(moduleCode)) {
       var flag = action === 'edit' ? rows[i].can_edit : rows[i].can_view;
-      return String(flag) === 'TRUE' || String(flag) === '1' || flag === true;
+      return isFlagOn(flag);
     }
   }
   return false;

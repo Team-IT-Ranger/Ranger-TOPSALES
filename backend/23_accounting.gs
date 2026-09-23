@@ -273,6 +273,8 @@ function createApBillFromGr(session, payload) {
   return _withDocLock(function() {
     var gr = _findById('goods_receipts', payload.grId);
     if (!gr) return { success: false, message: 'ไม่พบใบรับของนี้' };
+    // สมุดบัญชีเป็นของบริษัทเจ้าของสินค้าเท่านั้น — ใบรับของของตัวแทน (มี tenant_id) ตั้งหนี้ในระบบนี้ไม่ได้
+    if (String(gr.tenant_id || '')) return { success: false, message: 'ใบรับของนี้เป็นของตัวแทนจำหน่าย — ระบบบัญชีนี้เป็นสมุดของบริษัทเจ้าของสินค้าเท่านั้น' };
     if (gr.status !== 'posted') return { success: false, message: 'ใบรับของนี้ถูกยกเลิกแล้ว' };
     var dup = centralObjects('ap_bills').filter(function(b) { return String(b.gr_id) === String(gr.record_id) && b.status !== 'void'; })[0];
     if (dup) return { success: false, message: 'ใบรับของนี้ตั้งหนี้ไปแล้ว (' + dup.bill_no + ')' };
@@ -326,7 +328,7 @@ function createApBillManual(session, payload) {
   var billDate = payload.billDate || _todayStr();
   if (!_validDate(billDate)) return { success: false, message: 'วันที่ใบแจ้งหนี้ต้องเป็น yyyy-mm-dd' };
   return _withDocLock(function() {
-    var vendor = _findById('vendors', vendorId);
+    var vendor = _findScoped('vendors', vendorId, '');   // บัญชีเป็นสมุดของบริษัท ใช้ได้เฉพาะผู้ขายของบริษัท
     if (!vendor) return { success: false, message: 'ไม่พบผู้ขายรายนี้' };
     var expenseAcct = String(payload.expenseAccount || GL_ACCT.OTHER_EXPENSE);
     if (!_accountMap()[expenseAcct]) return { success: false, message: 'ไม่พบรหัสบัญชีค่าใช้จ่าย ' + expenseAcct };
@@ -362,7 +364,7 @@ function payApBills(session, payload) {
   var payDate = payload.paymentDate || _todayStr();
   if (!_validDate(payDate)) return { success: false, message: 'วันที่จ่ายต้องเป็น yyyy-mm-dd' };
   return _withDocLock(function() {
-    var vendor = _findById('vendors', payload.vendorId);
+    var vendor = _findScoped('vendors', payload.vendorId, '');
     if (!vendor) return { success: false, message: 'ไม่พบผู้ขายรายนี้' };
     var bills = [];
     for (var i = 0; i < allocs.length; i++) {

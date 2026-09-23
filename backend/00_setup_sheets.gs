@@ -9,7 +9,8 @@
 // customers/staff/sales อยู่ในนี้ด้วย เพราะบริษัทเจ้าของสินค้าเองก็ต้องเปิดบิลขายแทนตัวแทนได้ (เลือกลูกค้า/พนักงานที่จะตัดสต็อกให้)
 var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report', 'customers', 'staff', 'sales',
   'vendors', 'purchasing', 'inventory', 'accounting'];
-var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles'];
+var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles',
+  'vendors', 'purchasing', 'inventory'];   // ตัวแทนจำหน่ายซื้อของเองได้ (ข้อมูลแยกกันด้วย tenant_id — ดู 20_purchasing_master.gs)
 
 var CENTRAL_SHEETS = {
   liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],
@@ -59,32 +60,33 @@ var CENTRAL_SHEETS = {
 
   // ═══════════ งานซื้อ (PR → PO → รับของเข้าคลัง) — ดู 20_purchasing_master.gs, 21_purchase_requisition.gs, 22_purchase_order.gs ═══════════
   // ทั้งหมดเป็นข้อมูล "ฝั่งบริษัทเจ้าของสินค้า" จึงอยู่ Central Sheet (ตัวแทนไม่ได้ซื้อของเอง)
-  vendors: ['record_id','vendor_code','name','tax_id','branch_code','contact_name','phone','email','address',
+  // tenant_id ในกลุ่มตารางงานซื้อ/คลัง: ว่าง = ของบริษัทเจ้าของสินค้า · มีค่า = ของตัวแทนรายนั้น (ข้อมูลไม่ปนกัน)
+  vendors: ['record_id','tenant_id','vendor_code','name','tax_id','branch_code','contact_name','phone','email','address',
     'payment_terms_days','credit_limit','bank_name','bank_account_no','is_active','note','created_at'],
-  warehouses: ['record_id','code','name','address','is_active','is_default','created_at'],
+  warehouses: ['record_id','tenant_id','code','name','address','is_active','is_default','created_at'],
   // ยอดคงเหลือต่อคลัง+สินค้า (หน่วยฐาน) · avg_cost = ต้นทุนเฉลี่ยถ่วงน้ำหนัก อัปเดตตอนรับของ
-  warehouse_stock: ['record_id','warehouse_id','product_id','qty','avg_cost','updated_at'],
+  warehouse_stock: ['record_id','tenant_id','warehouse_id','product_id','qty','avg_cost','updated_at'],
   // บัญชีคุมการเคลื่อนไหวสต็อกคลัง (ledger) — 1 แถว = 1 การเคลื่อนไหว ย้อนรอยได้เสมอ
-  stock_ledger: ['record_id','warehouse_id','product_id','change_qty','balance_after','unit_cost','move_type','ref_type','ref_id','note','created_by','created_at'],
+  stock_ledger: ['record_id','tenant_id','warehouse_id','product_id','change_qty','balance_after','unit_cost','move_type','ref_type','ref_id','note','created_by','created_at'],
 
   // ── สายอนุมัติ: ออกแบบขั้นตอน (steps) เงื่อนไข (ช่วงวงเงิน) และจำนวนผู้อนุมัติต่อขั้นได้ ──
   // approval_flows: 1 สาย = 1 ประเภทเอกสาร (PR) × ช่วงวงเงิน [min_amount, max_amount] (max ว่าง = ไม่จำกัด)
-  approval_flows: ['record_id','doc_type','name','min_amount','max_amount','is_active','note','created_at'],
+  approval_flows: ['record_id','tenant_id','doc_type','name','min_amount','max_amount','is_active','note','created_at'],
   // approver_type: 'role' (ทุกคนที่ถือ role นี้) | 'user' (ระบุ admin_users.record_id)
   // approver_ref: role_code หรือ user id — ใส่หลายคนคั่นด้วย , ได้ · required_approvals = ต้องอนุมัติกี่คนจึงผ่านขั้นนี้
   approval_flow_steps: ['record_id','flow_id','step_no','name','approver_type','approver_ref','required_approvals'],
 
-  purchase_requisitions: ['record_id','pr_no','requester_user_id','department','need_by_date','note','status',
+  purchase_requisitions: ['record_id','tenant_id','pr_no','requester_user_id','department','need_by_date','note','status',
     'flow_id','current_step','total_ex_vat','created_at','submitted_at','decided_at','closed_at'],
   pr_items: ['record_id','pr_id','line_no','product_id','description','qty','unit_code','unit_price','amount','po_qty','note'],
   // ประวัติการตัดสินใจทุกครั้ง (ไม่ลบ ไม่ทับ) — ใช้ดูว่าใครอนุมัติขั้นไหนเมื่อไหร่
   pr_approvals: ['record_id','pr_id','step_no','approver_user_id','decision','comment','decided_at'],
 
-  purchase_orders: ['record_id','po_no','vendor_id','pr_id','warehouse_id','status','order_date','expected_date',
+  purchase_orders: ['record_id','tenant_id','po_no','vendor_id','pr_id','warehouse_id','status','order_date','expected_date',
     'vat_type','subtotal_ex_vat','discount_ex_vat','vat_amount','total','note','created_by','created_at','closed_at'],
   po_items: ['record_id','po_id','line_no','pr_item_id','product_id','description','qty','unit_code','unit_factor','unit_price','amount','received_qty'],
 
-  goods_receipts: ['record_id','gr_no','po_id','vendor_id','warehouse_id','receive_date','note','status','journal_id','created_by','created_at'],
+  goods_receipts: ['record_id','tenant_id','gr_no','po_id','vendor_id','warehouse_id','receive_date','note','status','journal_id','created_by','created_at'],
   gr_items: ['record_id','gr_id','po_item_id','product_id','qty','unit_code','unit_factor','base_qty','unit_cost','amount'],
 
   // ═══════════ บัญชี (แยกประเภท / ลูกหนี้ / เจ้าหนี้) — ดู 23_accounting.gs ═══════════
@@ -107,9 +109,16 @@ var CENTRAL_SHEETS = {
   ar_receipt_allocations: ['record_id','receipt_id','invoice_id','amount'],
 
   // ตัวนับเลขที่เอกสารระดับบริษัท (เอกสารของตัวแทนใช้ doc_number_counters ใน tenant sheet — ดู 12_docnum.gs)
-  central_doc_counters: ['doc_type','period_key','last_number'],
+  central_doc_counters: ['doc_type','period_key','last_number'],   // doc_type ของตัวแทนจะเป็น 'PR@TNKN' แยกเลขรันของใครของมัน
 
-  roles: ['role_code','role_label','is_system'],
+  // ข้อมูลบริษัทเจ้าของสินค้า (แถวเดียว record_id=1) — ใช้เป็นชื่อบริษัทที่โชว์ในตัวเลือกบริษัท หัวเอกสาร และใบกำกับภาษี
+  // คนละเรื่องกับ tenants (ข้อมูลตัวแทนแต่ละราย) และคนละเรื่องกับ tenant 'HOUSE' ที่เป็นแค่บัญชีขายตรงของบริษัท
+  company_profile: ['record_id','name','legal_name','tax_id','branch_code','address','phone','email','website',
+    'logo_url','bank_name','bank_account_no','bank_account_name','note','updated_at','updated_by'],
+
+  // roles.tenant_id ว่าง = บทบาทกลางของระบบ (super_admin/owner_admin/tenant_admin)
+  // มีค่า = บทบาทที่แอดมินของตัวแทนรายนั้นสร้างเอง เห็น/แก้ได้เฉพาะตัวแทนนั้น (ดู 26_roles.gs)
+  roles: ['role_code','role_label','is_system','tenant_id','description'],
   role_permissions: ['role_code','module_code','can_view','can_edit'],
 
   provinces: ['id','name','name_en','region'],
@@ -176,6 +185,7 @@ function setupCentralSheet() {
   _seedProvinces();
   _seedRolesAndPermissions();
   _seedGlAccounts();
+  _seedCompanyProfile();
   _seedDefaultWarehouse();
 
   _setTextColumns(ss, 'price_lists', ['valid_from', 'valid_to']);   // กัน Sheets แปลงวันที่เป็น Date เอง (เขตเวลาไม่ตรงกัน = วันเลื่อน)
@@ -261,11 +271,20 @@ function _seedGlAccounts() {
   ].forEach(function(r) { sh.appendRow(r); });
 }
 
+// ข้อมูลบริษัทเริ่มต้น 1 แถว — ผู้ใช้เข้าไปแก้ชื่อจริง/เลขผู้เสียภาษีได้ที่เมนู ตั้งค่าระบบ → ข้อมูลบริษัท
+function _seedCompanyProfile() {
+  var sh = centralSheet('company_profile');
+  if (sh.getLastRow() > 1) return;
+  sh.appendRow([1, 'บริษัทเจ้าของสินค้า', '', '', '', '', '', '', '', '', '', '', '', '', nowStr(), '']);
+}
+
 // คลังกลาง 1 แห่งให้เริ่มใช้งานได้ทันที (เพิ่มคลังเองได้ที่เมนูคลังสินค้า)
 function _seedDefaultWarehouse() {
   var sh = centralSheet('warehouses');
   if (sh.getLastRow() > 1) return;
-  sh.appendRow([1, 'MAIN', 'คลังกลาง', '', 'TRUE', 'TRUE', nowStr()]);
+  // เขียนด้วยชื่อคอลัมน์ ไม่ใช่ตำแหน่ง — ชีตเก่าที่เพิ่ง migrate จะมี tenant_id ต่อท้ายแถวหัว ไม่ได้อยู่คอลัมน์ที่ 2
+  centralAppend('warehouses', { record_id: 1, tenant_id: '', code: 'MAIN', name: 'คลังกลาง', address: '',
+    is_active: 'TRUE', is_default: 'TRUE', created_at: nowStr() });
 }
 
 function _seedPaymentTypes() {
@@ -317,9 +336,9 @@ function _seedRolesAndPermissions() {
   var rolesSh = centralSheet('roles');
   if (rolesSh.getLastRow() === 1) {
     [
-      ['super_admin', 'ผู้ดูแลระบบสูงสุด (บริษัท)', 'TRUE'],
-      ['owner_admin', 'แอดมินบริษัทเจ้าของสินค้า', 'TRUE'],
-      ['tenant_admin', 'แอดมินตัวแทนจำหน่าย', 'TRUE']
+      ['super_admin', 'ผู้ดูแลระบบสูงสุด (บริษัท)', 'TRUE', '', 'เห็นและแก้ได้ทุกเมนู กำหนดผ่าน Apps Script เท่านั้น'],
+      ['owner_admin', 'แอดมินบริษัทเจ้าของสินค้า', 'TRUE', '', 'ดูแลข้อมูลกลาง สินค้า ราคา งานซื้อ บัญชี'],
+      ['tenant_admin', 'แอดมินตัวแทนจำหน่าย', 'TRUE', '', 'ดูแลงานขาย พนักงาน ลูกค้า ของตัวแทนตัวเอง']
     ].forEach(function(r) { rolesSh.appendRow(r); });
   }
 

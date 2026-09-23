@@ -56,9 +56,19 @@ const ctx = {
   safeDateStr: v => String(v || ''),
   _requirePermission: (s, m, a) => (s.perms === 'none' ? { success: false, message: 'ไม่มีสิทธิ์ (' + m + ')' } : (a === 'edit' && s.readOnly ? { success: false, message: 'ไม่มีสิทธิ์แก้ไข' } : null)),
   _salesTenantId: (s, p) => (p && p.tenantId) || 'T1',
+  // เหมือน _effectiveTenantId ใน 14_permissions.gs: ตัวแทนใช้ของตัวเอง · ฝั่งบริษัทสวมสิทธิ์ตัวแทนได้ด้วย payload.tenantId
+  _effectiveTenantId: (s, p) => s.tenant_id || ((s.role_code === 'super_admin' || s.role_code === 'owner_admin') && p && p.tenantId ? String(p.tenantId) : null),
   isCreditPayment: c => { c = String(c || '').toLowerCase(); return c === 'credit_term' || c === 'credit'; }
 };
 vm.createContext(ctx);
+// โหลด 02_helpers.gs ของจริงก่อน (มี isFlagOn/isNotOff ที่โมดูลอื่นเรียกใช้) แล้วคืนค่าชีตจำลองทับ
+const _fakes = { centralSheet: ctx.centralSheet, centralObjects: ctx.centralObjects, centralAppend: ctx.centralAppend,
+  centralAppendMany: ctx.centralAppendMany, centralNextId: ctx.centralNextId, centralUpdate: ctx.centralUpdate,
+  deleteRowsWhere: ctx.deleteRowsWhere, tenantObjects: ctx.tenantObjects, nowStr: ctx.nowStr, safeDateStr: ctx.safeDateStr };
+ctx.SpreadsheetApp = { openById: () => { throw new Error('should not be called'); } };
+ctx.PropertiesService = { getScriptProperties: () => ({ getProperty: () => '' }) };
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', '02_helpers.gs'), 'utf8'), ctx, { filename: '02_helpers.gs' });
+Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 ['00_setup_sheets.gs', '17_pricing.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '23_accounting.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
@@ -317,6 +327,57 @@ eq('งบกำไรขาดทุน: รายได้ 10,000 + 2,000 · �
 const bs = ctx.getBalanceSheet(FIN, { asOf: '2026-12-31' });   // ครอบคลุมเอกสารที่ลงวันที่ล่วงหน้าในเทสต์ด้วย
 eq('งบดุลสมดุล: สินทรัพย์ = หนี้สิน + ทุน + กำไรงวดนี้', [bs.balanced, bs.totalAssets === bs.totalLiabilitiesAndEquity], [true, true]);
 eq('  กำไรในงบดุลตรงกับงบกำไรขาดทุน', bs.netProfit, pl.netProfit);
+console.log('\n── ตัวแทนจำหน่ายใช้ระบบงานซื้อเอง (ข้อมูลต้องไม่ปนกับของบริษัท) ──');
+const TEN = 'TNKN';
+const TADMIN = { adminUserId: '7', role_code: 'tenant_admin', tenant_id: TEN };
+append(sheets.admin_users, { record_id: 7, username: 'u7', display_name: 'แอดมินตัวแทนเหนือ', role_code: 'tenant_admin', tenant_id: TEN });
+const ownerVendorCount = ctx.listVendors(MGR, {}).data.length;
+const ownerStockValue = ctx.listWarehouseStock(FIN, {}).totalValue;
+const ownerTbBefore = ctx.getTrialBalance(FIN, {}).totalDebit;
+
+r = ctx.saveVendor(TADMIN, { code: 'V-001', name: 'ร้านค้าส่งเชียงใหม่', paymentTermsDays: 7 });
+ok('ตัวแทนสร้างผู้ขายของตัวเองได้ (รหัสซ้ำกับของบริษัทได้ เพราะคนละบริษัท)', r);
+const TVENDOR = r.vendor.id;
+eq('  ตัวแทนเห็นเฉพาะผู้ขายของตัวเอง', ctx.listVendors(TADMIN, {}).data.map(v => v.name), ['ร้านค้าส่งเชียงใหม่']);
+eq('  บริษัทไม่เห็นผู้ขายของตัวแทน', ctx.listVendors(MGR, {}).data.length, ownerVendorCount);
+fails('  บริษัทแก้ผู้ขายของตัวแทนไม่ได้', ctx.saveVendor(MGR, { id: TVENDOR, name: 'แอบแก้' }), /ไม่พบผู้ขาย/);
+fails('  บริษัทเปิดใบสั่งซื้อกับผู้ขายของตัวแทนไม่ได้',
+  ctx.savePurchaseOrder(MGR, { vendorId: TVENDOR, items: [{ productId: 10, qty: 1, unitPrice: 1 }] }), /เลือกผู้ขาย/);
+
+r = ctx.savePurchaseRequisition(TADMIN, { department: 'หน้าร้าน', items: [{ productId: 12, qty: 20, unitPrice: 50, unitCode: 'ม้วน' }] });
+ok('ตัวแทนเปิดใบขอซื้อได้', r);
+const TPR = r.pr.id;
+eq('  เลขที่เอกสารแยกเล่มของตัวแทน', /^PR-TNKN-\d{6}-0001$/.test(r.pr.prNo), true);
+eq('  ใบขอซื้อของตัวแทนไม่โผล่ในรายการของบริษัท',
+   ctx.listPurchaseRequisitions(MGR, {}).data.some(x => String(x.id) === String(TPR)), false);
+fails('  บริษัทเปิดใบขอซื้อของตัวแทนตรงๆ ไม่ได้', ctx.getPurchaseRequisition(MGR, { id: TPR }), /ไม่พบ/);
+eq('  แต่ฝั่งบริษัท (owner_admin) สวมสิทธิ์เข้าไปดูแทนได้',
+   ctx.getPurchaseRequisition(BOSS, { id: TPR, tenantId: TEN }).pr.id, TPR);
+r = ctx.submitPurchaseRequisition(TADMIN, { id: TPR });
+eq('  ตัวแทนยังไม่ได้ตั้งสายอนุมัติ → อนุมัติอัตโนมัติ (สายของบริษัทไม่มีผลข้ามบริษัท)',
+   [r.success, r.pr.status], [true, 'approved']);
+
+r = ctx.savePurchaseOrder(TADMIN, { vendorId: TVENDOR, orderDate: '2026-09-24', vatType: 'excluded',
+  items: [{ prItemId: ctx.listApprovedPrLines(TADMIN, {}).data[0].prItemId, productId: 12, qty: 20, unitCode: 'ม้วน', unitFactor: 1, unitPrice: 50 }] });
+ok('ตัวแทนออกใบสั่งซื้อจากใบขอซื้อของตัวเองได้', r);
+const TPO = r.po.id;
+eq('  เลขที่ใบสั่งซื้อแยกเล่ม', /^PO-TNKN-/.test(r.po.poNo), true);
+eq('  ระบบสร้างคลังของตัวแทนให้อัตโนมัติ', ctx.listWarehouses(TADMIN).data.map(w => [w.name, w.isDefault]), [['คลังของตัวแทน', true]]);
+ok('  ส่งใบสั่งซื้อ', ctx.issuePurchaseOrder(TADMIN, { id: TPO }));
+r = ctx.receiveGoods(TADMIN, { poId: TPO, receiveDate: '2026-09-25',
+  items: [{ poItemId: ctx.getPurchaseOrder(TADMIN, { id: TPO }).po.items[0].id, qty: 20 }] });
+ok('ตัวแทนรับของเข้าคลังตัวเองได้', r);
+eq('  ใบรับของของตัวแทนไม่ลงบัญชีบริษัท (journal_id ว่าง)', r.journalId, '');
+eq('  สต็อกของตัวแทนเพิ่มขึ้น 20 ม้วน @50', ctx.listWarehouseStock(TADMIN, {}).data.map(x => [x.productCode, x.qty, x.avgCost]), [['P-300', 20, 50]]);
+eq('  สต็อกของบริษัทไม่ถูกแตะ', ctx.listWarehouseStock(FIN, {}).totalValue, ownerStockValue);
+eq('  งบทดลองของบริษัทไม่ขยับ', ctx.getTrialBalance(FIN, {}).totalDebit, ownerTbBefore);
+eq('  บริษัทไม่เห็นใบรับของ/สต็อกของตัวแทนในรายการตัวเอง',
+   [ctx.listGoodsReceipts(FIN, {}).data.some(g => String(g.id) === String(r.grId)),
+    ctx.listStockLedger(FIN, {}).data.some(l => String(l.productId) === '12')], [false, false]);
+fails('  ตั้งหนี้เจ้าหนี้จากใบรับของของตัวแทนไม่ได้ (สมุดบัญชีเป็นของบริษัท)',
+  ctx.createApBillFromGr(FIN, { grId: r.grId, billDate: '2026-09-25', vendorBillNo: 'X-1' }), /ตัวแทน/);
+fails('  ตัวแทนยกเลิกใบสั่งซื้อของบริษัทไม่ได้', ctx.cancelPurchaseOrder(TADMIN, { id: PO1 }), /ไม่พบใบสั่งซื้อ/);
+
 eq('lock ถูกปล่อยทุกครั้ง', lockHeld, false);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

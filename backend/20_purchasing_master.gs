@@ -1,6 +1,7 @@
 /**
  * ===================== งานซื้อ: ข้อมูลตั้งต้น (ผู้ขาย / คลัง / สายอนุมัติ) =====================
- * ทั้งโมดูลงานซื้อเป็นข้อมูลฝั่ง "บริษัทเจ้าของสินค้า" เก็บใน Central Sheet (ตัวแทนจำหน่ายไม่ได้ซื้อของเอง)
+ * ใช้ได้ทั้งฝั่ง "บริษัทเจ้าของสินค้า" และฝั่ง "ตัวแทนจำหน่าย" — ข้อมูลอยู่ใน Central Sheet ทั้งคู่ แต่แยกขาดจากกันด้วย
+ * คอลัมน์ tenant_id (ดูหัวข้อ "ขอบเขตข้อมูล" ด้านล่าง) · ฝั่งบัญชี (23_accounting.gs) ยังเป็นของบริษัทอย่างเดียว
  * ลำดับงาน: ใบขอซื้อ (PR, 21_purchase_requisition.gs) → อนุมัติตามสายอนุมัติ → ออกใบสั่งซื้อ (PO, 22_purchase_order.gs)
  *           → รับของเข้าคลัง (GR) → ตั้งหนี้เจ้าหนี้ (23_accounting.gs)
  * PO เปิดตรงโดยไม่ต้องมี PR ก็ได้ (ซื้อด่วน/ซื้อประจำ) — ดู createPurchaseOrder
@@ -25,22 +26,42 @@ function _withDocLock(fn) {
  * (เอกสารของตัวแทนใช้ doc_number_series/doc_number_counters ใน tenant sheet — ดู 12_docnum.gs)
  * ต้องเรียกใต้ _withDocLock เท่านั้น เพราะขยับตัวนับ
  */
-function _nextCentralDocNo(docType) {
+function _nextCentralDocNo(docType, scope) {
   var period = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM');
+  // ตัวแทนแต่ละรายมีเลขรันของตัวเอง: คีย์ตัวนับ 'PO@TNKN' และเลขที่ออกมาเป็น PO-TNKN-202609-0001
+  var key = String(docType) + (scope ? '@' + scope : '');
+  var prefix = String(docType) + (scope ? '-' + scope : '');
   var sh = centralSheet('central_doc_counters');
   var data = sh.getDataRange().getValues();
   var next = 1;
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(docType) && String(data[i][1]) === period) {
+    if (String(data[i][0]) === key && String(data[i][1]) === period) {
       next = (parseInt(data[i][2], 10) || 0) + 1;
       sh.getRange(i + 1, 3).setValue(next);
-      return docType + '-' + period + '-' + _pad4(next);
+      return prefix + '-' + period + '-' + _pad4(next);
     }
   }
-  sh.appendRow([docType, period, 1]);
-  return docType + '-' + period + '-' + _pad4(1);
+  sh.appendRow([key, period, 1]);
+  return prefix + '-' + period + '-' + _pad4(1);
 }
 function _pad4(n) { var s = String(n); while (s.length < 4) s = '0' + s; return s; }
+
+/* ═══════════════ ขอบเขตข้อมูล (scope) ═══════════════
+ * ทุกตารางของงานซื้อ/คลังมีคอลัมน์ tenant_id:  ว่าง = ของบริษัทเจ้าของสินค้า · มีค่า = ของตัวแทนรายนั้น
+ * ตัวแทนเห็น/แก้ได้เฉพาะของตัวเอง (scope มาจาก session.tenant_id) ส่วนฝั่งบริษัทเข้าไปดู/ทำแทนตัวแทนได้
+ * โดยส่ง payload.tenantId เหมือนโมดูลอื่น (ดู _effectiveTenantId ใน 14_permissions.gs)
+ * กติกา: ทุก action ต้องอ่านผ่าน _scoped()/_findScoped() ห้ามใช้ centralObjects() ตรงๆ กับตารางกลุ่มนี้
+ *        ไม่งั้นตัวแทนจะเห็นผู้ขาย/ใบสั่งซื้อของบริษัทหรือของตัวแทนรายอื่น
+ */
+function _purchaseScope(session, payload) { return String(_effectiveTenantId(session, payload || {}) || ''); }
+function _sameScope(row, scope) { return String(row.tenant_id || '') === String(scope || ''); }
+function _scoped(sheetName, scope) {
+  return centralObjects(sheetName).filter(function(r) { return _sameScope(r, scope); });
+}
+function _findScoped(sheetName, id, scope) {
+  var r = _findById(sheetName, id);
+  return (r && _sameScope(r, scope)) ? r : null;
+}
 
 function _findById(sheetName, id) {
   var rows = centralObjects(sheetName);
@@ -62,7 +83,7 @@ function _vendorDto(v) {
 
 function listVendors(session, payload) {
   var err = _requirePermission(session, 'vendors', 'view'); if (err) return err;
-  var rows = centralObjects('vendors').map(_vendorDto);
+  var rows = _scoped('vendors', _purchaseScope(session, payload)).map(_vendorDto);
   if (payload && payload.activeOnly) rows = rows.filter(function(v) { return v.isActive; });
   rows.sort(function(a, b) { return String(a.name).localeCompare(String(b.name), 'th'); });
   return { success: true, data: rows };
@@ -76,8 +97,9 @@ function saveVendor(session, payload) {
   var code = String(payload.code || '').trim();
   var terms = _int(payload.paymentTermsDays);
   if (terms < 0) return { success: false, message: 'เครดิตเทอม (วัน) ต้องไม่ติดลบ' };
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var all = centralObjects('vendors');
+    var all = _scoped('vendors', scope);          // รหัสซ้ำกันได้ถ้าคนละบริษัท
     for (var i = 0; i < all.length; i++) {
       if (payload.id && String(all[i].record_id) === String(payload.id)) continue;
       if (code && String(all[i].vendor_code).trim().toLowerCase() === code.toLowerCase()) return { success: false, message: 'รหัสผู้ขาย "' + code + '" ซ้ำกับรายอื่น' };
@@ -88,10 +110,12 @@ function saveVendor(session, payload) {
       bank_name: String(payload.bankName || '').trim(), bank_account_no: String(payload.bankAccountNo || '').trim(),
       is_active: payload.isActive === false ? 'FALSE' : 'TRUE', note: String(payload.note || '') };
     if (payload.id) {
-      if (!centralUpdate('vendors', payload.id, fields)) return { success: false, message: 'ไม่พบผู้ขายรายนี้' };
+      if (!_findScoped('vendors', payload.id, scope)) return { success: false, message: 'ไม่พบผู้ขายรายนี้' };
+      centralUpdate('vendors', payload.id, fields);
       return { success: true, vendor: _vendorDto(_findById('vendors', payload.id)) };
     }
     fields.record_id = centralNextId('vendors');
+    fields.tenant_id = scope;
     fields.created_at = nowStr();
     centralAppend('vendors', fields);
     return { success: true, vendor: _vendorDto(fields) };
@@ -103,35 +127,50 @@ function saveVendor(session, payload) {
 function _warehouseDto(w) {
   return { id: w.record_id, code: w.code || '', name: w.name, address: w.address || '', isActive: _isTrue(w.is_active), isDefault: _isTrue(w.is_default) };
 }
-function listWarehouses(session) {
+function listWarehouses(session, payload) {
   var err = _requirePermission(session, 'inventory', 'view'); if (err) return err;
-  return { success: true, data: centralObjects('warehouses').map(_warehouseDto) };
+  var scope = _purchaseScope(session, payload);
+  _ensureScopeWarehouse(scope);
+  return { success: true, data: _scoped('warehouses', scope).map(_warehouseDto) };
 }
 function saveWarehouse(session, payload) {
   var err = _requirePermission(session, 'inventory', 'edit'); if (err) return err;
   var name = String(payload.name || '').trim();
   if (!name) return { success: false, message: 'กรุณาระบุชื่อคลัง' };
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
     var fields = { code: String(payload.code || '').trim(), name: name, address: String(payload.address || '').trim(),
       is_active: payload.isActive === false ? 'FALSE' : 'TRUE', is_default: payload.isDefault ? 'TRUE' : 'FALSE' };
-    // คลังหลักมีได้แห่งเดียว
-    if (payload.isDefault) centralObjects('warehouses').forEach(function(w) {
+    // คลังหลักมีได้แห่งเดียวต่อบริษัท
+    if (payload.isDefault) _scoped('warehouses', scope).forEach(function(w) {
       if (!payload.id || String(w.record_id) !== String(payload.id)) centralUpdate('warehouses', w.record_id, { is_default: 'FALSE' });
     });
     if (payload.id) {
-      if (!centralUpdate('warehouses', payload.id, fields)) return { success: false, message: 'ไม่พบคลังนี้' };
+      if (!_findScoped('warehouses', payload.id, scope)) return { success: false, message: 'ไม่พบคลังนี้' };
+      centralUpdate('warehouses', payload.id, fields);
       return { success: true, warehouse: _warehouseDto(_findById('warehouses', payload.id)) };
     }
     fields.record_id = centralNextId('warehouses');
+    fields.tenant_id = scope;
     fields.created_at = nowStr();
     centralAppend('warehouses', fields);
     return { success: true, warehouse: _warehouseDto(fields) };
   });
 }
-function _defaultWarehouseId() {
-  var ws = centralObjects('warehouses');
+function _defaultWarehouseId(scope) {
+  var ws = _scoped('warehouses', scope);
   for (var i = 0; i < ws.length; i++) if (_isTrue(ws[i].is_default)) return ws[i].record_id;
   return ws.length ? ws[0].record_id : null;
+}
+
+// ตัวแทนที่เพิ่งเริ่มใช้งานยังไม่มีคลังของตัวเอง — สร้างให้อัตโนมัติครั้งแรกที่ใช้ (จะได้ไม่ต้องตั้งค่าอะไรก่อนรับของ)
+function _ensureScopeWarehouse(scope) {
+  var id = _defaultWarehouseId(scope);
+  if (id) return id;
+  id = centralNextId('warehouses');
+  centralAppend('warehouses', { record_id: id, tenant_id: scope || '', code: 'MAIN',
+    name: scope ? 'คลังของตัวแทน' : 'คลังกลาง', address: '', is_active: 'TRUE', is_default: 'TRUE', created_at: nowStr() });
+  return id;
 }
 
 /* ═══════════════ สายอนุมัติ (approval flows) ═══════════════
@@ -153,7 +192,7 @@ function listApprovalFlows(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'view'); if (err) return err;
   var stepsByFlow = {};
   centralObjects('approval_flow_steps').forEach(function(s) { (stepsByFlow[String(s.flow_id)] = stepsByFlow[String(s.flow_id)] || []).push(s); });
-  var rows = centralObjects('approval_flows');
+  var rows = _scoped('approval_flows', _purchaseScope(session, payload));
   if (payload && payload.docType) rows = rows.filter(function(f) { return String(f.doc_type) === String(payload.docType); });
   return { success: true, data: rows.map(function(f) { return _flowDto(f, stepsByFlow[String(f.record_id)]); }) };
 }
@@ -184,16 +223,18 @@ function saveApprovalFlow(session, payload) {
     if (steps[i].approverType === 'user' && steps[i].requiredApprovals > n)
       return { success: false, message: 'ขั้นที่ ' + (i + 1) + ': ต้องอนุมัติ ' + steps[i].requiredApprovals + ' คน แต่ระบุผู้อนุมัติไว้ ' + n + ' คน' };
   }
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
     var flowId = payload.id;
     var head = { doc_type: docType, name: name, min_amount: _money(min), max_amount: max === null ? '' : _money(max),
       is_active: payload.isActive === false ? 'FALSE' : 'TRUE', note: String(payload.note || '') };
     if (flowId) {
-      if (!centralUpdate('approval_flows', flowId, head)) return { success: false, message: 'ไม่พบสายอนุมัตินี้' };
+      if (!_findScoped('approval_flows', flowId, scope)) return { success: false, message: 'ไม่พบสายอนุมัตินี้' };
+      centralUpdate('approval_flows', flowId, head);
       _deleteRowsMatching(centralSheet('approval_flow_steps'), function(o) { return String(o.flow_id) === String(flowId); });
     } else {
       flowId = centralNextId('approval_flows');
-      head.record_id = flowId; head.created_at = nowStr();
+      head.record_id = flowId; head.tenant_id = scope; head.created_at = nowStr();
       centralAppend('approval_flows', head);
     }
     var stepId = centralNextId('approval_flow_steps');
@@ -207,8 +248,9 @@ function saveApprovalFlow(session, payload) {
 
 function deleteApprovalFlow(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var flow = _findById('approval_flows', payload.id);
+    var flow = _findScoped('approval_flows', payload.id, scope);
     if (!flow) return { success: false, message: 'ไม่พบสายอนุมัตินี้' };
     var inUse = centralObjects('purchase_requisitions').some(function(pr) {
       return String(pr.flow_id) === String(payload.id) && (pr.status === 'pending');
@@ -221,9 +263,9 @@ function deleteApprovalFlow(session, payload) {
 }
 
 // สายที่ใช้กับเอกสารวงเงินนี้ (null = ไม่มีสาย → เอกสารอนุมัติเองอัตโนมัติ ดู submitPurchaseRequisition)
-function _resolveApprovalFlow(docType, amount) {
+function _resolveApprovalFlow(docType, amount, scope) {
   var amt = Number(amount) || 0, best = null;
-  centralObjects('approval_flows').forEach(function(f) {
+  _scoped('approval_flows', scope).forEach(function(f) {
     if (String(f.doc_type) !== String(docType) || !_isTrue(f.is_active)) return;
     var min = Number(f.min_amount) || 0;
     var max = (f.max_amount === '' || f.max_amount === null || f.max_amount === undefined) ? null : Number(f.max_amount);

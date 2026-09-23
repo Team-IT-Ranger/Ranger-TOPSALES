@@ -14,7 +14,7 @@ function getBootstrap(user) {
 
   var unitsByProduct = {};
   centralObjects('product_units')
-    .filter(function(u) { return String(u.is_active) !== 'FALSE' && String(u.is_active) !== '0'; })
+    .filter(function(u) { return isNotOff(u.is_active); })
     .forEach(function(u) {
       var pid = String(u.product_id);
       if (!unitsByProduct[pid]) unitsByProduct[pid] = [];
@@ -22,7 +22,7 @@ function getBootstrap(user) {
     });
 
   var products = centralObjects('products')
-    .filter(function(p) { return String(p.is_active) !== 'FALSE' && String(p.is_active) !== '0'; })
+    .filter(function(p) { return isNotOff(p.is_active); })
     .map(function(p) { return {
       id: String(p.record_id), name: p.name, price: parseFloat(p.base_price) || 0,
       unit: p.unit || 'ชิ้น', groupId: parseInt(p.group_id) || 0,
@@ -32,7 +32,7 @@ function getBootstrap(user) {
     }; });
 
   var customers = centralObjects('customers')
-    .filter(function(c) { return String(c.tenant_id) === String(user.tenantId) && String(c.is_active) !== 'FALSE'; })
+    .filter(function(c) { return String(c.tenant_id) === String(user.tenantId) && isNotOff(c.is_active); })
     .map(function(c) { return {
       id: parseInt(c.record_id), name: c.name, groupId: parseInt(c.group_id) || 0,
       phone: c.phone || '', address: c.address || '',
@@ -126,7 +126,7 @@ function getAdminDashboard(session, payload) {
   }
 
   // ── owner_admin / super_admin: รวมทุกตัวแทนที่ active ──
-  var tenants = centralObjects('tenants').filter(function(t) { return String(t.is_active) === 'TRUE' || String(t.is_active) === '1'; });
+  var tenants = centralObjects('tenants').filter(function(t) { return isFlagOn(t.is_active); });
   var totalBills = 0, totalRevenue = 0, perTenant = [];
   tenants.forEach(function(t) {
     try {
@@ -141,8 +141,8 @@ function getAdminDashboard(session, payload) {
     success: true, scope: 'owner',
     tenantCount: tenants.length,
     bills: totalBills, revenue: totalRevenue,
-    productCount: centralObjects('products').filter(function(p) { return String(p.is_active) !== 'FALSE'; }).length,
-    activePromoCount: centralObjects('discount_rules').filter(function(r) { return String(r.is_active) === 'TRUE'; }).length,
+    productCount: centralObjects('products').filter(function(p) { return isNotOff(p.is_active); }).length,
+    activePromoCount: centralObjects('discount_rules').filter(function(r) { return isFlagOn(r.is_active); }).length,
     perTenant: perTenant
   };
 }

@@ -418,7 +418,7 @@
     <div class="picker-list" id="picker-list">
       <button class="picker-row" onclick="pickOwnerContext()">
         <span class="mark" style="background:var(--blue)">TS</span>
-        <span class="txt"><div class="name">บริษัทเจ้าของสินค้า</div><div class="sub">จัดการสินค้า โปรโมชั่น ข้อมูลกลาง เครือข่ายตัวแทน</div></span>
+        <span class="txt"><div class="name" id="picker-owner-name">บริษัทเจ้าของสินค้า</div><div class="sub">เข้าใช้งานในฐานะบริษัท — เห็นทุกเมนูตามสิทธิ์ของบัญชีคุณ</div></span>
       </button>
       <hr class="picker-divider">
       <div id="picker-tenants"><div class="sub" style="padding:8px 4px">กำลังโหลดรายชื่อตัวแทน...</div></div>
@@ -965,6 +965,51 @@
         </section>
 
         <!-- ═══ SOON ═══ -->
+        <!-- ═══ ตั้งค่าระบบ: ข้อมูลบริษัทเจ้าของสินค้า ═══ -->
+        <section class="view" id="view-companysettings">
+          <div class="view-head">
+            <div><h1>ข้อมูลบริษัท</h1><p>ข้อมูลบริษัทเจ้าของสินค้า — ใช้เป็นชื่อบริษัทในตัวเลือกบริษัท หัวเอกสาร และใบกำกับภาษี</p></div>
+          </div>
+          <div class="form-card">
+            <h3>ข้อมูลทั่วไป</h3>
+            <p class="form-hint">ชื่อที่กรอกตรงนี้จะไปแสดงแทนคำว่า "บริษัทเจ้าของสินค้า" ทั้งระบบ</p>
+            <div class="form-grid g2">
+              <div class="field"><label>ชื่อบริษัท (ที่ใช้แสดงในระบบ) *</label><input id="co-name"></div>
+              <div class="field"><label>ชื่อจดทะเบียน (ถ้าต่างจากชื่อที่ใช้แสดง)</label><input id="co-legal"></div>
+              <div class="field"><label>เลขประจำตัวผู้เสียภาษี <span class="unit">13 หลัก</span></label><input id="co-tax" inputmode="numeric" maxlength="20"></div>
+              <div class="field"><label>สาขา <span class="unit">เช่น 00000 (สำนักงานใหญ่)</span></label><input id="co-branch"></div>
+              <div class="field span2"><label>ที่อยู่</label><input id="co-address"></div>
+              <div class="field"><label>โทรศัพท์</label><input id="co-phone"></div>
+              <div class="field"><label>อีเมล</label><input id="co-email"></div>
+              <div class="field"><label>เว็บไซต์</label><input id="co-website"></div>
+              <div class="field"><label>โลโก้ (URL รูป)</label><input id="co-logo"></div>
+            </div>
+          </div>
+          <div class="form-card">
+            <h3>บัญชีธนาคาร</h3>
+            <p class="form-hint">ใช้พิมพ์ลงใบแจ้งหนี้/ใบเสนอราคาให้ลูกค้าโอนเงิน</p>
+            <div class="form-grid">
+              <div class="field"><label>ธนาคาร</label><input id="co-bank"></div>
+              <div class="field"><label>เลขที่บัญชี</label><input id="co-bankno"></div>
+              <div class="field"><label>ชื่อบัญชี</label><input id="co-bankname"></div>
+            </div>
+            <div class="field" style="margin-top:12px"><label>หมายเหตุภายใน</label><input id="co-note"></div>
+            <div class="form-actions">
+              <span class="form-hint" id="co-updated" style="margin:0 auto 0 0"></span>
+              <button class="btn btn-primary" id="co-save" onclick="saveCompanySettings()">บันทึกข้อมูลบริษัท</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ ผู้ใช้งานและสิทธิ์: บทบาทและสิทธิ์ ═══ -->
+        <section class="view" id="view-roles">
+          <div class="view-head">
+            <div><h1>บทบาทและสิทธิ์</h1><p>กำหนดว่าบทบาทไหนเห็นเมนูอะไร และแก้ไขอะไรได้บ้าง — ผู้ใช้แต่ละคนถือ 1 บทบาท</p></div>
+            <button class="btn btn-primary" onclick="openRoleForm(null)">+ สร้างบทบาทใหม่</button>
+          </div>
+          <div id="roles-list"><p class="form-hint">กำลังโหลด...</p></div>
+        </section>
+
         <!-- ═══ งานซื้อ: ผู้ขาย ═══ -->
         <section class="view" id="view-vendors">
           <div class="view-head">
@@ -1048,7 +1093,7 @@
         <!-- ═══ คลังกลาง ═══ -->
         <section class="view" id="view-goodsreceipts">
           <div class="view-head">
-            <div><h1>ใบรับของเข้าคลัง</h1><p>รับของจากใบสั่งซื้อ — ระบบเพิ่มสต็อกคลังกลาง คิดต้นทุนเฉลี่ย และลงบัญชีสินค้าคงเหลือให้อัตโนมัติ</p></div>
+            <div><h1>ใบรับของเข้าคลัง</h1><p>รับของจากใบสั่งซื้อ — ระบบเพิ่มสต็อกในคลังและคิดต้นทุนเฉลี่ยให้อัตโนมัติ (เฉพาะฝั่งบริษัทจะลงบัญชีสินค้าคงเหลือให้ด้วย)</p></div>
             <button class="btn" onclick="gotoView('purchaseorders')">ไปหน้าใบสั่งซื้อเพื่อรับของ</button>
           </div>
           <div class="table-wrap"><table>
@@ -1059,7 +1104,7 @@
 
         <section class="view" id="view-warehousestock">
           <div class="view-head">
-            <div><h1>ยอดคงเหลือคลังกลาง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p></div>
+            <div><h1>ยอดคงเหลือในคลัง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p></div>
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>สินค้า</th><th>คลัง</th><th>คงเหลือ</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
@@ -1245,15 +1290,18 @@ async function showCompanyPicker(){
   document.getElementById('picker-screen').style.display = 'flex';
   const list = document.getElementById('picker-tenants');
   list.innerHTML = '<div class="sub" style="padding:8px 4px">กำลังโหลดรายชื่อตัวแทน...</div>';
-  const r = await callApi('listTenants', {});
+  const [r, coR] = await Promise.all([callApi('listTenants', {}), callApi('getCompanyProfile', {})]);
+  if (coR && coR.success) { COMPANY = coR.company; applyCompanyName(); }
   if (!r.success) { list.innerHTML = '<div class="sub" style="padding:8px 4px">'+esc(r.message)+'</div>'; return; }
   tenantsCache = r.data;
-  list.innerHTML = r.data.length ? r.data.map(t =>
+  // ไม่ต้องโชว์ตัวแทน 'บ้าน' (HOUSE) ในลิสต์ เพราะมันคือบัญชีขายตรงของบริษัทเอง — เลือกจากปุ่มบริษัทด้านบนได้เลย
+  const pickable = r.data.filter(t => !t.isHouse);
+  list.innerHTML = pickable.length ? pickable.map(t =>
     '<button class="picker-row" onclick="pickTenantContext(\''+esc(t.tenantId)+'\')">' +
       '<span class="mark" style="background:var(--green)">'+esc(String(t.tenantId).slice(0,2))+'</span>' +
       '<span class="txt"><div class="name">'+esc(t.name)+'</div><div class="sub">'+esc(t.tenantId)+(t.region?' · '+esc(t.region):'')+'</div></span>' +
     '</button>'
-  ).join('') : '<div class="sub" style="padding:8px 4px">ยังไม่มีตัวแทน</div>';
+  ).join('') : '<div class="sub" style="padding:8px 4px">ยังไม่มีตัวแทนจำหน่าย — เลือกบริษัทด้านบนเพื่อเข้าใช้งาน</div>';
 }
 function pickOwnerContext(){
   ACTIVE_TENANT_ID = null;
@@ -1270,7 +1318,7 @@ function backToPicker(){
   showCompanyPicker();
 }
 
-function enterApp(){
+async function enterApp(){
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('picker-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
@@ -1287,10 +1335,18 @@ function enterApp(){
   else if (ACTIVE_TENANT_ID) {
     const t = tenantsCache.find(x => String(x.tenantId) === String(ACTIVE_TENANT_ID));
     scopeLabelText = ACTIVE_TENANT_ID + (t ? ' · ' + t.name : '') + ' · Ultra Admin';
-  } else scopeLabelText = 'บริษัทเจ้าของสินค้า';
+  } else scopeLabelText = COMPANY.name || 'บริษัทเจ้าของสินค้า';
   document.getElementById('scopeLabel').textContent = scopeLabelText;
   renderNav();
   gotoView('dashboard');
+  // โหลดสิทธิ์จริงของผู้ใช้ + ชื่อบริษัท แล้ววาดเมนู/ป้ายบริบทอีกรอบ (ครั้งแรกวาดแบบเห็นทุกเมนูไปก่อนเพื่อไม่ให้หน้าค้าง)
+  const [permR, coR] = await Promise.all([callApi('getMyPermissions', {}), callApi('getCompanyProfile', {})]);
+  if (permR && permR.success) {
+    MY_PERMS = { isSuper: !!permR.isSuperAdmin, permissions: permR.permissions || {} };
+    document.getElementById('who-role').textContent = permR.roleLabel || SESSION.roleCode;
+    renderNav();
+  }
+  if (coR && coR.success) { COMPANY = coR.company; applyCompanyName(); }
 }
 
 /* ไอคอนเมนูเป็น inline SVG เส้นบาง (เดิมใช้ emoji ซึ่งหน้าตาต่างกันทุกเครื่อง/ทุก OS และดูไม่เข้าชุดกับธีม minimal)
@@ -1316,74 +1372,98 @@ const navIcon = name => '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke=
 const NAV = {
   tenant: { groups: [
     { n:'1', icon:'building', label:'ข้อมูลตัวแทน', subs:[
-      { n:'1.1', label:'ข้อมูลบริษัท', items:[ {n:'1.1.1', label:'ข้อมูลบริษัท', view:'companyprofile', ready:true} ] },
-      { n:'1.2', label:'บัญชีแอดมิน', items:[ {n:'1.2.1', label:'ผู้ใช้งานระบบ', view:'adminusers', ready:true} ] }
+      { n:'1.1', label:'ข้อมูลบริษัท', items:[ {n:'1.1.1', label:'ข้อมูลบริษัท', view:'companyprofile', mod:'settings', ready:true} ] }
     ]},
     { n:'2', icon:'receipt', label:'งานขาย', subs:[
-      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', ready:true} ] }
+      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', mod:'sales', ready:true} ] }
     ]},
     { n:'3', icon:'users', label:'บุคลากรและเขตขาย', subs:[
-      { n:'3.1', label:'พนักงานขาย', items:[ {n:'3.1.1', label:'รายชื่อพนักงาน', view:'staff', ready:true} ] },
-      { n:'3.2', label:'เขตการขาย', items:[ {n:'3.2.1', label:'ผังเขตการขาย', view:'v-zone', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
+      { n:'3.1', label:'พนักงานขาย', items:[ {n:'3.1.1', label:'รายชื่อพนักงาน', view:'staff', mod:'staff', ready:true} ] },
+      { n:'3.2', label:'เขตการขาย', items:[ {n:'3.2.1', label:'ผังเขตการขาย', view:'v-zone', mod:'zones', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
     ]},
     { n:'4', icon:'store', label:'ลูกค้าและเอกสาร', subs:[
-      { n:'4.1', label:'ลูกค้า', items:[ {n:'4.1.1', label:'รายชื่อลูกค้า', view:'customers', ready:true} ] },
-      { n:'4.2', label:'เลขที่เอกสาร', items:[ {n:'4.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', ready:true} ] }
+      { n:'4.1', label:'ลูกค้า', items:[ {n:'4.1.1', label:'รายชื่อลูกค้า', view:'customers', mod:'customers', ready:true} ] },
+      { n:'4.2', label:'เลขที่เอกสาร', items:[ {n:'4.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', mod:'docnum', ready:true} ] }
     ]},
-    { n:'5', icon:'box', label:'คลังสินค้า', subs:[
-      { n:'5.1', label:'เคลื่อนไหวสินค้า', items:[
-        {n:'5.1.1', label:'รับสินค้าเข้าคลัง', view:'v-recv', ready:false, soon:'รับสินค้าเข้าคลัง', desc:'ใบรับสินค้าเข้าคลังแบบมีเลขเอกสารทางการ ผูกกับใบสั่งซื้อ'},
-        {n:'5.1.2', label:'โอนย้ายคลัง', view:'v-transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
+    { n:'5', icon:'cart', label:'งานซื้อ', subs:[
+      { n:'5.1', label:'ใบขอซื้อ', items:[ {n:'5.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', mod:'purchasing', ready:true} ] },
+      { n:'5.2', label:'ใบสั่งซื้อ', items:[ {n:'5.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', mod:'purchasing', ready:true} ] },
+      { n:'5.3', label:'ข้อมูลตั้งต้น', items:[
+        {n:'5.3.1', label:'ผู้ขาย/ผู้จัดจำหน่าย', view:'vendors', mod:'vendors', ready:true},
+        {n:'5.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true}
+      ]}
+    ]},
+    { n:'6', icon:'box', label:'คลังสินค้า', subs:[
+      { n:'6.1', label:'รับของ', items:[ {n:'6.1.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', mod:'inventory', ready:true} ] },
+      { n:'6.2', label:'ยอดคงเหลือ', items:[ {n:'6.2.1', label:'สต็อกคลัง', view:'warehousestock', mod:'inventory', ready:true} ] },
+      { n:'6.3', label:'เคลื่อนไหวสินค้า', items:[
+        {n:'6.3.1', label:'รับสินค้าเข้าคลัง (จากบริษัท)', view:'v-recv', mod:'stock_receive', ready:false, soon:'รับสินค้าเข้าคลังจากบริษัท', desc:'ใบรับสินค้าที่บริษัทส่งมาให้ตัวแทน (คนละทางกับการซื้อจากผู้ขายเองในเมนูงานซื้อ)'},
+        {n:'6.3.2', label:'โอนย้ายคลัง', view:'v-transfer', mod:'stock_transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
       ]},
-      { n:'5.2', label:'เบิกจ่าย', items:[ {n:'5.2.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
+      { n:'6.4', label:'เบิกจ่าย', items:[ {n:'6.4.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', mod:'van_issue', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
     ]},
-    { n:'6', icon:'truck', label:'การจัดส่งและรายงาน', subs:[
-      { n:'6.1', label:'การจัดส่ง', items:[ {n:'6.1.1', label:'สถานะการจัดส่ง', view:'v-ship', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
-      { n:'6.2', label:'รายงาน', items:[ {n:'6.2.1', label:'รายงานการขาย', view:'v-report1', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
+    { n:'7', icon:'users', label:'ผู้ใช้งานและสิทธิ์', subs:[
+      { n:'7.1', label:'ผู้ใช้งาน', items:[ {n:'7.1.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true} ] },
+      { n:'7.2', label:'สิทธิ์การใช้งาน', items:[ {n:'7.2.1', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true} ] }
+    ]},
+    { n:'8', icon:'truck', label:'การจัดส่งและรายงาน', subs:[
+      { n:'8.1', label:'การจัดส่ง', items:[ {n:'8.1.1', label:'สถานะการจัดส่ง', view:'v-ship', mod:'shipping', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
+      { n:'8.2', label:'รายงาน', items:[ {n:'8.2.1', label:'รายงานการขาย', view:'v-report1', mod:'sales_report', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
     ]}
   ]},
   owner: { groups: [
     { n:'1', icon:'tag', label:'สินค้าและโปรโมชั่น', subs:[
-      { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', ready:true} ] },
-      { n:'1.2', label:'โปรโมชั่น', items:[ {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', ready:true} ] }
+      { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', mod:'products', ready:true} ] },
+      { n:'1.2', label:'โปรโมชั่น', items:[ {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', mod:'promotions', ready:true} ] }
     ]},
     { n:'2', icon:'receipt', label:'งานขาย', subs:[
-      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', ready:true} ] }
-    ]},
-    { n:'3', icon:'coin', label:'ราคาและส่วนลด', subs:[
-      { n:'3.1', label:'ชุดราคา', items:[ {n:'3.1.1', label:'ชุดราคาและส่วนลด', view:'pricelists', ready:true} ] }
-    ]},
-    { n:'4', icon:'gear', label:'ข้อมูลกลาง', subs:[
-      { n:'4.1', label:'กลุ่มลูกค้า', items:[ {n:'4.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', ready:true} ] },
-      { n:'4.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'4.2.1', label:'รายการช่องทาง', view:'distchannels', ready:true} ] },
-      { n:'4.3', label:'ประเภทการชำระเงิน', items:[ {n:'4.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', ready:true} ] }
-    ]},
-    { n:'5', icon:'building', label:'เครือข่ายตัวแทน', subs:[
-      { n:'5.1', label:'ตัวแทนจำหน่าย', items:[ {n:'5.1.1', label:'รายชื่อตัวแทน', view:'tenants', ready:true} ] },
-      { n:'5.2', label:'ผู้ใช้งานและสิทธิ์', items:[ {n:'5.2.1', label:'บัญชีแอดมิน', view:'adminusers', ready:true} ] }
-    ]},
-    { n:'6', icon:'cart', label:'งานซื้อ', subs:[
-      { n:'6.1', label:'ใบขอซื้อ', items:[ {n:'6.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', ready:true} ] },
-      { n:'6.2', label:'ใบสั่งซื้อ', items:[ {n:'6.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', ready:true} ] },
-      { n:'6.3', label:'ข้อมูลตั้งต้น', items:[
-        {n:'6.3.1', label:'ผู้ขาย/ผู้จัดจำหน่าย', view:'vendors', ready:true},
-        {n:'6.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', ready:true}
+      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', mod:'sales', ready:true} ] },
+      { n:'2.2', label:'ลูกค้าและพนักงาน', items:[
+        {n:'2.2.1', label:'รายชื่อลูกค้า', view:'customers', mod:'customers', ready:true},
+        {n:'2.2.2', label:'พนักงานขาย', view:'staff', mod:'staff', ready:true}
       ]}
     ]},
-    { n:'7', icon:'box', label:'คลังสินค้ากลาง', subs:[
-      { n:'7.1', label:'รับของ', items:[ {n:'7.1.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', ready:true} ] },
-      { n:'7.2', label:'ยอดคงเหลือ', items:[ {n:'7.2.1', label:'สต็อกคลังกลาง', view:'warehousestock', ready:true} ] }
+    { n:'3', icon:'coin', label:'ราคาและส่วนลด', subs:[
+      { n:'3.1', label:'ชุดราคา', items:[ {n:'3.1.1', label:'ชุดราคาและส่วนลด', view:'pricelists', mod:'pricing', ready:true} ] }
     ]},
-    { n:'8', icon:'book', label:'บัญชี', subs:[
-      { n:'8.1', label:'เจ้าหนี้', items:[ {n:'8.1.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', ready:true} ] },
-      { n:'8.2', label:'ลูกหนี้', items:[ {n:'8.2.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', ready:true} ] },
-      { n:'8.3', label:'บัญชีทั่วไป', items:[ {n:'8.3.1', label:'สมุดรายวัน/งบทดลอง', view:'glbooks', ready:true} ] }
+    { n:'4', icon:'gear', label:'ข้อมูลกลาง', subs:[
+      { n:'4.1', label:'กลุ่มลูกค้า', items:[ {n:'4.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', mod:'settings', ready:true} ] },
+      { n:'4.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'4.2.1', label:'รายการช่องทาง', view:'distchannels', mod:'settings', ready:true} ] },
+      { n:'4.3', label:'ประเภทการชำระเงิน', items:[ {n:'4.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', mod:'settings', ready:true} ] }
     ]},
-    { n:'9', icon:'chart', label:'รายงาน', subs:[
-      { n:'9.1', label:'ยอดขาย', items:[ {n:'9.1.1', label:'สรุปยอดขายรวม', view:'v-report2', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
+    { n:'5', icon:'building', label:'เครือข่ายตัวแทน', subs:[
+      { n:'5.1', label:'ตัวแทนจำหน่าย', items:[ {n:'5.1.1', label:'รายชื่อตัวแทน', view:'tenants', mod:'tenants', ready:true} ] }
+    ]},
+    { n:'6', icon:'users', label:'ผู้ใช้งานและสิทธิ์', subs:[
+      { n:'6.1', label:'ผู้ใช้งาน', items:[ {n:'6.1.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true} ] },
+      { n:'6.2', label:'สิทธิ์การใช้งาน', items:[ {n:'6.2.1', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true} ] }
+    ]},
+    { n:'7', icon:'cart', label:'งานซื้อ', subs:[
+      { n:'7.1', label:'ใบขอซื้อ', items:[ {n:'7.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', mod:'purchasing', ready:true} ] },
+      { n:'7.2', label:'ใบสั่งซื้อ', items:[ {n:'7.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', mod:'purchasing', ready:true} ] },
+      { n:'7.3', label:'ข้อมูลตั้งต้น', items:[
+        {n:'7.3.1', label:'ผู้ขาย/ผู้จัดจำหน่าย', view:'vendors', mod:'vendors', ready:true},
+        {n:'7.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true}
+      ]}
+    ]},
+    { n:'8', icon:'box', label:'คลังสินค้ากลาง', subs:[
+      { n:'8.1', label:'รับของ', items:[ {n:'8.1.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', mod:'inventory', ready:true} ] },
+      { n:'8.2', label:'ยอดคงเหลือ', items:[ {n:'8.2.1', label:'สต็อกคลังกลาง', view:'warehousestock', mod:'inventory', ready:true} ] }
+    ]},
+    { n:'9', icon:'book', label:'บัญชี', subs:[
+      { n:'9.1', label:'เจ้าหนี้', items:[ {n:'9.1.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true} ] },
+      { n:'9.2', label:'ลูกหนี้', items:[ {n:'9.2.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true} ] },
+      { n:'9.3', label:'บัญชีทั่วไป', items:[ {n:'9.3.1', label:'สมุดรายวัน/งบทดลอง', view:'glbooks', mod:'accounting', ready:true} ] }
+    ]},
+    { n:'10', icon:'gear', label:'ตั้งค่าระบบ', subs:[
+      { n:'10.1', label:'บริษัท', items:[ {n:'10.1.1', label:'ข้อมูลบริษัท', view:'companysettings', mod:'settings', ready:true} ] }
+    ]},
+    { n:'11', icon:'chart', label:'รายงาน', subs:[
+      { n:'11.1', label:'ยอดขาย', items:[ {n:'11.1.1', label:'สรุปยอดขายรวม', view:'v-report2', mod:'sales_report', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
     ]}
   ]}
 };
+
 
 let sbPinned = false, sbCollapsed = true, closeTimer = null, openTimer = null;
 // หน่วง 1 วินาทีก่อนยืด/หุบ left pane เอง (แยกจาก transition ของกลุ่มเมนูที่ยาวกว่านั้นอีก) กันสไลด์วูบวาบตอนเมาส์กวาดผ่าน
@@ -1467,12 +1547,31 @@ function closeFliesIn(groupBody){
   });
 }
 
+/* ข้อมูลบริษัทเจ้าของสินค้า (ตั้งที่เมนู ตั้งค่าระบบ → ข้อมูลบริษัท) — ใช้แทนคำว่า "บริษัทเจ้าของสินค้า" ทั้งระบบ */
+let COMPANY = { name: 'บริษัทเจ้าของสินค้า' };
+function applyCompanyName(){
+  const name = COMPANY.name || 'บริษัทเจ้าของสินค้า';
+  if (!EFFECTIVE_TENANT_ID()) {
+    const lbl = document.getElementById('scopeLabel'); if (lbl) lbl.textContent = name;
+    const mark = document.getElementById('scopeMark'); if (mark) mark.textContent = name.replace(/^(บริษัท|บจก\.|หจก\.)\s*/, '').slice(0, 2);
+  }
+  const ownerName = document.getElementById('picker-owner-name'); if (ownerName) ownerName.textContent = name;
+}
+
+/* สิทธิ์ของผู้ใช้ที่ล็อกอินอยู่ (มาจาก getMyPermissions) — ใช้ซ่อนเมนูที่ไม่มีสิทธิ์
+   ฝั่ง backend ยังตรวจสิทธิ์ซ้ำทุก action อยู่ดี การซ่อนเมนูเป็นแค่เรื่องความสะอาดของหน้าจอ ไม่ใช่การกันจริง */
+let MY_PERMS = { isSuper: false, permissions: {} };
+const canView = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].view);
+const canEdit = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].edit);
+
 function renderNav(){
   const html = NAV[SCOPE].groups.map((g, gi) => {
     const gid = 'g' + gi;
-    const subsHtml = g.subs.map((sg, si) => {
+    const visibleSubs = g.subs.filter(sg => sg.items.some(it => canView(it.mod)));
+    if (!visibleSubs.length) return '';        // ทั้งกลุ่มไม่มีเมนูที่ดูได้ → ไม่ต้องโชว์หัวกลุ่ม
+    const subsHtml = visibleSubs.map((sg, si) => {
       const flyId = gid + '-s' + si;
-      const itemsHtml = sg.items.map(it =>
+      const itemsHtml = sg.items.filter(it => canView(it.mod)).map(it =>
         '<button class="sb-action" onclick="gotoView(\''+it.view+'\')" data-view="'+it.view+'">' +
           '<span class="sb-action-num">'+it.n+'</span><span>'+esc(it.label)+'</span>' +
           (it.ready ? '' : '<span class="soon-dot"></span>') + '</button>'
@@ -1507,7 +1606,8 @@ const LOADERS = {
   salesorders: loadSalesOrders,
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
-  apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks
+  apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks,
+  companysettings: loadCompanySettings, roles: loadRoles
 };
 function gotoView(view){
   let elId = 'soon', label = view, meta = findMeta(view);
@@ -2874,17 +2974,40 @@ async function organizeDbFiles(){
 }
 async function loadTenantsQuiet(){ const r = await callApi('listTenants', {}); if (r.success) tenantsCache = r.data; }
 function onAdminRoleChange(){
-  const isTenantAdmin = document.getElementById('au-role').value === 'tenant_admin';
-  document.getElementById('au-tenant-wrap').style.display = isTenantAdmin ? '' : 'none';
-  if (isTenantAdmin) ensureTenantsForDropdown();
+  // บทบาทที่ผูกกับตัวแทน (tenant_admin หรือบทบาทที่ตัวแทนสร้างเอง) ต้องระบุว่าเป็นของตัวแทนรายไหน
+  // ฝั่งตัวแทนเองไม่ต้องถาม เพราะระบบผูกให้กับตัวแทนที่กำลังทำงานอยู่แล้ว
+  const sel = document.getElementById('au-role');
+  const role = (ROLES_CACHE || []).find(r => r.code === sel.value);
+  const needsTenant = !EFFECTIVE_TENANT_ID() && (sel.value === 'tenant_admin' || !!(role && role.tenantId));
+  document.getElementById('au-tenant-wrap').style.display = needsTenant ? '' : 'none';
+  if (needsTenant) ensureTenantsForDropdown();
+}
+
+/* รายชื่อบทบาทสำหรับ dropdown — มาจาก listRolesWithPermissions จึงได้บทบาทที่ผู้ใช้สร้างเองด้วย */
+let ROLES_CACHE = null;
+async function ensureRolesForDropdown(force){
+  if (ROLES_CACHE && !force) return ROLES_CACHE;
+  const r = await callApi('listRolesWithPermissions', {});
+  ROLES_CACHE = r.success ? r.data.filter(x => x.code !== 'super_admin') : [];
+  const sel = document.getElementById('au-role');
+  if (sel) {
+    const keep = sel.value;
+    sel.innerHTML = ROLES_CACHE.map(x => '<option value="'+esc(x.code)+'">'+esc(x.label)+(x.tenantId ? ' ('+esc(x.tenantId)+')' : '')+'</option>').join('');
+    if (ROLES_CACHE.some(x => x.code === keep)) sel.value = keep;
+  }
+  return ROLES_CACHE;
 }
 let adminUsersCache = [];
 const ADMIN_ROLE_LABEL = { super_admin:'ผู้ดูแลระบบสูงสุด', owner_admin:'แอดมินบริษัท', tenant_admin:'แอดมินตัวแทน' };
+const roleLabelOf = code => {
+  const r = (ROLES_CACHE || []).find(x => x.code === code);
+  return r ? r.label : (ADMIN_ROLE_LABEL[code] || code);
+};
 function renderAdminUsersTable(){
   const body = document.getElementById('adminusers-body');
   if (!adminUsersCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีผู้ใช้งาน</td></tr>'; return; }
   body.innerHTML = adminUsersCache.map(u =>
-    '<tr><td class="mono-data">'+esc(u.username)+'</td><td>'+esc(u.displayName)+'</td><td>'+(ADMIN_ROLE_LABEL[u.roleCode]||u.roleCode)+'</td>' +
+    '<tr><td class="mono-data">'+esc(u.username)+'</td><td>'+esc(u.displayName)+'</td><td>'+esc(roleLabelOf(u.roleCode))+'</td>' +
     '<td class="mono-data">'+esc(u.tenantId||'-')+'</td>' +
     '<td><span class="pill '+(u.status==='active'?'ok':'off')+'">'+(u.status==='active'?'ใช้งาน':'ปิด')+'</span></td>' +
     '<td>' + (u.roleCode === 'super_admin' ? '<span style="color:var(--ink-faint);font-size:11.5px">แก้ผ่าน Editor</span>' :
@@ -2897,8 +3020,9 @@ async function loadAdminUsers(){
   body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
   // ฝั่งตัวแทน (หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทนอยู่) สร้างได้แค่ tenant_admin ของตัวเอง — ซ่อนช่องเลือกตัวแทนและตัวเลือกสิทธิ์
   const roleWrap = document.getElementById('au-role-wrap');
-  if (EFFECTIVE_TENANT_ID()) { roleWrap.style.display = 'none'; document.getElementById('au-tenant-wrap').style.display = 'none'; }
-  else { roleWrap.style.display = ''; onAdminRoleChange(); }
+  roleWrap.style.display = '';
+  await ensureRolesForDropdown();
+  onAdminRoleChange();
 
   const r = await callApi('listAdminUsers', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
@@ -2911,11 +3035,8 @@ async function createAdminUserUI(){
   const displayName = document.getElementById('au-displayname').value.trim();
   if (!username || !password || !displayName) { toast('กรุณากรอกให้ครบ', true); return; }
   if (password.length < 8) { toast('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร', true); return; }
-  const payload = { username, password, displayName };
-  if (!EFFECTIVE_TENANT_ID()) {
-    payload.roleCode = document.getElementById('au-role').value;
-    if (payload.roleCode === 'tenant_admin') payload.tenantId = document.getElementById('au-tenant').value;
-  }
+  const payload = { username, password, displayName, roleCode: document.getElementById('au-role').value };
+  if (document.getElementById('au-tenant-wrap').style.display !== 'none') payload.tenantId = document.getElementById('au-tenant').value;
   const r = await callApi('createAdminUser', payload);
   if (!r.success) { toast(r.message, true); return; }
   toast('เพิ่มผู้ใช้งานสำเร็จ');
@@ -3240,9 +3361,9 @@ function renderPoDetail(po){
     '<td class="mono-data">'+it.receivedQty+'</td><td class="mono-data">'+it.remainQty+'</td></tr>').join(''), 8, 'ไม่มีรายการ');
   document.getElementById('pod-receipts').innerHTML = po.receipts.length ? po.receipts.map(g =>
     '<div class="activity-row"><span><b>'+esc(g.grNo)+'</b> '+esc(g.receiveDate)+' · '+g.itemCount+' รายการ</span>' +
-    '<span><button class="btn btn-sm" onclick="billFromGr('+g.id+')">ตั้งหนี้</button></span></div>').join('')
+    '<span>'+(SCOPE === 'owner' ? '<button class="btn btn-sm" onclick="billFromGr('+g.id+')">ตั้งหนี้</button>' : '')+'</span></div>').join('')
     : '<p class="form-hint">ยังไม่มีการรับของ</p>';
-  document.getElementById('pod-bills').innerHTML = po.bills.length ? po.bills.map(x =>
+  document.getElementById('pod-bills').innerHTML = SCOPE !== 'owner' ? '<p class="form-hint">ตัวแทนจำหน่ายไม่ได้ใช้สมุดบัญชีของบริษัท</p>' : po.bills.length ? po.bills.map(x =>
     '<div class="activity-row"><span>'+esc(x.billNo)+'</span><span class="amt">฿'+bahtPlain(x.total)+' '+pill2(DOC_ST, x.status)+'</span></div>').join('')
     : '<p class="form-hint">ยังไม่ได้ตั้งหนี้</p>';
 }
@@ -3365,7 +3486,8 @@ async function loadGoodsReceipts(){
     '<tr><td class="mono-data">'+esc(g.grNo)+'</td><td class="mono-data">'+esc(g.receiveDate)+'</td>' +
     '<td class="clickable-row" onclick="openPoDetail('+g.poId+')">'+dash(g.poNo)+'</td><td>'+dash(g.vendorName)+'</td>' +
     '<td>'+g.itemCount+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
-    '<td>'+(g.billNo ? '<span class="pill ok">'+esc(g.billNo)+'</span>' : '<button class="btn btn-sm" onclick="billFromGrList('+g.id+')">ตั้งหนี้</button>')+'</td></tr>').join(''),
+    '<td>'+(g.billNo ? '<span class="pill ok">'+esc(g.billNo)+'</span>'
+      : (SCOPE === 'owner' ? '<button class="btn btn-sm" onclick="billFromGrList('+g.id+')">ตั้งหนี้</button>' : '<span class="muted">—</span>'))+'</td></tr>').join(''),
     7, 'ยังไม่มีใบรับของ');
 }
 async function billFromGrList(grId){
@@ -3694,6 +3816,105 @@ async function openAccountsList(){
     '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>ชื่อบัญชี</th><th>ประเภท</th></tr></thead><tbody>' +
     acctsCache.map(a => '<tr><td class="mono-data">'+esc(a.code)+'</td><td>'+esc(a.name)+'</td><td>'+esc(a.acctType)+'</td></tr>').join('') +
     '</tbody></table></div><div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
+}
+
+/* ══════════════ ตั้งค่าระบบ → ข้อมูลบริษัท (25_company.gs) ══════════════ */
+const CO_FIELDS = { name:'co-name', legalName:'co-legal', taxId:'co-tax', branchCode:'co-branch', address:'co-address',
+  phone:'co-phone', email:'co-email', website:'co-website', logoUrl:'co-logo', bankName:'co-bank',
+  bankAccountNo:'co-bankno', bankAccountName:'co-bankname', note:'co-note' };
+async function loadCompanySettings(){
+  const r = await callApi('getCompanyProfile', {});
+  if (!r.success) { toast(r.message, true); return; }
+  COMPANY = r.company; applyCompanyName();
+  Object.keys(CO_FIELDS).forEach(k => { const el = document.getElementById(CO_FIELDS[k]); if (el) el.value = r.company[k] || ''; });
+  document.getElementById('co-updated').textContent = r.company.updatedAt ? ('แก้ไขล่าสุด ' + r.company.updatedAt) : '';
+  // ไม่มีสิทธิ์แก้ = ดูได้อย่างเดียว (backend ปฏิเสธอยู่แล้ว แต่ปิดช่องกรอกให้ชัดว่าแก้ไม่ได้)
+  const editable = r.company.canEdit;
+  Object.values(CO_FIELDS).forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !editable; });
+  document.getElementById('co-save').style.display = editable ? '' : 'none';
+}
+async function saveCompanySettings(){
+  const btn = document.getElementById('co-save');
+  const payload = {};
+  Object.keys(CO_FIELDS).forEach(k => { const el = document.getElementById(CO_FIELDS[k]); if (el) payload[k] = el.value.trim(); });
+  if (!payload.name) { toast('กรุณาระบุชื่อบริษัท', true); return; }
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  const r = await callApi('saveCompanyProfile', payload);
+  btn.disabled = false; btn.textContent = 'บันทึกข้อมูลบริษัท';
+  if (!r.success) { toast(r.message, true); return; }
+  COMPANY = r.company; applyCompanyName();
+  document.getElementById('co-updated').textContent = 'แก้ไขล่าสุด ' + r.company.updatedAt;
+  toast(r.message || 'บันทึกแล้ว');
+}
+
+/* ══════════════ ผู้ใช้งานและสิทธิ์ → บทบาทและสิทธิ์ (26_roles.gs) ══════════════ */
+let ROLES = { data: [], modules: [], myPermissions: {} };
+async function loadRoles(){
+  const box = document.getElementById('roles-list');
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listRolesWithPermissions', {});
+  if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
+  ROLES = r; renderRoles();
+}
+function renderRoles(){
+  const box = document.getElementById('roles-list');
+  const modLabel = {}; ROLES.modules.forEach(m => { modLabel[m.code] = m.label; });
+  box.innerHTML = ROLES.data.map(role => {
+    const granted = role.permissions.filter(p => p.view || p.edit);
+    return '<div class="form-card"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+      '<div><h3 style="margin:0">'+esc(role.label)+' ' +
+        (role.isSystem ? '<span class="pill off">บทบาทระบบ</span>' : '') +
+        (role.tenantId ? ' <span class="pill wait">เฉพาะ '+esc(role.tenantId)+'</span>' : '') + '</h3>' +
+        '<p class="form-hint" style="margin:4px 0 0">'+esc(role.description || '—')+' · ผู้ใช้ '+role.userCount+' บัญชี · รหัส <span class="mono-data">'+esc(role.code)+'</span></p></div>' +
+      '<div style="display:flex;gap:6px;align-items:flex-start">' +
+        (role.canEdit ? '<button class="btn btn-sm" onclick="openRoleForm(\''+esc(role.code)+'\')">แก้สิทธิ์</button>' : '') +
+        '<button class="btn btn-sm" onclick="openRoleForm(\''+esc(role.code)+'\', true)">คัดลอกเป็นบทบาทใหม่</button>' +
+        (role.canEdit && !role.userCount ? '<button class="btn btn-sm btn-ghost" onclick="deleteRoleUI(\''+esc(role.code)+'\')">ลบ</button>' : '') +
+      '</div></div>' +
+      '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">' +
+        (granted.length ? granted.map(p => '<span class="pill '+(p.edit ? 'ok' : 'off')+'">'+esc(modLabel[p.module] || p.module)+(p.edit ? ' · แก้ไขได้' : ' · ดูอย่างเดียว')+'</span>').join('')
+          : '<span class="form-hint">ยังไม่ได้ให้สิทธิ์เมนูใดเลย</span>') +
+      '</div></div>';
+  }).join('') || '<div class="soon-panel"><p>ยังไม่มีบทบาท</p></div>';
+}
+function openRoleForm(code, asCopy){
+  const role = code ? ROLES.data.find(r => r.code === code) : null;
+  const mine = ROLES.myPermissions || {};
+  const rows = ROLES.modules.map(m => {
+    const p = role ? (role.permissions.find(x => x.module === m.code) || {}) : {};
+    // ติ๊กได้เฉพาะสิทธิ์ที่ตัวเองมี (backend ปฏิเสธอยู่แล้ว แต่ปิดช่องให้เห็นชัดว่าให้ไม่ได้)
+    const canGiveView = !mine[m.code] || mine[m.code].view, canGiveEdit = !mine[m.code] || mine[m.code].edit;
+    return '<div class="plm-row" style="grid-template-columns:1fr 92px 92px" data-mod="'+esc(m.code)+'">' +
+      '<span>'+esc(m.label)+'<br><span class="unit mono-data">'+esc(m.code)+'</span></span>' +
+      '<label class="toggle-row"><input type="checkbox" class="rp-view"'+(p.view?' checked':'')+(canGiveView?'':' disabled')+'> ดู</label>' +
+      '<label class="toggle-row"><input type="checkbox" class="rp-edit"'+(p.edit?' checked':'')+(canGiveEdit?'':' disabled')+'> แก้ไข</label></div>';
+  }).join('');
+  const title = !role ? 'สร้างบทบาทใหม่' : (asCopy ? 'คัดลอกจาก "'+esc(role.label)+'"' : 'แก้สิทธิ์ "'+esc(role.label)+'"');
+  plModal('<h3>'+title+'</h3>' +
+    '<p class="form-hint">ติ๊ก "แก้ไข" แล้วระบบจะให้สิทธิ์ "ดู" อัตโนมัติ · ช่องที่ติ๊กไม่ได้คือสิทธิ์ที่บัญชีของคุณเองยังไม่มี</p>' +
+    plField('ชื่อบทบาท *', '<input id="rf-label" value="'+plVal(role ? (asCopy ? role.label + ' (สำเนา)' : role.label) : '')+'">') +
+    plField('คำอธิบาย', '<input id="rf-desc" value="'+plVal(role ? role.description : '')+'">') +
+    '<h4>สิทธิ์ตามเมนู</h4>' +
+    '<div class="plm-row head" style="grid-template-columns:1fr 92px 92px"><span>เมนู</span><span>ดู</span><span>แก้ไข</span></div>' +
+    '<div id="rf-rows">' + rows + '</div>' +
+    plModalActions('submitRole(' + (role && !asCopy ? "'" + role.code + "'" : 'null') + ')', role && !asCopy ? 'บันทึกสิทธิ์' : 'สร้างบทบาท'));
+}
+function submitRole(code){ return plBusy(async () => {
+  const label = document.getElementById('rf-label').value.trim();
+  if (!label) return plModalErr('กรุณาตั้งชื่อบทบาท');
+  const permissions = [...document.querySelectorAll('#rf-rows .plm-row')].map(r => ({
+    module: r.dataset.mod, view: r.querySelector('.rp-view').checked, edit: r.querySelector('.rp-edit').checked }));
+  const r = await callApi('saveRole', { code: code || undefined, label, description: document.getElementById('rf-desc').value.trim(), permissions });
+  if (!r.success) return plModalErr(r.message);
+  ROLES = r; plModalClose(); renderRoles(); toast(r.message || 'บันทึกแล้ว');
+  if (code && code === MY_PERMS.roleCode) { const p = await callApi('getMyPermissions', {}); if (p.success) { MY_PERMS = { isSuper: !!p.isSuperAdmin, permissions: p.permissions }; renderNav(); } }
+}); }
+async function deleteRoleUI(code){
+  const role = ROLES.data.find(r => r.code === code);
+  if (!confirm('ลบบทบาท "' + (role ? role.label : code) + '" ?')) return;
+  const r = await callApi('deleteRole', { code });
+  if (!r.success) { toast(r.message, true); return; }
+  ROLES = r; renderRoles(); toast(r.message || 'ลบแล้ว');
 }
 
 /* ── ตัวเลขเงินชิดขวาอัตโนมัติ ──

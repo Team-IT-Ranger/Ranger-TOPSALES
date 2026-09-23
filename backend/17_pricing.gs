@@ -16,7 +16,7 @@ function _dOnly(v) {
 }
 function _validDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')); }
 function _numOrBlank(v) { if (v === null || v === undefined || v === '') return ''; var n = Number(v); return isFinite(n) ? n : ''; }
-function _isTrue(v) { return v === true || String(v) === 'TRUE' || String(v) === 'true'; }
+function _isTrue(v) { return isFlagOn(v); }   // เก็บชื่อเดิมไว้ให้โค้ดที่เรียกอยู่ ใช้ตรรกะกลางตัวเดียวกัน (02_helpers.gs)
 
 function _priceListDto(l, groupName, itemCount, lineCount) {
   return {

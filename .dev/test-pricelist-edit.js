@@ -35,6 +35,14 @@ const ctx = {
   _productAllCodes: p => [String(p.product_code).toLowerCase()]
 };
 vm.createContext(ctx);
+// โหลด 02_helpers.gs ของจริงก่อน (มี isFlagOn ที่ _isTrue เรียกใช้) แล้วคืนค่าชีตจำลองทับ
+const _fakes = { centralSheet: ctx.centralSheet, centralObjects: ctx.centralObjects, centralAppend: ctx.centralAppend,
+  centralAppendMany: ctx.centralAppendMany, centralNextId: ctx.centralNextId, centralUpdate: ctx.centralUpdate,
+  deleteRowsWhere: ctx.deleteRowsWhere, tenantObjects: ctx.tenantObjects, nowStr: ctx.nowStr, safeDateStr: ctx.safeDateStr };
+ctx.SpreadsheetApp = { openById: () => { throw new Error('should not be called'); } };
+ctx.PropertiesService = { getScriptProperties: () => ({ getProperty: () => '' }) };
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', '02_helpers.gs'), 'utf8'), ctx, { filename: '02_helpers.gs' });
+Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 for (const f of ['17_pricing.gs', '18_pricing_engine.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
 
 let failed = 0;

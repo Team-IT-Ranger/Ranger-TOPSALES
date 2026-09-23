@@ -9,6 +9,10 @@
  *   - บันทึก stock_ledger 1 แถวต่อสินค้า (ย้อนรอยได้)
  *   - ลงบัญชีอัตโนมัติ: เดบิต สินค้าคงเหลือ / เครดิต รับของแล้วยังไม่ได้รับใบแจ้งหนี้ (GR/NI) — ดู 23_accounting.gs
  * ตั้งหนี้เจ้าหนี้จากใบรับของทำที่ createApBillFromGr (23_accounting.gs)
+ *
+ * ตัวแทนจำหน่าย: ใช้ PO/GR/สต็อกได้เหมือนกัน แยกข้อมูลด้วย tenant_id (ดู _purchaseScope ใน 20_purchasing_master.gs)
+ * แต่ "ไม่ลงบัญชี" — สมุดบัญชี/เจ้าหนี้เป็นของบริษัทเจ้าของสินค้าเท่านั้น ใบรับของของตัวแทนจึงมี journal_id ว่าง
+ * (ตัวแทนเป็นคนละนิติบุคคล จะเอาเข้างบบริษัทไม่ได้ — ถ้าจะทำบัญชีให้ตัวแทนต้องเป็นชุดสมุดแยกของเขาเอง)
  */
 
 var PO_STATUSES = ['draft', 'sent', 'partial', 'received', 'cancelled'];
@@ -58,7 +62,7 @@ function listPurchaseOrders(session, payload) {
   var vendors = {}, itemsByPo = {};
   centralObjects('vendors').forEach(function(v) { vendors[String(v.record_id)] = v.name; });
   centralObjects('po_items').forEach(function(it) { (itemsByPo[String(it.po_id)] = itemsByPo[String(it.po_id)] || []).push(it); });
-  var rows = centralObjects('purchase_orders');
+  var rows = _scoped('purchase_orders', _purchaseScope(session, payload));
   if (payload.status) rows = rows.filter(function(po) { return String(po.status) === String(payload.status); });
   if (payload.vendorId) rows = rows.filter(function(po) { return String(po.vendor_id) === String(payload.vendorId); });
   if (payload.openOnly) rows = rows.filter(function(po) { return po.status === 'sent' || po.status === 'partial'; });
@@ -76,7 +80,7 @@ function listPurchaseOrders(session, payload) {
 
 function getPurchaseOrder(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'view'); if (err) return err;
-  var po = _findById('purchase_orders', payload.id);
+  var po = _findScoped('purchase_orders', payload.id, _purchaseScope(session, payload));
   if (!po) return { success: false, message: 'ไม่พบใบสั่งซื้อนี้' };
   var dto = _poDto(po, _childrenOf('po_items', 'po_id', po.record_id), _poExtra(po));
   dto.receipts = _childrenOf('goods_receipts', 'po_id', po.record_id).map(function(gr) {
@@ -96,7 +100,8 @@ function getPurchaseOrder(session, payload) {
  */
 function savePurchaseOrder(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
-  var vendor = payload.vendorId ? _findById('vendors', payload.vendorId) : null;
+  var scope = _purchaseScope(session, payload);
+  var vendor = payload.vendorId ? _findScoped('vendors', payload.vendorId, scope) : null;
   if (!vendor) return { success: false, message: 'กรุณาเลือกผู้ขาย' };
   if (!_isTrue(vendor.is_active)) return { success: false, message: 'ผู้ขายรายนี้ถูกปิดการใช้งานอยู่' };
   var orderDate = payload.orderDate || _todayStr();
@@ -132,7 +137,7 @@ function savePurchaseOrder(session, payload) {
       var it = items[i]; if (!it.prItemId) continue;
       var prItem = _findById('pr_items', it.prItemId);
       if (!prItem) return { success: false, message: 'รายการที่ ' + (i + 1) + ': ไม่พบรายการในใบขอซื้อ' };
-      var pr = _findById('purchase_requisitions', prItem.pr_id);
+      var pr = _findScoped('purchase_requisitions', prItem.pr_id, scope);
       if (!pr || pr.status !== 'approved') return { success: false, message: 'รายการที่ ' + (i + 1) + ': ใบขอซื้ออ้างอิงยังไม่อนุมัติ (หรือถูกปิดไปแล้ว)' };
       var alreadyThisPo = 0;
       if (payload.id) _childrenOf('po_items', 'po_id', payload.id).forEach(function(o) { if (String(o.pr_item_id) === String(it.prItemId)) alreadyThisPo += Number(o.qty) || 0; });
@@ -144,19 +149,19 @@ function savePurchaseOrder(session, payload) {
     var prKeys = Object.keys(prIds);
     if (prKeys.length > 1) return { success: false, message: 'ใบสั่งซื้อ 1 ใบ อ้างอิงใบขอซื้อได้ใบเดียว (เลือกมา ' + prKeys.length + ' ใบ)' };
 
-    var head = { vendor_id: vendor.record_id, pr_id: prKeys.length ? prKeys[0] : '', warehouse_id: payload.warehouseId || _defaultWarehouseId() || '',
+    var head = { vendor_id: vendor.record_id, pr_id: prKeys.length ? prKeys[0] : '', warehouse_id: payload.warehouseId || _ensureScopeWarehouse(scope) || '',
       order_date: orderDate, expected_date: payload.expectedDate || '', vat_type: vatType,
       subtotal_ex_vat: amt.subtotal, discount_ex_vat: amt.discount, vat_amount: amt.vat, total: amt.total, note: String(payload.note || '') };
     var poId = payload.id;
     if (poId) {
-      var existing = _findById('purchase_orders', poId);
+      var existing = _findScoped('purchase_orders', poId, scope);
       if (!existing) return { success: false, message: 'ไม่พบใบสั่งซื้อนี้' };
       if (existing.status !== 'draft') return { success: false, message: 'แก้ได้เฉพาะใบสั่งซื้อที่ยังเป็นร่าง — ใบที่ส่งผู้ขายแล้วให้ยกเลิกแล้วเปิดใหม่' };
       centralUpdate('purchase_orders', poId, head);
       _deleteRowsMatching(centralSheet('po_items'), function(o) { return String(o.po_id) === String(poId); });
     } else {
       poId = centralNextId('purchase_orders');
-      head.record_id = poId; head.po_no = _nextCentralDocNo('PO'); head.status = 'draft';
+      head.record_id = poId; head.tenant_id = scope; head.po_no = _nextCentralDocNo('PO', scope); head.status = 'draft';
       head.created_by = session.adminUserId; head.created_at = nowStr(); head.closed_at = '';
       centralAppend('purchase_orders', head);
     }
@@ -166,15 +171,16 @@ function savePurchaseOrder(session, payload) {
         description: it.description, qty: it.qty, unit_code: it.unitCode, unit_factor: it.unitFactor,
         unit_price: _money(it.unitPrice), amount: _money(it.qty * it.unitPrice), received_qty: 0 };
     }));
-    return getPurchaseOrder(session, { id: poId });
+    return getPurchaseOrder(session, { id: poId, tenantId: scope });
   });
 }
 
 // payload: { id } — ส่งใบสั่งซื้อให้ผู้ขาย: ล็อกไม่ให้แก้ และตัดยอดค้างของใบขอซื้อ
 function issuePurchaseOrder(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var po = _findById('purchase_orders', payload.id);
+    var po = _findScoped('purchase_orders', payload.id, scope);
     if (!po) return { success: false, message: 'ไม่พบใบสั่งซื้อนี้' };
     if (po.status !== 'draft') return { success: false, message: 'ใบนี้ส่งให้ผู้ขายไปแล้ว' };
     var items = _childrenOf('po_items', 'po_id', po.record_id);
@@ -186,7 +192,7 @@ function issuePurchaseOrder(session, payload) {
     });
     centralUpdate('purchase_orders', po.record_id, { status: 'sent' });
     if (po.pr_id) _closePrIfFullyReleased(po.pr_id);
-    return _withPoResult(session, po.record_id, 'ส่งใบสั่งซื้อให้ผู้ขายแล้ว');
+    return _withPoResult(session, po.record_id, 'ส่งใบสั่งซื้อให้ผู้ขายแล้ว', scope);
   });
 }
 
@@ -197,8 +203,8 @@ function _closePrIfFullyReleased(prId) {
   if (!remain) centralUpdate('purchase_requisitions', prId, { status: 'closed', closed_at: nowStr() });
 }
 
-function _withPoResult(session, poId, message) {
-  var r = getPurchaseOrder(session, { id: poId });
+function _withPoResult(session, poId, message, scope) {
+  var r = getPurchaseOrder(session, { id: poId, tenantId: scope || '' });
   if (r.success) r.message = message;
   return r;
 }
@@ -206,8 +212,9 @@ function _withPoResult(session, poId, message) {
 // payload: { id, reason? } — ยกเลิกใบสั่งซื้อ (ต้องยังไม่รับของ) แล้วคืนยอดค้างให้ใบขอซื้อ
 function cancelPurchaseOrder(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var po = _findById('purchase_orders', payload.id);
+    var po = _findScoped('purchase_orders', payload.id, scope);
     if (!po) return { success: false, message: 'ไม่พบใบสั่งซื้อนี้' };
     if (po.status === 'cancelled') return { success: false, message: 'ใบนี้ถูกยกเลิกไปแล้ว' };
     var items = _childrenOf('po_items', 'po_id', po.record_id);
@@ -224,7 +231,7 @@ function cancelPurchaseOrder(session, payload) {
       var pr = _findById('purchase_requisitions', po.pr_id);
       if (pr && pr.status === 'closed') centralUpdate('purchase_requisitions', po.pr_id, { status: 'approved', closed_at: '' });
     }
-    return _withPoResult(session, po.record_id, 'ยกเลิกใบสั่งซื้อแล้ว');
+    return _withPoResult(session, po.record_id, 'ยกเลิกใบสั่งซื้อแล้ว', scope);
   });
 }
 
@@ -242,13 +249,14 @@ function receiveGoods(session, payload) {
     .filter(function(it) { return it.poItemId && it.qty !== null && it.qty !== 0; });
   if (!lines.length) return { success: false, message: 'ยังไม่ได้ระบุจำนวนที่รับ' };
 
+  var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
-    var po = _findById('purchase_orders', payload.poId);
+    var po = _findScoped('purchase_orders', payload.poId, scope);
     if (!po) return { success: false, message: 'ไม่พบใบสั่งซื้อนี้' };
     if (po.status === 'draft') return { success: false, message: 'ใบสั่งซื้อยังเป็นร่าง — ส่งให้ผู้ขายก่อนจึงจะรับของได้' };
     if (po.status === 'cancelled') return { success: false, message: 'ใบสั่งซื้อนี้ถูกยกเลิกแล้ว' };
-    var warehouseId = payload.warehouseId || po.warehouse_id || _defaultWarehouseId();
-    var wh = warehouseId ? _findById('warehouses', warehouseId) : null;
+    var warehouseId = payload.warehouseId || po.warehouse_id || _ensureScopeWarehouse(scope);
+    var wh = warehouseId ? _findScoped('warehouses', warehouseId, scope) : null;
     if (!wh) return { success: false, message: 'กรุณาเลือกคลังที่รับของ' };
 
     var poItems = {};
@@ -268,8 +276,8 @@ function receiveGoods(session, payload) {
     }
 
     var grId = centralNextId('goods_receipts');
-    var grNo = _nextCentralDocNo('GR');
-    centralAppend('goods_receipts', { record_id: grId, gr_no: grNo, po_id: po.record_id, vendor_id: po.vendor_id, warehouse_id: wh.record_id,
+    var grNo = _nextCentralDocNo('GR', scope);
+    centralAppend('goods_receipts', { record_id: grId, tenant_id: scope, gr_no: grNo, po_id: po.record_id, vendor_id: po.vendor_id, warehouse_id: wh.record_id,
       receive_date: receiveDate, note: String(payload.note || ''), status: 'posted', journal_id: '', created_by: session.adminUserId, created_at: nowStr() });
     var grItemId = centralNextId('gr_items');
     centralAppendMany('gr_items', grRows.map(function(r, i) {
@@ -283,7 +291,7 @@ function receiveGoods(session, payload) {
     // เข้าสต็อก + ledger
     var inventoryValue = 0;
     stockOps.forEach(function(op) {
-      _applyStockIn(wh.record_id, op.productId, op.baseQty, op.unitCost, 'receipt', 'GR', grId, grNo, session.adminUserId);
+      _applyStockIn(scope, wh.record_id, op.productId, op.baseQty, op.unitCost, 'receipt', 'GR', grId, grNo, session.adminUserId);
       inventoryValue += op.baseQty * op.unitCost;
     });
     // สถานะ PO ตามยอดที่รับแล้ว
@@ -293,9 +301,10 @@ function receiveGoods(session, payload) {
     centralUpdate('purchase_orders', po.record_id, { status: done ? 'received' : (some ? 'partial' : po.status), closed_at: done ? nowStr() : '' });
 
     // ลงบัญชี: เดบิตสินค้าคงเหลือ / เครดิต GR/NI (ยังไม่ได้รับใบแจ้งหนี้จากผู้ขาย)
+    // เฉพาะของบริษัทเจ้าของสินค้า — ของตัวแทนเข้าสต็อกอย่างเดียว ไม่แตะสมุดบัญชีบริษัท
     var journalId = '';
     inventoryValue = _money(inventoryValue);
-    if (inventoryValue > 0) {
+    if (inventoryValue > 0 && !scope) {
       var jr = _postJournal({ date: receiveDate, source: 'INV', refType: 'GR', refId: grId, memo: 'รับของเข้าคลัง ' + grNo + ' (' + (po.po_no || '') + ')',
         createdBy: session.adminUserId, lines: [
           { accountCode: GL_ACCT.INVENTORY, description: 'สินค้าคงเหลือเพิ่มจาก ' + grNo, debit: inventoryValue, credit: 0 },
@@ -305,15 +314,15 @@ function receiveGoods(session, payload) {
       journalId = jr.journalId;
       centralUpdate('goods_receipts', grId, { journal_id: journalId });
     }
-    var res = _withPoResult(session, po.record_id, 'รับของเข้าคลัง ' + grNo + ' แล้ว' + (inventoryValue > 0 ? ' (ลงบัญชีสินค้าคงเหลือ ' + inventoryValue.toLocaleString() + ' บาท)' : ''));
+    var res = _withPoResult(session, po.record_id, 'รับของเข้าคลัง ' + grNo + ' แล้ว' + (journalId ? ' (ลงบัญชีสินค้าคงเหลือ ' + inventoryValue.toLocaleString() + ' บาท)' : ''), scope);
     res.grId = grId; res.grNo = grNo; res.journalId = journalId;
     return res;
   });
 }
 
 // เพิ่มของเข้าคลัง + คิดต้นทุนเฉลี่ยถ่วงน้ำหนักใหม่ + เขียน ledger (เรียกใต้ _withDocLock เท่านั้น)
-function _applyStockIn(warehouseId, productId, baseQty, unitCost, moveType, refType, refId, refNo, userId) {
-  var rows = centralObjects('warehouse_stock');
+function _applyStockIn(scope, warehouseId, productId, baseQty, unitCost, moveType, refType, refId, refNo, userId) {
+  var rows = _scoped('warehouse_stock', scope);
   var cur = null;
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i].warehouse_id) === String(warehouseId) && String(rows[i].product_id) === String(productId)) { cur = rows[i]; break; }
@@ -324,9 +333,9 @@ function _applyStockIn(warehouseId, productId, baseQty, unitCost, moveType, refT
   // ต้นทุนเฉลี่ยใหม่ = (มูลค่าเดิม + มูลค่าที่รับเข้า) / จำนวนใหม่ (ของออกไม่เปลี่ยนต้นทุนเฉลี่ย)
   var newCost = baseQty > 0 && newQty > 0 ? _money((oldQty * oldCost + baseQty * unitCost) / newQty) : oldCost;
   if (cur) centralUpdate('warehouse_stock', cur.record_id, { qty: newQty, avg_cost: newCost, updated_at: nowStr() });
-  else centralAppend('warehouse_stock', { record_id: centralNextId('warehouse_stock'), warehouse_id: warehouseId, product_id: productId,
+  else centralAppend('warehouse_stock', { record_id: centralNextId('warehouse_stock'), tenant_id: scope || '', warehouse_id: warehouseId, product_id: productId,
     qty: newQty, avg_cost: newCost, updated_at: nowStr() });
-  centralAppend('stock_ledger', { record_id: centralNextId('stock_ledger'), warehouse_id: warehouseId, product_id: productId,
+  centralAppend('stock_ledger', { record_id: centralNextId('stock_ledger'), tenant_id: scope || '', warehouse_id: warehouseId, product_id: productId,
     change_qty: baseQty, balance_after: newQty, unit_cost: unitCost, move_type: moveType, ref_type: refType, ref_id: refId,
     note: refNo || '', created_by: userId, created_at: nowStr() });
   return { qty: newQty, avgCost: newCost };
@@ -342,7 +351,7 @@ function listGoodsReceipts(session, payload) {
   centralObjects('ap_bills').forEach(function(b) { if (b.gr_id && b.status !== 'void') billedGr[String(b.gr_id)] = b.bill_no; });
   var itemsByGr = {};
   centralObjects('gr_items').forEach(function(it) { (itemsByGr[String(it.gr_id)] = itemsByGr[String(it.gr_id)] || []).push(it); });
-  var rows = centralObjects('goods_receipts');
+  var rows = _scoped('goods_receipts', _purchaseScope(session, payload));
   if (payload.poId) rows = rows.filter(function(g) { return String(g.po_id) === String(payload.poId); });
   if (payload.notBilledOnly) rows = rows.filter(function(g) { return !billedGr[String(g.record_id)] && g.status === 'posted'; });
   var out = rows.map(function(g) {
@@ -359,7 +368,7 @@ function listGoodsReceipts(session, payload) {
 
 function getGoodsReceipt(session, payload) {
   var err = _requirePermission(session, 'inventory', 'view'); if (err) return err;
-  var gr = _findById('goods_receipts', payload.id);
+  var gr = _findScoped('goods_receipts', payload.id, _purchaseScope(session, payload));
   if (!gr) return { success: false, message: 'ไม่พบใบรับของนี้' };
   var products = {};
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
@@ -387,7 +396,7 @@ function listWarehouseStock(session, payload) {
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
   var warehouses = {};
   centralObjects('warehouses').forEach(function(w) { warehouses[String(w.record_id)] = w.name; });
-  var rows = centralObjects('warehouse_stock');
+  var rows = _scoped('warehouse_stock', _purchaseScope(session, payload));
   if (payload.warehouseId) rows = rows.filter(function(r) { return String(r.warehouse_id) === String(payload.warehouseId); });
   var out = rows.map(function(r) {
     var p = products[String(r.product_id)];
@@ -406,7 +415,7 @@ function listStockLedger(session, payload) {
   payload = payload || {};
   var products = {};
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
-  var rows = centralObjects('stock_ledger');
+  var rows = _scoped('stock_ledger', _purchaseScope(session, payload));
   if (payload.productId) rows = rows.filter(function(r) { return String(r.product_id) === String(payload.productId); });
   if (payload.warehouseId) rows = rows.filter(function(r) { return String(r.warehouse_id) === String(payload.warehouseId); });
   var out = rows.map(function(r) {
