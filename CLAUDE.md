@@ -83,6 +83,10 @@ it fills the gaps around them.
 - สร้างไฟล์ใหม่จะเข้าโฟลเดอร์ถูกที่ตั้งแต่แรก (`_buildTenantSpreadsheet`, `setupUatEnvironment`)
 - ไฟล์เก่าที่สร้างก่อนหน้านี้ย้ายด้วย action `organizeDatabaseFiles` (super_admin, ปุ่มอยู่หน้า "ตัวแทนจำหน่าย")
   — รันซ้ำได้ ไฟล์ที่อยู่ถูกที่แล้วข้าม และรายงานผลรายไฟล์
+- สิทธิ์ OAuth: งานนี้ต้องใช้ scope `https://www.googleapis.com/auth/drive` (เต็ม) ใน `backend/appsscript.json`
+  — `drive.file` ไม่พอ เพราะแตะได้เฉพาะไฟล์ที่แอปสร้างเอง แต่โฟลเดอร์ปลายทางคนสร้าง (พลาดมาแล้ว 2026-09-23:
+  “สิทธิ์ที่ระบุไว้ไม่เพียงพอ… DriveApp.getFolderById”) เมื่อเปลี่ยน scope แล้ว **เจ้าของ deployment ต้องรัน
+  `authorizeDriveAccess()` (99_dev_tools.gs) ใน editor หนึ่งครั้งเพื่อกดยอมรับสิทธิ์ใหม่** แล้วค่อย Deploy → New version
 - **สำคัญ**: ไฟล์ฐานข้อมูลทุกไฟล์ถูกสร้างโดย Apps Script จึงมีเจ้าของเป็นบัญชีที่รันสคริปต์
   (`channarong@thanatkorn.com`) — บัญชีอื่น (รวม `inno09_it@`) เปิดอ่านได้แต่ **ย้ายไฟล์ไม่ได้**
   การจัดระเบียบจึงต้องสั่งผ่าน backend เท่านั้น ไม่ใช่ลากใน Drive หรือสั่งจากเครื่องมือภายนอก

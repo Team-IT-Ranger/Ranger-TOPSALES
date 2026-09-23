@@ -114,5 +114,12 @@ eq('  ไฟล์ที่เปิดไม่ได้ ไม่ทำให�
   return [l.success, /อ่านไม่ได้/.test(l.data[l.data.length - 1].folder)];
 })(), [true, true]);
 
+console.log('\n── ข้อความบอกวิธีแก้เมื่อสิทธิ์ไม่พอ ──');
+ctx.DriveApp.getFolderById = () => { throw new Error('สิทธิ์ที่ระบุไว้ไม่เพียงพอที่จะเรียกใช้ DriveApp.getFolderById (https://www.googleapis.com/auth/drive)'); };
+r = ctx.organizeDatabaseFiles(SUPER, {});
+eq('สิทธิ์ OAuth ไม่พอ → บอกให้รัน authorizeDriveAccess()', [r.success, /authorizeDriveAccess/.test(r.message)], [false, true]);
+ctx.DriveApp.getFolderById = () => { throw new Error('You do not have permission to access the requested document.'); };
+eq('  ไม่มีสิทธิ์ในโฟลเดอร์ → บอกให้เช็คสิทธิ์บนไดรฟ์ที่แชร์', /ผู้จัดการเนื้อหา/.test(ctx.organizeDatabaseFiles(SUPER, {}).message), true);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

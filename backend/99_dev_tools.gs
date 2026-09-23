@@ -144,3 +144,20 @@ function testCentralConnection() {
   var sheet = centralSheet('liff_users');
   Logger.log('เชื่อมต่อ Central Sheet สำเร็จ: ' + sheet.getName());
 }
+
+/**
+ * รันฟังก์ชันนี้ใน Apps Script editor "ครั้งเดียว" หลังเปลี่ยนสิทธิ์ Drive (oauthScopes ใน appsscript.json)
+ * — จะขึ้นหน้าต่างขออนุญาตให้กดยอมรับ แล้วเช็คให้เลยว่าเข้าถึงโฟลเดอร์ฐานข้อมูลได้จริงไหม
+ * ถ้าไม่รันอันนี้ก่อน เว็บแอปจะฟ้อง "สิทธิ์ที่ระบุไว้ไม่เพียงพอ" ตอนกดจัดระเบียบไฟล์
+ * (Web App รันในฐานะเจ้าของ deployment เจ้าของจึงต้องเป็นคนกดยอมรับสิทธิ์ใหม่เอง)
+ */
+function authorizeDriveAccess() {
+  var rootId = _dbRootFolderId();
+  var root = DriveApp.getFolderById(rootId);           // จุดนี้แหละที่ต้องใช้สิทธิ์ Drive เต็ม
+  Logger.log('✅ เข้าถึงโฟลเดอร์รากได้: ' + root.getName() + ' (' + rootId + ')');
+  var env = _dbEnvFolder(), owner = _dbOwnerFolder();
+  Logger.log('✅ โฟลเดอร์ของสภาพแวดล้อมนี้: ' + env.getName() + ' / ' + owner.getName());
+  var tenants = centralObjects('tenants').length;
+  Logger.log('พร้อมจัดระเบียบไฟล์แล้ว — Central Sheet + ตัวแทน ' + tenants + ' ราย');
+  Logger.log('ขั้นต่อไป: กลับไปที่ /admin-uat/ → เมนูตัวแทนจำหน่าย → "จัดระเบียบไฟล์ตามโครงสร้าง"');
+}

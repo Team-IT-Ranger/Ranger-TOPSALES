@@ -57,7 +57,7 @@ function _moveFileTo(fileId, folder) {
     file.moveTo(folder);
     return { moved: true, name: file.getName(), from: currentId };
   } catch (e) {
-    return { moved: false, error: e.message };
+    return { moved: false, error: _driveErrorHint(e) };
   }
 }
 
@@ -91,8 +91,23 @@ function organizeDatabaseFiles(session, payload) {
       moved: report.filter(function(x) { return x.status === 'ย้ายแล้ว'; }).length,
       failed: report.filter(function(x) { return x.status.indexOf('ย้ายไม่ได้') === 0; }).length };
   } catch (e) {
-    return { success: false, message: 'จัดระเบียบไม่สำเร็จ: ' + e.message, report: report };
+    return { success: false, message: _driveErrorHint(e), report: report };
   }
+}
+
+// แปลง error ของ Drive เป็นคำอธิบายที่ทำตามได้จริง (เจอบ่อย 2 แบบ: สิทธิ์ OAuth ไม่พอ / ไม่มีสิทธิ์ในโฟลเดอร์)
+function _driveErrorHint(e) {
+  var m = String((e && e.message) || e);
+  if (/insufficient|ไม่เพียงพอ|auth\/drive/i.test(m)) {
+    return 'สิทธิ์ Drive ของสคริปต์ยังไม่พอ — เจ้าของ deployment ต้องเปิด Apps Script editor แล้วรันฟังก์ชัน ' +
+      '`authorizeDriveAccess()` หนึ่งครั้งเพื่อกดยอมรับสิทธิ์ใหม่ จากนั้น Deploy → New version แล้วลองใหม่ ' +
+      '(รายละเอียด: ' + m + ')';
+  }
+  if (/permission|ไม่มีสิทธิ/i.test(m)) {
+    return 'เข้าถึงโฟลเดอร์ปลายทางไม่ได้ — บัญชีที่รันสคริปต์ต้องมีสิทธิ์อย่างน้อย "ผู้จัดการเนื้อหา" ' +
+      'บนไดรฟ์ที่แชร์ที่เก็บโฟลเดอร์ฐานข้อมูล (DB_ROOT_FOLDER_ID) · รายละเอียด: ' + m;
+  }
+  return 'จัดระเบียบไม่สำเร็จ: ' + m;
 }
 
 // ดูว่าตอนนี้ไฟล์ไหนอยู่โฟลเดอร์ไหน (ไม่ย้ายอะไรทั้งนั้น) — ใช้โชว์ในหน้าแอดมิน
