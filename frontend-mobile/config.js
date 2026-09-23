@@ -5,7 +5,9 @@
              ยังว่าง = เปิดในเบราว์เซอร์ธรรมดาได้เฉพาะโหมดทดสอบบน UAT (?devLineUserId=...) — production ใช้งานไม่ได้จนกว่าจะใส่ */
 (function(){
   var BACKENDS = {
-    prod: 'https://script.google.com/macros/s/AKfycbzDLcX5Qd4MMdBpcwr4MWoYJdP0JCiMMgMAnFmcC9t5zS2zoOfkfttXXcj0Ettza56gIA/exec',
+    /* ว่างไว้จนกว่าจะมีโปรเจกต์ Apps Script ของ production จริง (ตอนนี้มีแค่ dev + uat)
+       เปิด /mobile/ ตอนนี้จะขึ้นข้อความว่ายังไม่ได้ตั้งค่า ไม่ไปแตะ backend ตัวไหนทั้งนั้น */
+    prod: '',
     uat:  'https://script.google.com/macros/s/AKfycbwsdgUjEe1RQFeuHQ3je92eok-ezYp2vVRL571eXNdRs1lfEAEXf1rSEIPFClb7GTYu7A/exec' /* TOPSHOP Backend UAT — ห้ามใส่ URL ของ production ตรงนี้ */
   };
   var LIFF_IDS = {

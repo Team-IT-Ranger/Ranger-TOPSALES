@@ -8,13 +8,14 @@ it fills the gaps around them.
 ## Golden rules
 
 1. **All work happens on git branch `UAT`. Never commit to `main` directly.** `main` only moves via
-   `git merge UAT --ff-only`, and only after the user explicitly approves what's on UAT. See
-   README.md's UAT/Production table for the exact promote steps (`.dev/push-backend.sh prod` +
-   manual Deploy → New version in the Apps Script editor — production deploys are never automated).
-2. **UAT and production are fully separate**: different git branch deploy targets
-   (`/admin-uat/` vs `/admin/` on GitHub Pages), different Apps Script projects
-   (`backend/.clasp.uat.json` vs `backend/.clasp.json`), different Central Sheets, different Tenant
-   Sheets. Never let UAT code/data touch the production Apps Script project or Sheet.
+   `git merge UAT --ff-only`, and only after the user explicitly approves what's on UAT.
+   **There is no production environment yet** (see the environments table in README.md) — nothing to
+   promote to until the user creates a production Apps Script project; deploys are never automated.
+2. **Environments are fully separate.** Three are planned, two exist: **dev** (`1iVJDVuc…`,
+   `backend/.clasp.dev.json`) — the system owner's own environment, this app does not use it;
+   **uat** (`1SDBJgSN…`, `backend/.clasp.uat.json`) — what we test on, `/admin-uat/`; and
+   **production — not created yet** (`/admin/` is deliberately closed, `BACKENDS.prod` empty).
+   Never let one environment's code or data touch another's Apps Script project or Sheet.
 3. Verify things actually work before reporting success — the user tests live and expects real
    verification (UAT end-to-end test run, or a live browser check), not "should work now."
 4. After a toggle/status-style action, mutate the local JS cache and re-render — don't refetch the
@@ -77,7 +78,7 @@ it fills the gaps around them.
 - โครงสร้าง: `<root>/db_<env>/TNKI/` = Central Sheet + ฐานข้อมูลบริษัทเจ้าของสินค้า (tenant `HOUSE`) ·
   `<root>/db_<env>/<รหัสตัวแทน>/` = ไฟล์ของตัวแทนรายนั้น (ชื่อโฟลเดอร์ = รหัสตัวแทน = อักษรย่อของชื่อตัวแทน)
 - root = Script Property `DB_ROOT_FOLDER_ID` (default `1vjnkJ1Sec0pWh2HPJ0WulkGd2yRnFyvK` = โฟลเดอร์
-  `salesranger-TOPSHOP` บน Shared Drive — โฟลเดอร์เดียวกับ Drive clone ของ repo) · env = `ENV_NAME`
+  `Ranger-TOPSHOP` บน Shared Drive — โฟลเดอร์เดียวกับ Drive clone ของ repo · id ไม่เปลี่ยนตามชื่อโฟลเดอร์) · env = `ENV_NAME`
   (`uat` ตั้งไว้แล้วโดย `setupUatEnvironment()`; ไม่ตั้ง = ถือว่า prod) — ดู `24_drive_layout.gs`
 - สร้างไฟล์ใหม่จะเข้าโฟลเดอร์ถูกที่ตั้งแต่แรก (`_buildTenantSpreadsheet`, `setupUatEnvironment`)
 - ไฟล์เก่าที่สร้างก่อนหน้านี้ย้ายด้วย action `organizeDatabaseFiles` (super_admin, ปุ่มอยู่หน้า "ตัวแทนจำหน่าย")
@@ -86,7 +87,9 @@ it fills the gaps around them.
   (`channarong@thanatkorn.com`) — บัญชีอื่น (รวม `inno09_it@`) เปิดอ่านได้แต่ **ย้ายไฟล์ไม่ได้**
   การจัดระเบียบจึงต้องสั่งผ่าน backend เท่านั้น ไม่ใช่ลากใน Drive หรือสั่งจากเครื่องมือภายนอก
 - `salesranger-TOPSHOP(dev)` (ไฟล์ Sheet ในโฟลเดอร์ราก, 8 ก.ย. 2026) เป็น Central Sheet รุ่นแรกที่เลิกใช้แล้ว
-  (สคีมาเก่า ไม่มีสินค้า/ตัวแทน, password ยังเป็น plaintext) — **ไม่ใช่** ฐานข้อมูล production ปัจจุบัน อย่าเอาไปใช้
+  (สคีมาเก่า ไม่มีสินค้า/ตัวแทน, password ยังเป็น plaintext) — รอเจ้าของระบบตัดสินใจว่าจะลบหรือเก็บ
+- ยังไม่มีสภาพแวดล้อม production → โฟลเดอร์ `db_prod/` ที่สร้างไว้ยังว่าง จะได้ใช้ก็ต่อเมื่อมีโปรเจกต์จริง
+  (ฐานข้อมูลของ dev ยังไม่ได้จัดเข้าโครงสร้างนี้ — ถ้าจะจัดด้วย ต้องเพิ่ม `db_dev/` และตั้ง `ENV_NAME='dev'`)
 
 ## Environment gotchas
 
@@ -111,8 +114,10 @@ it fills the gaps around them.
   Script project's own Script Properties (Project Settings in the Apps Script editor); that's the
   place to look if they're ever needed again, not this file.
 - Two clones of this repo live on the dev machine, both active and both fast-forward-only from
-  GitHub: `G:\Shared drives\AppSpace\salesranger-TOPSHOP` (Google Shared Drive — the working copy)
-  and `C:\Users\dev-administrator\appdev\salesranger-TOPSHOP` (local — backup / second checkout).
+  GitHub: `G:\Shared drives\AppSpace\Ranger-TOPSHOP` (Google Shared Drive — the working copy; folder
+  renamed from `salesranger-TOPSHOP` on 2026-09-23, older notes use the old name) and
+  `C:\Users\dev-administrator\appdev\salesranger-TOPSHOP` (local — backup / second checkout, still
+  under the old name).
   **GitHub is the single source of truth.** Rules: develop in one clone at a time; sync only by
   push/pull through GitHub, never by copying `.git` between them; `reference/` (ใบราคาจริง) lives in
   the Drive clone only, per README. Before starting work, confirm the clone is current — compare
@@ -129,7 +134,8 @@ it fills the gaps around them.
 
 - Frontend (`frontend-admin/index.html`, `config.js`, `pricelist-parser.js`): just push to `UAT` (or
   `main`) — `.github/workflows/deploy-admin.yml` deploys automatically to `/admin-uat/` or `/admin/`.
-- Backend: `.dev/push-backend.sh uat` (or `prod`) pushes the `.gs` files via `clasp`, but that alone
+- Backend: `.dev/push-backend.sh dev|uat|prod` pushes the `.gs` files via `clasp` (`prod` refuses with
+  a message until `backend/.clasp.prod.json` exists), but that alone
   does **not** redeploy the live Web App URL — Apps Script libraries need an explicit new deployment
   version. For UAT, redeploy the *existing* deployment (so the URL in `frontend-admin/config.js`
   keeps working) with something like:
@@ -138,22 +144,23 @@ it fills the gaps around them.
     && cd "$TMP" && clasp deploy -i <existing UAT deployment id> -d "description"
   ```
   Find `<existing UAT deployment id>` from the URL in `frontend-admin/config.js` (`BACKENDS.uat`) —
-  it's the `.../macros/s/<deployment id>/exec` segment. For production this needs the user's
-  explicit go-ahead and is normally done by the user themselves (Deploy → New version) per their
-  standing instruction, not automated by Claude.
-- Apps Script project IDs: **production = `1iVJDVuc…` (`backend/.clasp.json`)**, UAT = `1SDBJgSN…`
-  (`backend/.clasp.uat.json`). The production Web App deployment (`AKfycbzDLcX5…`, the one
-  `/admin/` calls) is labelled "salesranger-TOPSHOP-be**(dev)**" for historical reasons and people
-  sometimes call it "backend dev" — it **is** production. There is no third project. The same
-  project also holds two unrelated old `salesranger-isp` deployments; leave them alone.
-- `clasp` needs `clasp login` with a Google account that has edit access to both the "TOPSHOP
-  Backend" (prod) and "TOPSHOP Backend UAT" Apps Script projects. This is a per-machine login
+  it's the `.../macros/s/<deployment id>/exec` segment. Deploys are always done by the user
+  themselves (Deploy → New version) per their standing instruction, not automated by Claude.
+- Apps Script project IDs: **dev = `1iVJDVuc…`** (`backend/.clasp.dev.json`, and still the default
+  `backend/.clasp.json`), **uat = `1SDBJgSN…`** (`backend/.clasp.uat.json`), **production = does not
+  exist yet**. The deployment `AKfycbzDLcX5…` lives in the **dev** project — it is NOT production,
+  whatever its description says. (This file claimed the opposite until 2026-09-23: the repo called dev
+  "production", so `/admin/` was wired to the dev backend and `push-backend.sh prod` pushed into dev.
+  Fixed — `BACKENDS.prod` is now empty and `/admin/` shows "ยังไม่เปิดใช้งานระบบจริง" with login disabled.)
+  The dev project also holds two unrelated old `salesranger-isp` deployments; leave them alone.
+- `clasp` needs `clasp login` with a Google account that has edit access to the dev and UAT
+  Apps Script projects. This is a per-machine login
   (`~/.clasprc.json`) — a fresh machine/account needs to run it again.
 - `clasp push` works for any account the project is shared with as Editor, but `clasp deploy` only
   works for accounts **in the same Google Workspace domain as the script owner**. On the dev
   machine clasp is logged in as `info@tnk.co.th`, which can push to both projects but cannot
   deploy — after `push-backend.sh uat` the user redeploys the UAT deployment (`AKfycbwsdg…`) from
-  the Apps Script editor (Manage deployments → edit → New version), same as production.
+  the Apps Script editor (Manage deployments → edit → New version).
 
 ## Testing
 
@@ -183,7 +190,9 @@ it fills the gaps around them.
 
 ## Current status (as of the last work in this repo)
 
-Promoted to production on 2026-09-22 (`main` = `5861bc1`, backend pushed to the prod project):
+On `main` (`5861bc1`, merged 2026-09-22) and served at `/admin/`, which is **closed** until a real
+production environment exists. That day's backend push went into the **dev** project by mistake (the
+repo called dev "production"); dev's live deployment was never updated, so nothing live changed:
 - Price-list/discount system: Excel import wizard, tiered case pricing, cash/credit split, bill-level
   promos, admin "ทดลองคิดราคา" price tester (`backend/17_pricing.gs`, `18_pricing_engine.gs`).
 - Admin-side Sales Order module: list/detail/open-new-sale/cancel, working both in tenant mode and

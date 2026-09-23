@@ -25,23 +25,28 @@ docs/              เอกสารแผน/สถาปัตยกรรม
 Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pages (Admin App) + Vercel (Mobile App — แผนสัปดาห์ 3)
 — เตรียมโครงสร้างรองรับ Cloud Database เต็มรูปแบบไว้สำหรับเฟสถัดไป ยังไม่ใช้ตอนนี้
 
-## UAT / Production — แยกกันเสมอ
+## สภาพแวดล้อม — dev / UAT / production
 
-ทุกการแก้ไขต้องผ่าน UAT ก่อน ผู้ใช้จริงบน production ต้องไม่โดนกระทบระหว่างเราทำงาน
+สถานะจริง ณ 2026-09-23: มี 2 สภาพแวดล้อมที่ใช้งานอยู่ (**dev** กับ **UAT**) ส่วน **production ยังไม่ถูกสร้าง**
 
-| | UAT | Production |
-|---|---|---|
-| Git branch | `UAT` | `main` |
-| Admin App | `.../admin-uat/` (แถบแดง "UAT") | `.../admin/` |
-| Backend | Apps Script โปรเจกต์ "TOPSHOP Backend UAT" (`backend/.clasp.uat.json`) | โปรเจกต์เดิม (`backend/.clasp.json`) |
-| Database | Central Sheet ของ UAT (สร้างโดย `setupUatEnvironment()`) + Tenant Sheet แยก | Central Sheet จริง |
+| | dev | UAT | production |
+|---|---|---|---|
+| Git branch | — (เจ้าของระบบใช้เอง) | `UAT` | `main` |
+| Admin App | — | `.../admin-uat/` (แถบแดง "UAT") | `.../admin/` — **ปิดไว้** (ยังไม่ต่อ backend ใดๆ) |
+| Apps Script | `salesranger-TOPSHOP-be(dev)` `1iVJDVuc…` (`backend/.clasp.dev.json`) | `salesranger-TOPSHOP-be(uat)` `1SDBJgSN…` (`backend/.clasp.uat.json`) | ยังไม่มีโปรเจกต์ (จะใช้ `backend/.clasp.prod.json`) |
+| Database | Central Sheet ของ dev | Central Sheet ของ UAT (`setupUatEnvironment()`) + Tenant Sheet แยก | ยังไม่มี |
 
-**ขั้นตอนทุกครั้ง**
+`frontend-admin/config.js` เลือก backend จาก URL: `/admin-uat/` และ localhost = UAT · นอกนั้น = prod ซึ่ง**เว้นว่างไว้โดยเจตนา**
+→ เปิด `/admin/` ตอนนี้จะล็อกอินไม่ได้และขึ้นแถบ "ยังไม่เปิดใช้งานระบบจริง" (กันไม่ให้เว็บตัวจริงไปคุยกับ backend ของ dev/uat)
+
+**ขั้นตอนทำงานตอนนี้**
 1. แก้โค้ด → commit ลง branch `UAT` เท่านั้น → `.dev/push-backend.sh uat` (ถ้าแก้ backend)
-2. ทดสอบบน `/admin-uat/` จนผ่าน
-3. เมื่ออนุมัติให้ขึ้นจริง: `git checkout main && git merge UAT --ff-only && git push` แล้ว `.dev/push-backend.sh prod` และ Deploy → New version ใน Apps Script ของ production
+2. ให้เจ้าของโปรเจกต์กด Deploy → New version ที่ deployment เดิมของ UAT (clasp deploy ข้ามโดเมนไม่ได้)
+3. ทดสอบบน `/admin-uat/` จนผ่าน
 4. ห้าม commit ลง `main` ตรงๆ
 
-`frontend-admin/config.js` เลือก backend เองตาม URL (`/admin-uat/` และ localhost = UAT) — ค่า UAT ว่างไว้จนกว่าจะตั้ง Web App URL ของ UAT
-UAT ไม่มีค่า → ระบบไม่ตกไปชี้ production (ล็อกอินไม่ได้ + มีแถบเตือน)
-`.dev/push-backend.sh uat` ไม่ส่ง `script_properties.gs` (มี secret และ Sheet ID จริงของ production) ไปโปรเจกต์ UAT
+**เมื่อจะเปิด production จริง** (ยังไม่ถึงขั้นนั้น): สร้างโปรเจกต์ Apps Script ใหม่ + Central Sheet ใหม่ → ใส่
+`backend/.clasp.prod.json` → `.dev/push-backend.sh prod` → Deploy → New version → เอา Web App URL ใส่ `BACKENDS.prod`
+ใน `frontend-admin/config.js` (และ `frontend-mobile/config.js`) → merge `UAT` → `main`
+
+`.dev/push-backend.sh` ไม่ส่ง `script_properties.gs` (มี secret) ขึ้นโปรเจกต์ใดทั้งสิ้น

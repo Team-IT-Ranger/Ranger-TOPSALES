@@ -3533,11 +3533,21 @@ async function openAccountsList(){
 
 /* ── สภาพแวดล้อม ── */
 (function initEnv(){
+  const b = document.getElementById('env-banner');
   if (APP_ENV === 'uat') {
-    const b = document.getElementById('env-banner');
     b.style.display = 'block'; document.body.classList.add('env-uat');
-    b.textContent = BACKEND_URL ? 'UAT — สภาพแวดล้อมทดสอบ ข้อมูลไม่ใช่ของจริง' : 'UAT ยังไม่ได้ตั้งค่า backend (BACKEND_URL_UAT ใน config.js) — ยังใช้งานไม่ได้';
+    b.textContent = BACKEND_URL ? 'UAT — สภาพแวดล้อมทดสอบ ข้อมูลไม่ใช่ของจริง' : 'UAT ยังไม่ได้ตั้งค่า backend (BACKENDS.uat ใน config.js) — ยังใช้งานไม่ได้';
     document.title = '[UAT] ' + document.title;
+  } else if (!BACKEND_URL) {
+    // /admin/ = สภาพแวดล้อม production ซึ่ง "ยังไม่เปิดใช้งาน" (ยังไม่มีโปรเจกต์ Apps Script ของ production จริง)
+    // ตั้งใจปิดไว้ ไม่ให้ไปต่อ backend ของ dev/uat โดยไม่ตั้งใจ — ทดสอบระบบให้ใช้ /admin-uat/
+    b.style.display = 'block'; document.body.classList.add('env-uat');
+    b.textContent = 'ยังไม่เปิดใช้งานระบบจริง — หน้านี้ยังไม่ได้ต่อฐานข้อมูลใดๆ (ทดสอบระบบที่ /admin-uat/)';
+    document.title = '[ยังไม่เปิดใช้งาน] ' + document.title;
+    const err = document.getElementById('login-err');
+    if (err) { err.textContent = 'ระบบจริงยังไม่เปิดใช้งาน — ใช้ /admin-uat/ สำหรับทดสอบ'; err.style.display = 'block'; }
+    const btn = document.getElementById('login-btn');
+    if (btn) btn.disabled = true;
   }
 })();
 

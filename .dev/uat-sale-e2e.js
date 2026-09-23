@@ -2,7 +2,7 @@
 // node .dev/uat-sale-e2e.js
 const URL_ = process.env.UAT_URL, USER = process.env.UAT_USER || 'admin', PASS = process.env.UAT_PASS || 'ChangeMe123!';
 if (!URL_) { console.error('ตั้ง UAT_URL ก่อน'); process.exit(1); }
-if (URL_.includes('AKfycbzDLcX5')) { console.error('นี่คือ URL production — ปฏิเสธ'); process.exit(1); }
+if (!/AKfycbwsdgUjEe1RQFeuHQ3je92eok/.test(URL_)) { console.error('URL นี้ไม่ใช่ backend ของ UAT — ปฏิเสธ (เทสต์ชุดนี้เขียนข้อมูลจริง ห้ามยิงใส่ dev/production)'); process.exit(1); }
 const post = async body => { for (let i = 0; i < 3; i++) { try { return await (await fetch(URL_, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), redirect: 'follow' })).json(); } catch (e) { if (i === 2) throw e; } } };
 let failed = 0;
 const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond ? '' : '  ' + JSON.stringify(extra))); if (!cond) failed++; };
