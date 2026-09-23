@@ -41,6 +41,9 @@ function _buildTenantSpreadsheet(tenantId, tenantName) {
   docSh.appendRow([1, 'SO', 'SO', 'yyyyMMdd', 4, 'daily', '-', 'TRUE']);
 
   SpreadsheetApp.flush();
+  // เก็บไฟล์เข้าโฟลเดอร์ของตัวแทนรายนี้ทันทีตั้งแต่สร้าง (db_<env>/<รหัสตัวแทน> — ดู 24_drive_layout.gs)
+  // ย้ายไม่สำเร็จก็ไม่ทำให้การสร้างตัวแทนพัง (ไฟล์ยังใช้งานได้ปกติ แค่ค้างอยู่ My Drive — สั่ง organizeDatabaseFiles ทีหลังได้)
+  try { _moveFileTo(fileId, _dbTenantFolder(tenantId)); } catch (e) { Logger.log('ย้ายไฟล์ตัวแทนเข้าโฟลเดอร์ไม่สำเร็จ: ' + e.message); }
   return fileId;
 }
 

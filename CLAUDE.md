@@ -72,6 +72,22 @@ it fills the gaps around them.
 - ยังไม่ได้ทำ: แก้ไข/ยกเลิกใบรับของ (GR) หลังลงบัญชีแล้ว, ตัดต้นทุนขาย (COGS 5100) ตอนขายออกจากคลังกลาง,
   งบกำไรขาดทุน/งบดุล (มีแต่งบทดลอง), ปิดงวดบัญชี, ภาษีหัก ณ ที่จ่าย, multi-currency.
 
+## ที่เก็บไฟล์ฐานข้อมูลบน Drive (added 2026-09-23)
+
+- โครงสร้าง: `<root>/db_<env>/TNKI/` = Central Sheet + ฐานข้อมูลบริษัทเจ้าของสินค้า (tenant `HOUSE`) ·
+  `<root>/db_<env>/<รหัสตัวแทน>/` = ไฟล์ของตัวแทนรายนั้น (ชื่อโฟลเดอร์ = รหัสตัวแทน = อักษรย่อของชื่อตัวแทน)
+- root = Script Property `DB_ROOT_FOLDER_ID` (default `1vjnkJ1Sec0pWh2HPJ0WulkGd2yRnFyvK` = โฟลเดอร์
+  `salesranger-TOPSHOP` บน Shared Drive — โฟลเดอร์เดียวกับ Drive clone ของ repo) · env = `ENV_NAME`
+  (`uat` ตั้งไว้แล้วโดย `setupUatEnvironment()`; ไม่ตั้ง = ถือว่า prod) — ดู `24_drive_layout.gs`
+- สร้างไฟล์ใหม่จะเข้าโฟลเดอร์ถูกที่ตั้งแต่แรก (`_buildTenantSpreadsheet`, `setupUatEnvironment`)
+- ไฟล์เก่าที่สร้างก่อนหน้านี้ย้ายด้วย action `organizeDatabaseFiles` (super_admin, ปุ่มอยู่หน้า "ตัวแทนจำหน่าย")
+  — รันซ้ำได้ ไฟล์ที่อยู่ถูกที่แล้วข้าม และรายงานผลรายไฟล์
+- **สำคัญ**: ไฟล์ฐานข้อมูลทุกไฟล์ถูกสร้างโดย Apps Script จึงมีเจ้าของเป็นบัญชีที่รันสคริปต์
+  (`channarong@thanatkorn.com`) — บัญชีอื่น (รวม `inno09_it@`) เปิดอ่านได้แต่ **ย้ายไฟล์ไม่ได้**
+  การจัดระเบียบจึงต้องสั่งผ่าน backend เท่านั้น ไม่ใช่ลากใน Drive หรือสั่งจากเครื่องมือภายนอก
+- `salesranger-TOPSHOP(dev)` (ไฟล์ Sheet ในโฟลเดอร์ราก, 8 ก.ย. 2026) เป็น Central Sheet รุ่นแรกที่เลิกใช้แล้ว
+  (สคีมาเก่า ไม่มีสินค้า/ตัวแทน, password ยังเป็น plaintext) — **ไม่ใช่** ฐานข้อมูล production ปัจจุบัน อย่าเอาไปใช้
+
 ## Environment gotchas
 
 - Windows + Git Bash: `.gs`/`.js`/`.html` files are CRLF. Prefer the `Edit`/`Write` tools over shell
@@ -145,6 +161,8 @@ it fills the gaps around them.
 - `node .dev/test-pricelist-edit.js` — unit tests of the manual price-entry actions (create / clone /
   savePriceListLine / deletePriceListLine / savePriceListBillPromos) against in-memory fake sheets,
   including the draft-only rule and that saved rows price correctly through `priceCart()`.
+- `node .dev/test-drive-layout.js` — unit tests ของการจัดโฟลเดอร์ไฟล์ฐานข้อมูล (แยก env, TNKI, โฟลเดอร์ต่อตัวแทน,
+  รันซ้ำไม่สร้างซ้ำ) ด้วย DriveApp จำลอง
 - `node .dev/test-purchasing-accounting.js` — unit tests ของงานซื้อ+บัญชีทั้งสาย (PR/อนุมัติหลายขั้น/PO/รับของ/
   ต้นทุนเฉลี่ย/AP/AR/งบทดลอง) บนชีตจำลอง ไม่ยิงเน็ต — 109 assertions.
 - `UAT_URL='<uat exec url>' node .dev/uat-sale-e2e.js` — full end-to-end test against the live UAT

@@ -807,6 +807,15 @@
             </div>
             <div class="form-actions"><button class="btn btn-primary" id="t-create-btn" onclick="createTenantUI()">+ สร้างตัวแทนใหม่</button></div>
           </div>
+          <div class="form-card">
+            <h3>ที่เก็บไฟล์ฐานข้อมูลบน Google Drive</h3>
+            <p class="form-hint" id="dbl-hint">แยกโฟลเดอร์ตามสภาพแวดล้อม (db_uat / db_prod) · ข้อมูลส่วนกลางและฐานข้อมูลของบริษัทเจ้าของสินค้าอยู่ใน TNKI · ตัวแทนแต่ละรายอยู่โฟลเดอร์ชื่อรหัสตัวแทนของตัวเอง</p>
+            <div id="dbl-list"></div>
+            <div class="form-actions">
+              <button class="btn" onclick="loadDbLayout()">ดูตำแหน่งไฟล์</button>
+              <button class="btn btn-primary" id="dbl-fix" onclick="organizeDbFiles()">จัดระเบียบไฟล์ตามโครงสร้าง</button>
+            </div>
+          </div>
         </section>
 
         <!-- ═══ SOON ═══ -->
@@ -2669,6 +2678,34 @@ async function ensureTenantsForDropdown(){
   if (!tenantsCache.length) await loadTenantsQuiet();
   const sel = document.getElementById('au-tenant');
   sel.innerHTML = tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'">'+esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
+}
+/* ── ที่เก็บไฟล์ฐานข้อมูลบน Drive (24_drive_layout.gs) ── */
+async function loadDbLayout(){
+  const box = document.getElementById('dbl-list');
+  box.innerHTML = '<p class="form-hint">กำลังอ่านจาก Google Drive...</p>';
+  const r = await callApi('getDatabaseLayout', {});
+  if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
+  document.getElementById('dbl-hint').innerHTML = 'สภาพแวดล้อมนี้ = <b>'+esc(r.env)+'</b> → ไฟล์ทั้งหมดต้องอยู่ใต้ <b>'+esc(r.envFolder)+'</b> · ' +
+    'ข้อมูลส่วนกลาง + ฐานข้อมูลบริษัทเจ้าของสินค้า → <b>'+esc(r.ownerFolder)+'</b> · ตัวแทนแต่ละราย → โฟลเดอร์ชื่อรหัสตัวแทน';
+  box.innerHTML = r.data.length ? r.data.map(x => {
+    const wrong = x.folder.indexOf(r.envFolder + '/') !== 0;
+    return '<div class="activity-row"><span>'+esc(x.what)+(x.tenantId?' <span class="mono-data">'+esc(x.tenantId)+'</span>':'') +
+      '<br><span class="unit">'+esc(x.name || x.fileId)+'</span></span>' +
+      '<span class="amt">'+(wrong ? '<span class="pill wait">'+esc(x.folder)+'</span>' : '<span class="pill ok">'+esc(x.folder)+'</span>') +
+      (x.url ? ' <a href="'+esc(x.url)+'" target="_blank" rel="noopener">เปิด ↗</a>' : '') + '</span></div>';
+  }).join('') : '<p class="form-hint">ยังไม่มีไฟล์ฐานข้อมูล</p>';
+}
+async function organizeDbFiles(){
+  if (!confirm('ย้ายไฟล์ฐานข้อมูลทั้งหมดเข้าโฟลเดอร์ตามโครงสร้าง?\n(ข้อมูลในไฟล์ไม่เปลี่ยน แต่ตำแหน่งไฟล์และสิทธิ์ที่สืบทอดจากโฟลเดอร์จะเปลี่ยน)')) return;
+  const btn = document.getElementById('dbl-fix');
+  btn.disabled = true; btn.textContent = 'กำลังจัดระเบียบ...';
+  const r = await callApi('organizeDatabaseFiles', {});
+  btn.disabled = false; btn.textContent = 'จัดระเบียบไฟล์ตามโครงสร้าง';
+  if (!r.success) { toast(r.message, true); return; }
+  toast('ย้าย '+r.moved+' ไฟล์' + (r.failed ? ' · ย้ายไม่ได้ '+r.failed+' ไฟล์' : ''), !!r.failed);
+  document.getElementById('dbl-list').innerHTML = r.report.map(x =>
+    '<div class="activity-row"><span>'+esc(x.what)+'<br><span class="unit">'+esc(x.name || x.fileId)+' → '+esc(x.target)+'</span></span>' +
+    '<span class="amt">'+(x.status.indexOf('ย้ายไม่ได้') === 0 ? '<span class="pill wait">'+esc(x.status)+'</span>' : '<span class="pill ok">'+esc(x.status)+'</span>')+'</span></div>').join('');
 }
 async function loadTenantsQuiet(){ const r = await callApi('listTenants', {}); if (r.success) tenantsCache = r.data; }
 function onAdminRoleChange(){

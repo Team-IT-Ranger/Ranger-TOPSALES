@@ -129,6 +129,8 @@ function setupUatEnvironment() {
   }
   var ss = SpreadsheetApp.create('TOPSHOP UAT — Central Sheet');
   props.setProperties({ CENTRAL_SHEET_FILEID: ss.getId(), ENV_NAME: 'uat' });
+  // เก็บเข้าโฟลเดอร์ db_uat/TNKI ตั้งแต่แรก (ENV_NAME ต้องตั้งก่อน ไม่งั้นจะไปลง db_prod)
+  try { _moveFileTo(ss.getId(), _dbOwnerFolder()); } catch (e) { Logger.log('ย้าย Central Sheet เข้าโฟลเดอร์ไม่สำเร็จ: ' + e.message); }
   Logger.log('สร้าง Central Sheet UAT แล้ว: ' + ss.getUrl());
 
   setupCentralSheet();

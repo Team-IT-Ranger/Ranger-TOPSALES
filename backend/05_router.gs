@@ -104,6 +104,8 @@ var ADMIN_ACTION_MAP = {
   previewDocNumber:       previewDocNumberAdmin,
 
   createTenant:           createTenant,
+  getDatabaseLayout:      getDatabaseLayout,
+  organizeDatabaseFiles:  organizeDatabaseFiles,
   listTenants:            listTenants,
   updateTenantStatus:     updateTenantStatus,
 
