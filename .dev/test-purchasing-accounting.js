@@ -311,6 +311,12 @@ eq('  ใบเดิมเป็น voided และผลของมันถ
 const tb2 = ctx.getTrialBalance(FIN, {});
 eq('  งบทดลองยังสมดุลหลังกลับรายการ', tb2.totalDebit === tb2.totalCredit, true);
 eq('สิทธิ์: ผู้ใช้ read-only ลงบัญชีไม่ได้', ctx.postManualJournal({ adminUserId: '4', role_code: 'staff_user', readOnly: true }, { date: '2026-09-30', lines: [] }).success, false);
+const pl = ctx.getIncomeStatement(FIN, {});
+eq('งบกำไรขาดทุน: รายได้ 10,000 + 2,000 · ค่าใช้จ่าย 5,000 (ค่าขนส่ง) → กำไร 7,000',
+   [pl.totalIncome, pl.totalExpense, pl.netProfit], [12000, 5000, 7000]);
+const bs = ctx.getBalanceSheet(FIN, { asOf: '2026-12-31' });   // ครอบคลุมเอกสารที่ลงวันที่ล่วงหน้าในเทสต์ด้วย
+eq('งบดุลสมดุล: สินทรัพย์ = หนี้สิน + ทุน + กำไรงวดนี้', [bs.balanced, bs.totalAssets === bs.totalLiabilitiesAndEquity], [true, true]);
+eq('  กำไรในงบดุลตรงกับงบกำไรขาดทุน', bs.netProfit, pl.netProfit);
 eq('lock ถูกปล่อยทุกครั้ง', lockHeld, false);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

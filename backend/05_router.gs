@@ -143,6 +143,8 @@ var ADMIN_ACTION_MAP = {
   listJournals:           listJournals,
   getJournal:             getJournal,
   getTrialBalance:        getTrialBalance,
+  getIncomeStatement:     getIncomeStatement,
+  getBalanceSheet:        getBalanceSheet,
   listApBills:            listApBills,
   createApBillFromGr:     createApBillFromGr,
   createApBillManual:     createApBillManual,

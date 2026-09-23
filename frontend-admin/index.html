@@ -953,6 +953,8 @@
             <div><h1>บัญชีแยกประเภท</h1><p>สมุดรายวันทุกใบ (ระบบลงให้อัตโนมัติจากงานซื้อ/รับของ/เจ้าหนี้/ลูกหนี้) และงบทดลอง</p></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
               <button class="btn" onclick="loadTrialBalance()">งบทดลอง</button>
+              <button class="btn" onclick="loadIncomeStatement()">งบกำไรขาดทุน</button>
+              <button class="btn" onclick="loadBalanceSheet()">งบดุล</button>
               <button class="btn" onclick="openAccountsList()">ผังบัญชี</button>
               <button class="btn btn-primary" onclick="openJournalForm()">+ ลงใบสำคัญเอง</button>
             </div>
@@ -3452,6 +3454,37 @@ async function loadTrialBalance(){
       '<td class="mono-data">฿'+bahtPlain(a.credit)+'</td><td class="mono-data">฿'+bahtPlain(a.balance)+'</td></tr>').join('') +
     '<tr><td colspan="2"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalDebit)+'</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalCredit)+'</b></td>' +
     '<td>'+(balanced?'<span class="pill ok">สมดุล</span>':'<span class="pill wait">ไม่สมดุล</span>')+'</td></tr></tbody></table></div>';
+}
+const acctRows = (rows, sign) => rows.map(a => '<div class="activity-row"><span class="mono-data">'+esc(a.code)+'</span><span>'+esc(a.name)+
+  '</span><span class="amt mono-data">฿'+bahtPlain(sign ? a.balance : a.balance)+'</span></div>').join('') || '<p class="form-hint">ไม่มีรายการ</p>';
+async function loadIncomeStatement(){
+  const card = document.getElementById('gl-tb-card');
+  card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('getIncomeStatement', {});
+  if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  card.querySelector('h3').textContent = 'งบกำไรขาดทุน (ทุกงวดที่มีข้อมูล)';
+  document.getElementById('gl-tb').innerHTML =
+    '<h4 style="margin:6px 0">รายได้</h4>' + acctRows(r.income) +
+    '<div class="activity-row"><b>รวมรายได้</b><span class="amt mono-data"><b>฿'+bahtPlain(r.totalIncome)+'</b></span></div>' +
+    '<h4 style="margin:14px 0 6px">ค่าใช้จ่าย</h4>' + acctRows(r.expense) +
+    '<div class="activity-row"><b>รวมค่าใช้จ่าย</b><span class="amt mono-data"><b>฿'+bahtPlain(r.totalExpense)+'</b></span></div>' +
+    '<div class="activity-row" style="border-top:2px solid var(--border)"><b>'+(r.netProfit>=0?'กำไรสุทธิ':'ขาดทุนสุทธิ')+'</b>' +
+    '<span class="amt mono-data"><b>฿'+bahtPlain(Math.abs(r.netProfit))+'</b></span></div>';
+}
+async function loadBalanceSheet(){
+  const card = document.getElementById('gl-tb-card');
+  card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('getBalanceSheet', {});
+  if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  card.querySelector('h3').textContent = 'งบแสดงฐานะการเงิน ณ ' + r.asOf;
+  document.getElementById('gl-tb').innerHTML =
+    '<h4 style="margin:6px 0">สินทรัพย์</h4>' + acctRows(r.assets) +
+    '<div class="activity-row"><b>รวมสินทรัพย์</b><span class="amt mono-data"><b>฿'+bahtPlain(r.totalAssets)+'</b></span></div>' +
+    '<h4 style="margin:14px 0 6px">หนี้สิน</h4>' + acctRows(r.liabilities) +
+    '<h4 style="margin:14px 0 6px">ส่วนของเจ้าของ</h4>' + acctRows(r.equity) +
+    '<div class="activity-row"><span>กำไร(ขาดทุน)สะสมงวดนี้ ยังไม่ปิดเข้าทุน</span><span class="amt mono-data">฿'+bahtPlain(r.netProfit)+'</span></div>' +
+    '<div class="activity-row" style="border-top:2px solid var(--border)"><b>รวมหนี้สินและส่วนของเจ้าของ</b>' +
+    '<span class="amt mono-data"><b>฿'+bahtPlain(r.totalLiabilitiesAndEquity)+'</b> '+(r.balanced?'<span class="pill ok">สมดุล</span>':'<span class="pill wait">ไม่สมดุล</span>')+'</span></div>';
 }
 async function openAccountsList(){
   await ensureAccounts();

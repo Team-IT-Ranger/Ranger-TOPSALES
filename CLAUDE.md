@@ -152,6 +152,9 @@ it fills the gaps around them.
   through both the mobile and admin action surfaces). Refuses to run against the production URL as a
   safety check. Re-run this after any pricing-engine or sales-order backend change before calling it
   verified.
+- `UAT_URL='<uat exec url>' node .dev/uat-purchasing-e2e.js` — live UAT test ของงานซื้อ+บัญชีทั้งสาย
+  (ผู้ขาย → สายอนุมัติ 2 ขั้น → PR → PO → รับของ 2 ครั้ง → ตั้งหนี้ → จ่าย → ลูกหนี้ → งบทดลอง/งบดุล)
+  ทิ้งเอกสารทดสอบชื่อขึ้นต้น `E2E` ไว้ใน UAT (เอกสารที่ลงบัญชีแล้วลบไม่ได้ตามหลักบัญชี)
 - `UAT_URL='<uat exec url>' node .dev/uat-pricelist-edit-e2e.js` — live UAT test of manual price entry
   (clone an active list, edit/delete lines, bill promos, empty list; confirms active lists refuse edits).
   Only touches drafts it creates and deletes them at the end.

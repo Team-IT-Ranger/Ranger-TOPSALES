@@ -196,6 +196,45 @@ function getTrialBalance(session, payload) {
     totalCredit: _money(rows.reduce(function(s, r) { return s + r.credit; }, 0)) };
 }
 
+// ยอดคงเหลือต่อบัญชี (ด้านปกติของบัญชีเป็นบวก) ในช่วงวันที่ — ใช้ร่วมกันทั้งงบทดลอง/งบกำไรขาดทุน/งบดุล
+function _accountBalances(dateFrom, dateTo) {
+  var tb = getTrialBalance({ role_code: 'super_admin' }, { dateFrom: dateFrom, dateTo: dateTo });
+  var map = {};
+  tb.data.forEach(function(a) { map[a.code] = a; });
+  return { map: map, rows: tb.data };
+}
+function _sumType(rows, type) { return _money(rows.filter(function(a) { return a.acctType === type; }).reduce(function(s, a) { return s + a.balance; }, 0)); }
+
+// งบกำไรขาดทุน (ตามงวดที่เลือก): รายได้ − ค่าใช้จ่าย
+function getIncomeStatement(session, payload) {
+  var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
+  payload = payload || {};
+  var b = _accountBalances(payload.dateFrom, payload.dateTo);
+  var income = b.rows.filter(function(a) { return a.acctType === 'income'; });
+  var expense = b.rows.filter(function(a) { return a.acctType === 'expense'; });
+  var totalIncome = _sumType(b.rows, 'income'), totalExpense = _sumType(b.rows, 'expense');
+  return { success: true, dateFrom: payload.dateFrom || '', dateTo: payload.dateTo || '',
+    income: income, expense: expense, totalIncome: totalIncome, totalExpense: totalExpense,
+    netProfit: _money(totalIncome - totalExpense) };
+}
+
+// งบแสดงฐานะการเงิน ณ วันที่: สินทรัพย์ = หนี้สิน + ทุน + กำไรสะสมงวดนี้
+function getBalanceSheet(session, payload) {
+  var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
+  payload = payload || {};
+  var asOf = payload.asOf || _todayStr();
+  var b = _accountBalances('', asOf);
+  var assets = b.rows.filter(function(a) { return a.acctType === 'asset'; });
+  var liabilities = b.rows.filter(function(a) { return a.acctType === 'liability'; });
+  var equity = b.rows.filter(function(a) { return a.acctType === 'equity'; });
+  var totalAssets = _sumType(b.rows, 'asset'), totalLiabilities = _sumType(b.rows, 'liability'), totalEquity = _sumType(b.rows, 'equity');
+  var profit = _money(_sumType(b.rows, 'income') - _sumType(b.rows, 'expense'));   // กำไรสะสมที่ยังไม่ได้ปิดเข้าทุน
+  return { success: true, asOf: asOf, assets: assets, liabilities: liabilities, equity: equity,
+    totalAssets: totalAssets, totalLiabilities: totalLiabilities, totalEquity: totalEquity, netProfit: profit,
+    totalLiabilitiesAndEquity: _money(totalLiabilities + totalEquity + profit),
+    balanced: Math.abs(totalAssets - (totalLiabilities + totalEquity + profit)) < 0.01 };
+}
+
 /* ═══════════════ เจ้าหนี้ (AP) ═══════════════ */
 
 function _apBillDto(b, extra) {
