@@ -25,7 +25,7 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
   var productMap = {};
   centralObjects('products').forEach(function(p) { productMap[String(p.record_id)] = p; });
   var unitMap = {};
-  centralObjects('product_units').forEach(function(u) { unitMap[String(u.product_id) + '_' + u.unit_code] = u; });
+  centralObjects('product_units').forEach(function(u) { unitMap[String(u.product_id) + '_' + normUnitCode(u.unit_code)] = u; });
 
   var items = [];
   for (var ri = 0; ri < rawItems.length; ri++) {
@@ -36,15 +36,15 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
     var qty = parseInt(raw.qty) || 0;
     if (qty <= 0) return { success: false, message: 'จำนวนสินค้าต้องมากกว่า 0' };
 
-    var unitCode = raw.unitCode;
+    var unitCode = normUnitCode(raw.unitCode, '');
     var unitFactor = 1, unitPrice = parseFloat(p.base_price) || 0;
-    if (unitCode && unitCode !== p.unit) {
+    if (unitCode && !isBaseUnit(unitCode)) {
       var u = unitMap[String(raw.productId) + '_' + unitCode];
-      if (!u) return { success: false, message: 'ไม่พบหน่วยขาย "' + unitCode + '" ของสินค้า ' + p.name };
+      if (!u) return { success: false, message: 'ไม่พบหน่วยขาย "' + unitLabelOf(unitCode) + '" ของสินค้า ' + p.name };
       unitFactor = parseFloat(u.unit_factor) || 1;
       unitPrice = parseFloat(u.price) || 0;
     } else {
-      unitCode = p.unit;
+      unitCode = UNIT_PC;                 // หน่วยฐานของทั้งระบบ = ชิ้น
     }
 
     items.push({

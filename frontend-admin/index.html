@@ -619,7 +619,7 @@
               </select></div>
               <div class="field" id="son-staff-field" style="display:none"><label>พนักงานที่จะตัดสต็อกให้</label><select id="son-staff"></select></div>
             </div>
-            <p class="form-hint">แพ็ค (PACK) ขายได้เฉพาะตัดสต็อกรถทันที + ชำระเงินสดเท่านั้น (ตามกติการาคา)</p>
+            <p class="form-hint">แพ็ค (PK) ขายได้เฉพาะตัดสต็อกรถทันที + ชำระเงินสดเท่านั้น (ตามกติการาคา)</p>
           </div>
           <div class="form-card">
             <h3>รายการสินค้า</h3>
@@ -2382,7 +2382,7 @@ function pltInit(d){
 function pltAddRow(){
   const d = document.createElement('div'); d.className = 'plt-row'; d.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
   d.innerHTML = '<select class="plt-prod" style="flex:1;min-width:0">' + PLT.products.map(p => '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('') + '</select>' +
-    '<select class="plt-unit"><option value="CASE">หีบ</option><option value="PACK">แพ็ค</option></select>' +
+    '<select class="plt-unit"><option value="CT">ลัง</option><option value="PK">แพ็ค</option></select>' +
     '<input type="number" class="plt-qty" min="1" value="1" style="width:80px"><button class="btn btn-sm" onclick="this.parentNode.remove()">✕</button>';
   document.getElementById('plt-rows').appendChild(d);
 }
@@ -2395,7 +2395,7 @@ async function pltRun(){
   if (!r.success) { out.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   const name = id => (PLT.products.find(p => String(p.id) === String(id)) || {}).label || id;
   out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>' +
-    r.lines.map(l => '<tr><td>'+esc(name(l.productId))+'</td><td>'+(l.unitCode==='PACK'?'แพ็ค':'หีบ')+'</td><td>'+l.qty+'</td><td class="mono-data">฿'+baht(l.unitPrice)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>').join('') +
+    r.lines.map(l => '<tr><td>'+esc(name(l.productId))+'</td><td>'+(['PK','PACK'].includes(l.unitCode)?'แพ็ค':'ลัง')+'</td><td>'+l.qty+'</td><td class="mono-data">฿'+baht(l.unitPrice)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>').join('') +
     '</tbody></table></div><div class="activity-row"><span>ยอดรวม (รวม VAT)</span><span class="amt mono-data">฿'+baht(r.subtotal)+'</span></div>' +
     (r.billPercent ? '<div class="activity-row"><span>โปรระดับบิล ลด '+esc(r.billPercent)+'% (ยอดไม่รวม VAT ฿'+baht(r.subtotalExVat)+' ครบ ฿'+baht(r.billMinExVat)+')</span><span class="amt mono-data">-฿'+baht(r.billDiscount)+'</span></div>' : '') +
     '<div class="activity-row"><b>สุทธิ</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';

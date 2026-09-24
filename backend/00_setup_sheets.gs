@@ -24,7 +24,8 @@ var CENTRAL_SHEETS = {
   //   ใช้จับคู่ตอน import เท่านั้น อาจไม่ unique เพราะมาจากระบบภายนอก) — แนวคิดจาก item_code ของ Hippo Village
   // has_transactions: 'TRUE' เมื่อสินค้านี้เคยถูกขายจริงอย่างน้อยหนึ่งครั้ง (recordSale ใน 07_sales.gs เป็นคนเซ็ต)
   //   ใช้ล็อกไม่ให้เปลี่ยน product_code อีก กันเอกสาร/รายงานย้อนหลังอ้างรหัสผิดของ — เซ็ตครั้งเดียวไม่มีวันเคลียร์คืน
-  // unit = ชื่อหน่วยฐาน (ไทย, default 'ชิ้น') / unit_code = รหัสหน่วยฐาน (อังกฤษ, default 'pcs')
+  // unit = ชื่อหน่วยฐาน (ไทย, default 'ชิ้น') / unit_code = รหัสหน่วยฐาน — ทั้งระบบใช้ 3 หน่วยเท่านั้น
+  // CT=ลัง · PK=แพ็ค · PC=ชิ้น (หน่วยฐาน) ดู 28_units.gs · ข้อมูลเก่ารหัส CASE/PACK/pcs แปลงด้วย migrateUnitCodes()
   //   คู่กันแบบเดียวกับ unit_label/unit_code ใน product_units (หน่วยขายเพิ่มเติม) ด้านล่าง — ถ้าไม่ตั้งมาใช้ default,
   //   ถ้าตั้งมาแล้วใช้ค่าที่ตั้งเสมอ (บังคับ default ที่ addProduct/updateProduct ใน 10_master_data.gs)
   // barcode: บาร์โค้ด "ชุด" ของหน่วยฐาน unique เฉพาะสินค้า+หน่วยนี้เท่านั้น
@@ -39,7 +40,7 @@ var CENTRAL_SHEETS = {
   //  price_lists: 1 ชุด = 1 กลุ่มลูกค้า × 1 ช่วงเวลา, status: draft | active | archived (valid_from/to เป็นข้อความ yyyy-MM-dd)
   //  price_list_items: 1 แถว = 1 ขั้นราคาของ 1 สินค้า 1 หน่วยขาย — ราคาสุทธิรวม VAT เป็นตัวตั้ง (ส่วนลด % คำนวณเอา)
   //    line_id = กลุ่มแถวที่ใช้ตารางขั้นบันไดร่วมกัน (เช่น แซนดัลวูด+ลาเวนเดอร์) นับจำนวนหีบรวมกันทั้ง line
-  //    unit_code CASE=หีบ, PACK=แพ็ค (van_only=TRUE ขายได้เฉพาะ Cash Van + เงินสด), max_qty ว่าง = ขึ้นไป
+  //    unit_code CT=ลัง, PK=แพ็ค (van_only=TRUE ขายได้เฉพาะ Cash Van + เงินสด), max_qty ว่าง = ขึ้นไป
   price_lists: ['record_id','name','customer_group_id','valid_from','valid_to','status','source_file','note','created_at','activated_at'],
   price_list_items: ['record_id','price_list_id','line_id','product_id','unit_code','unit_factor','min_qty','max_qty',
     'list_price_ex_vat','cash_price_incl_vat','credit_price_incl_vat','van_only','suggested_price','retail_price','tier_label'],

@@ -43,7 +43,7 @@ ctx.SpreadsheetApp = { openById: () => { throw new Error('should not be called')
 ctx.PropertiesService = { getScriptProperties: () => ({ getProperty: () => '' }) };
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', '02_helpers.gs'), 'utf8'), ctx, { filename: '02_helpers.gs' });
 Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
-for (const f of ['17_pricing.gs', '18_pricing_engine.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
+for (const f of ['28_units.gs', '17_pricing.gs', '18_pricing_engine.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
 
 let failed = 0;
 const eq = (name, actual, expected) => {
@@ -70,9 +70,9 @@ const L1 = r.id;
 r = ctx.savePriceListLine(S, { priceListId: L1, productIds: [301], caseFactor: 48, listExVat: 500, tiers: [{ min: 1, max: null, cashInclVat: 520, creditInclVat: 530 }] });
 eq('บันทึก line ใหม่ขั้นเดียว', [r.success, r.line.tiers.length, r.line.tiers[0].max, r.line.products[0].productCode], [true, 1, null, 'C301']);
 const soapLine = r.line.lineId;
-eq('  เขียน 1 แถว CASE', itemsOf(L1).map(i => [i.unit_code, i.min_qty, i.max_qty, i.cash_price_incl_vat, i.credit_price_incl_vat, i.van_only]), [['CASE', 1, '', 520, 530, 'FALSE']]);
-eq('  สร้างหน่วยหีบให้สินค้า', objs(sheets.product_units).map(u => [u.product_id, u.unit_code, u.unit_factor]), [[301, 'CASE', 48]]);
-let p = ctx.priceCart(ctxOf(L1), [{ productId: 301, unitCode: 'CASE', qty: 7 }], { isCredit: false, isVan: false });
+eq('  เขียน 1 แถว CASE', itemsOf(L1).map(i => [i.unit_code, i.min_qty, i.max_qty, i.cash_price_incl_vat, i.credit_price_incl_vat, i.van_only]), [['CT', 1, '', 520, 530, 'FALSE']]);
+eq('  สร้างหน่วยหีบให้สินค้า', objs(sheets.product_units).map(u => [u.product_id, u.unit_code, u.unit_factor]), [[301, 'CT', 48]]);
+let p = ctx.priceCart(ctxOf(L1), [{ productId: 301, unitCode: 'CT', qty: 7 }], { isCredit: false, isVan: false });
 eq('  เครื่องยนต์คิดราคา 7 หีบ เงินสด = 3,640', [p.success, p.total], [true, 3640]);
 
 // ── line หลายสินค้า + หลายขั้น + แพ็ค ──
@@ -83,11 +83,11 @@ r = ctx.savePriceListLine(S, lineIn);
 eq('บันทึก line 2 สินค้า 3 ขั้น + แพ็ค (ขั้นเรียงให้เอง)', [r.success, r.line.tiers.map(t => t.min), r.line.packs.length], [true, [1, 2, 10], 1]);
 const xLine = r.line.lineId;
 eq('  เขียน (3 ขั้น + 1 แพ็ค) × 2 สินค้า = 8 แถว line_id เดียวกัน', [itemsOf(L1).filter(i => i.line_id === xLine).length, xLine !== soapLine], [8, true]);
-p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'CASE', qty: 1 }, { productId: 102, unitCode: 'CASE', qty: 1 }], { isCredit: true, isVan: false });
+p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'CT', qty: 1 }, { productId: 102, unitCode: 'CT', qty: 1 }], { isCredit: true, isVan: false });
 eq('  แซนดัลวูด 1 + ลาเวนเดอร์ 1 นับรวม 2 หีบ เครดิต → 1,215', p.lines.map(l => l.unitPrice), [1215, 1215]);
-p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'PACK', qty: 2 }], { isCredit: false, isVan: true });
+p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'PK', qty: 2 }], { isCredit: false, isVan: true });
 eq('  แพ็คขายรถ เงินสด 2 แพ็ค = 202', p.total, 202);
-p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'PACK', qty: 2 }], { isCredit: false, isVan: false });
+p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'PK', qty: 2 }], { isCredit: false, isVan: false });
 eq('  แพ็คไม่ใช่รถ → PACK_VAN_ONLY', p.code, 'PACK_VAN_ONLY');
 r = ctx.getPriceList(S, { id: L1 });
 const got = r.lines.find(l => l.lineId === xLine);

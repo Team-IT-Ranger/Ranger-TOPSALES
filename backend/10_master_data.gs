@@ -124,7 +124,7 @@ function addProduct(session, payload) {
   var recordId = centralNextId('products');
   centralAppend('products', {
     record_id: recordId, product_code: productCode, name: payload.name, base_price: payload.basePrice || 0,
-    unit: payload.unit || 'ชิ้น', unit_code: payload.unitCode || 'pcs', group_id: payload.groupId || 0, is_active: 'TRUE',
+    unit: payload.unit || UNIT_LABELS.PC, unit_code: normUnitCode(payload.unitCode, UNIT_PC), group_id: payload.groupId || 0, is_active: 'TRUE',
     external_code: payload.externalCode || '',
     barcode: payload.barcode || '', group_barcode: payload.groupBarcode || '',
     cost_price: payload.costPrice || 0, vat_type: payload.vatType || 'none', image_url: ''
@@ -155,8 +155,8 @@ function updateProduct(session, payload) {
   if (payload.name !== undefined) fields.name = payload.name;
   if (payload.basePrice !== undefined) fields.base_price = payload.basePrice;
   // หน่วยฐานว่างไม่ได้ — เว้นว่างแล้วบันทึกต้องกลับไปใช้ default (ไทย=ชิ้น, อังกฤษ=pcs) ไม่ใช่เก็บเป็นค่าว่าง
-  if (payload.unit !== undefined) fields.unit = String(payload.unit || '').trim() || 'ชิ้น';
-  if (payload.unitCode !== undefined) fields.unit_code = String(payload.unitCode || '').trim() || 'pcs';
+  if (payload.unit !== undefined) fields.unit = String(payload.unit || '').trim() || UNIT_LABELS.PC;
+  if (payload.unitCode !== undefined) fields.unit_code = normUnitCode(payload.unitCode, UNIT_PC);
   if (payload.groupId !== undefined) fields.group_id = payload.groupId;
   if (payload.isActive !== undefined) fields.is_active = payload.isActive;
   if (payload.barcode !== undefined) fields.barcode = payload.barcode;
@@ -206,9 +206,10 @@ function listProductUnits(session, payload) {
 function addProductUnit(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
   if (!payload.productId || !payload.unitCode || !payload.unitFactor) return { success: false, message: 'กรุณาระบุสินค้า/รหัสหน่วย/factor ให้ครบ' };
+  var code = normUnitCode(payload.unitCode);   // ทั้งระบบใช้ CT/PK/PC เท่านั้น (28_units.gs)
   centralAppend('product_units', {
-    record_id: centralNextId('product_units'), product_id: payload.productId, unit_code: payload.unitCode,
-    unit_label: payload.unitLabel || payload.unitCode, unit_factor: payload.unitFactor, price: payload.price || 0,
+    record_id: centralNextId('product_units'), product_id: payload.productId, unit_code: code,
+    unit_label: payload.unitLabel || unitLabelOf(code), unit_factor: payload.unitFactor, price: payload.price || 0,
     is_active: 'TRUE', barcode: payload.barcode || ''
   });
   return { success: true };

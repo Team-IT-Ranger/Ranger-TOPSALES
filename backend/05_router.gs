@@ -111,6 +111,7 @@ var ADMIN_ACTION_MAP = {
   deleteRole:             deleteRole,
 
   createTenant:           createTenant,
+  migrateUnitCodes:       migrateUnitCodes,
   getDatabaseLayout:      getDatabaseLayout,
   organizeDatabaseFiles:  organizeDatabaseFiles,
   listTenants:            listTenants,

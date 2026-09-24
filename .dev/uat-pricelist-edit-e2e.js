@@ -48,11 +48,11 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
       tiers: [{ min: 1, max: null, cashInclVat: 777, creditInclVat: 788 }], packs: [] });
     check('แก้รายการในชุดร่าง', r.success && r.line.lineId == cl.lineId && r.line.tiers[0].cashInclVat === 777, r);
     const pid = cl.products[0].productId;
-    r = await admin('previewPricing', { priceListId: cloneId, paymentType: 'cash', isVan: false, items: [{ productId: pid, unitCode: 'CASE', qty: 3 }] });
+    r = await admin('previewPricing', { priceListId: cloneId, paymentType: 'cash', isVan: false, items: [{ productId: pid, unitCode: 'CT', qty: 3 }] });
     check('  previewPricing ใช้ราคาใหม่ 3 × 777', r.success && r.lines[0].unitPrice === 777 && r.lines[0].lineTotal === 2331, r);
-    r = await admin('previewPricing', { priceListId: cloneId, paymentType: 'credit_term', isVan: false, items: [{ productId: pid, unitCode: 'CASE', qty: 1 }] });
+    r = await admin('previewPricing', { priceListId: cloneId, paymentType: 'credit_term', isVan: false, items: [{ productId: pid, unitCode: 'CT', qty: 1 }] });
     check('  เครดิต = 788', r.success && r.lines[0].unitPrice === 788, r);
-    r = await admin('previewPricing', { priceListId: active.id, paymentType: 'cash', isVan: false, items: [{ productId: pid, unitCode: 'CASE', qty: 3 }] });
+    r = await admin('previewPricing', { priceListId: active.id, paymentType: 'cash', isVan: false, items: [{ productId: pid, unitCode: 'CT', qty: 3 }] });
     check('  ชุด active ยังคิดราคาเดิม', r.success && r.lines[0].unitPrice !== 777, r);
 
     // 4) validation ผ่าน backend จริง

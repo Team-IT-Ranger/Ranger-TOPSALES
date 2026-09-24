@@ -68,7 +68,7 @@ function getPriceList(session, payload) {
                 cashInclVat: it.cash_price_incl_vat === '' ? null : it.cash_price_incl_vat,
                 creditInclVat: it.credit_price_incl_vat === '' ? null : it.credit_price_incl_vat,
                 listExVat: it.list_price_ex_vat === '' ? null : it.list_price_ex_vat, vanOnly: _isTrue(it.van_only), label: it.tier_label || '' };
-    if (it.unit_code === 'CASE') { ln.tiers.push(row); ln.caseFactor = it.unit_factor; ln.listExVat = row.listExVat; if (it.suggested_price !== '') ln.suggestedPack = it.suggested_price; if (it.retail_price !== '') ln.retailPiece = it.retail_price; }
+    if (isCaseUnit(it.unit_code)) { ln.tiers.push(row); ln.caseFactor = it.unit_factor; ln.listExVat = row.listExVat; if (it.suggested_price !== '') ln.suggestedPack = it.suggested_price; if (it.retail_price !== '') ln.retailPiece = it.retail_price; }
     else ln.packs.push(row);
   });
   var outLines = order.map(function(k) {
@@ -142,15 +142,15 @@ function importPriceList(session, payload) {
         if (ids.length) { stats.productsMatched++; return hits[ids[0]]; }
         if (!createMissing) { warnings.push('ไม่พบสินค้ารหัส ' + codes.join('/') + ' (' + v.name + ')'); return null; }
         var p = { record_id: nextProductId++, product_code: codes[0], alias_codes: codes.slice(1).join(','), name: v.name, base_price: 0,
-                  unit: 'ชิ้น', unit_code: 'pcs', group_id: 0, is_active: 'TRUE', external_code: '', barcode: '', group_barcode: '',
+                  unit: UNIT_LABELS.PC, unit_code: UNIT_PC, group_id: 0, is_active: 'TRUE', external_code: '', barcode: '', group_barcode: '',
                   cost_price: 0, vat_type: 'none', image_url: '', has_transactions: '' };
         newProducts.push(p); stats.productsCreated++;
         return p;
       }).filter(Boolean);
     });
 
-    // 2) หน่วยขาย (หีบ/แพ็ค) — ของเดิมไม่ทับ ถ้า factor ต่างกันแจ้งเตือนให้คนตัดสินใจ
-    var existingUnits = {}; centralObjects('product_units').forEach(function(u) { existingUnits[String(u.product_id) + '_' + u.unit_code] = u; });
+    // 2) หน่วยขาย (ลัง/แพ็ค) — ของเดิมไม่ทับ ถ้า factor ต่างกันแจ้งเตือนให้คนตัดสินใจ
+    var existingUnits = {}; centralObjects('product_units').forEach(function(u) { existingUnits[String(u.product_id) + '_' + normUnitCode(u.unit_code)] = u; });
     var unitId = centralNextId('product_units'), newUnits = [];
     var ensureUnit = function(p, code, label, factor, price) {
       if (!factor) return;
@@ -169,15 +169,15 @@ function importPriceList(session, payload) {
       var thisLine = lineId + li;
       var firstCash = ln.tiers && ln.tiers.length ? (ln.tiers[0].cashInclVat != null ? ln.tiers[0].cashInclVat : ln.tiers[0].creditInclVat) : 0;
       prods.forEach(function(p) {
-        ensureUnit(p, 'CASE', 'หีบ', ln.caseFactor, firstCash);
-        if (ln.packs && ln.packs.length) ensureUnit(p, 'PACK', 'แพ็ค', ln.packs[0].factor, ln.packs[0].cashInclVat);
+        ensureUnit(p, UNIT_CT, UNIT_LABELS.CT, ln.caseFactor, firstCash);
+        if (ln.packs && ln.packs.length) ensureUnit(p, UNIT_PK, UNIT_LABELS.PK, ln.packs[0].factor, ln.packs[0].cashInclVat);
         (ln.tiers || []).forEach(function(t) {
-          items.push({ record_id: itemId++, price_list_id: listId, line_id: thisLine, product_id: p.record_id, unit_code: 'CASE', unit_factor: ln.caseFactor || '',
+          items.push({ record_id: itemId++, price_list_id: listId, line_id: thisLine, product_id: p.record_id, unit_code: UNIT_CT, unit_factor: ln.caseFactor || '',
             min_qty: t.min, max_qty: t.max == null ? '' : t.max, list_price_ex_vat: _numOrBlank(ln.listExVat), cash_price_incl_vat: _numOrBlank(t.cashInclVat),
             credit_price_incl_vat: _numOrBlank(t.creditInclVat), van_only: 'FALSE', suggested_price: _numOrBlank(ln.suggestedPack), retail_price: _numOrBlank(ln.retailPiece), tier_label: t.label || '' });
         });
         (ln.packs || []).forEach(function(pk) {
-          items.push({ record_id: itemId++, price_list_id: listId, line_id: thisLine, product_id: p.record_id, unit_code: 'PACK', unit_factor: pk.factor || '',
+          items.push({ record_id: itemId++, price_list_id: listId, line_id: thisLine, product_id: p.record_id, unit_code: UNIT_PK, unit_factor: pk.factor || '',
             min_qty: 1, max_qty: '', list_price_ex_vat: _numOrBlank(pk.listExVat), cash_price_incl_vat: _numOrBlank(pk.cashInclVat),
             credit_price_incl_vat: _numOrBlank(pk.creditInclVat), van_only: 'TRUE', suggested_price: '', retail_price: _numOrBlank(ln.retailPiece), tier_label: pk.note || 'ขายเฉพาะหน่วยรถ' });
         });
@@ -414,12 +414,12 @@ function savePriceListLine(session, payload) {
     var items = [];
     productIds.forEach(function(pid) {
       tiers.forEach(function(t) {
-        items.push({ record_id: itemId++, price_list_id: list.record_id, line_id: lineId, product_id: products[pid].record_id, unit_code: 'CASE', unit_factor: caseFactor,
+        items.push({ record_id: itemId++, price_list_id: list.record_id, line_id: lineId, product_id: products[pid].record_id, unit_code: UNIT_CT, unit_factor: caseFactor,
           min_qty: t.min, max_qty: t.max === null ? '' : t.max, list_price_ex_vat: _numOrBlank(listExVat), cash_price_incl_vat: _numOrBlank(t.cash),
           credit_price_incl_vat: _numOrBlank(t.credit), van_only: 'FALSE', suggested_price: _numOrBlank(suggested), retail_price: _numOrBlank(retail), tier_label: t.label });
       });
       packs.forEach(function(pk) {
-        items.push({ record_id: itemId++, price_list_id: list.record_id, line_id: lineId, product_id: products[pid].record_id, unit_code: 'PACK', unit_factor: pk.factor,
+        items.push({ record_id: itemId++, price_list_id: list.record_id, line_id: lineId, product_id: products[pid].record_id, unit_code: UNIT_PK, unit_factor: pk.factor,
           min_qty: 1, max_qty: '', list_price_ex_vat: _numOrBlank(pk.listEx), cash_price_incl_vat: _numOrBlank(pk.cash),
           credit_price_incl_vat: '', van_only: 'TRUE', suggested_price: '', retail_price: _numOrBlank(retail), tier_label: pk.note || 'ขายเฉพาะหน่วยรถ' });
       });
@@ -437,8 +437,8 @@ function savePriceListLine(session, payload) {
       existingUnits[String(p.record_id) + '_' + code] = u; newUnits.push(u);
     };
     productIds.forEach(function(pid) {
-      ensureUnit(products[pid], 'CASE', 'หีบ', caseFactor, firstCash);
-      if (packs.length) ensureUnit(products[pid], 'PACK', 'แพ็ค', packs[0].factor, packs[0].cash);
+      ensureUnit(products[pid], UNIT_CT, UNIT_LABELS.CT, caseFactor, firstCash);
+      if (packs.length) ensureUnit(products[pid], UNIT_PK, UNIT_LABELS.PK, packs[0].factor, packs[0].cash);
     });
 
     if (lineKey !== null) _deleteRowsMatching(centralSheet('price_list_items'), function(o) { return String(o.price_list_id) === String(list.record_id) && String(o.line_id) === lineKey; });
@@ -452,8 +452,8 @@ function savePriceListLine(session, payload) {
       lineId: lineId,
       products: productIds.map(function(pid) { return { productId: products[pid].record_id, productCode: products[pid].product_code, name: products[pid].name }; }),
       caseFactor: caseFactor, listExVat: listExVat,
-      tiers: tiers.map(function(t) { return row('CASE', caseFactor, t.min, t.max, t.cash, t.credit, listExVat, false, t.label); }),
-      packs: packs.map(function(pk) { return row('PACK', pk.factor, 1, null, pk.cash, null, pk.listEx, true, pk.note || 'ขายเฉพาะหน่วยรถ'); }),
+      tiers: tiers.map(function(t) { return row(UNIT_CT, caseFactor, t.min, t.max, t.cash, t.credit, listExVat, false, t.label); }),
+      packs: packs.map(function(pk) { return row(UNIT_PK, pk.factor, 1, null, pk.cash, null, pk.listEx, true, pk.note || 'ขายเฉพาะหน่วยรถ'); }),
       suggestedPack: suggested, retailPiece: retail
     };
     return { success: true, line: line, warnings: warnings };

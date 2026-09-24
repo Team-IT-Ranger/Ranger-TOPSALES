@@ -38,7 +38,8 @@ function _pricingContextForList(list) {
 }
 
 /**
- * cart: [{ productId, unitCode('CASE'|'PACK'), qty }]   opts: { isCredit:boolean, isVan:boolean }
+ * cart: [{ productId, unitCode('CT' ลัง | 'PK' แพ็ค), qty }]   opts: { isCredit:boolean, isVan:boolean }
+ * รหัสหน่วยผ่าน normUnitCode() ทั้งสองฝั่ง (28_units.gs) — ข้อมูลเก่าที่เป็น CASE/PACK จึงยังคิดราคาได้
  * กติกา (จากใบรายการขายจริง):
  *  - ขั้นบันไดนับ "จำนวนหีบรวมของ line เดียวกัน" (สินค้าที่ใช้ตารางขั้นร่วมกัน) แล้วทุกหีบใช้ราคาของขั้นที่ถึง
  *  - ราคาที่ขายคือราคาสุทธิรวม VAT (เงินสด หรือ เครดิตตามวิธีชำระ)
@@ -50,16 +51,16 @@ function priceCart(ctx, cart, opts) {
   opts = opts || {};
   var byProduct = {};
   ctx.items.forEach(function(it) {
-    var k = String(it.product_id) + '|' + it.unit_code;
+    var k = String(it.product_id) + '|' + normUnitCode(it.unit_code, UNIT_CT);
     (byProduct[k] = byProduct[k] || []).push(it);
   });
   Object.keys(byProduct).forEach(function(k) { byProduct[k].sort(function(a, b) { return Number(a.min_qty) - Number(b.min_qty); }); });
 
-  // จำนวนหีบรวมต่อ line
+  // จำนวนลังรวมต่อ line
   var caseQtyByLine = {};
   cart.forEach(function(c) {
-    if (c.unitCode !== 'CASE') return;
-    var rows = byProduct[String(c.productId) + '|CASE'];
+    if (!isCaseUnit(c.unitCode)) return;
+    var rows = byProduct[String(c.productId) + '|' + UNIT_CT];
     if (!rows || !rows.length) return;
     var key = String(rows[0].line_id);
     caseQtyByLine[key] = (caseQtyByLine[key] || 0) + (Number(c.qty) || 0);
@@ -68,17 +69,18 @@ function priceCart(ctx, cart, opts) {
   var lines = [], subtotal = 0;
   for (var i = 0; i < cart.length; i++) {
     var c = cart[i], qty = Number(c.qty) || 0;
+    var unitCode = normUnitCode(c.unitCode, UNIT_CT);
     if (qty <= 0) return { success: false, message: 'จำนวนสินค้าต้องมากกว่า 0' };
-    var rows = byProduct[String(c.productId) + '|' + c.unitCode];
+    var rows = byProduct[String(c.productId) + '|' + unitCode];
     if (!rows || !rows.length) {
       return { success: false, code: 'NOT_IN_PRICE_LIST', productId: c.productId,
-               message: 'สินค้า ' + c.productId + ' หน่วย ' + c.unitCode + ' ไม่มีในชุดราคา "' + ctx.list.name + '"' };
+               message: 'สินค้า ' + c.productId + ' หน่วย ' + unitLabelOf(unitCode) + ' ไม่มีในชุดราคา "' + ctx.list.name + '"' };
     }
 
     var item = null;
-    if (c.unitCode === 'PACK') {
+    if (isPackUnit(unitCode)) {
       if (!opts.isVan) return { success: false, code: 'PACK_VAN_ONLY', productId: c.productId, message: 'แพ็คขายได้เฉพาะ Cash Van เท่านั้น' };
-      if (opts.isCredit) return { success: false, code: 'PACK_CASH_ONLY', productId: c.productId, message: 'แพ็คขายได้เฉพาะเงินสด (ขายเครดิตต้องสั่งเป็นหีบ)' };
+      if (opts.isCredit) return { success: false, code: 'PACK_CASH_ONLY', productId: c.productId, message: 'แพ็คขายได้เฉพาะเงินสด (ขายเครดิตต้องสั่งเป็นลัง)' };
       item = rows[0];
     } else {
       var total = caseQtyByLine[String(rows[0].line_id)] || qty;
@@ -86,7 +88,7 @@ function priceCart(ctx, cart, opts) {
         var min = Number(rows[r].min_qty), max = rows[r].max_qty === '' ? Infinity : Number(rows[r].max_qty);
         if (total >= min && total <= max) { item = rows[r]; break; }
       }
-      if (!item) return { success: false, code: 'NO_TIER', productId: c.productId, message: 'จำนวน ' + total + ' หีบ ไม่ตรงขั้นราคาใดในชุดราคา (สินค้า ' + c.productId + ')' };
+      if (!item) return { success: false, code: 'NO_TIER', productId: c.productId, message: 'จำนวน ' + total + ' ลัง ไม่ตรงขั้นราคาใดในชุดราคา (สินค้า ' + c.productId + ')' };
     }
 
     var price = opts.isCredit ? item.credit_price_incl_vat : item.cash_price_incl_vat;
@@ -96,7 +98,7 @@ function priceCart(ctx, cart, opts) {
     price = Number(price);
     var lineTotal = _round2(price * qty);
     subtotal += lineTotal;
-    lines.push({ productId: String(c.productId), unitCode: c.unitCode, unitFactor: Number(item.unit_factor) || 1, qty: qty,
+    lines.push({ productId: String(c.productId), unitCode: unitCode, unitFactor: Number(item.unit_factor) || 1, qty: qty,
                  unitPrice: price, lineTotal: lineTotal, tierLabel: item.tier_label || '', lineId: item.line_id });
   }
   subtotal = _round2(subtotal);
