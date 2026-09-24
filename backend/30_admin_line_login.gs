@@ -12,7 +12,8 @@
  * ผลลัพธ์ที่เป็นไปได้:
  *   - เจอบัญชี active + มีบทบาท → ออก session token เหมือน adminLogin ทุกประการ
  *   - เจอบัญชี pending/rejected/ระงับ → บอกสถานะให้ชัด (ไม่ปล่อยเข้า)
- *   - ไม่เจอบัญชี → คืน needRegister + โปรไฟล์ LINE ให้หน้าเว็บเปิดฟอร์มสมัครที่ **ล็อก LINE id ที่ยืนยันแล้ว** ไว้ให้
+ *   - ไม่เจอบัญชี → คืน needRegister + **ตั๋วสมัคร (signupTicket)** ที่ผูกกับ LINE id ที่เพิ่งยืนยัน (อายุ 15 นาที)
+ *     หน้าเว็บเอาตั๋วนี้ไปสมัครต่อโดย **ไม่ต้องตั้งรหัสผ่าน** — ตัวตนถูกยืนยันโดย LINE แล้ว ตั้งรหัสอีกก็ซ้ำซ้อน
  *
  * **ต้องตั้งค่าใน LINE Developers Console**: Callback URL ของ LINE Login channel ต้องมี URL ของหน้าแอดมิน
  * ทั้ง production และ UAT ไม่งั้น LINE จะปฏิเสธตั้งแต่ขั้นที่ 1 (ข้อความ 400 invalid redirect_uri)
@@ -69,8 +70,18 @@ function adminLoginWithLine(payload) {
 
   var found = _adminByLineId(profile.userId);
   if (!found) {
-    return { success: false, needRegister: true, message: 'LINE นี้ยังไม่ได้ผูกกับบัญชีผู้ใช้ — ลงทะเบียนขอใช้งานก่อน',
+    // ตั๋วสมัคร: ผูกกับตัวตน LINE ที่เพิ่งยืนยัน ใช้ได้ครั้งเดียวภายใน 15 นาที (ดู registerAdminUserWithLine)
+    var ticket = Utilities.getUuid();
+    cache.put(SIGNUP_TICKET_PREFIX + ticket, JSON.stringify({
+      lineUserId: profile.userId, displayName: profile.displayName || '' }), 900);
+    return { success: false, needRegister: true, signupTicket: ticket,
+      message: 'LINE นี้ยังไม่ได้ผูกกับบัญชีผู้ใช้ — ลงทะเบียนขอใช้งานก่อน',
       lineProfile: { userId: profile.userId, displayName: profile.displayName || '' } };
+  }
+  // บัญชีที่ยังไม่มีชื่อ (เช่นสร้างจากสคริปต์) เติมชื่อจาก LINE ให้ — ไม่ทับชื่อที่ตั้งไว้แล้ว
+  if (!String(found.display_name || '').trim() && profile.displayName) {
+    centralUpdate('admin_users', found.record_id, { display_name: profile.displayName });
+    found.display_name = profile.displayName;
   }
   var gate = _adminAccountGate(found);
   if (gate) return gate;

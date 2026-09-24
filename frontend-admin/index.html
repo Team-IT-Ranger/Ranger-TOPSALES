@@ -410,14 +410,16 @@
     <h1>Ranger TOPSALES</h1>
     <p>เข้าสู่ระบบ Admin App</p>
     <div class="err" id="login-err"></div>
-    <div class="field"><label>Username</label><input id="login-user" autocomplete="username"></div>
-    <div class="field"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password"></div>
+    <div id="pw-login-fields" style="display:none">
+      <div class="field"><label>Username</label><input id="login-user" autocomplete="username"></div>
+      <div class="field"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password"></div>
+    </div>
     <button class="btn btn-line" id="line-login-btn" style="width:100%;margin-bottom:10px" onclick="doLineLogin()">
       <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="vertical-align:-3px;margin-right:7px"><path d="M8 1.6c3.6 0 6.5 2.3 6.5 5.2 0 1-.4 2-1.1 2.8-1 1.3-3.3 2.9-3.9 3.1-.5.2-.5-.1-.4-.4l.1-.6c0-.2 0-.4-.4-.5C5.6 10.9 3 9 3 6.8c0-2.9 2.4-5.2 5-5.2z"/></svg>เข้าสู่ระบบด้วย LINE</button>
-    <div class="or-line"><span>หรือ</span></div>
-    <button class="btn btn-primary" id="login-btn" style="width:100%" onclick="doLogin()">เข้าสู่ระบบ</button>
-    <p class="form-hint" style="margin-top:14px">ยังไม่มีบัญชี? <a href="#" onclick="showSignup();return false">ลงทะเบียนผู้ใช้ใหม่</a>
-      — เลือกสังกัดแล้วรอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน</p>
+    <p class="form-hint" style="margin-top:12px">ผู้ใช้ใหม่กดปุ่มนี้ได้เลย — ระบบยืนยันตัวตนกับ LINE แล้วให้เลือกสังกัด
+      จากนั้นรอผู้ดูแลอนุมัติ <b>ไม่ต้องตั้งรหัสผ่าน</b></p>
+    <p class="form-hint" style="margin-top:10px"><a href="#" id="pw-toggle" onclick="togglePasswordLogin();return false">เข้าสู่ระบบด้วยรหัสผ่าน (บัญชีเดิม)</a></p>
+    <button class="btn btn-primary" id="login-btn" style="width:100%;display:none" onclick="doLogin()">เข้าสู่ระบบ</button>
   </div>
 
   <!-- ลงทะเบียนเอง: ได้บัญชีสถานะ "รออนุมัติ" ยังไม่มีสิทธิ์ใดๆ จนกว่าผู้ดูแลจะอนุมัติ (ดู backend/29_admin_signup.gs) -->
@@ -426,14 +428,11 @@
     <p>กรอกข้อมูลแล้วรอผู้ดูแลระบบอนุมัติ — ผู้ดูแลจะเป็นผู้กำหนดสิทธิ์ให้</p>
     <div class="err" id="signup-err"></div>
     <div class="ok-msg" id="signup-ok" style="display:none"></div>
-    <div class="field"><label>ชื่อ-สกุล</label><input id="su-name"></div>
+    <div class="ok-msg" id="su-line-badge" style="display:none"></div>
+    <div class="field"><label>ชื่อผู้ใช้ <span class="unit">(ตั้งต้นจากชื่อใน LINE — แก้ได้)</span></label><input id="su-name"></div>
     <div class="field"><label>สังกัด</label>
       <select id="su-tenant"><option value="">บริษัทเจ้าของสินค้า</option></select>
     </div>
-    <div class="field"><label>LINE User ID <span class="unit">(ตัวตนกลางของทุกแอป)</span></label><input id="su-lineid" placeholder="U94dedbdb…" autocomplete="off">
-      <p class="form-hint">เปิดแอปมือถือของระบบด้วย LINE ของคุณหนึ่งครั้ง แล้วคัดลอกรหัสที่หน้า "รออนุมัติ" มาวางที่นี่</p></div>
-    <div class="field"><label>Username <span class="unit">(อย่างน้อย 4 ตัวอักษร)</span></label><input id="su-user" autocomplete="off"></div>
-    <div class="field"><label>รหัสผ่าน <span class="unit">(อย่างน้อย 8 ตัวอักษร)</span></label><input id="su-pass" type="password" autocomplete="new-password"></div>
     <button class="btn btn-primary" id="su-btn" style="width:100%" onclick="doSignup()">ส่งคำขอใช้งาน</button>
     <p class="form-hint" style="margin-top:14px"><a href="#" onclick="showLogin();return false">← กลับไปหน้าเข้าสู่ระบบ</a></p>
   </div>
@@ -1313,14 +1312,16 @@ async function handleLineCallback(){
       body: JSON.stringify({ action:'adminLoginWithLine', payload:{ code, redirectUrl: lineRedirectUrl() } }) });
     const data = await res.json();
     if (data.success) { finishLogin(data); return true; }
-    if (data.needRegister) {                       // ยังไม่มีบัญชี → สมัครโดยล็อก LINE id ที่ LINE ยืนยันแล้ว
+    if (data.needRegister) {                       // ยังไม่มีบัญชี → สมัครต่อด้วยตั๋วที่ผูกกับ LINE ที่ยืนยันแล้ว
+      SIGNUP_TICKET = data.signupTicket || '';
       showSignup();
-      const lid = document.getElementById('su-lineid');
-      lid.value = (data.lineProfile && data.lineProfile.userId) || '';
-      lid.readOnly = true;
-      document.getElementById('su-name').value = (data.lineProfile && data.lineProfile.displayName) || '';
+      const nm = (data.lineProfile && data.lineProfile.displayName) || '';
+      document.getElementById('su-name').value = nm;   // ชื่อใน LINE เป็นชื่อผู้ใช้ตั้งต้น
+      const badge = document.getElementById('su-line-badge');
+      badge.textContent = 'ยืนยันตัวตนกับ LINE เรียบร้อย' + (nm ? (' — ' + nm) : '') + ' · ไม่ต้องตั้งรหัสผ่าน';
+      badge.style.display = 'block';
       const ok = document.getElementById('signup-ok');
-      ok.textContent = 'ยืนยัน LINE เรียบร้อย — กรอกข้อมูลที่เหลือเพื่อขอใช้งาน'; ok.style.display = 'block';
+      ok.textContent = 'เหลือแค่เลือกสังกัดแล้วส่งคำขอ'; ok.style.display = 'block';
       return true;
     }
     errEl.textContent = data.message || 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ'; errEl.style.display = 'block';
@@ -1352,28 +1353,39 @@ async function loadSignupTenants(){
     sel.dataset.loaded = '1';
   } catch (e) { /* ไม่มีรายชื่อตัวแทนก็ยังสมัครเข้าบริษัทได้ */ }
 }
+/* สมัครใช้งาน = ยืนยันตัวตนกับ LINE แล้วเลือกสังกัด — ไม่มีรหัสผ่านให้ตั้ง (ตัวตนยืนยันด้วย LINE แล้ว)
+   SIGNUP_TICKET มาจาก adminLoginWithLine ตอนที่ LINE นั้นยังไม่มีบัญชีในระบบ (อายุ 15 นาที) */
+let SIGNUP_TICKET = '';
 async function doSignup(){
   const err = document.getElementById('signup-err'), ok = document.getElementById('signup-ok');
-  err.style.display = 'none'; ok.style.display = 'none';
-  const payload = { displayName: document.getElementById('su-name').value.trim(),
-    tenantId: document.getElementById('su-tenant').value,
-    lineUserId: document.getElementById('su-lineid').value.trim(),
-    username: document.getElementById('su-user').value.trim(),
-    password: document.getElementById('su-pass').value };
-  if (!payload.displayName || !payload.username || !payload.password || !payload.lineUserId) {
-    err.textContent = 'กรุณากรอกข้อมูลให้ครบ (รวม LINE User ID)'; err.style.display = 'block'; return;
+  err.style.display = 'none';
+  if (!SIGNUP_TICKET) {   // เข้าหน้านี้โดยไม่ได้ผ่าน LINE — พากลับไปกดปุ่ม LINE ก่อน
+    err.textContent = 'กรุณากด "เข้าสู่ระบบด้วย LINE" ก่อน เพื่อยืนยันตัวตน'; err.style.display = 'block'; return;
   }
+  const payload = { signupTicket: SIGNUP_TICKET, displayName: document.getElementById('su-name').value.trim(),
+    tenantId: document.getElementById('su-tenant').value };
+  if (!payload.displayName) { err.textContent = 'กรุณาระบุชื่อผู้ใช้'; err.style.display = 'block'; return; }
   const btn = document.getElementById('su-btn'); btn.disabled = true; btn.textContent = 'กำลังส่งคำขอ...';
   try {
     const res = await fetch(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ action:'registerAdminUser', payload }) });
+      body: JSON.stringify({ action:'registerAdminUserWithLine', payload }) });
     const r = await res.json();
     if (!r.success) { err.textContent = r.message || 'ลงทะเบียนไม่สำเร็จ'; err.style.display = 'block'; return; }
+    SIGNUP_TICKET = '';
     ok.textContent = r.message; ok.style.display = 'block';
-    ['su-name','su-user','su-pass','su-lineid'].forEach(id => document.getElementById(id).value = '');
+    btn.style.display = 'none';
   } catch (e) {
     err.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message; err.style.display = 'block';
   } finally { btn.disabled = false; btn.textContent = 'ส่งคำขอใช้งาน'; }
+}
+// สลับไปใช้ช่องรหัสผ่าน (บัญชีเดิมที่ยังไม่ได้ผูก LINE)
+function togglePasswordLogin(){
+  const box = document.getElementById('pw-login-fields'), btn = document.getElementById('login-btn'),
+        link = document.getElementById('pw-toggle');
+  const show = box.style.display === 'none';
+  box.style.display = show ? '' : 'none';
+  btn.style.display = show ? '' : 'none';
+  link.textContent = show ? 'ซ่อนการเข้าสู่ระบบด้วยรหัสผ่าน' : 'เข้าสู่ระบบด้วยรหัสผ่าน (บัญชีเดิม)';
 }
 
 async function doLogin(){

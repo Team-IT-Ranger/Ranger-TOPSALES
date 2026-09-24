@@ -143,6 +143,10 @@ function adminLogin(payload) {
   if (String(found.status) === ADMIN_STATUS_REJECTED) return { success: false, message: 'คำขอใช้งานของบัญชีนี้ถูกปฏิเสธ — ติดต่อผู้ดูแลระบบ' };
   if (String(found.status) !== ADMIN_STATUS_ACTIVE) return { success: false, message: 'บัญชีนี้ถูกระงับการใช้งาน' };
   if (!String(found.role_code || '').trim()) return { success: false, message: 'บัญชีนี้ยังไม่ได้กำหนดบทบาท — ติดต่อผู้ดูแลระบบ' };
+  // บัญชีที่สมัครผ่าน LINE ไม่มีรหัสผ่านโดยตั้งใจ (ตัวตนยืนยันด้วย LINE แล้ว ไม่ตั้งรหัสซ้ำซ้อน)
+  if (!String(found.password_hash || '').trim()) {
+    return { success: false, lineOnly: true, message: 'บัญชีนี้เข้าสู่ระบบด้วยปุ่ม "เข้าสู่ระบบด้วย LINE" เท่านั้น' };
+  }
   if (_hashPassword(password, found.salt) !== found.password_hash) return { success: false, message: 'รหัสผ่านไม่ถูกต้อง' };
 
   // ออก session ด้วยตัวเดียวกับการล็อกอินด้วย LINE (ensureSchemaCurrent อยู่ข้างใน) — ดู 30_admin_line_login.gs
@@ -194,6 +198,8 @@ function doPost(e) {
   }
   if (action === 'listActiveTenants') return _jsonOutput(listActiveTenants());
   if (action === 'registerAdminUser') return _jsonOutput(registerAdminUser(payload));
+  // สมัครด้วยตัวตน LINE ที่เพิ่งยืนยัน (ไม่ต้องตั้งรหัสผ่าน) — ดู 29_admin_signup.gs
+  if (action === 'registerAdminUserWithLine') return _jsonOutput(registerAdminUserWithLine(payload));
   if (action === 'adminLogin')      return _jsonOutput(adminLogin(payload));
   if (action === 'adminLogout')     return _jsonOutput(adminLogout(body.token));
 

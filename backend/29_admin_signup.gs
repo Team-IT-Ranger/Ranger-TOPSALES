@@ -176,3 +176,56 @@ function linkAdminLineId(session, payload) {
   return { success: true, message: lineUserId ? ('ผูก LINE กับบัญชี ' + target.username + ' แล้ว') : ('ยกเลิกการผูก LINE ของบัญชี ' + target.username + ' แล้ว'),
     user: { id: target.record_id, username: target.username, lineUserId: lineUserId } };
 }
+
+/* ═══════════ สมัครด้วยตัวตน LINE ที่ยืนยันแล้ว (ไม่มีรหัสผ่าน) ═══════════
+ * กติกาเจ้าของระบบ 2026-09-24: "ยืนยันตัวตนกับ LINE สำเร็จแล้ว ไม่จำเป็นต้องตั้งรหัสในระบบซ้ำซ้อน"
+ * ผู้ใช้กดปุ่มเข้าสู่ระบบด้วย LINE → ยังไม่มีบัญชี → ได้ signupTicket (อายุ 15 นาที ใช้ครั้งเดียว)
+ * → ส่งกลับมาที่นี่พร้อม "สังกัด" ที่เลือก → ได้บัญชีสถานะ pending ที่ผูก LINE id ไว้แล้ว รอผู้ดูแลอนุมัติ
+ * ชื่อผู้ใช้ตั้งต้น = ชื่อที่แสดงใน LINE (แก้ทีหลังได้) · username สร้างให้อัตโนมัติ ไม่ให้ซ้ำ
+ */
+var SIGNUP_TICKET_PREFIX = 'signupticket_';
+
+function _uniqueUsername(base, lineUserId) {
+  var slug = String(base || '').trim().replace(/\s+/g, '.').replace(/[^0-9A-Za-z\u0E00-\u0E7F._-]/g, '').slice(0, 24);
+  if (slug.length < 3) slug = 'line.' + String(lineUserId || '').substring(1, 9);
+  var taken = {};
+  centralObjects('admin_users').forEach(function(u) { taken[String(u.username).toLowerCase()] = true; });
+  if (!taken[slug.toLowerCase()]) return slug;
+  for (var i = 2; i < 100; i++) if (!taken[(slug + '.' + i).toLowerCase()]) return slug + '.' + i;
+  return slug + '.' + String(Date.now()).slice(-5);
+}
+
+/** payload: { signupTicket, tenantId ('' = บริษัทเจ้าของสินค้า), displayName? } */
+function registerAdminUserWithLine(payload) {
+  payload = payload || {};
+  var ticket = String(payload.signupTicket || '').trim();
+  if (!ticket) return { success: false, message: 'ไม่พบตั๋วลงทะเบียน กรุณากด "เข้าสู่ระบบด้วย LINE" ใหม่' };
+
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get(SIGNUP_TICKET_PREFIX + ticket);
+  if (!raw) return { success: false, message: 'ตั๋วลงทะเบียนหมดอายุแล้ว กรุณากด "เข้าสู่ระบบด้วย LINE" ใหม่อีกครั้ง' };
+  var tk; try { tk = JSON.parse(raw); } catch (e) { tk = null; }
+  if (!tk || !isLineUserId(tk.lineUserId)) return { success: false, message: 'ตั๋วลงทะเบียนไม่ถูกต้อง' };
+
+  var tenantId = String(payload.tenantId || '').trim();
+  if (tenantId && !_activeTenantRow(tenantId)) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
+  var displayName = String(payload.displayName || tk.displayName || '').trim();
+  if (!displayName) return { success: false, message: 'กรุณาระบุชื่อผู้ใช้' };
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { success: false, message: 'ระบบกำลังบันทึกข้อมูลอยู่ ลองใหม่อีกครั้ง' };
+  try {
+    var dup = _adminByLineId(tk.lineUserId);
+    if (dup) return { success: false, message: 'LINE นี้ผูกกับบัญชี "' + dup.username + '" อยู่แล้ว — กดเข้าสู่ระบบด้วย LINE ได้เลย' };
+    var username = _uniqueUsername(displayName, tk.lineUserId);
+    centralAppend('admin_users', {
+      record_id: centralNextId('admin_users'), username: username,
+      password_hash: '', salt: '',                    // ไม่มีรหัสผ่าน — เข้าระบบด้วย LINE เท่านั้น
+      display_name: displayName, role_code: '', tenant_id: tenantId,
+      status: ADMIN_STATUS_PENDING, created_at: nowStr(), line_user_id: tk.lineUserId
+    });
+    cache.remove(SIGNUP_TICKET_PREFIX + ticket);      // ตั๋วใช้ได้ครั้งเดียว
+    return { success: true, pending: true, username: username,
+      message: 'ลงทะเบียนแล้วในชื่อ "' + displayName + '" — รอผู้ดูแลระบบอนุมัติและกำหนดสิทธิ์ ครั้งต่อไปกดเข้าสู่ระบบด้วย LINE ได้เลย' };
+  } finally { lock.releaseLock(); }
+}

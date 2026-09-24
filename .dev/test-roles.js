@@ -31,10 +31,15 @@ const sheets = {
   ]
 };
 const sheetOf = n => { if (!sheets[n]) sheets[n] = []; return sheets[n]; };
+const CACHE = {};
 const ctx = {
   console, JSON, String, Number, Object, Array, Date, isFinite, parseInt, parseFloat, RegExp,
   Session: { getScriptTimeZone: () => 'Asia/Bangkok' }, Utilities: { formatDate: () => '2026-09-24', getUuid: () => 'uuid' },
-  CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
+  CacheService: { getScriptCache: () => ({
+    get: k => (CACHE[k] === undefined ? null : CACHE[k]),
+    put: (k, v) => { CACHE[k] = v; },
+    remove: k => { delete CACHE[k]; }
+  }) },
   LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
   SpreadsheetApp: { openById: () => { throw new Error('no'); } },
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => '' }) },
@@ -192,6 +197,29 @@ eq('บัญชีบริษัทกลางเลือกตัวแท�
 eq('บัญชีบริษัทกลางเลือกตัวแทนได้ (owner_admin)', ctx._effectiveTenantId(OWNER, { tenantId: 'T2' }), 'T2');
 eq('บทบาทฝั่งบริษัทที่สร้างเองก็เลือกตัวแทนได้ (สิทธิ์รายโมดูลยังตรวจตามบทบาทเดิม)',
    ctx._effectiveTenantId(OWNER_STAFF, { tenantId: 'T1' }), 'T1');
+
+console.log('\n── สมัครด้วยตัวตน LINE (ไม่ต้องตั้งรหัสผ่าน) ──');
+const LID3 = 'U33333333333333333333333333333333';
+CACHE['signupticket_TK1'] = JSON.stringify({ lineUserId: LID3, displayName: 'ชนรงค์ ธนัทกร' });
+r = ctx.registerAdminUserWithLine({ signupTicket: 'TK1', tenantId: 'T1' });
+const created = sheets.admin_users.find(u => u.line_user_id === LID3);
+eq('สมัครด้วยตั๋วสำเร็จ และได้สถานะรออนุมัติ', [r.success, r.pending], [true, true]);
+eq('  ชื่อผู้ใช้ตั้งต้นมาจากชื่อใน LINE', created.display_name, 'ชนรงค์ ธนัทกร');
+eq('  ไม่มีรหัสผ่านในระบบ (ตัวตนยืนยันด้วย LINE แล้ว)', [created.password_hash, created.salt], ['', '']);
+eq('  ผูก LINE id ที่ยืนยันแล้ว + ยังไม่มีบทบาท', [created.line_user_id, created.role_code, created.status], [LID3, '', 'pending']);
+eq('  username สร้างให้อัตโนมัติจากชื่อ', created.username.length > 2, true);
+fails('ตั๋วใช้ซ้ำไม่ได้', ctx.registerAdminUserWithLine({ signupTicket: 'TK1', tenantId: 'T1' }), /หมดอายุ|ไม่พบ/);
+fails('ไม่มีตั๋ว → ปฏิเสธ', ctx.registerAdminUserWithLine({ tenantId: 'T1' }), /ตั๋วลงทะเบียน/);
+CACHE['signupticket_TK2'] = JSON.stringify({ lineUserId: LID3, displayName: 'คนเดิม' });
+fails('LINE เดิมที่มีบัญชีแล้ว สมัครซ้ำไม่ได้', ctx.registerAdminUserWithLine({ signupTicket: 'TK2' }), /ผูกกับบัญชี/);
+CACHE['signupticket_TK3'] = JSON.stringify({ lineUserId: 'U44444444444444444444444444444444', displayName: 'x' });
+fails('เลือกสังกัดที่ปิดใช้งาน → ปฏิเสธ', ctx.registerAdminUserWithLine({ signupTicket: 'TK3', tenantId: 'TZ' }), /ไม่พบตัวแทน/);
+eq('ชื่อซ้ำกัน → username ไม่ชนกัน', (() => {
+  CACHE['signupticket_TK4'] = JSON.stringify({ lineUserId: 'U55555555555555555555555555555555', displayName: 'ชนรงค์ ธนัทกร' });
+  ctx.registerAdminUserWithLine({ signupTicket: 'TK4' });
+  const names = sheets.admin_users.filter(u => String(u.display_name) === 'ชนรงค์ ธนัทกร').map(u => u.username);
+  return names.length === 2 && names[0] !== names[1];
+})(), true);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
