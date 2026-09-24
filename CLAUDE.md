@@ -197,6 +197,11 @@ it fills the gaps around them.
 
 - Frontend (`frontend-admin/index.html`, `config.js`, `pricelist-parser.js`): just push to `UAT` (or
   `main`) — `.github/workflows/deploy-admin.yml` deploys automatically to `/admin-uat/` or `/admin/`.
+  **แก้ `config.js` เมื่อไหร่ ให้บัมป์ `?v=` ของ `<script src="config.js?v=…">` ใน `index.html` ด้วย** ทั้งสองแอป —
+  เบราว์เซอร์แคชไฟล์นี้ไว้ ผู้ใช้เดิมจะยังยิงไป backend ตัวเก่าจนกว่าแคชหมดอายุ (เจอมาแล้วตอนเปิด prod 2026-09-24)
+  อีกอาการของวันนั้น: บิลด์ของ Pages ที่ทริกเกอร์จาก push ขึ้น `main` ประกอบ `/mobile/` จาก main ได้ไฟล์ **เก่า**
+  (ทั้งที่ main มีคอมมิตแล้ว ส่วน `/mobile-uat/` จาก UAT ได้ไฟล์ใหม่) — แก้ด้วยการ push อีกครั้งให้บิลด์ใหม่
+  วิธีเช็คของจริงที่เสิร์ฟอยู่: `curl -s '<pages url>/mobile/config.js?cb=1' | grep …` อย่าดูจากเบราว์เซอร์อย่างเดียว
 - Backend: `.dev/push-backend.sh dev|uat|prod` pushes the `.gs` files via `clasp` (`prod` refuses with
   a message until `backend/.clasp.prod.json` exists), but that alone
   does **not** redeploy the live Web App URL — Apps Script libraries need an explicit new deployment
