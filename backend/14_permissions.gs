@@ -44,9 +44,16 @@ var MODULE_REGISTRY = [
  *      ไม่กระทบ เพราะ owner_admin ยังไม่มีสิทธิ์ (view/edit) ของโมดูลพวกนั้นใน role_permissions อยู่ดี
  *  - ไม่มีทั้งคู่ → null (ฝั่งบริษัท ทำงานกับข้อมูลกลางไม่ผูกตัวแทนใดตัวแทนหนึ่ง)
  */
+/**
+ * ตัวแทนที่คำขอนี้ "ทำงานอยู่บน" — ว่าง/null = ข้อมูลของบริษัทเจ้าของสินค้าเอง
+ *  - บัญชีที่สังกัดตัวแทน (session.tenant_id มีค่า) ถูกล็อกไว้ที่ตัวแทนตัวเองเสมอ ข้ามไปตัวแทนอื่นไม่ได้เด็ดขาด
+ *  - บัญชีของ "บริษัทกลาง" (tenant_id ว่าง — super_admin / owner_admin / บทบาทฝั่งบริษัทที่สร้างเอง)
+ *    เลือกเข้าไปทำงานแทนตัวแทนรายใดก็ได้ด้วย payload.tenantId (หน้าเว็บมีหน้าเลือกบริษัทให้ตั้งแต่ล็อกอิน)
+ *    สิทธิ์รายโมดูลยังถูกตรวจตามบทบาทของเขาตามปกติทุก action
+ */
 function _effectiveTenantId(session, payload) {
   if (session.tenant_id) return session.tenant_id;
-  if ((session.role_code === 'super_admin' || session.role_code === 'owner_admin') && payload && payload.tenantId) return String(payload.tenantId);
+  if (payload && payload.tenantId) return String(payload.tenantId);
   return null;
 }
 

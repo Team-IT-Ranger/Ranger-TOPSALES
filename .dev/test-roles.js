@@ -182,5 +182,16 @@ eq('  คิวว่างแล้ว', ctx.listPendingAdminUsers(OWNER, {}).d
 fails('ผู้ใช้ที่ไม่มีสิทธิ์ users_roles ดูคิวไม่ได้',
   ctx.listPendingAdminUsers({ adminUserId: '9', role_code: 'ไม่มีสิทธิ์', tenant_id: '' }, {}));
 
+console.log('\n── เข้าบริษัทไหนหลังล็อกอิน (_effectiveTenantId) ──');
+const OWNER_STAFF = { adminUserId: '8', role_code: 'owner_pricing', tenant_id: '' };   // บทบาทฝั่งบริษัทที่สร้างเอง
+eq('บัญชีของตัวแทน ถูกล็อกที่ตัวแทนตัวเอง แม้ส่ง tenantId อื่นมา',
+   ctx._effectiveTenantId(T1, { tenantId: 'T2' }), 'T1');
+eq('บัญชีบริษัทกลางไม่เลือกตัวแทน = ทำงานในนามบริษัท',
+   ctx._effectiveTenantId(OWNER, {}), null);
+eq('บัญชีบริษัทกลางเลือกตัวแทนได้ (super_admin)', ctx._effectiveTenantId(SUPER, { tenantId: 'T2' }), 'T2');
+eq('บัญชีบริษัทกลางเลือกตัวแทนได้ (owner_admin)', ctx._effectiveTenantId(OWNER, { tenantId: 'T2' }), 'T2');
+eq('บทบาทฝั่งบริษัทที่สร้างเองก็เลือกตัวแทนได้ (สิทธิ์รายโมดูลยังตรวจตามบทบาทเดิม)',
+   ctx._effectiveTenantId(OWNER_STAFF, { tenantId: 'T1' }), 'T1');
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

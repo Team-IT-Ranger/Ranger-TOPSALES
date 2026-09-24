@@ -443,7 +443,7 @@
 <div id="picker-screen">
   <div class="picker-card">
     <h1>เลือกบริษัทที่ต้องการใช้งาน</h1>
-    <p>คุณเป็น Ultra Admin — เลือกได้ทั้งข้อมูลกลางของบริษัทเจ้าของสินค้า หรือสวมสิทธิ์เข้าไปทำงานแทนตัวแทนรายใดรายหนึ่ง</p>
+    <p>บัญชีของคุณอยู่กับบริษัทเจ้าของสินค้า — เลือกทำงานกับข้อมูลของบริษัทเอง หรือเข้าไปดูแลตัวแทนจำหน่ายรายใดรายหนึ่ง</p>
     <div class="picker-list" id="picker-list">
       <button class="picker-row" onclick="pickOwnerContext()">
         <span class="mark" style="background:var(--blue)">TS</span>
@@ -1420,10 +1420,13 @@ function doLogout(){
 }
 
 /* หลัง login สำเร็จ (หรือโหลดหน้าใหม่ทั้งที่ยัง login ค้างอยู่) — super_admin (Ultra Admin) ต้องเลือกบริษัทก่อนเสมอ */
+/* ล็อกอินแล้วไปไหนต่อ (กติกาเจ้าของระบบ 2026-09-24):
+   - บัญชีที่สังกัดตัวแทน → เข้าบริษัทของตัวเองทันที ไม่ต้องเลือกอะไร
+   - บัญชีของบริษัทกลาง (ไม่มีสังกัด) → ขึ้นหน้าเลือกก่อน: ทำงานในนามบริษัท หรือเข้าไปดูแลตัวแทนรายใดรายหนึ่ง */
 function routeAfterAuth(){
   document.getElementById('login-screen').style.display = 'none';
   ACTIVE_TENANT_ID = null;
-  if (SESSION.roleCode === 'super_admin') showCompanyPicker();
+  if (!SESSION.tenantId) showCompanyPicker();
   else enterApp();
 }
 async function showCompanyPicker(){
@@ -1518,7 +1521,7 @@ async function enterApp(){
   document.getElementById('app-screen').style.display = 'block';
   const effTenant = EFFECTIVE_TENANT_ID();
   SCOPE = effTenant ? 'tenant' : 'owner';
-  document.getElementById('switch-company-btn').style.display = SESSION.roleCode === 'super_admin' ? '' : 'none';
+  document.getElementById('switch-company-btn').style.display = SESSION.tenantId ? 'none' : '';   // สลับบริษัทได้เฉพาะบัญชีของบริษัทกลาง
   document.getElementById('who-name').textContent = SESSION.displayName;
   document.getElementById('who-role').textContent = SESSION.roleCode;
   document.getElementById('who-tenant').textContent = effTenant ? ('· ' + effTenant) : '';
