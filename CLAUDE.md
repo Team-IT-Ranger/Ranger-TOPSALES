@@ -9,13 +9,13 @@ it fills the gaps around them.
 
 1. **All work happens on git branch `UAT`. Never commit to `main` directly.** `main` only moves via
    `git merge UAT --ff-only`, and only after the user explicitly approves what's on UAT.
-   **There is no production environment yet** (see the environments table in README.md) — nothing to
-   promote to until the user creates a production Apps Script project; deploys are never automated.
-2. **Environments are fully separate.** Three are planned, two exist: **dev** (`1iVJDVuc…`,
-   `backend/.clasp.dev.json`) — the system owner's own environment, this app does not use it;
-   **uat** (`1SDBJgSN…`, `backend/.clasp.uat.json`) — what we test on, `/admin-uat/`; and
-   **production — not created yet** (`/admin/` is deliberately closed, `BACKENDS.prod` empty).
-   Never let one environment's code or data touch another's Apps Script project or Sheet.
+   Production exists since 2026-09-24 (project `1BDLcQIB…`) but `/admin/` is still closed — `main`
+   has not been moved yet and must not be until the prod backend answers a real login.
+2. **Environments are fully separate.** **dev** (`1iVJDVuc…`, `backend/.clasp.dev.json`) — the system
+   owner's own environment, this app does not use it; **uat** (`1SDBJgSN…`, `backend/.clasp.uat.json`)
+   — what we test on, `/admin-uat/`; **prod** (`1BDLcQIB…`, `backend/.clasp.prod.json`, created
+   2026-09-24 and owned by `info@tnk.co.th` — the clasp account, so `clasp deploy` works there unlike
+   the other two). Never let one environment's code or data touch another's Apps Script project or Sheet.
 3. Verify things actually work before reporting success — the user tests live and expects real
    verification (UAT end-to-end test run, or a live browser check), not "should work now."
 4. After a toggle/status-style action, mutate the local JS cache and re-render — don't refetch the
@@ -82,6 +82,19 @@ it fills the gaps around them.
   แล้ว (ถ้าตัดใบเดิมออกด้วยจะหักซ้ำสองเท่า — เคยพลาดตรงนี้ เทสต์จับได้).
 - ยังไม่ได้ทำ: แก้ไข/ยกเลิกใบรับของ (GR) หลังลงบัญชีแล้ว, ตัดต้นทุนขาย (COGS 5100) ตอนขายออกจากคลังกลาง,
   งบกำไรขาดทุน/งบดุล (มีแต่งบทดลอง), ปิดงวดบัญชี, ภาษีหัก ณ ที่จ่าย, multi-currency.
+
+## เปิด production (2026-09-24)
+
+- โปรเจกต์ `salesranger-TOPSHOP-be(prod)` `1BDLcQIBqwJaGTDdUa0WD8s-w35oj8H_2q3AYiedTPzRz0kUnHoECViLR`
+  สร้างด้วย `clasp create-script` จากบัญชี `info@tnk.co.th` → push โค้ดครบ → `clasp create-deployment`
+  ได้ Web App `AKfycbwpUpxp…` (access `ANYONE_ANONYMOUS`, execute as ผู้ deploy) ใส่ใน `BACKENDS.prod` แล้ว
+- **ค้างอยู่**: ยิง POST เข้า exec URL ยังได้ HTTP 403 (หน้า Drive "ต้องมีสิทธิ์เข้าถึง") ทั้งที่ค่า
+  `entryPointConfig.access` ที่ Google เก็บไว้เป็น `ANYONE_ANONYMOUS` จริง — deployment ที่สร้างจาก API
+  โดยที่เจ้าของยังไม่เคยเปิดสคริปต์/ยอมรับสิทธิ์ ต้องให้เจ้าของเข้าไปยืนยันใน editor ก่อน
+  (หรือโดเมน `tnk.co.th` ปิดการแชร์สาธารณะไว้ ซึ่งถ้าใช่ต้องย้ายโปรเจกต์ไปโดเมน `thanatkorn.com` แทน)
+- `setupProductionEnvironment()` (`99_dev_tools.gs`) = ปุ่มเดียวจบสำหรับเจ้าของ: สร้าง Central Sheet ของ prod,
+  ตั้ง `ENV_NAME='prod'`, ลงชีต/ผังบัญชี, สร้างแอดมินคนแรก — ไม่คัดลอกข้อมูลจาก UAT (ข้อมูลทดสอบห้ามขึ้น prod)
+- ยังไม่ merge `UAT` → `main` จนกว่า backend prod จะตอบล็อกอินได้จริง (ไม่งั้น `/admin/` เปิดมาแล้วพัง)
 
 ## ตัวตนของแอปมือถือ (LINE ID token, added 2026-09-24)
 
@@ -194,20 +207,23 @@ it fills the gaps around them.
   it's the `.../macros/s/<deployment id>/exec` segment. Deploys are always done by the user
   themselves (Deploy → New version) per their standing instruction, not automated by Claude.
 - Apps Script project IDs: **dev = `1iVJDVuc…`** (`backend/.clasp.dev.json`, and still the default
-  `backend/.clasp.json`), **uat = `1SDBJgSN…`** (`backend/.clasp.uat.json`), **production = does not
-  exist yet**. The deployment `AKfycbzDLcX5…` lives in the **dev** project — it is NOT production,
+  `backend/.clasp.json`), **uat = `1SDBJgSN…`** (`backend/.clasp.uat.json`), **prod = `1BDLcQIB…`**
+  (`backend/.clasp.prod.json`, deployment `AKfycbwpUpxp…`, created 2026-09-24).
+  The deployment `AKfycbzDLcX5…` lives in the **dev** project — it is NOT production,
   whatever its description says. (This file claimed the opposite until 2026-09-23: the repo called dev
-  "production", so `/admin/` was wired to the dev backend and `push-backend.sh prod` pushed into dev.
-  Fixed — `BACKENDS.prod` is now empty and `/admin/` shows "ยังไม่เปิดใช้งานระบบจริง" with login disabled.)
+  "production", so `/admin/` was wired to the dev backend and `push-backend.sh prod` pushed into dev.)
   The dev project also holds two unrelated old `salesranger-isp` deployments; leave them alone.
 - `clasp` needs `clasp login` with a Google account that has edit access to the dev and UAT
   Apps Script projects. This is a per-machine login
   (`~/.clasprc.json`) — a fresh machine/account needs to run it again.
 - `clasp push` works for any account the project is shared with as Editor, but `clasp deploy` only
   works for accounts **in the same Google Workspace domain as the script owner**. On the dev
-  machine clasp is logged in as `info@tnk.co.th`, which can push to both projects but cannot
-  deploy — after `push-backend.sh uat` the user redeploys the UAT deployment (`AKfycbwsdg…`) from
+  machine clasp is logged in as `info@tnk.co.th`, which can push to dev/uat but cannot deploy them —
+  after `push-backend.sh uat` the user redeploys the UAT deployment (`AKfycbwsdg…`) from
   the Apps Script editor (Manage deployments → edit → New version).
+  **prod is different**: that project was created by `info@tnk.co.th` itself, so
+  `clasp create-deployment` / `clasp update-deployment <id>` work from here (still ask the user first —
+  a prod deploy is their call).
 
 ## Testing
 

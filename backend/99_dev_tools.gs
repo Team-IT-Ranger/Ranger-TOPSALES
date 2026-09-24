@@ -139,6 +139,36 @@ function setupUatEnvironment() {
   Logger.log('ขั้นต่อไป: Deploy → New deployment → Web app (Execute as: Me, Anyone) แล้วส่ง URL ที่ได้ให้ตั้งเป็น BACKEND_URL_UAT');
 }
 
+/**
+ * ตั้งค่าสภาพแวดล้อม production ครั้งแรก — รันใน Apps Script editor ของโปรเจกต์ production เท่านั้น
+ * (กดปุ่ม Run ครั้งแรกจะขึ้นหน้าต่างขออนุญาตสิทธิ์ Sheets/Drive/External request ให้กดยอมรับ)
+ * ทำให้ครบในครั้งเดียว: สร้าง Central Sheet ของ production → ตั้ง Script Properties → สร้างชีต/ผังบัญชี → สร้างแอดมินคนแรก
+ * ไม่คัดลอกข้อมูลจาก UAT มาให้ (ข้อมูลทดสอบห้ามขึ้น production) — สินค้า/ลูกค้า/ชุดราคาจริงค่อยนำเข้าทีหลัง
+ */
+function setupProductionEnvironment() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CENTRAL_SHEET_FILEID')) {
+    Logger.log('❌ หยุด: โปรเจกต์นี้ตั้ง CENTRAL_SHEET_FILEID ไว้แล้ว (ENV_NAME=' + props.getProperty('ENV_NAME') + ') — ไม่สร้างซ้ำ');
+    return;
+  }
+  props.setProperty('ENV_NAME', 'prod');               // ต้องตั้งก่อนสร้างไฟล์ ไม่งั้นไฟล์ไปลงโฟลเดอร์ผิด env
+  var ss = SpreadsheetApp.create('TOPSHOP — Central Sheet (production)');
+  props.setProperty('CENTRAL_SHEET_FILEID', ss.getId());
+  try { _moveFileTo(ss.getId(), _dbOwnerFolder()); } catch (e) { Logger.log('ย้าย Central Sheet เข้าโฟลเดอร์ db_prod/TNKI ไม่สำเร็จ: ' + e.message); }
+
+  setupCentralSheet();
+  createFirstSuperAdmin();
+
+  Logger.log('✅ production พร้อมใช้งานขั้นต้น');
+  Logger.log('   Central Sheet: ' + ss.getUrl());
+  Logger.log('   เข้าระบบครั้งแรก: admin / ChangeMe123!  ← เปลี่ยนรหัสผ่านทันทีหลังเข้าได้');
+  Logger.log('ยังต้องตั้ง Script Properties อีก (Project Settings → Script Properties):');
+  Logger.log('   LINE_CHANNEL_ID / LINE_CHANNEL_SECRET — ของ LINE Login channel ที่ใช้กับ LIFF ของ production');
+  Logger.log('   LIFF_ID           — LIFF app ที่ชี้มาที่ /mobile/');
+  Logger.log('   ENDPOINT_URL      — Web App URL ของ deployment production (ใช้เป็น redirect_uri ของ LINE Login)');
+  Logger.log('หมายเหตุ: ENV_NAME=prod แปลว่าแอปมือถือต้องยืนยัน LINE ID token เสมอ (ดู 27_line_auth.gs)');
+}
+
 // เรียกทดสอบว่าเชื่อม Central Sheet ได้ปกติหรือไม่
 function testCentralConnection() {
   var sheet = centralSheet('liff_users');
