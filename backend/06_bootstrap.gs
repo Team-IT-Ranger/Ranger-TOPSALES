@@ -97,8 +97,9 @@ function getAdminDashboard(session, payload) {
   var effTenantId = _effectiveTenantId(session, payload || {});
 
   if (effTenantId) {
+    // ฝั่งตัวแทนเปิดไฟล์ของตัวเองไฟล์เดียวอยู่แล้ว (ต้องใช้รายการบิลล่าสุดด้วย) จึงไม่ต้องพึ่ง rollup
     var orders = tenantObjects(effTenantId, 'sales_orders')
-      .filter(function(o) { return String(o.created_at).indexOf(today) === 0; });
+      .filter(function(o) { return _dOnly(o.created_at) === today && String(o.status) !== 'cancelled'; });
     var pendingSO = orders.filter(function(o) { return o.status === 'pending_delivery'; });
 
     var staff = centralObjects('liff_users').filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
@@ -126,15 +127,14 @@ function getAdminDashboard(session, payload) {
   }
 
   // ── owner_admin / super_admin: รวมทุกตัวแทนที่ active ──
+  // อ่านจากยอดสรุปรายวัน (sales_daily) ชีตเดียว — เดิมเปิดไฟล์ของทุกตัวแทน ใช้เวลา 16–18 วิ (ดู 31_sales_rollup.gs)
   var tenants = centralObjects('tenants').filter(function(t) { return isFlagOn(t.is_active); });
+  var daily = salesDailyMap(today);
   var totalBills = 0, totalRevenue = 0, perTenant = [];
   tenants.forEach(function(t) {
-    try {
-      var tOrders = tenantObjects(t.tenant_id, 'sales_orders').filter(function(o) { return String(o.created_at).indexOf(today) === 0; });
-      var rev = tOrders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0);
-      totalBills += tOrders.length; totalRevenue += rev;
-      perTenant.push({ tenantId: t.tenant_id, name: t.name, bills: tOrders.length, revenue: rev });
-    } catch (e) { /* ตัวแทนที่ sheet ยังไม่พร้อม ข้ามไปไม่ให้ dashboard พังทั้งหน้า */ }
+    var d = daily[String(t.tenant_id)] || { bills: 0, revenue: 0 };
+    totalBills += d.bills; totalRevenue += d.revenue;
+    perTenant.push({ tenantId: t.tenant_id, name: t.name, bills: d.bills, revenue: d.revenue });
   });
 
   return {

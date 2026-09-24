@@ -115,6 +115,8 @@ var ADMIN_ACTION_MAP = {
   deleteRole:             deleteRole,
 
   createTenant:           createTenant,
+  getAdminBootstrap:      getAdminBootstrap,
+  rebuildSalesDaily:      function(session) { return session.role_code === 'super_admin' ? rebuildSalesDaily() : { success: false, message: 'เฉพาะ super_admin' }; },
   migrateUnitCodes:       migrateUnitCodes,
   getDatabaseLayout:      getDatabaseLayout,
   organizeDatabaseFiles:  organizeDatabaseFiles,

@@ -62,6 +62,7 @@ function _migrateUnitColumn(sh, colName, dflt, labelCol) {
     if (String(newCode) !== String(oldCode)) changed++;
   }
   if (!changed) return 0;
+  try { centralInvalidate(sh.getName()); } catch (e) {}   // เขียนทั้งคอลัมน์แบบดิบ
   sh.getRange(2, c + 1, codes.length, 1).setValues(codes);
   if (lc !== -1) sh.getRange(2, lc + 1, labels.length, 1).setValues(labels);
   return changed;

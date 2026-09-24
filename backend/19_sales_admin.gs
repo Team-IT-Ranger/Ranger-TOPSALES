@@ -162,6 +162,8 @@ function recordSaleAdmin(session, payload) {
     sale_by: saleBy, lat: '', lng: '', map: '', note: noteParts.join(' · '), created_at: createdAt
   });
 
+  bumpSalesDaily(tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
+
   items.forEach(function(it) {
     tenantAppend(tenantId, 'order_items', {
       record_id: tenantNextId(tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
@@ -226,5 +228,6 @@ function cancelSalesOrderAdmin(session, payload) {
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][idCol]) === String(order.record_id)) { sh.getRange(i + 1, statusCol + 1).setValue('cancelled'); break; }
   }
+  bumpSalesDaily(tenantId, _dOnly(order.created_at), -1, -(parseFloat(order.total) || 0));   // หักออกจากยอดสรุปรายวัน
   return { success: true };
 }

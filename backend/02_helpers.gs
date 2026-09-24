@@ -10,6 +10,41 @@
  *         ส่วนข้อมูลธุรกรรมรายวันแยกไฟล์ต่อตัวแทน กันข้อมูลปนกันระหว่างตัวแทน
  */
 
+/* ═══════════ ชั้นอ่านข้อมูล: ทำไมต้องมีแคช (วัดจริง 2026-09-24) ═══════════
+ * ค่าคงที่ต่อ 1 คำขอของ Apps Script Web App ≈ 1.6 วินาที (แค่ routing ยังไม่แตะชีต)
+ * เปิด Spreadsheet 1 ไฟล์ (+อ่าน 1 ชีต) ≈ +1.5 วินาที · เปิดแอปครั้งหนึ่งเคยใช้ ~32 วินาที
+ * มาตรการ:
+ *   1) _objMemo — ภายในคำขอเดียวกัน อ่านชีตเดิมซ้ำไม่ต้องอ่านใหม่ (หน้าชุดราคาเคยอ่านซ้ำ 3 รอบ)
+ *   2) SHEET_CACHE_TABLES — ตารางแม่ที่เปลี่ยนน้อย แคชข้ามคำขอด้วย CacheService (TTL 5 นาที)
+ *      ล้างอัตโนมัติทุกครั้งที่เขียนผ่าน centralAppend/centralUpdate/centralAppendMany/deleteRowsWhere
+ *      ที่เขียนชีตแบบดิบ (getRange().setValue) ต้องเรียก centralInvalidate('<ชีต>') เองเสมอ
+ *   3) ห้ามแคช: ตารางเอกสาร/ธุรกรรม, ตัวนับเลขที่เอกสาร, liff_users, admin_users (ความถูกต้องสำคัญกว่าความเร็ว)
+ */
+var SHEET_CACHE_TTL = 300;
+var SHEET_CACHE_TABLES = {
+  products: 1, product_units: 1, product_groups: 1, customers: 1, customer_groups: 1,
+  tenants: 1, roles: 1, role_permissions: 1, company_profile: 1,
+  price_lists: 1, price_list_items: 1, price_list_bill_promos: 1,
+  distribution_channels: 1, payment_types: 1, discount_rules: 1,
+  vendors: 1, warehouses: 1, approval_flows: 1, approval_flow_steps: 1, gl_accounts: 1
+};
+var _objMemo = {};
+
+// วันที่จาก Sheets เป็น object Date — แปลงเป็นสตริงมาตรฐานของระบบก่อนเข้าแคช
+// เพื่อให้แถวที่มาจากแคชกับที่อ่านสดมีหน้าตาเหมือนกันเป๊ะ (ไม่งั้นการเรียงวันที่จะเพี้ยนเมื่อปนกัน)
+function _normalizeRowDates(rows) {
+  return rows.map(function(r) {
+    var o = {};
+    for (var k in r) o[k] = (r[k] instanceof Date) ? safeDateStr(r[k]) : r[k];
+    return o;
+  });
+}
+function _sheetCacheKey(name) { return 'sheet_' + name + '_v1'; }
+function centralInvalidate(name) {
+  delete _objMemo[name];
+  if (SHEET_CACHE_TABLES[name]) { try { CacheService.getScriptCache().remove(_sheetCacheKey(name)); } catch (e) {} }
+}
+
 // เก็บ Spreadsheet ที่เปิดแล้วไว้ในการทำงานครั้งนี้ กันเปิดซ้ำ (openById มีต้นทุน)
 var _ssCache = {};
 function _openSpreadsheet(fileId) {
@@ -33,9 +68,27 @@ function centralFileId() {
   return id;
 }
 function centralSheet(name) { return _getSheetByFileId(centralFileId(), name); }
-function centralObjects(name) { return sheetObjectsOf(centralSheet(name)); }
-function centralAppend(name, obj) { return appendRowToSheet(centralSheet(name), obj); }
-function centralUpdate(name, recordId, obj) { return updateRowInSheet(centralSheet(name), recordId, obj); }
+function centralObjects(name) {
+  if (_objMemo[name]) return _objMemo[name];
+  if (SHEET_CACHE_TABLES[name]) {
+    try {
+      var raw = CacheService.getScriptCache().get(_sheetCacheKey(name));
+      if (raw) { _objMemo[name] = JSON.parse(raw); return _objMemo[name]; }
+    } catch (e) { /* แคชมีปัญหา → อ่านชีตตามปกติ */ }
+  }
+  var rows = sheetObjectsOf(centralSheet(name));
+  if (SHEET_CACHE_TABLES[name]) {
+    rows = _normalizeRowDates(rows);
+    try {
+      var json = JSON.stringify(rows);
+      if (json.length < 90000) CacheService.getScriptCache().put(_sheetCacheKey(name), json, SHEET_CACHE_TTL);
+    } catch (e) { /* ใหญ่เกินหรือแคชล่ม — ไม่เป็นไร */ }
+  }
+  _objMemo[name] = rows;
+  return rows;
+}
+function centralAppend(name, obj) { centralInvalidate(name); return appendRowToSheet(centralSheet(name), obj); }
+function centralUpdate(name, recordId, obj) { centralInvalidate(name); return updateRowInSheet(centralSheet(name), recordId, obj); }
 function centralNextId(name) { return nextIdOf(centralSheet(name)); }
 
 // ── TENANT ──
@@ -81,6 +134,7 @@ function sheetObjectsOf(sh) {
 }
 
 function appendRowToSheet(sh, obj) {
+  try { centralInvalidate(sh.getName()); } catch (e) {}
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   var row = headers.map(function(h) { return obj[h] !== undefined ? obj[h] : ''; });
   sh.appendRow(row);
@@ -90,12 +144,13 @@ function appendRowToSheet(sh, obj) {
 // เติมหลายแถวรวดเดียว (setValues ครั้งเดียว) — นำเข้าไฟล์ทีละแถวด้วย appendRow ช้ามากจนใช้ไม่ได้
 function appendRowsToSheet(sh, objs) {
   if (!objs.length) return 0;
+  try { centralInvalidate(sh.getName()); } catch (e) {}
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   var rows = objs.map(function(o) { return headers.map(function(h) { return o[h] !== undefined ? o[h] : ''; }); });
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
   return rows.length;
 }
-function centralAppendMany(name, objs) { return appendRowsToSheet(centralSheet(name), objs); }
+function centralAppendMany(name, objs) { centralInvalidate(name); return appendRowsToSheet(centralSheet(name), objs); }
 
 /* ═══════════ ค่า TRUE/FALSE จาก Google Sheets ═══════════
  * กับดักที่เคยทำให้บั๊กเงียบมาก่อน: เราเขียนข้อความ 'TRUE' ลงชีต แต่ Sheets แปลงเป็น checkbox/boolean ให้เอง
@@ -120,6 +175,7 @@ function isNotOff(v) { return !isFlagOff(v); }
 
 // ลบทุกแถวที่คอลัมน์ colName = value (ลบจากล่างขึ้นบน ไม่ให้เลขแถวเลื่อน)
 function deleteRowsWhere(sh, colName, value) {
+  try { centralInvalidate(sh.getName()); } catch (e) {}
   var data = sh.getDataRange().getValues();
   var col = data[0].indexOf(colName); if (col === -1) return 0;
   var n = 0;
@@ -129,6 +185,7 @@ function deleteRowsWhere(sh, colName, value) {
 
 // อัปเดตบางฟิลด์ของแถวที่ record_id ตรงกับที่ระบุ (partial update ตาม key ที่ส่งมาใน obj)
 function updateRowInSheet(sh, recordId, obj) {
+  try { centralInvalidate(sh.getName()); } catch (e) {}
   var data = sh.getDataRange().getValues();
   var headers = data[0];
   var idCol = headers.indexOf('record_id');

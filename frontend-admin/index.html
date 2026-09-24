@@ -400,13 +400,13 @@
 </head>
 <body>
 <script src="config.js?v=20260924"></script>   <!-- ใส่ ?v= ทุกครั้งที่แก้ config.js: เบราว์เซอร์แคชไฟล์นี้ไว้ ถ้าไม่บัมป์ ผู้ใช้เดิมจะยังคุยกับ backend ตัวเก่า -->
-<script src="pricelist-parser.js"></script>
+<!-- pricelist-parser.js โหลดแบบ lazy ตอนเข้าหน้านำเข้าไฟล์ (ดู ensurePricelistParser) — ไม่ถ่วงการเปิดแอป -->
 <div id="env-banner" style="display:none"></div>
 
 <!-- ══════════ LOGIN ══════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="mascot-sr1.png?v=3" alt="Ranger TOPSALES" class="login-mascot">
+    <img src="mascot-sr1.png?v=4" alt="Ranger TOPSALES" class="login-mascot" width="236" height="236" fetchpriority="high" decoding="async">
     <h1>Ranger TOPSALES</h1>
     <p>เข้าสู่ระบบ Admin App</p>
     <div class="err" id="login-err"></div>
@@ -461,7 +461,7 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="sb-header">
-        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png?v=3" alt="SR"></span><span class="sb-logo-txt">TOPSALES</span></div>
+        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png?v=4" alt="SR" width="60" height="60" decoding="async"></span><span class="sb-logo-txt">TOPSALES</span></div>
         <button class="sb-ctrl-btn" id="pinBtn" title="ปักหมุดเมนูไว้" onclick="togglePin()">📌</button>
       </div>
       <div class="sb-company">
@@ -1431,12 +1431,23 @@ async function showCompanyPicker(){
   document.getElementById('picker-screen').style.display = 'flex';
   const list = document.getElementById('picker-tenants');
   list.innerHTML = '<div class="sub" style="padding:8px 4px">กำลังโหลดรายชื่อตัวแทน...</div>';
-  const [r, coR] = await Promise.all([callApi('listTenants', {}), callApi('getCompanyProfile', {})]);
-  if (coR && coR.success) { COMPANY = coR.company; applyCompanyName(); }
-  if (!r.success) { list.innerHTML = '<div class="sub" style="padding:8px 4px">'+esc(r.message)+'</div>'; return; }
+  const snap = snapLoad();
+  if (snap && snap.data) {                       // รายชื่อของเมื่อครู่ขึ้นก่อน แล้วค่อยรีเฟรช
+    if (snap.data.company) { COMPANY = snap.data.company; applyCompanyName(); }
+    if (snap.data.tenants) { tenantsCache = snap.data.tenants; renderPickerTenants(tenantsCache); }
+  }
+  const b = await callApi('getAdminBootstrap', {});
+  if (b && b.success) snapSave(b);
+  const r = (b && b.success) ? { success: true, data: b.tenants || [] } : { success: false, message: (b && b.message) || 'โหลดรายชื่อตัวแทนไม่สำเร็จ' };
+  if (b && b.success && b.company) { COMPANY = b.company; applyCompanyName(); }
+  if (!r.success) { if (!snap) list.innerHTML = '<div class="sub" style="padding:8px 4px">'+esc(r.message)+'</div>'; return; }
   tenantsCache = r.data;
   // ไม่ต้องโชว์ตัวแทน 'บ้าน' (HOUSE) ในลิสต์ เพราะมันคือบัญชีขายตรงของบริษัทเอง — เลือกจากปุ่มบริษัทด้านบนได้เลย
-  const pickable = r.data.filter(t => !t.isHouse);
+  renderPickerTenants(r.data);
+}
+function renderPickerTenants(rows){
+  const list = document.getElementById('picker-tenants');
+  const pickable = (rows || []).filter(t => !t.isHouse);
   list.innerHTML = pickable.length ? pickable.map(t =>
     '<button class="picker-row" onclick="pickTenantContext(\''+esc(t.tenantId)+'\')">' +
       '<span class="mark" style="background:var(--green)">'+esc(String(t.tenantId).slice(0,2))+'</span>' +
@@ -1459,6 +1470,35 @@ function backToPicker(){
   showCompanyPicker();
 }
 
+/* ══════════ เปิดแอปให้ "ปุ๊บติด" ══════════
+   วัดจริง 24 ก.ย. 2026: ค่าคงที่ของ Apps Script ≈ 1.6 วิ **ต่อคำขอ** — เดิมเปิดแอปยิง 4 คำขอเป็นทอดๆ รวม ~32 วิ
+   ตอนนี้ 1) วาดจาก snapshot ที่เก็บไว้ทันที (ผู้ใช้เห็นแอปพร้อมใช้ทันที ไม่ต้องรอเน็ต)
+          2) ยิง getAdminBootstrap คำขอเดียว ได้ สิทธิ์ + บริษัท + ตัวแทน + แดชบอร์ด แล้วค่อยอัปเดตทับ */
+const LS_SNAP = 'topshop_' + APP_ENV + '_snapshot';
+function snapKey(){ return (SESSION ? SESSION.username : '?') + '|' + (EFFECTIVE_TENANT_ID() || 'owner'); }
+function snapLoad(){
+  try { return (JSON.parse(localStorage.getItem(LS_SNAP) || '{}'))[snapKey()] || null; } catch (e) { return null; }
+}
+function snapSave(data){
+  try {
+    const all = JSON.parse(localStorage.getItem(LS_SNAP) || '{}');
+    all[snapKey()] = { ts: Date.now(), data: data };
+    localStorage.setItem(LS_SNAP, JSON.stringify(all));
+  } catch (e) { /* โควตาเต็ม/โหมดส่วนตัว — แค่ไม่มีของเก่าให้วาดก่อน */ }
+}
+/* เอาผลจาก getAdminBootstrap (หรือ snapshot) ไปใส่สถานะแอปแล้ววาดใหม่
+   fromSnapshot = true → เป็นข้อมูลของเมื่อครู่ ให้ขึ้นป้าย "กำลังอัปเดต…" ไว้ */
+function applyBootstrap(b, fromSnapshot){
+  if (!b) return;
+  if (b.permissions) MY_PERMS = { isSuper: !!b.isSuperAdmin, permissions: b.permissions };
+  if (b.roleLabel) { const el = document.getElementById('who-role'); if (el) el.textContent = b.roleLabel; }
+  if (b.company) { COMPANY = b.company; applyCompanyName(); }
+  if (b.tenants) tenantsCache = b.tenants;
+  renderNav();
+  if (b.dashboard) { renderDashboard(b.dashboard, fromSnapshot); if (!fromSnapshot) DASH_FRESH_TS = Date.now(); }
+}
+let DASH_FRESH_TS = 0, BOOT_IN_FLIGHT = false;   // BOOT_IN_FLIGHT = กำลังรอ getAdminBootstrap (ซึ่งมีแดชบอร์ดมาด้วย)   // แดชบอร์ดมากับ bootstrap แล้วเมื่อไหร่ — กันหน้าแรกยิง getAdminDashboard ซ้ำอีกคำขอ
+
 async function enterApp(){
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('picker-screen').style.display = 'none';
@@ -1479,15 +1519,15 @@ async function enterApp(){
   } else scopeLabelText = COMPANY.name || 'บริษัทเจ้าของสินค้า';
   document.getElementById('scopeLabel').textContent = scopeLabelText;
   renderNav();
+  BOOT_IN_FLIGHT = true;
   gotoView('dashboard');
   // โหลดสิทธิ์จริงของผู้ใช้ + ชื่อบริษัท แล้ววาดเมนู/ป้ายบริบทอีกรอบ (ครั้งแรกวาดแบบเห็นทุกเมนูไปก่อนเพื่อไม่ให้หน้าค้าง)
-  const [permR, coR] = await Promise.all([callApi('getMyPermissions', {}), callApi('getCompanyProfile', {})]);
-  if (permR && permR.success) {
-    MY_PERMS = { isSuper: !!permR.isSuperAdmin, permissions: permR.permissions || {} };
-    document.getElementById('who-role').textContent = permR.roleLabel || SESSION.roleCode;
-    renderNav();
-  }
-  if (coR && coR.success) { COMPANY = coR.company; applyCompanyName(); }
+  const snap = snapLoad();
+  if (snap) applyBootstrap(snap.data, true);          // ของเมื่อครู่ — เห็นทันที
+  const b = await callApi('getAdminBootstrap', {});   // สิทธิ์ + บริษัท + ตัวแทน + แดชบอร์ด ในคำขอเดียว
+  BOOT_IN_FLIGHT = false;
+  if (b && b.success) { applyBootstrap(b, false); snapSave(b); }
+  else if (!snap) { const d = document.getElementById('dash-date'); if (d) d.textContent = (b && b.message) || 'โหลดข้อมูลไม่สำเร็จ'; }
 }
 
 /* ไอคอนเมนูเป็น inline SVG เส้นบาง (เดิมใช้ emoji ซึ่งหน้าตาต่างกันทุกเครื่อง/ทุก OS และดูไม่เข้าชุดกับธีม minimal)
@@ -1768,11 +1808,19 @@ function gotoView(view){
 
 /* ══════════════ DASHBOARD ══════════════ */
 async function loadDashboard(){
-  document.getElementById('dash-date').textContent = 'กำลังโหลด...';
+  if (BOOT_IN_FLIGHT || Date.now() - DASH_FRESH_TS < 30000) return;   // มากับ getAdminBootstrap อยู่แล้ว   // เพิ่งได้มากับ getAdminBootstrap ไม่ต้องยิงซ้ำ
+  const snap = snapLoad();
+  if (snap && snap.data && snap.data.dashboard) renderDashboard(snap.data.dashboard, true);
+  else document.getElementById('dash-date').textContent = 'กำลังโหลด...';
   const r = await callApi('getAdminDashboard', {});
   if (!r.success) { toast(r.message, true); return; }
+  renderDashboard(r, false);
+  const s2 = snapLoad();                       // เก็บตัวเลขล่าสุดไว้ให้รอบหน้าเห็นทันที
+  if (s2 && s2.data) { s2.data.dashboard = r; snapSave(s2.data); }
+}
+function renderDashboard(r, fromSnapshot){
   const tz = new Date().toLocaleDateString('th-TH', {year:'numeric', month:'long', day:'numeric'});
-  document.getElementById('dash-date').textContent = tz;
+  document.getElementById('dash-date').textContent = tz + (fromSnapshot ? ' · กำลังอัปเดต…' : '');
 
   if (r.scope === 'tenant'){
     document.getElementById('dash-kpis').innerHTML =
@@ -2849,6 +2897,17 @@ function loadSheetJS(){
     document.head.appendChild(s);
   });
 }
+// ตัวอ่านใบราคา (pricelist-parser.js 16KB) โหลดตอนจะใช้จริงเท่านั้น — เปิดแอปครั้งแรกจะได้ไม่ต้องรอ
+function ensurePricelistParser(){
+  if (window.PricelistParser) return Promise.resolve(window.PricelistParser);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'pricelist-parser.js?v=20260924';
+    s.onload = () => resolve(window.PricelistParser);
+    s.onerror = () => reject(new Error('โหลดตัวอ่านใบราคาไม่สำเร็จ'));
+    document.head.appendChild(s);
+  });
+}
 const plNormCode = c => String(c).trim().toLowerCase();
 function plProductCodes(p){ return [p.product_code].concat(String(p.alias_codes||'').split(',')).map(plNormCode).filter(Boolean); }
 async function pliPickFile(input){
@@ -2856,8 +2915,8 @@ async function pliPickFile(input){
   const st = document.getElementById('pli-status');
   st.textContent = 'กำลังอ่านไฟล์...';
   try {
-    const [XL, buf] = await Promise.all([loadSheetJS(), file.arrayBuffer()]);
-    const res = PricelistParser.parse(XL, buf, { type: 'array' });
+    const [XL, buf, PP] = await Promise.all([loadSheetJS(), file.arrayBuffer(), ensurePricelistParser()]);
+    const res = PP.parse(XL, buf, { type: 'array' });
     const sheet = res.sheets.find(s => s.items.length);
     if (!sheet) { st.textContent = 'ไม่พบตารางราคาในไฟล์นี้ (ต้องเป็นรูปแบบ "ใบรายการขาย" ที่มีหัวราคาเงินสด/เครดิต)'; return; }
     PLI = { sheet, fileName: file.name };
@@ -2865,7 +2924,7 @@ async function pliPickFile(input){
     if (pr && pr.success) productsCache = pr.data;
     if (gr.success) { customerGroupsCache = gr.data; document.getElementById('pli-groups').innerHTML = gr.data.map(g => '<option value="'+esc(g.name)+'">').join(''); }
     // เดาชื่อ/กลุ่ม/ช่วงเวลาจากหัวไฟล์ (แก้ได้ก่อนนำเข้า)
-    const period = PricelistParser.parsePeriod(sheet.title) || {};
+    const period = (window.PricelistParser || PP).parsePeriod(sheet.title) || {};
     const inParen = (sheet.title.match(/\(([^)]*)\)/) || [])[1] || '';
     // ไม่มีวงเล็บ (เช่น "…กันยายน 2569  ขายให้ศูนย์") → ใช้ข้อความท้ายหลังปี พ.ศ.
     const afterYear = (sheet.title.match(/25\d\d\s+(.+)$/) || [])[1] || '';

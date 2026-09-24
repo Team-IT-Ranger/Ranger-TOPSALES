@@ -126,6 +126,8 @@ function recordSale(user, payload) {
     map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt
   });
 
+  bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
+
   items.forEach(function(it) {
     tenantAppend(user.tenantId, 'order_items', {
       record_id: tenantNextId(user.tenantId, 'order_items'), order_id: orderId, product_id: it.productId,

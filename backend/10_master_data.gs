@@ -74,6 +74,7 @@ function updateStaffAdmin(session, payload) {
       if (effTenantId && String(data[i][3]) !== String(effTenantId)) return { success: false, message: 'ไม่มีสิทธิ์แก้ไขพนักงานของตัวแทนอื่น' };
       if (payload.status) sh.getRange(i + 1, 5).setValue(payload.status);
       if (payload.role) sh.getRange(i + 1, 3).setValue(payload.role);
+      centralInvalidate('liff_users');   // เขียนแบบดิบ ไม่ผ่าน centralUpdate
       return { success: true };
     }
   }

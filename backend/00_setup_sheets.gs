@@ -111,6 +111,8 @@ var CENTRAL_SHEETS = {
   ar_receipt_allocations: ['record_id','receipt_id','invoice_id','amount'],
 
   // ตัวนับเลขที่เอกสารระดับบริษัท (เอกสารของตัวแทนใช้ doc_number_counters ใน tenant sheet — ดู 12_docnum.gs)
+  // ยอดขายรายวันต่อตัวแทน — แดชบอร์ดอ่านตารางนี้แทนการเปิดไฟล์ของทุกตัวแทน (ดู 31_sales_rollup.gs)
+  sales_daily: ['record_id','tenant_id','sale_date','bills','revenue','updated_at'],
   central_doc_counters: ['doc_type','period_key','last_number'],   // doc_type ของตัวแทนจะเป็น 'PR@TNKN' แยกเลขรันของใครของมัน
 
   // ข้อมูลบริษัทเจ้าของสินค้า (แถวเดียว record_id=1) — ใช้เป็นชื่อบริษัทที่โชว์ในตัวเลือกบริษัท หัวเอกสาร และใบกำกับภาษี
