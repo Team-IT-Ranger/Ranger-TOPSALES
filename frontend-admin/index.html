@@ -422,6 +422,8 @@
     <div class="field"><label>สังกัด</label>
       <select id="su-tenant"><option value="">บริษัทเจ้าของสินค้า</option></select>
     </div>
+    <div class="field"><label>LINE User ID <span class="unit">(ตัวตนกลางของทุกแอป)</span></label><input id="su-lineid" placeholder="U94dedbdb…" autocomplete="off">
+      <p class="form-hint">เปิดแอปมือถือของระบบด้วย LINE ของคุณหนึ่งครั้ง แล้วคัดลอกรหัสที่หน้า "รออนุมัติ" มาวางที่นี่</p></div>
     <div class="field"><label>Username <span class="unit">(อย่างน้อย 4 ตัวอักษร)</span></label><input id="su-user" autocomplete="off"></div>
     <div class="field"><label>รหัสผ่าน <span class="unit">(อย่างน้อย 8 ตัวอักษร)</span></label><input id="su-pass" type="password" autocomplete="new-password"></div>
     <button class="btn btn-primary" id="su-btn" style="width:100%" onclick="doSignup()">ส่งคำขอใช้งาน</button>
@@ -1291,10 +1293,11 @@ async function doSignup(){
   err.style.display = 'none'; ok.style.display = 'none';
   const payload = { displayName: document.getElementById('su-name').value.trim(),
     tenantId: document.getElementById('su-tenant').value,
+    lineUserId: document.getElementById('su-lineid').value.trim(),
     username: document.getElementById('su-user').value.trim(),
     password: document.getElementById('su-pass').value };
-  if (!payload.displayName || !payload.username || !payload.password) {
-    err.textContent = 'กรุณากรอกข้อมูลให้ครบ'; err.style.display = 'block'; return;
+  if (!payload.displayName || !payload.username || !payload.password || !payload.lineUserId) {
+    err.textContent = 'กรุณากรอกข้อมูลให้ครบ (รวม LINE User ID)'; err.style.display = 'block'; return;
   }
   const btn = document.getElementById('su-btn'); btn.disabled = true; btn.textContent = 'กำลังส่งคำขอ...';
   try {
@@ -1303,7 +1306,7 @@ async function doSignup(){
     const r = await res.json();
     if (!r.success) { err.textContent = r.message || 'ลงทะเบียนไม่สำเร็จ'; err.style.display = 'block'; return; }
     ok.textContent = r.message; ok.style.display = 'block';
-    ['su-name','su-user','su-pass'].forEach(id => document.getElementById(id).value = '');
+    ['su-name','su-user','su-pass','su-lineid'].forEach(id => document.getElementById(id).value = '');
   } catch (e) {
     err.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message; err.style.display = 'block';
   } finally { btn.disabled = false; btn.textContent = 'ส่งคำขอใช้งาน'; }
@@ -3096,7 +3099,8 @@ async function loadPendingAdminUsers(){
     .map(x => '<option value="'+esc(x.code)+'">'+esc(x.label)+(x.tenantId ? ' ('+esc(x.tenantId)+')' : '')+'</option>').join('');
   list.innerHTML = rows.map(u =>
     '<div class="activity-row"><span><b>'+esc(u.displayName)+'</b> <span class="mono-data">'+esc(u.username)+'</span>'+
-      ' · สังกัด '+esc(u.tenantName)+' · ขอเมื่อ '+esc(u.requestedAt)+'</span>'+
+      ' · สังกัด '+esc(u.tenantName)+' · LINE <span class="mono-data">'+esc((u.lineUserId||'-').slice(0,12))+'…</span>'+
+      ' · ขอเมื่อ '+esc(u.requestedAt)+'</span>'+
     '<span><select id="pa-role-'+u.id+'" style="margin-right:6px"><option value="">— เลือกสิทธิ์ —</option>'+roleOpts+'</select>'+
       '<button class="btn btn-sm btn-primary" onclick="approvePending('+u.id+')">อนุมัติ</button> '+
       '<button class="btn btn-sm" onclick="rejectPending('+u.id+')">ปฏิเสธ</button></span></div>').join('');

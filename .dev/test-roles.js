@@ -138,27 +138,43 @@ fails('ผู้ใช้ที่ไม่มีสิทธิ์ users_roles 
   ctx.listRolesWithPermissions({ adminUserId: '5', role_code: 'ไม่มีสิทธิ์', tenant_id: '' }, {}));
 
 console.log('\n-- ผู้ใช้ใหม่: ต้องเลือกสังกัดและรออนุมัติ --');
-r = ctx.registerAdminUser({ username: 'newbie', password: 'password123', displayName: 'ผู้ใช้ใหม่', tenantId: 'T1' });
+const LID1 = 'U11111111111111111111111111111111', LID2 = 'U22222222222222222222222222222222';
+fails('ไม่กรอก LINE User ID -> ปฏิเสธ', ctx.registerAdminUser({ username: 'noline', password: 'password123', displayName: 'x', tenantId: 'T1' }), /LINE User ID/);
+fails('LINE User ID ผิดรูปแบบ -> ปฏิเสธ', ctx.registerAdminUser({ username: 'badline', password: 'password123', displayName: 'x', tenantId: 'T1', lineUserId: '0812345678' }), /รูปแบบ/);
+r = ctx.registerAdminUser({ username: 'newbie', password: 'password123', displayName: 'ผู้ใช้ใหม่', tenantId: 'T1', lineUserId: LID1 });
 eq('สมัครแล้วได้สถานะรออนุมัติ', [r.success, r.pending], [true, true]);
 const pending = sheets.admin_users.find(u => u.username === 'newbie');
-eq('  บัญชีที่สมัครยังไม่มีบทบาทและสถานะ pending', [pending.status, pending.role_code, pending.tenant_id], ['pending', '', 'T1']);
-fails('สมัคร username ซ้ำ -> ปฏิเสธ', ctx.registerAdminUser({ username: 'NEWBIE', password: 'password123', displayName: 'ซ้ำ' }), /ลงทะเบียนไว้แล้ว|ถูกใช้แล้ว/);
-fails('รหัสผ่านสั้นเกินไป -> ปฏิเสธ', ctx.registerAdminUser({ username: 'shorty', password: '123', displayName: 'x' }), /8 ตัวอักษร/);
-fails('เลือกสังกัดที่ไม่มีจริง -> ปฏิเสธ', ctx.registerAdminUser({ username: 'ghost', password: 'password123', displayName: 'x', tenantId: 'NOPE' }), /ไม่พบตัวแทน/);
-fails('เลือกสังกัดที่ปิดใช้งานแล้ว -> ปฏิเสธ', ctx.registerAdminUser({ username: 'ghost2', password: 'password123', displayName: 'x', tenantId: 'TZ' }), /ไม่พบตัวแทน/);
-r = ctx.registerAdminUser({ username: 'ownerreq', password: 'password123', displayName: 'ขอเข้าบริษัท' });
+eq('  บัญชีที่สมัครยังไม่มีบทบาทและสถานะ pending + ผูก LINE id ไว้', [pending.status, pending.role_code, pending.tenant_id, pending.line_user_id], ['pending', '', 'T1', LID1]);
+fails('LINE id ซ้ำกับบัญชีอื่น -> ปฏิเสธ (1 LINE = 1 บัญชี)',
+  ctx.registerAdminUser({ username: 'another', password: 'password123', displayName: 'y', tenantId: 'T1', lineUserId: LID1 }), /ผูกกับบัญชี/);
+fails('สมัคร username ซ้ำ -> ปฏิเสธ', ctx.registerAdminUser({ username: 'NEWBIE', password: 'password123', displayName: 'ซ้ำ', lineUserId: LID2 }), /ลงทะเบียนไว้แล้ว|ถูกใช้แล้ว/);
+fails('รหัสผ่านสั้นเกินไป -> ปฏิเสธ', ctx.registerAdminUser({ username: 'shorty', password: '123', displayName: 'x', lineUserId: LID2 }), /8 ตัวอักษร/);
+fails('เลือกสังกัดที่ไม่มีจริง -> ปฏิเสธ', ctx.registerAdminUser({ username: 'ghost', password: 'password123', displayName: 'x', tenantId: 'NOPE', lineUserId: LID2 }), /ไม่พบตัวแทน/);
+fails('เลือกสังกัดที่ปิดใช้งานแล้ว -> ปฏิเสธ', ctx.registerAdminUser({ username: 'ghost2', password: 'password123', displayName: 'x', tenantId: 'TZ', lineUserId: LID2 }), /ไม่พบตัวแทน/);
+r = ctx.registerAdminUser({ username: 'ownerreq', password: 'password123', displayName: 'ขอเข้าบริษัท', lineUserId: LID2 });
 eq('สมัครเข้าบริษัทเจ้าของสินค้า (ไม่ระบุตัวแทน) ได้', [r.success, sheets.admin_users.find(u => u.username === 'ownerreq').tenant_id], [true, '']);
 
 console.log('\n-- คิวอนุมัติ --');
-eq('แอดมินตัวแทน T1 เห็นเฉพาะคำขอที่ขอเข้าตัวแทนตัวเอง',
-   ctx.listPendingAdminUsers(T1, {}).data.map(x => x.username), ['newbie']);
-eq('ฝั่งบริษัทเห็นทุกคำขอ', ctx.listPendingAdminUsers(OWNER, {}).data.map(x => x.username).sort(), ['newbie', 'ownerreq']);
-fails('แอดมินตัวแทนอื่น (T2) อนุมัติคำขอของ T1 ไม่ได้', ctx.approveAdminUser(T2, { id: pending.record_id, roleCode: 'tenant_admin' }), /ตัวแทนอื่น/);
-fails('อนุมัติโดยไม่เลือกบทบาท -> ปฏิเสธ', ctx.approveAdminUser(OWNER, { id: pending.record_id }), /เลือกบทบาท/);
+eq('แอดมินตัวแทนไม่เห็นคิวคำขอแอดมิน (อนุมัติพนักงานที่เมนูพนักงานขายแทน)',
+   ctx.listPendingAdminUsers(T1, {}).data.length, 0);
+eq('ฝั่งบริษัทเห็นเฉพาะคำขอเข้าบริษัท', ctx.listPendingAdminUsers(OWNER, {}).data.map(x => x.username), ['ownerreq']);
+eq('Ultra Admin เห็นทุกคำขอ', ctx.listPendingAdminUsers(SUPER, {}).data.map(x => x.username).sort(), ['newbie', 'ownerreq']);
+fails('แอดมินตัวแทนอนุมัติคำขอเป็นแอดมินตัวแทนไม่ได้ (ต้อง Ultra Admin)',
+  ctx.approveAdminUser(T1, { id: pending.record_id, roleCode: 'tenant_admin' }), /Ultra Admin/);
+fails('แอดมินบริษัทก็อนุมัติคำขอฝั่งตัวแทนไม่ได้',
+  ctx.approveAdminUser(OWNER, { id: pending.record_id, roleCode: 'tenant_admin' }), /Ultra Admin/);
+fails('อนุมัติโดยไม่เลือกบทบาท -> ปฏิเสธ', ctx.approveAdminUser(SUPER, { id: pending.record_id }), /เลือกบทบาท/);
 fails('อนุมัติเป็น super_admin ผ่านหน้าจอไม่ได้', ctx.approveAdminUser(SUPER, { id: pending.record_id, roleCode: 'super_admin' }), /เลือกบทบาท/);
-r = ctx.approveAdminUser(T1, { id: pending.record_id, roleCode: 'tenant_admin' });
-eq('แอดมินตัวแทนอนุมัติคนของตัวเองได้', [r.success, pending.status, pending.role_code], [true, 'active', 'tenant_admin']);
-fails('อนุมัติซ้ำ -> ปฏิเสธ', ctx.approveAdminUser(T1, { id: pending.record_id, roleCode: 'tenant_admin' }), /ดำเนินการไปแล้ว/);
+r = ctx.approveAdminUser(SUPER, { id: pending.record_id, roleCode: 'tenant_admin' });
+eq('Ultra Admin อนุมัติแอดมินของตัวแทนได้', [r.success, pending.status, pending.role_code], [true, 'active', 'tenant_admin']);
+fails('อนุมัติซ้ำ -> ปฏิเสธ', ctx.approveAdminUser(SUPER, { id: pending.record_id, roleCode: 'tenant_admin' }), /ดำเนินการไปแล้ว/);
+console.log('\n-- ผูก LINE id กับบัญชีที่มีอยู่ --');
+r = ctx.linkAdminLineId(SUPER, { username: 'admin', lineUserId: 'U94dedbdbc8da0378b4762e2e35a73c99' });
+eq('Ultra Admin ผูก LINE ให้บัญชีตัวเองได้',
+   [r.success, sheets.admin_users.find(u => u.username === 'admin').line_user_id], [true, 'U94dedbdbc8da0378b4762e2e35a73c99']);
+fails('ผูก LINE ที่ซ้ำกับบัญชีอื่น -> ปฏิเสธ', ctx.linkAdminLineId(SUPER, { username: 'owner', lineUserId: LID1 }), /ผูกกับบัญชี/);
+fails('คนที่ไม่ใช่ Ultra Admin ผูก LINE ไม่ได้', ctx.linkAdminLineId(OWNER, { username: 'owner', lineUserId: LID2 }), /Ultra Admin/);
+
 const req2 = sheets.admin_users.find(u => u.username === 'ownerreq');
 r = ctx.rejectAdminUser(OWNER, { id: req2.record_id });
 eq('ปฏิเสธคำขอได้ และสถานะเป็น rejected', [r.success, req2.status], [true, 'rejected']);

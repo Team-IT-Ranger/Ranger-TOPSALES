@@ -7,10 +7,29 @@
  *     จึงยังล็อกอินไม่ได้และไม่มีสิทธิ์ใดๆ จนกว่าผู้ดูแลจะกดอนุมัติพร้อมกำหนดบทบาท
  *
  * สถานะของ admin_users: active (ใช้งานได้) · pending (รออนุมัติ) · rejected (ถูกปฏิเสธ) · อื่นๆ = ถูกระงับ
- * การอนุมัติใช้ resolveAssignableRole() เหมือนตอนสร้างบัญชีเอง — แอดมินตัวแทนจึงอนุมัติได้เฉพาะคนที่ขอเข้า
- * ตัวแทนของตัวเอง และให้บทบาทเกินสิทธิ์ตัวเองไม่ได้ (ดู 26_roles.gs)
+ *
+ * **ทุกบัญชีผูกกับ LINE user id เสมอ** (กติกาเจ้าของระบบ 2026-09-24) — ใช้ LINE user id เป็นตัวตนกลางของทุกแอป
+ * บัญชีแอดมิน 1 บัญชี = LINE user id 1 ค่า (ซ้ำกันไม่ได้) และเป็นค่าเดียวกับที่ใช้เข้าแอปมือถือ
+ *
+ * สายอนุมัติตามลำดับชั้น:
+ *   - ขอเป็น "แอดมินของตัวแทนจำหน่าย" (สังกัดเป็นตัวแทน) → **Ultra Admin (super_admin) อนุมัติเท่านั้น**
+ *   - ขอเป็นผู้ใช้ของบริษัทเจ้าของสินค้า → Ultra Admin หรือแอดมินฝั่งบริษัทที่มีสิทธิ์ users_roles แก้ไข
+ *   - พนักงานของตัวแทน (ผู้ใช้แอปมือถือใน liff_users) → **แอดมินของตัวแทนนั้นอนุมัติเอง**
+ *     ที่เมนู "พนักงานขาย" (updateStaffAdmin ใน 10_master_data.gs) — ไม่ผ่านไฟล์นี้
  */
 var ADMIN_STATUS_ACTIVE = 'active', ADMIN_STATUS_PENDING = 'pending', ADMIN_STATUS_REJECTED = 'rejected';
+
+/** LINE user id ของจริงเป็น 'U' + hex 32 ตัว — กันพิมพ์ชื่อเล่น/เบอร์โทรมาใส่ */
+function isLineUserId(v) { return /^U[0-9a-f]{32}$/i.test(String(v || '').trim()); }
+
+/** บัญชีแอดมินที่ผูกกับ LINE id นี้ (ถ้ามี) */
+function _adminByLineId(lineUserId) {
+  var rows = centralObjects('admin_users');
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].line_user_id || '').toLowerCase() === String(lineUserId || '').toLowerCase()) return rows[i];
+  }
+  return null;
+}
 
 function _activeTenantRow(tenantId) {
   var rows = centralObjects('tenants');
@@ -36,6 +55,11 @@ function registerAdminUser(payload) {
   var tenantId = String(payload.tenantId || '').trim();
   if (tenantId && !_activeTenantRow(tenantId)) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
 
+  // ตัวตนกลางของทุกแอป — ต้องมีและต้องไม่ซ้ำกับบัญชีอื่น
+  var lineUserId = String(payload.lineUserId || '').trim();
+  if (!lineUserId) return { success: false, message: 'กรุณากรอก LINE User ID (ดูได้จากแอปมือถือของระบบ หน้า "รออนุมัติ")' };
+  if (!isLineUserId(lineUserId)) return { success: false, message: 'รูปแบบ LINE User ID ไม่ถูกต้อง (ต้องขึ้นต้นด้วย U ตามด้วยตัวอักษร/ตัวเลข 32 ตัว)' };
+
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return { success: false, message: 'ระบบกำลังบันทึกข้อมูลอยู่ ลองใหม่อีกครั้ง' };
   try {
@@ -46,12 +70,14 @@ function registerAdminUser(payload) {
         return { success: false, message: st === ADMIN_STATUS_PENDING ? 'username นี้ลงทะเบียนไว้แล้ว กำลังรอผู้ดูแลระบบอนุมัติ' : 'username นี้ถูกใช้แล้ว กรุณาใช้ชื่ออื่น' };
       }
     }
+    var dupLine = _adminByLineId(lineUserId);
+    if (dupLine) return { success: false, message: 'LINE นี้ผูกกับบัญชี "' + dupLine.username + '" อยู่แล้ว (1 LINE = 1 บัญชี)' };
     var salt = Utilities.getUuid();
     centralAppend('admin_users', {
       record_id: centralNextId('admin_users'), username: username,
       password_hash: _hashPassword(password, salt), salt: salt,
       display_name: displayName, role_code: '', tenant_id: tenantId,
-      status: ADMIN_STATUS_PENDING, created_at: nowStr()
+      status: ADMIN_STATUS_PENDING, created_at: nowStr(), line_user_id: lineUserId
     });
     return { success: true, pending: true,
       message: 'ลงทะเบียนแล้ว — รอผู้ดูแลระบบอนุมัติและกำหนดสิทธิ์ก่อนจึงจะเข้าใช้งานได้' };
@@ -59,11 +85,17 @@ function registerAdminUser(payload) {
 }
 
 // ── ฝั่งผู้ดูแล: คิวคำขอที่รออนุมัติ ──
+/**
+ * คำขอที่ผู้เรียก "อนุมัติได้จริง" เท่านั้น (ไม่โชว์สิ่งที่กดไม่ได้ให้สับสน)
+ *   super_admin → ทุกคำขอ · ฝั่งบริษัท → เฉพาะคำขอเข้าบริษัท · ฝั่งตัวแทน → ไม่มี (อนุมัติพนักงานที่เมนูพนักงานขาย)
+ */
 function _pendingScopeRows(session, payload) {
+  var isSuper = session && session.role_code === 'super_admin';
   var effTenantId = _effectiveTenantId(session, payload || {});
+  if (!isSuper && effTenantId) return [];
   return centralObjects('admin_users').filter(function(u) {
     if (String(u.status) !== ADMIN_STATUS_PENDING) return false;
-    return effTenantId ? String(u.tenant_id || '') === String(effTenantId) : true;
+    return isSuper ? true : String(u.tenant_id || '') === '';
   });
 }
 
@@ -76,6 +108,7 @@ function listPendingAdminUsers(session, payload) {
       tenantId: u.tenant_id || '',
       tenantName: u.tenant_id ? (tenantNames[String(u.tenant_id)] || u.tenant_id)
         : (typeof _companyName === 'function' ? _companyName() : 'บริษัทเจ้าของสินค้า'),   // ชื่อบริษัทจาก 25_company.gs
+      lineUserId: u.line_user_id || '',
       requestedAt: safeDateStr(u.created_at) };
   }) };
 }
@@ -88,9 +121,13 @@ function approveAdminUser(session, payload) {
   if (!target) return { success: false, message: 'ไม่พบคำขอนี้' };
   if (String(target.status) !== ADMIN_STATUS_PENDING) return { success: false, message: 'คำขอนี้ถูกดำเนินการไปแล้ว (สถานะ: ' + target.status + ')' };
 
+  // ขอเป็นแอดมินของตัวแทน = Ultra Admin เท่านั้นที่อนุมัติได้ (แอดมินตัวแทนอนุมัติได้แค่พนักงานของตัวเองในแอปมือถือ)
+  if (String(target.tenant_id || '') && session.role_code !== 'super_admin') {
+    return { success: false, message: 'คำขอเป็นแอดมินของตัวแทนจำหน่าย ต้องให้ Ultra Admin เป็นผู้อนุมัติ' };
+  }
   var effTenantId = _effectiveTenantId(session, payload);
-  if (effTenantId && String(target.tenant_id || '') !== String(effTenantId)) {
-    return { success: false, message: 'ไม่มีสิทธิ์อนุมัติคำขอของตัวแทนอื่น' };
+  if (effTenantId && session.role_code !== 'super_admin') {
+    return { success: false, message: 'ไม่มีสิทธิ์อนุมัติคำขอนี้' };
   }
   var roleCode = resolveAssignableRole(session, String(payload.roleCode || ''), String(target.tenant_id || ''));
   if (!roleCode) return { success: false, message: 'กรุณาเลือกบทบาทที่ถูกต้องให้ผู้ใช้รายนี้ (กำหนด super_admin ผ่านหน้าจอไม่ได้)' };
@@ -105,10 +142,37 @@ function rejectAdminUser(session, payload) {
   var target = _adminUserRow((payload || {}).id);
   if (!target) return { success: false, message: 'ไม่พบคำขอนี้' };
   if (String(target.status) !== ADMIN_STATUS_PENDING) return { success: false, message: 'คำขอนี้ถูกดำเนินการไปแล้ว' };
-  var effTenantId = _effectiveTenantId(session, payload || {});
-  if (effTenantId && String(target.tenant_id || '') !== String(effTenantId)) {
-    return { success: false, message: 'ไม่มีสิทธิ์ปฏิเสธคำขอของตัวแทนอื่น' };
+  if (String(target.tenant_id || '') && session.role_code !== 'super_admin') {
+    return { success: false, message: 'คำขอเป็นแอดมินของตัวแทนจำหน่าย ต้องให้ Ultra Admin เป็นผู้ดำเนินการ' };
   }
   centralUpdate('admin_users', target.record_id, { status: ADMIN_STATUS_REJECTED });
   return { success: true, message: 'ปฏิเสธคำขอของ ' + target.display_name + ' แล้ว' };
+}
+
+/**
+ * ผูก/แก้ LINE user id ของบัญชีแอดมิน — payload: { id | username, lineUserId }
+ * Ultra Admin เท่านั้น (ตัวตนกลางของทุกแอป เปลี่ยนมั่วไม่ได้) · ส่ง lineUserId ว่าง = ยกเลิกการผูก
+ */
+function linkAdminLineId(session, payload) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  payload = payload || {};
+  var target = payload.id ? _adminUserRow(payload.id) : null;
+  if (!target && payload.username) {
+    centralObjects('admin_users').forEach(function(u) {
+      if (String(u.username).toLowerCase() === String(payload.username).toLowerCase()) target = u;
+    });
+  }
+  if (!target) return { success: false, message: 'ไม่พบบัญชีผู้ใช้นี้' };
+
+  var lineUserId = String(payload.lineUserId || '').trim();
+  if (lineUserId) {
+    if (!isLineUserId(lineUserId)) return { success: false, message: 'รูปแบบ LINE User ID ไม่ถูกต้อง' };
+    var dup = _adminByLineId(lineUserId);
+    if (dup && String(dup.record_id) !== String(target.record_id)) {
+      return { success: false, message: 'LINE นี้ผูกกับบัญชี "' + dup.username + '" อยู่แล้ว (1 LINE = 1 บัญชี)' };
+    }
+  }
+  centralUpdate('admin_users', target.record_id, { line_user_id: lineUserId });
+  return { success: true, message: lineUserId ? ('ผูก LINE กับบัญชี ' + target.username + ' แล้ว') : ('ยกเลิกการผูก LINE ของบัญชี ' + target.username + ' แล้ว'),
+    user: { id: target.record_id, username: target.username, lineUserId: lineUserId } };
 }
