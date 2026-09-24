@@ -50,8 +50,9 @@ Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pa
 **เปิด production** — ลำดับที่ตกลงกันไว้ (2026-09-24)
 
 ทำจากบัญชี `channarong@thanatkorn.com` (เจ้าของ dev/uat และไฟล์ฐานข้อมูลทั้งหมด):
-1. สร้างโปรเจกต์ Apps Script เปล่าชื่อ `salesranger-TOPSHOP-be(prod)` → แชร์ให้ `info@tnk.co.th`
-   เป็น **Editor** (เครื่อง dev ใช้บัญชีนี้ `clasp push`) → ส่ง script id มาใส่ `backend/.clasp.prod.json`
+1. ✅ สร้างโปรเจกต์แล้ว: `1XObaZXuCcXcBn6j12tzXMj1VHcx1KIETNsso_zKPw1UGKaLrVvFrVv1c`
+   (ใส่ใน `backend/.clasp.prod.json` แล้ว) — **ยังต้องแชร์ให้ `info@tnk.co.th` เป็น Editor**
+   ไม่งั้น `clasp push` จากเครื่อง dev ขึ้นว่า "The caller does not have permission"
 2. `.dev/push-backend.sh prod` (ทำให้จากเครื่อง dev ได้)
 3. ใน editor: Run `setupProductionEnvironment()` (`99_dev_tools.gs`) หนึ่งครั้ง → กดยอมรับสิทธิ์
    Sheets / Drive / External request → ได้ Central Sheet ของ prod + ผังบัญชี + แอดมินคนแรก

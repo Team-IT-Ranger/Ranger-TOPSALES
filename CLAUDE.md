@@ -210,8 +210,11 @@ it fills the gaps around them.
   it's the `.../macros/s/<deployment id>/exec` segment. Deploys are always done by the user
   themselves (Deploy → New version) per their standing instruction, not automated by Claude.
 - Apps Script project IDs: **dev = `1iVJDVuc…`** (`backend/.clasp.dev.json`, and still the default
-  `backend/.clasp.json`), **uat = `1SDBJgSN…`** (`backend/.clasp.uat.json`), **prod = ยังไม่มี**
-  (จะสร้างจากบัญชี `channarong@thanatkorn.com` แล้วใส่ `backend/.clasp.prod.json`).
+  `backend/.clasp.json`), **uat = `1SDBJgSN…`** (`backend/.clasp.uat.json`), **prod = `1XObaZXu…`**
+  (`backend/.clasp.prod.json`, สร้างโดย `channarong@thanatkorn.com` 2026-09-24).
+  ค่าที่ต่างกันรายสภาพแวดล้อม **ไม่มีอยู่ในโค้ดเลย** — อยู่ใน Script Properties ของแต่ละโปรเจกต์ล้วนๆ
+  (`CENTRAL_SHEET_FILEID`, `ENV_NAME`, `LINE_CHANNEL_ID`, `LINE_CHANNEL_SECRET`, `LIFF_ID`,
+  `ENDPOINT_URL`, `DB_ROOT_FOLDER_ID`) และ property ไม่ติดไปกับการ copy โปรเจกต์ จึงต้องตั้งใหม่ทุกครั้ง.
   The deployment `AKfycbzDLcX5…` lives in the **dev** project — it is NOT production,
   whatever its description says. (This file claimed the opposite until 2026-09-23: the repo called dev
   "production", so `/admin/` was wired to the dev backend and `push-backend.sh prod` pushed into dev.)
