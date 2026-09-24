@@ -27,14 +27,15 @@ Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pa
 
 ## สภาพแวดล้อม — dev / UAT / production
 
-สถานะ ณ 2026-09-24: **สร้างโปรเจกต์ production แล้ว** (deploy ครั้งแรกเรียบร้อย) เหลือขั้นตอนที่ต้องทำในบัญชี
-เจ้าของโปรเจกต์เอง — ดูหัวข้อ "เปิด production" ด้านล่าง
+สถานะ ณ 2026-09-24: **production กำลังตั้งขึ้น** — เจ้าของระบบเลือกให้โปรเจกต์ prod อยู่กับบัญชี
+`channarong@thanatkorn.com` (บัญชีเดียวกับ dev/uat และเป็นเจ้าของไฟล์ฐานข้อมูลทั้งหมด) ดูขั้นตอนที่เหลือ
+ในหัวข้อ "เปิด production" ด้านล่าง · `/admin/` ยังปิดอยู่จนกว่า backend prod จะตอบล็อกอินได้จริง
 
 | | dev | UAT | production |
 |---|---|---|---|
 | Git branch | — (เจ้าของระบบใช้เอง) | `UAT` | `main` |
 | Admin App | — | `.../admin-uat/` (แถบแดง "UAT") | `.../admin/` — **ปิดไว้** (ยังไม่ต่อ backend ใดๆ) |
-| Apps Script | `salesranger-TOPSHOP-be(dev)` `1iVJDVuc…` (`backend/.clasp.dev.json`) | `salesranger-TOPSHOP-be(uat)` `1SDBJgSN…` (`backend/.clasp.uat.json`) | `salesranger-TOPSHOP-be(prod)` `1BDLcQIB…` (`backend/.clasp.prod.json`) — เจ้าของ: `info@tnk.co.th` |
+| Apps Script | `salesranger-TOPSHOP-be(dev)` `1iVJDVuc…` (`backend/.clasp.dev.json`) | `salesranger-TOPSHOP-be(uat)` `1SDBJgSN…` (`backend/.clasp.uat.json`) | รอสร้างจากบัญชี `channarong@thanatkorn.com` แล้วใส่ `backend/.clasp.prod.json` |
 | Database | Central Sheet ของ dev | Central Sheet ของ UAT (`setupUatEnvironment()`) + Tenant Sheet แยก | ยังไม่สร้าง — รัน `setupProductionEnvironment()` ครั้งเดียวใน editor |
 
 `frontend-admin/config.js` เลือก backend จาก URL: `/admin-uat/` และ localhost = UAT · นอกนั้น = prod
@@ -46,19 +47,23 @@ Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pa
 3. ทดสอบบน `/admin-uat/` จนผ่าน
 4. ห้าม commit ลง `main` ตรงๆ
 
-**เปิด production** — ทำไปแล้ว: สร้างโปรเจกต์ `1BDLcQIB…` (clasp, บัญชี `info@tnk.co.th`) · push โค้ดครบ ·
-deploy ครั้งแรกเป็น Web App (`AKfycbwpUpxp…`, access = ANYONE_ANONYMOUS, execute as = ผู้ deploy) ·
-ใส่ URL ลง `BACKENDS.prod` ของทั้งสอง frontend แล้ว
+**เปิด production** — ลำดับที่ตกลงกันไว้ (2026-09-24)
 
-เหลือขั้นตอนที่ต้องทำในบัญชีเจ้าของโปรเจกต์ (`info@tnk.co.th`) เพราะรันจากเครื่องมือภายนอกไม่ได้:
-1. เปิด `https://script.google.com/d/1BDLcQIBqwJaGTDdUa0WD8s-w35oj8H_2q3AYiedTPzRz0kUnHoECViLR/edit`
-   → Run `setupProductionEnvironment()` → กดยอมรับสิทธิ์ (Sheets / Drive / External request)
-   ฟังก์ชันนี้สร้าง Central Sheet ของ production, ตั้ง `ENV_NAME=prod`, สร้างชีต/ผังบัญชี และแอดมินคนแรก
-2. Deploy → Manage deployments → ตรวจว่า "Who has access" = **Anyone** (ตอน deploy ครั้งแรกจากภายนอก
-   Google ยังไม่เปิดให้คนนอกเข้า — ทดสอบแล้วได้ HTTP 403 จนกว่าจะยืนยันจากในบัญชีเจ้าของ)
-   ถ้าโดเมนไม่อนุญาตให้เปิดสาธารณะ ต้องย้ายโปรเจกต์ไปอยู่บัญชีเดียวกับ dev/uat (`thanatkorn.com`) แทน
-3. ตั้ง Script Properties: `LINE_CHANNEL_ID`, `LINE_CHANNEL_SECRET`, `LIFF_ID`, `ENDPOINT_URL`
-4. สร้าง LIFF app ของ production (Endpoint `.../mobile/`, scope `profile` + `openid`) แล้วใส่ `LIFF_IDS.prod`
-5. ทดสอบล็อกอิน `/admin/` แล้วค่อย merge `UAT` → `main` (ขั้นนี้ยังไม่ทำ — `/admin/` ยังปิดอยู่)
+ทำจากบัญชี `channarong@thanatkorn.com` (เจ้าของ dev/uat และไฟล์ฐานข้อมูลทั้งหมด):
+1. สร้างโปรเจกต์ Apps Script เปล่าชื่อ `salesranger-TOPSHOP-be(prod)` → แชร์ให้ `info@tnk.co.th`
+   เป็น **Editor** (เครื่อง dev ใช้บัญชีนี้ `clasp push`) → ส่ง script id มาใส่ `backend/.clasp.prod.json`
+2. `.dev/push-backend.sh prod` (ทำให้จากเครื่อง dev ได้)
+3. ใน editor: Run `setupProductionEnvironment()` (`99_dev_tools.gs`) หนึ่งครั้ง → กดยอมรับสิทธิ์
+   Sheets / Drive / External request → ได้ Central Sheet ของ prod + ผังบัญชี + แอดมินคนแรก
+   (`admin` / `ChangeMe123!` — เปลี่ยนรหัสทันทีหลังเข้าได้) และตั้ง `ENV_NAME='prod'` ให้เอง
+4. ตั้ง Script Properties ที่เหลือ: `LINE_CHANNEL_ID`, `LINE_CHANNEL_SECRET`, `LIFF_ID`, `ENDPOINT_URL`
+5. Deploy → New deployment → Web app (Execute as: **Me**, Who has access: **Anyone**) → ส่ง exec URL มา
+   ใส่ `BACKENDS.prod` ทั้ง `frontend-admin/config.js` และ `frontend-mobile/config.js`
+6. สร้าง LIFF app ของ production (Endpoint `.../mobile/`, scope `profile` + `openid`) → ใส่ `LIFF_IDS.prod`
+7. ทดสอบล็อกอินกับ backend prod จริง → ผ่านแล้วจึง `git merge UAT --ff-only` ขึ้น `main` (เปิด `/admin/`)
+
+หมายเหตุ: 24 ก.ย. 2026 เคยสร้างโปรเจกต์ prod ด้วยบัญชี `info@tnk.co.th` ไปก่อน (`1BDLcQIB…`) แต่เจ้าของระบบ
+เลือกให้ prod อยู่บัญชี `channarong@` แทน — โปรเจกต์นั้น **ห้ามนำมาใช้** และยังค้างอยู่ในไดรฟ์ของ `info@`
+(ลบได้ด้วย `clasp delete-script 1BDLcQIB…` เมื่อเจ้าของระบบสั่ง)
 
 `.dev/push-backend.sh` ไม่ส่ง `script_properties.gs` (มี secret) ขึ้นโปรเจกต์ใดทั้งสิ้น

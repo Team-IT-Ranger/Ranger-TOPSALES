@@ -4,7 +4,7 @@
 # สภาพแวดล้อมที่มีจริงตอนนี้ (2026-09-23):
 #   dev  → Apps Script "salesranger-TOPSHOP-be(dev)"  1iVJDVuc…  (backend/.clasp.dev.json) — ของเจ้าของระบบใช้เอง
 #   uat  → Apps Script "salesranger-TOPSHOP-be(uat)"  1SDBJgSN…  (backend/.clasp.uat.json) — ที่แอปนี้ใช้ทดสอบ
-#   prod → Apps Script "salesranger-TOPSHOP-be(prod)" 1BDLcQIB…  (backend/.clasp.prod.json) — ตัวจริง (สร้าง 24 ก.ย. 2026)
+#   prod → **รอสร้างจากบัญชี channarong@thanatkorn.com** แล้วใส่ script id ใน backend/.clasp.prod.json
 #
 # เดิมสคริปต์นี้ใช้คำว่า prod กับโปรเจกต์ 1iVJ ซึ่งที่จริงคือ dev — แก้แล้ว อย่าเอากลับ
 # ทุกสภาพแวดล้อม push จากโฟลเดอร์ชั่วคราว และ "ไม่ส่ง" script_properties.gs (มี secret) ขึ้นไป
