@@ -11,7 +11,7 @@
     uat:  'https://script.google.com/macros/s/AKfycbwsdgUjEe1RQFeuHQ3je92eok-ezYp2vVRL571eXNdRs1lfEAEXf1rSEIPFClb7GTYu7A/exec' /* TOPSHOP Backend UAT — ห้ามใส่ URL ของ production ตรงนี้ */
   };
   var LIFF_IDS = {
-    prod: '2010417493-GXAqTbSu',   /* Endpoint URL: https://team-it-ranger.github.io/salesranger-TOPSHOP/mobile/ */
+    prod: '2010417493-GXAqTbSu',   /* Endpoint URL: https://team-it-ranger.github.io/salesranger-TOPSHOP/mobile/ (เปิดใช้ 24 ก.ย. 2026) */
     uat:  '2010417493-pYb6cS8e'   /* Endpoint URL: https://team-it-ranger.github.io/salesranger-TOPSHOP/mobile-uat/ */
   };
   var h = location.hostname, p = location.pathname;
