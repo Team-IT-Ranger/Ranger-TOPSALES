@@ -253,6 +253,10 @@ it fills the gaps around them.
   สิทธิ์เกินของตัวเอง, ขอบเขตบทบาทของตัวแทน, `resolveAssignableRole`.
 - `node .dev/test-line-auth.js` — unit tests ของการยืนยัน LINE ID token (`27_line_auth.gs`) ด้วย UrlFetchApp จำลอง:
   token ของแอปอื่น/หมดอายุ/ปลอมต้องไม่ผ่าน, สวมรอย lineUserId คนอื่นไม่ได้, แคชไม่ยิงซ้ำ, ความเข้มตาม env.
+- `BACKEND_URL='<exec url>' node .dev/import-pricelists.js [--dry]` — นำเข้าใบราคาจริงจาก `reference/*.xlsx`
+  เข้าสภาพแวดล้อมไหนก็ได้ (ใช้ `pricelist-parser.js` ตัวเดียวกับหน้าเว็บ + SheetJS ใน `.dev/xlsx.full.min.js`)
+  ได้ชุดราคาสถานะ **ร่าง** เสมอ — เปิดใช้งานต้องกดเองในแอป · `--dry` = อ่านไฟล์อย่างเดียวไม่แตะ backend
+  (แทน `.dev/import-to-uat.js` เดิมที่ล็อกกับ UAT อย่างเดียว)
 - `UAT_URL='<uat exec url>' node .dev/uat-sale-e2e.js` — full end-to-end test against the live UAT
   backend (creates a throwaway test tenant/customer/staff, runs pricing + sales-order scenarios
   through both the mobile and admin action surfaces). Refuses to run against the production URL as a
@@ -309,6 +313,9 @@ Pending / not started:
   `openid` ใน LIFF app ก่อน ไม่งั้น `liff.getIDToken()` ว่างและแอปจะวนล็อกอิน
 - บัญชีของตัวแทนจำหน่าย (สมุดแยกของตัวแทนเอง) — ตอนนี้ตัวแทนซื้อของและเก็บสต็อกได้ แต่ไม่มีเจ้าหนี้/สมุดบัญชี
 - โอนย้าย/เบิกจ่ายสต็อกของตัวแทนแบบมีเอกสาร (เมนู 6.3/6.4 ฝั่งตัวแทนยังเป็น "เร็วๆ นี้")
+- **10505 (กาวดักแมลงวัน รุ่นแถมกาวสองหน้า): จำนวนต่อหีบไม่ตรงกันระหว่างใบราคา** — ใบร้านค้าระบุ 1x20x5x5
+  (500 ต่อหีบ) แต่ใบศูนย์ระบุ 1x20x5 (100 ต่อหีบ) · ตอนนำเข้า prod ระบบเก็บ 500 ไว้ตามใบแรกและเตือนไว้
+  ("ในระบบมี factor 500 แต่ใบราคาระบุ 100 (ไม่ได้แก้ให้)") — ต้องถามเจ้าของระบบว่าอันไหนถูก ก่อนเปิดใช้ชุดราคาศูนย์
 - Minor open items noted in code comments: 10505's base unit was imported as ชิ้น but is probably
   แผ่น/ซอง; a per-shop pack quantity cap (ไม่เกิน 4 แพ็ค) isn't implemented; free goods (ของแถม) are
   deferred per the user's own prioritization.
