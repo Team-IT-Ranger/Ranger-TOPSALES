@@ -114,7 +114,8 @@ function listAdminUsers(adminUser, payload) {
   return {
     success: true,
     data: rows.map(function(u) {
-      return { id: String(u.record_id), username: u.username, displayName: u.display_name, roleCode: u.role_code, tenantId: u.tenant_id || '', status: u.status, createdAt: safeDateStr(u.created_at) };
+      return { id: String(u.record_id), username: u.username, displayName: u.display_name, roleCode: u.role_code,
+        tenantId: u.tenant_id || '', status: u.status, lineUserId: u.line_user_id || '', createdAt: safeDateStr(u.created_at) };
     })
   };
 }

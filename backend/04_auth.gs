@@ -13,13 +13,15 @@
  */
 
 // ===================== LINE LOGIN =====================
-function buildLoginUrl(redirectUrl) {
+function buildLoginUrl(redirectUrl, state) {
   var cfg = getConfig();
+  // state: หน้าเว็บสุ่มมาเองแล้วเทียบตอน LINE ส่งกลับ (กันคนอื่นยัด callback ให้) — ไม่ส่งมาก็ใช้ค่าเดิมของระบบเก่า
+  var st = String(state || '').replace(/[^A-Za-z0-9_-]/g, '').substring(0, 64) || 'salesranger123';
   return 'https://access.line.me/oauth2/v2.1/authorize' +
     '?response_type=code' +
     '&client_id=' + cfg.LINE_CHANNEL_ID +
     '&redirect_uri=' + encodeURIComponent(redirectUrl) +
-    '&state=salesranger123' +
+    '&state=' + encodeURIComponent(st) +
     '&scope=profile%20openid';
 }
 
@@ -143,20 +145,8 @@ function adminLogin(payload) {
   if (!String(found.role_code || '').trim()) return { success: false, message: 'บัญชีนี้ยังไม่ได้กำหนดบทบาท — ติดต่อผู้ดูแลระบบ' };
   if (_hashPassword(password, found.salt) !== found.password_hash) return { success: false, message: 'รหัสผ่านไม่ถูกต้อง' };
 
-  ensureSchemaCurrent();   // สคีมา Central Sheet เปลี่ยนตามโค้ดใหม่ → ปรับให้เองครั้งเดียว (ดู 00_setup_sheets.gs)
-
-  var cfg = getConfig();
-  var token = Utilities.getUuid();
-  var session = {
-    adminUserId: String(found.record_id),
-    username: found.username,
-    displayName: found.display_name,
-    role_code: found.role_code,
-    tenant_id: found.tenant_id || ''
-  };
-  CacheService.getScriptCache().put('admin_session_' + token, JSON.stringify(session), cfg.ADMIN_SESSION_TTL_SEC);
-
-  return { success: true, token: token, displayName: found.display_name, roleCode: found.role_code, tenantId: found.tenant_id || '' };
+  // ออก session ด้วยตัวเดียวกับการล็อกอินด้วย LINE (ensureSchemaCurrent อยู่ข้างใน) — ดู 30_admin_line_login.gs
+  return _issueAdminSession(found);
 }
 
 function resolveAdminSession(token) {
@@ -190,7 +180,8 @@ function doPost(e) {
   var payload = body.payload || {};
 
   // ── 1) Public: ยังไม่มีตัวตน ──
-  if (action === 'lineLoginUrl')    return _jsonOutput({ success: true, url: buildLoginUrl(payload.redirectUrl || getConfig().ENDPOINT_URL) });
+  if (action === 'lineLoginUrl')    return _jsonOutput({ success: true, url: buildLoginUrl(payload.redirectUrl || getConfig().ENDPOINT_URL, payload.state) });
+  if (action === 'adminLoginWithLine') return _jsonOutput(adminLoginWithLine(payload));
   if (action === 'lineExchangeCode') return _jsonOutput(_lineExchangeCode(payload));
   // checkUser/registerUser ผูกกับตัวตน LINE → ยึด lineUid ที่ยืนยันแล้วเท่านั้น (กันสมัครสวมรอยคนอื่น)
   if (action === 'checkUser' || action === 'registerUser') {
