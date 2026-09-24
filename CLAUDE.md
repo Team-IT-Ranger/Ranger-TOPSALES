@@ -189,6 +189,11 @@ it fills the gaps around them.
   `backend/script_properties.gs.example`). The real values already live server-side in each Apps
   Script project's own Script Properties (Project Settings in the Apps Script editor); that's the
   place to look if they're ever needed again, not this file.
+- **GitHub repo ถูกเปลี่ยนชื่อเป็น `Team-IT-Ranger/Ranger-TOPSHOP` (24 ก.ย. 2026)** — URL ของ GitHub Pages
+  จึงเปลี่ยนตามเป็น `https://team-it-ranger.github.io/Ranger-TOPSHOP/{admin,admin-uat,mobile,mobile-uat}/`
+  (ของเดิม `/salesranger-TOPSHOP/…` ตอบ 404 แล้ว) · remote เดิมยัง push ได้เพราะ GitHub redirect ให้ แต่ควรตั้งใหม่ด้วย
+  `git remote set-url origin https://github.com/Team-IT-Ranger/Ranger-TOPSHOP.git` · **Endpoint URL ของ LIFF app
+  ทั้งสองตัวใน LINE Developers Console ต้องแก้ตามด้วย** ไม่งั้นแอปมือถือเปิดไม่ขึ้น
 - Two clones of this repo live on the dev machine, both active and both fast-forward-only from
   GitHub: `G:\Shared drives\AppSpace\Ranger-TOPSHOP` (Google Shared Drive — the working copy; folder
   renamed from `salesranger-TOPSHOP` on 2026-09-23, older notes use the old name) and
