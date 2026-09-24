@@ -2,7 +2,8 @@
    ENV ตัดสินจาก URL ที่เปิด: /mobile-uat/ และ localhost = 'uat' (ห้ามแตะข้อมูลจริง), นอกนั้น = 'prod'
    BACKENDS ต้องตรงกับ frontend-admin/config.js — backend ตัวเดียวกัน (Mobile ใช้ action กลุ่ม ACTION_MAP ใน 05_router.gs)
    LIFF_IDS: สร้าง LIFF app แยกต่อสภาพแวดล้อมใน LINE Developers Console (Endpoint URL = .../mobile-uat/ กับ .../mobile/)
-             ยังว่าง = เปิดในเบราว์เซอร์ธรรมดาได้เฉพาะโหมดทดสอบบน UAT (?devLineUserId=...) — production ใช้งานไม่ได้จนกว่าจะใส่ */
+             ทั้งสอง env ใส่ครบแล้ว (24 ก.ย. 2026) · ทั้งคู่อยู่ใต้ LINE Login channel เดียวกัน 2010417493
+             ต้องติ๊ก scope openid ของ LIFF ทั้งสองตัว ไม่งั้น liff.getIDToken() ว่างและ backend จะไม่ให้ผ่าน */
 (function(){
   var BACKENDS = {
     /* salesranger-TOPSHOP-be(prod) — backend ตัวเดียวกับที่ /admin/ ใช้ */
@@ -10,9 +11,7 @@
     uat:  'https://script.google.com/macros/s/AKfycbwsdgUjEe1RQFeuHQ3je92eok-ezYp2vVRL571eXNdRs1lfEAEXf1rSEIPFClb7GTYu7A/exec' /* TOPSHOP Backend UAT — ห้ามใส่ URL ของ production ตรงนี้ */
   };
   var LIFF_IDS = {
-    /* ยังว่าง: ต้องสร้าง LIFF app ของ production (Endpoint = .../mobile/) ใน LINE Developers Console ก่อน
-       ว่างอยู่ = เปิด /mobile/ แล้วขึ้นข้อความว่ายังไม่ได้ตั้งค่า LIFF ID (ไม่พัง ไม่แตะข้อมูล) */
-    prod: '',
+    prod: '2010417493-GXAqTbSu',   /* Endpoint URL: https://team-it-ranger.github.io/salesranger-TOPSHOP/mobile/ */
     uat:  '2010417493-pYb6cS8e'   /* Endpoint URL: https://team-it-ranger.github.io/salesranger-TOPSHOP/mobile-uat/ */
   };
   var h = location.hostname, p = location.pathname;
