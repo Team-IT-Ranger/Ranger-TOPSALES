@@ -114,7 +114,7 @@ it fills the gaps around them.
   · เจอแต่ pending/rejected/ระงับ → บอกสถานะ · ไม่เจอ → `needRegister` + โปรไฟล์ LINE แล้วหน้าเว็บเปิดฟอร์มสมัคร
     โดย**ล็อกช่อง LINE User ID ที่ยืนยันแล้ว**ไว้ให้ (สมัครทางนี้จึงเป็นตัวตนจริง ไม่ใช่พิมพ์เอง)
 - **ต้องตั้ง Callback URL ใน LINE Login channel** ให้ตรงกับ `redirect_uri` ที่หน้าเว็บส่ง (origin + path ของหน้า
-  โดยตัด `index.html` ทิ้ง): `https://team-it-ranger.github.io/Ranger-TOPSHOP/admin/` และ `.../admin-uat/`
+  โดยตัด `index.html` ทิ้ง): `https://team-it-ranger.github.io/Ranger-TOPSALES/admin/` และ `.../admin-uat/`
   ไม่ตรง = LINE ตอบ 400 invalid redirect_uri ตั้งแต่ขั้นแรก
 - การกรอก LINE User ID เองในฟอร์มสมัคร (ไม่ผ่านปุ่ม LINE) ยังทำได้อยู่ — ตัวตนตรงนั้นไม่ได้ยืนยัน
   ใช้การอนุมัติของผู้ดูแลเป็นด่านตรวจ
@@ -222,11 +222,18 @@ it fills the gaps around them.
   `backend/script_properties.gs.example`). The real values already live server-side in each Apps
   Script project's own Script Properties (Project Settings in the Apps Script editor); that's the
   place to look if they're ever needed again, not this file.
-- **GitHub repo ถูกเปลี่ยนชื่อเป็น `Team-IT-Ranger/Ranger-TOPSHOP` (24 ก.ย. 2026)** — URL ของ GitHub Pages
-  จึงเปลี่ยนตามเป็น `https://team-it-ranger.github.io/Ranger-TOPSHOP/{admin,admin-uat,mobile,mobile-uat}/`
-  (ของเดิม `/salesranger-TOPSHOP/…` ตอบ 404 แล้ว) · remote เดิมยัง push ได้เพราะ GitHub redirect ให้ แต่ควรตั้งใหม่ด้วย
-  `git remote set-url origin https://github.com/Team-IT-Ranger/Ranger-TOPSHOP.git` · **Endpoint URL ของ LIFF app
-  ทั้งสองตัวใน LINE Developers Console ต้องแก้ตามด้วย** ไม่งั้นแอปมือถือเปิดไม่ขึ้น
+- **ชื่อแอปอย่างเป็นทางการคือ "Ranger TOPSALES"** (เดิม "SalesRanger TOPSHOP" — เปลี่ยน 24 ก.ย. 2026)
+  ข้อความในแอปทั้งสองตัว/README/ชื่อไฟล์ฐานข้อมูลที่ "สร้างใหม่ต่อจากนี้" ใช้ชื่อใหม่แล้ว · ของที่ยังชื่อเดิมโดยตั้งใจ
+  เพราะเป็นชื่อทรัพยากรจริงบน Google: โปรเจกต์ Apps Script (`salesranger-TOPSHOP-be(uat)` ฯลฯ), Central Sheet
+  ที่สร้างไปแล้ว, ไฟล์ตัวแทนเดิม (`salesranger-TOPSHOP-<รหัส>`), โฟลเดอร์ Drive และคีย์ `localStorage` (`topshop_*`
+  — เปลี่ยนแล้วผู้ใช้จะหลุดล็อกอินทุกคน) · จะเปลี่ยนชื่อพวกนี้เมื่อไหร่ก็ได้ ไม่มีโค้ดไหนค้นหาด้วยชื่อ
+- **GitHub repo เปลี่ยนชื่อ 2 ครั้ง** — ปัจจุบัน (final) คือ `Team-IT-Ranger/Ranger-TOPSALES`
+  URL ของ GitHub Pages จึงเป็น `https://team-it-ranger.github.io/Ranger-TOPSALES/{admin,admin-uat,mobile,mobile-uat}/`
+  (ชื่อเก่าทั้ง `/salesranger-TOPSHOP/` และ `/Ranger-TOPSHOP/` ตอบ 404) · **ทุกครั้งที่เปลี่ยนชื่อรีโปต้องตามแก้ 4 ที่**:
+  1) `git remote set-url origin https://github.com/Team-IT-Ranger/Ranger-TOPSALES.git`
+  2) Endpoint URL ของ LIFF app ทั้ง 2 ตัวใน LINE Developers Console (ไม่งั้นแอปมือถือเปิดไม่ขึ้น)
+  3) Callback URL ของ LINE Login channel สำหรับหน้าแอดมิน (ไม่งั้นปุ่ม "เข้าสู่ระบบด้วย LINE" ตอบ 400)
+  4) ลิงก์ที่แจกให้ทีมใช้งาน
 - Two clones of this repo live on the dev machine, both active and both fast-forward-only from
   GitHub: `G:\Shared drives\AppSpace\Ranger-TOPSHOP` (Google Shared Drive — the working copy; folder
   renamed from `salesranger-TOPSHOP` on 2026-09-23, older notes use the old name) and

@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SalesRanger TOPSHOP — Admin</title>
+<title>Ranger TOPSALES — Admin</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
-  /* ===== TOPSHOP theme — น้ำเงิน/เขียวพาสเทลเป็นหลัก ตัดด้วยแดง/ดำพาสเทล
+  /* ===== TOPSALES theme — น้ำเงิน/เขียวพาสเทลเป็นหลัก ตัดด้วยแดง/ดำพาสเทล
      โครง sidebar (group/subgroup/action, ยืดหด, ปักหมุด, แผงลอย) คัดลอกจาก Hippo Village ===== */
   :root{
     /* พาเลตต์ light/minimal (ปรับโฉม 2026-09-23): พื้นขาวอมฟ้าจาง ตัวอักษรโทนกรมท่า ฟ้าเดียวเป็นสีหลัก
@@ -406,8 +406,8 @@
 <!-- ══════════ LOGIN ══════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="mascot-sr1.png?v=3" alt="SalesRanger" class="login-mascot">
-    <h1>SalesRanger TOPSHOP</h1>
+    <img src="mascot-sr1.png?v=3" alt="Ranger TOPSALES" class="login-mascot">
+    <h1>Ranger TOPSALES</h1>
     <p>เข้าสู่ระบบ Admin App</p>
     <div class="err" id="login-err"></div>
     <div class="field"><label>Username</label><input id="login-user" autocomplete="username"></div>
@@ -461,7 +461,7 @@
 
     <aside class="sidebar" id="sidebar">
       <div class="sb-header">
-        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png?v=3" alt="SR"></span><span class="sb-logo-txt">TOPSHOP</span></div>
+        <div class="sb-logo"><span class="sb-logo-mark"><img src="mascot-sr1.png?v=3" alt="SR"></span><span class="sb-logo-txt">TOPSALES</span></div>
         <button class="sb-ctrl-btn" id="pinBtn" title="ปักหมุดเมนูไว้" onclick="togglePin()">📌</button>
       </div>
       <div class="sb-company">
@@ -478,7 +478,7 @@
 
     <div class="main-area">
       <header class="topbar">
-        <div class="crumb">TOPSHOP Admin / <b id="crumb-current">ภาพรวม</b></div>
+        <div class="crumb">TOPSALES Admin / <b id="crumb-current">ภาพรวม</b></div>
         <div class="top-right">
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
           <button class="btn btn-sm" id="switch-company-btn" style="display:none" onclick="backToPicker()">↔ เปลี่ยนบริษัท</button>
@@ -2159,7 +2159,7 @@ async function sonSubmit(){
 /* ══════════════ PRODUCTS + UNITS + GROUPS ══════════════ */
 /* ══════════════ PRODUCTS — สถาปัตยกรรมแบบ "field config ขับเคลื่อนฟอร์ม" + ตาราง sort ได้
    คัดลอกแนวคิดมาจากระบบ Item Master ของ Hippo Village (ITEM_FIELDS / renderItemTable / _itemCmp /
-   openItemModal / submitItemForm) ปรับให้เข้ากับ backend ของ TOPSHOP เอง (Drive แทน base64,
+   openItemModal / submitItemForm) ปรับให้เข้ากับ backend ของ TOPSALES เอง (Drive แทน base64,
    มีแค่ประเภทเดียวคือ "สินค้า" ไม่ต้องมีระบบแท็บหลายประเภทแบบต้นฉบับ) ══════════════ */
 const VAT_TYPE_LABEL = { none:'ไม่มี VAT', included:'รวม VAT', excluded:'แยก VAT' };
 // key = ชื่อ field ในฟอร์ม/payload (camelCase ตามที่ backend รับ), dataKey = ชื่อคอลัมน์จริงใน Sheet (snake_case)

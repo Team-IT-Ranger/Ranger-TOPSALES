@@ -21,7 +21,7 @@ var TENANT_SHEET_TABS = {
 };
 
 function _buildTenantSpreadsheet(tenantId, tenantName) {
-  var newSS = SpreadsheetApp.create('salesranger-TOPSHOP-' + tenantId);
+  var newSS = SpreadsheetApp.create('Ranger-TOPSALES-' + tenantId);   // ไฟล์เก่าที่สร้างก่อนเปลี่ยนชื่อแอปยังใช้ชื่อ salesranger-TOPSHOP-*
   var fileId = newSS.getId();
 
   Object.keys(TENANT_SHEET_TABS).forEach(function(tabName) {

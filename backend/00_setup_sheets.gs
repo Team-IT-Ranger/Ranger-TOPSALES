@@ -161,7 +161,7 @@ function _setTextColumns(ss, sheetName, headers) {
 function setupCentralSheet() {
   var cfg = getConfig();
   var ss = SpreadsheetApp.openById(cfg.CENTRAL_SHEET_FILEID);
-  Logger.log('=== TOPSHOP Central Sheet Setup ===');
+  Logger.log('=== TOPSALES Central Sheet Setup ===');
 
   var created = [], existed = [];
   Object.keys(CENTRAL_SHEETS).forEach(function(tabName) {

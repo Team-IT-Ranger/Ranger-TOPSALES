@@ -1,4 +1,4 @@
-# SalesRanger TOPSHOP
+# Ranger TOPSALES
 
 ระบบขาย/บริหารตัวแทนจำหน่ายสำหรับ Cash Van Sales และ Credit Sales — ดูภาพรวมสถาปัตยกรรมได้ที่
 [docs/topshop_architecture.html](docs/topshop_architecture.html)

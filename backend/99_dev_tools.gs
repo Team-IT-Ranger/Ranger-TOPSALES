@@ -127,7 +127,7 @@ function setupUatEnvironment() {
     Logger.log('❌ หยุด: โปรเจกต์นี้ตั้ง CENTRAL_SHEET_FILEID ไว้แล้ว (' + props.getProperty('ENV_NAME') + ') — ไม่สร้างซ้ำ กันไปแตะข้อมูลเดิม');
     return;
   }
-  var ss = SpreadsheetApp.create('TOPSHOP UAT — Central Sheet');
+  var ss = SpreadsheetApp.create('TOPSALES UAT — Central Sheet');
   props.setProperties({ CENTRAL_SHEET_FILEID: ss.getId(), ENV_NAME: 'uat' });
   // เก็บเข้าโฟลเดอร์ db_uat/TNKI ตั้งแต่แรก (ENV_NAME ต้องตั้งก่อน ไม่งั้นจะไปลง db_prod)
   try { _moveFileTo(ss.getId(), _dbOwnerFolder()); } catch (e) { Logger.log('ย้าย Central Sheet เข้าโฟลเดอร์ไม่สำเร็จ: ' + e.message); }
@@ -152,7 +152,7 @@ function setupProductionEnvironment() {
     return;
   }
   props.setProperty('ENV_NAME', 'prod');               // ต้องตั้งก่อนสร้างไฟล์ ไม่งั้นไฟล์ไปลงโฟลเดอร์ผิด env
-  var ss = SpreadsheetApp.create('TOPSHOP — Central Sheet (production)');
+  var ss = SpreadsheetApp.create('TOPSALES — Central Sheet (production)');
   props.setProperty('CENTRAL_SHEET_FILEID', ss.getId());
   try { _moveFileTo(ss.getId(), _dbOwnerFolder()); } catch (e) { Logger.log('ย้าย Central Sheet เข้าโฟลเดอร์ db_prod/TNKI ไม่สำเร็จ: ' + e.message); }
 

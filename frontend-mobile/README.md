@@ -1,4 +1,4 @@
-# SalesRanger TOPSHOP — Frontend (Mobile / LINE LIFF)
+# Ranger TOPSALES — Frontend (Mobile / LINE LIFF)
 
 แอปพนักงานขาย (หน่วยรถ Cash Van / พนักงานขายตรง) เปิดใน LINE ผ่าน LIFF — static site ไฟล์เดียว
 (`index.html` + `config.js`, ไม่มี build, ไม่มี framework) ต่อยอดจาก `_legacy-standalone-liff-app/`

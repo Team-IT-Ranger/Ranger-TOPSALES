@@ -1,4 +1,4 @@
-# SalesRanger TOPSHOP — Backend (Google Apps Script)
+# Ranger TOPSALES — Backend (Google Apps Script)
 
 **Backend นี้เป็น JSON API ล้วนๆ ไม่มีหน้าเว็บ ไม่มี HtmlService** — จัดการ Sheet (Central + Tenant) และ
 business logic ทั้งหมดเท่านั้น หน้าตาทั้ง 2 แอป (Mobile LIFF ของพนักงานขาย และ Admin App) แยกคนละ
