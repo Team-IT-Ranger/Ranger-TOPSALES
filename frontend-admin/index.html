@@ -49,6 +49,7 @@
   .field label{display:block;font-size:12px;color:var(--ink-soft);font-weight:600;margin-bottom:5px}
   .field input,.field select{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:14px;font-family:inherit;background:var(--surface);color:var(--ink)}
   .err{background:var(--red-soft);color:var(--red);font-size:12.5px;padding:9px 11px;border-radius:7px;margin-bottom:14px;display:none}
+  .ok-msg{background:var(--green-soft,#e8f6ee);color:var(--green,#1c7c4a);font-size:12.5px;padding:9px 11px;border-radius:7px;margin-bottom:14px}
 
   /* ── company picker (Ultra Admin เลือกก่อนเข้าใช้งาน) ── */
   #picker-screen{min-height:100vh;display:none;align-items:flex-start;justify-content:center;background:var(--ground);padding:60px 20px}
@@ -407,6 +408,24 @@
     <div class="field"><label>Username</label><input id="login-user" autocomplete="username"></div>
     <div class="field"><label>Password</label><input id="login-pass" type="password" autocomplete="current-password"></div>
     <button class="btn btn-primary" id="login-btn" style="width:100%" onclick="doLogin()">เข้าสู่ระบบ</button>
+    <p class="form-hint" style="margin-top:14px">ยังไม่มีบัญชี? <a href="#" onclick="showSignup();return false">ลงทะเบียนผู้ใช้ใหม่</a>
+      — เลือกสังกัดแล้วรอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน</p>
+  </div>
+
+  <!-- ลงทะเบียนเอง: ได้บัญชีสถานะ "รออนุมัติ" ยังไม่มีสิทธิ์ใดๆ จนกว่าผู้ดูแลจะอนุมัติ (ดู backend/29_admin_signup.gs) -->
+  <div class="login-card" id="signup-card" style="display:none">
+    <h1>ลงทะเบียนผู้ใช้ใหม่</h1>
+    <p>กรอกข้อมูลแล้วรอผู้ดูแลระบบอนุมัติ — ผู้ดูแลจะเป็นผู้กำหนดสิทธิ์ให้</p>
+    <div class="err" id="signup-err"></div>
+    <div class="ok-msg" id="signup-ok" style="display:none"></div>
+    <div class="field"><label>ชื่อ-สกุล</label><input id="su-name"></div>
+    <div class="field"><label>สังกัด</label>
+      <select id="su-tenant"><option value="">บริษัทเจ้าของสินค้า</option></select>
+    </div>
+    <div class="field"><label>Username <span class="unit">(อย่างน้อย 4 ตัวอักษร)</span></label><input id="su-user" autocomplete="off"></div>
+    <div class="field"><label>รหัสผ่าน <span class="unit">(อย่างน้อย 8 ตัวอักษร)</span></label><input id="su-pass" type="password" autocomplete="new-password"></div>
+    <button class="btn btn-primary" id="su-btn" style="width:100%" onclick="doSignup()">ส่งคำขอใช้งาน</button>
+    <p class="form-hint" style="margin-top:14px"><a href="#" onclick="showLogin();return false">← กลับไปหน้าเข้าสู่ระบบ</a></p>
   </div>
 </div>
 
@@ -506,6 +525,11 @@
         <!-- ═══ ADMIN USERS ═══ -->
         <section class="view" id="view-adminusers">
           <div class="view-head"><div><h1>ผู้ใช้งานระบบ</h1><p>บัญชีแอดมินที่เข้า Admin App ได้ — คนละส่วนกับพนักงานขับรถขาย (LIFF)</p></div></div>
+          <div class="form-card" id="pending-card" style="display:none">
+            <h3>คำขอใช้งานที่รออนุมัติ <span class="pill wait" id="pending-count"></span></h3>
+            <p class="form-hint">ผู้ใช้ใหม่ลงทะเบียนเองจากหน้าเข้าสู่ระบบ — อนุมัติพร้อมกำหนดสิทธิ์ หรือปฏิเสธคำขอ</p>
+            <div id="pending-list"></div>
+          </div>
           <div class="table-wrap"><table>
             <thead><tr><th>Username</th><th>ชื่อ</th><th>สิทธิ์</th><th>ตัวแทน</th><th>สถานะ</th><th></th></tr></thead>
             <tbody id="adminusers-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
@@ -1240,6 +1264,51 @@ async function callApi(action, payload){
 }
 
 /* ── Auth ── */
+/* ── ลงทะเบียนผู้ใช้ใหม่ (สมัครเอง → รออนุมัติ) ── */
+function showSignup(){
+  document.querySelector('#login-screen .login-card').style.display = 'none';
+  document.getElementById('signup-card').style.display = '';
+  loadSignupTenants();
+}
+function showLogin(){
+  document.querySelector('#login-screen .login-card').style.display = '';
+  document.getElementById('signup-card').style.display = 'none';
+}
+async function loadSignupTenants(){
+  const sel = document.getElementById('su-tenant');
+  if (sel.dataset.loaded) return;
+  try {
+    const res = await fetch(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'listActiveTenants', payload:{} }) });
+    const r = await res.json();
+    sel.innerHTML = '<option value="">บริษัทเจ้าของสินค้า</option>' +
+      (r.data||[]).map(t => '<option value="'+esc(t.tenant_id)+'">'+esc(t.name)+'</option>').join('');
+    sel.dataset.loaded = '1';
+  } catch (e) { /* ไม่มีรายชื่อตัวแทนก็ยังสมัครเข้าบริษัทได้ */ }
+}
+async function doSignup(){
+  const err = document.getElementById('signup-err'), ok = document.getElementById('signup-ok');
+  err.style.display = 'none'; ok.style.display = 'none';
+  const payload = { displayName: document.getElementById('su-name').value.trim(),
+    tenantId: document.getElementById('su-tenant').value,
+    username: document.getElementById('su-user').value.trim(),
+    password: document.getElementById('su-pass').value };
+  if (!payload.displayName || !payload.username || !payload.password) {
+    err.textContent = 'กรุณากรอกข้อมูลให้ครบ'; err.style.display = 'block'; return;
+  }
+  const btn = document.getElementById('su-btn'); btn.disabled = true; btn.textContent = 'กำลังส่งคำขอ...';
+  try {
+    const res = await fetch(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'registerAdminUser', payload }) });
+    const r = await res.json();
+    if (!r.success) { err.textContent = r.message || 'ลงทะเบียนไม่สำเร็จ'; err.style.display = 'block'; return; }
+    ok.textContent = r.message; ok.style.display = 'block';
+    ['su-name','su-user','su-pass'].forEach(id => document.getElementById(id).value = '');
+  } catch (e) {
+    err.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message; err.style.display = 'block';
+  } finally { btn.disabled = false; btn.textContent = 'ส่งคำขอใช้งาน'; }
+}
+
 async function doLogin(){
   const username = document.getElementById('login-user').value.trim();
   const password = document.getElementById('login-pass').value;
@@ -1601,7 +1670,7 @@ function findMeta(view){
 const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
-  companyprofile: loadCompanyProfile, adminusers: loadAdminUsers, pricelists: loadPriceLists,
+  companyprofile: loadCompanyProfile, adminusers: () => { loadAdminUsers(); loadPendingAdminUsers(); }, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
   salesorders: loadSalesOrders,
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
@@ -3015,6 +3084,37 @@ function renderAdminUsersTable(){
       '<button class="btn btn-sm" onclick="resetAdminUserPasswordUI(\''+u.id+'\',\''+esc(u.username)+'\')">รีเซ็ตรหัสผ่าน</button>') + '</td></tr>'
   ).join('');
 }
+async function loadPendingAdminUsers(){
+  const card = document.getElementById('pending-card'), list = document.getElementById('pending-list');
+  if (!card) return;
+  const r = await callApi('listPendingAdminUsers', {});
+  const rows = (r.success && r.data) || [];
+  card.style.display = rows.length ? '' : 'none';
+  document.getElementById('pending-count').textContent = rows.length ? rows.length + ' คำขอ' : '';
+  await ensureRolesForDropdown();
+  const roleOpts = ROLES_CACHE.filter(x => x.code !== 'super_admin')
+    .map(x => '<option value="'+esc(x.code)+'">'+esc(x.label)+(x.tenantId ? ' ('+esc(x.tenantId)+')' : '')+'</option>').join('');
+  list.innerHTML = rows.map(u =>
+    '<div class="activity-row"><span><b>'+esc(u.displayName)+'</b> <span class="mono-data">'+esc(u.username)+'</span>'+
+      ' · สังกัด '+esc(u.tenantName)+' · ขอเมื่อ '+esc(u.requestedAt)+'</span>'+
+    '<span><select id="pa-role-'+u.id+'" style="margin-right:6px"><option value="">— เลือกสิทธิ์ —</option>'+roleOpts+'</select>'+
+      '<button class="btn btn-sm btn-primary" onclick="approvePending('+u.id+')">อนุมัติ</button> '+
+      '<button class="btn btn-sm" onclick="rejectPending('+u.id+')">ปฏิเสธ</button></span></div>').join('');
+}
+async function approvePending(id){
+  const roleCode = document.getElementById('pa-role-' + id).value;
+  if (!roleCode) { toast('เลือกสิทธิ์ให้ผู้ใช้ก่อนอนุมัติ', true); return; }
+  const r = await callApi('approveAdminUser', { id, roleCode });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message); loadPendingAdminUsers(); loadAdminUsers();
+}
+async function rejectPending(id){
+  if (!confirm('ปฏิเสธคำขอนี้? ผู้ใช้จะเข้าระบบไม่ได้และสมัครด้วย username เดิมซ้ำไม่ได้')) return;
+  const r = await callApi('rejectAdminUser', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message); loadPendingAdminUsers();
+}
+
 async function loadAdminUsers(){
   const body = document.getElementById('adminusers-body');
   body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';

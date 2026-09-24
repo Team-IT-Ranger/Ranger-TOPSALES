@@ -92,6 +92,10 @@ function checkUser(lineUid) {
 // userData: { lineUid, name, schema(=tenantId) } — lineUid ถูกแทนที่ด้วยตัวตนที่ยืนยันแล้วใน doPost
 function registerUser(userData) {
   if (!userData || !userData.lineUid) return { success: false, message: 'ไม่พบตัวตนผู้ใช้' };
+  if (!String(userData.name || '').trim()) return { success: false, message: 'กรุณากรอกชื่อ-สกุล' };
+  // ต้องเลือกสังกัด (ตัวแทนที่ยังเปิดใช้งาน) เสมอ — กติกาเดียวกับแอปแอดมิน ดู 29_admin_signup.gs
+  if (!String(userData.schema || '').trim()) return { success: false, message: 'กรุณาเลือกสังกัด (ตัวแทนจำหน่าย) ก่อนลงทะเบียน' };
+  if (!_activeTenantRow(userData.schema)) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
   var existing = checkUser(userData.lineUid);   // กดสมัครซ้ำ/เน็ตกระตุก แล้วได้แถวซ้ำกันในชีต
   if (existing.exists) return { success: true, already: true, message: 'บัญชีนี้ลงทะเบียนไว้แล้ว (สถานะ: ' + (existing.status || '-') + ')' };
   centralAppend('liff_users', {
@@ -99,10 +103,10 @@ function registerUser(userData) {
     display_name: userData.name,
     role: 'van_sales',
     tenant_id: userData.schema,
-    status: 'No',
+    status: 'No',                         // 'No' = รอผู้ดูแลอนุมัติที่เมนู "พนักงานขาย" (updateStaffAdmin)
     last_login: new Date()
   });
-  return { success: true };
+  return { success: true, pending: true, message: 'ลงทะเบียนแล้ว — รอผู้ดูแลระบบอนุมัติก่อนเริ่มใช้งาน' };
 }
 
 // รายชื่อตัวแทนที่ active — frontend ใช้แสดง dropdown ตอนลงทะเบียนพนักงานใหม่
@@ -131,7 +135,12 @@ function adminLogin(payload) {
     if (String(users[i].username).toLowerCase() === username.toLowerCase()) { found = users[i]; break; }
   }
   if (!found) return { success: false, message: 'ไม่พบผู้ใช้งานนี้' };
-  if (String(found.status) !== 'active') return { success: false, message: 'บัญชีนี้ถูกระงับการใช้งาน' };
+  if (String(found.status) === ADMIN_STATUS_PENDING) {
+    return { success: false, pendingApproval: true, message: 'บัญชีนี้รอผู้ดูแลระบบอนุมัติอยู่ — เข้าใช้งานได้หลังได้รับอนุมัติและกำหนดสิทธิ์แล้ว' };
+  }
+  if (String(found.status) === ADMIN_STATUS_REJECTED) return { success: false, message: 'คำขอใช้งานของบัญชีนี้ถูกปฏิเสธ — ติดต่อผู้ดูแลระบบ' };
+  if (String(found.status) !== ADMIN_STATUS_ACTIVE) return { success: false, message: 'บัญชีนี้ถูกระงับการใช้งาน' };
+  if (!String(found.role_code || '').trim()) return { success: false, message: 'บัญชีนี้ยังไม่ได้กำหนดบทบาท — ติดต่อผู้ดูแลระบบ' };
   if (_hashPassword(password, found.salt) !== found.password_hash) return { success: false, message: 'รหัสผ่านไม่ถูกต้อง' };
 
   ensureSchemaCurrent();   // สคีมา Central Sheet เปลี่ยนตามโค้ดใหม่ → ปรับให้เองครั้งเดียว (ดู 00_setup_sheets.gs)
@@ -193,6 +202,7 @@ function doPost(e) {
     return _jsonOutput(registerUser(payload));
   }
   if (action === 'listActiveTenants') return _jsonOutput(listActiveTenants());
+  if (action === 'registerAdminUser') return _jsonOutput(registerAdminUser(payload));
   if (action === 'adminLogin')      return _jsonOutput(adminLogin(payload));
   if (action === 'adminLogout')     return _jsonOutput(adminLogout(body.token));
 

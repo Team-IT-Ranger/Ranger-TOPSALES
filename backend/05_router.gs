@@ -107,6 +107,9 @@ var ADMIN_ACTION_MAP = {
   saveCompanyProfile:     saveCompanyProfile,
   getMyPermissions:       getMyPermissions,
   listRolesWithPermissions: listRolesWithPermissions,
+  listPendingAdminUsers:  listPendingAdminUsers,
+  approveAdminUser:       approveAdminUser,
+  rejectAdminUser:        rejectAdminUser,
   saveRole:               saveRole,
   deleteRole:             deleteRole,
 

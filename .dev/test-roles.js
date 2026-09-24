@@ -5,6 +5,11 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const B = f => fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8');
 
 const sheets = {
+  tenants: [
+    { tenant_id: 'T1', name: 'ตัวแทนที่หนึ่ง', is_active: true },
+    { tenant_id: 'T2', name: 'ตัวแทนที่สอง', is_active: true },
+    { tenant_id: 'TZ', name: 'ตัวแทนที่ปิดไปแล้ว', is_active: false }
+  ],
   roles: [
     { role_code: 'super_admin', role_label: 'ผู้ดูแลระบบสูงสุด', is_system: true, tenant_id: '', description: '' },
     { role_code: 'owner_admin', role_label: 'แอดมินบริษัท', is_system: true, tenant_id: '', description: '' },
@@ -48,7 +53,9 @@ vm.createContext(ctx);
 const fakes = {}; ['centralObjects','centralSheet','centralAppend','centralAppendMany','centralUpdate','centralNextId','deleteRowsWhere','nowStr','safeDateStr'].forEach(k => fakes[k] = ctx[k]);
 vm.runInContext(B('02_helpers.gs'), ctx, { filename: '02_helpers.gs' });
 Object.keys(fakes).forEach(k => { ctx[k] = fakes[k]; });
-['14_permissions.gs', '17_pricing.gs', '20_purchasing_master.gs', '26_roles.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
+['14_permissions.gs', '17_pricing.gs', '20_purchasing_master.gs', '26_roles.gs', '16_admin_users.gs', '29_admin_signup.gs']
+  .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
+ctx._hashPassword = (pw, salt) => 'hash:' + salt + ':' + pw;   // ของจริงอยู่ใน 04_auth.gs (ไม่ได้โหลดในเทสต์นี้)
 
 let failed = 0;
 const eq = (name, actual, expected) => {
@@ -129,6 +136,35 @@ eq('  สิทธิ์ของบทบาทนั้นถูกลบต�
 console.log('\n── สิทธิ์ขั้นต่ำในการเข้าหน้าจอนี้ ──');
 fails('ผู้ใช้ที่ไม่มีสิทธิ์ users_roles เปิดหน้าไม่ได้',
   ctx.listRolesWithPermissions({ adminUserId: '5', role_code: 'ไม่มีสิทธิ์', tenant_id: '' }, {}));
+
+console.log('\n-- ผู้ใช้ใหม่: ต้องเลือกสังกัดและรออนุมัติ --');
+r = ctx.registerAdminUser({ username: 'newbie', password: 'password123', displayName: 'ผู้ใช้ใหม่', tenantId: 'T1' });
+eq('สมัครแล้วได้สถานะรออนุมัติ', [r.success, r.pending], [true, true]);
+const pending = sheets.admin_users.find(u => u.username === 'newbie');
+eq('  บัญชีที่สมัครยังไม่มีบทบาทและสถานะ pending', [pending.status, pending.role_code, pending.tenant_id], ['pending', '', 'T1']);
+fails('สมัคร username ซ้ำ -> ปฏิเสธ', ctx.registerAdminUser({ username: 'NEWBIE', password: 'password123', displayName: 'ซ้ำ' }), /ลงทะเบียนไว้แล้ว|ถูกใช้แล้ว/);
+fails('รหัสผ่านสั้นเกินไป -> ปฏิเสธ', ctx.registerAdminUser({ username: 'shorty', password: '123', displayName: 'x' }), /8 ตัวอักษร/);
+fails('เลือกสังกัดที่ไม่มีจริง -> ปฏิเสธ', ctx.registerAdminUser({ username: 'ghost', password: 'password123', displayName: 'x', tenantId: 'NOPE' }), /ไม่พบตัวแทน/);
+fails('เลือกสังกัดที่ปิดใช้งานแล้ว -> ปฏิเสธ', ctx.registerAdminUser({ username: 'ghost2', password: 'password123', displayName: 'x', tenantId: 'TZ' }), /ไม่พบตัวแทน/);
+r = ctx.registerAdminUser({ username: 'ownerreq', password: 'password123', displayName: 'ขอเข้าบริษัท' });
+eq('สมัครเข้าบริษัทเจ้าของสินค้า (ไม่ระบุตัวแทน) ได้', [r.success, sheets.admin_users.find(u => u.username === 'ownerreq').tenant_id], [true, '']);
+
+console.log('\n-- คิวอนุมัติ --');
+eq('แอดมินตัวแทน T1 เห็นเฉพาะคำขอที่ขอเข้าตัวแทนตัวเอง',
+   ctx.listPendingAdminUsers(T1, {}).data.map(x => x.username), ['newbie']);
+eq('ฝั่งบริษัทเห็นทุกคำขอ', ctx.listPendingAdminUsers(OWNER, {}).data.map(x => x.username).sort(), ['newbie', 'ownerreq']);
+fails('แอดมินตัวแทนอื่น (T2) อนุมัติคำขอของ T1 ไม่ได้', ctx.approveAdminUser(T2, { id: pending.record_id, roleCode: 'tenant_admin' }), /ตัวแทนอื่น/);
+fails('อนุมัติโดยไม่เลือกบทบาท -> ปฏิเสธ', ctx.approveAdminUser(OWNER, { id: pending.record_id }), /เลือกบทบาท/);
+fails('อนุมัติเป็น super_admin ผ่านหน้าจอไม่ได้', ctx.approveAdminUser(SUPER, { id: pending.record_id, roleCode: 'super_admin' }), /เลือกบทบาท/);
+r = ctx.approveAdminUser(T1, { id: pending.record_id, roleCode: 'tenant_admin' });
+eq('แอดมินตัวแทนอนุมัติคนของตัวเองได้', [r.success, pending.status, pending.role_code], [true, 'active', 'tenant_admin']);
+fails('อนุมัติซ้ำ -> ปฏิเสธ', ctx.approveAdminUser(T1, { id: pending.record_id, roleCode: 'tenant_admin' }), /ดำเนินการไปแล้ว/);
+const req2 = sheets.admin_users.find(u => u.username === 'ownerreq');
+r = ctx.rejectAdminUser(OWNER, { id: req2.record_id });
+eq('ปฏิเสธคำขอได้ และสถานะเป็น rejected', [r.success, req2.status], [true, 'rejected']);
+eq('  คิวว่างแล้ว', ctx.listPendingAdminUsers(OWNER, {}).data.length, 0);
+fails('ผู้ใช้ที่ไม่มีสิทธิ์ users_roles ดูคิวไม่ได้',
+  ctx.listPendingAdminUsers({ adminUserId: '9', role_code: 'ไม่มีสิทธิ์', tenant_id: '' }, {}));
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
