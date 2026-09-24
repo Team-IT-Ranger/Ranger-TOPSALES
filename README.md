@@ -27,16 +27,15 @@ Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pa
 
 ## สภาพแวดล้อม — dev / UAT / production
 
-สถานะ ณ 2026-09-24: **production กำลังตั้งขึ้น** — เจ้าของระบบเลือกให้โปรเจกต์ prod อยู่กับบัญชี
-`channarong@thanatkorn.com` (บัญชีเดียวกับ dev/uat และเป็นเจ้าของไฟล์ฐานข้อมูลทั้งหมด) ดูขั้นตอนที่เหลือ
-ในหัวข้อ "เปิด production" ด้านล่าง · `/admin/` ยังปิดอยู่จนกว่า backend prod จะตอบล็อกอินได้จริง
+สถานะ ณ 2026-09-24: **เปิด production แล้ว** — ครบทั้ง 3 สภาพแวดล้อม (`dev` / `uat` / `prod`)
+โปรเจกต์ prod เป็นของ `channarong@thanatkorn.com` บัญชีเดียวกับ dev/uat และมีฐานข้อมูลของตัวเองแยกขาด
 
 | | dev | UAT | production |
 |---|---|---|---|
 | Git branch | — (เจ้าของระบบใช้เอง) | `UAT` | `main` |
-| Admin App | — | `.../admin-uat/` (แถบแดง "UAT") | `.../admin/` — **ปิดไว้** (ยังไม่ต่อ backend ใดๆ) |
-| Apps Script | `salesranger-TOPSHOP-be(dev)` `1iVJDVuc…` (`backend/.clasp.dev.json`) | `salesranger-TOPSHOP-be(uat)` `1SDBJgSN…` (`backend/.clasp.uat.json`) | รอสร้างจากบัญชี `channarong@thanatkorn.com` แล้วใส่ `backend/.clasp.prod.json` |
-| Database | Central Sheet ของ dev | Central Sheet ของ UAT (`setupUatEnvironment()`) + Tenant Sheet แยก | ยังไม่สร้าง — รัน `setupProductionEnvironment()` ครั้งเดียวใน editor |
+| Admin App | — | `.../admin-uat/` (แถบเหลือง "UAT") | `.../admin/` — ใช้งานจริง |
+| Apps Script | `salesranger-TOPSHOP-be(dev)` `1iVJDVuc…` (`backend/.clasp.dev.json`) | `salesranger-TOPSHOP-be(uat)` `1SDBJgSN…` (`backend/.clasp.uat.json`) | `salesranger-TOPSHOP-be(prod)` `1XObaZXu…` (`backend/.clasp.prod.json`) |
+| Database | Central Sheet ของ dev | Central Sheet ของ UAT (`setupUatEnvironment()`) + Tenant Sheet แยก | Central Sheet ของ prod ใน `db_prod/TNKI` (`setupProductionEnvironment()`) |
 
 `frontend-admin/config.js` เลือก backend จาก URL: `/admin-uat/` และ localhost = UAT · นอกนั้น = prod
 (`BACKENDS.prod` ชี้ไปที่ deployment ของโปรเจกต์ prod แล้ว) — `/admin/` จะเปิดใช้ได้ก็ต่อเมื่อ merge `UAT` → `main`

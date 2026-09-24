@@ -5,8 +5,8 @@
              ยังว่าง = เปิดในเบราว์เซอร์ธรรมดาได้เฉพาะโหมดทดสอบบน UAT (?devLineUserId=...) — production ใช้งานไม่ได้จนกว่าจะใส่ */
 (function(){
   var BACKENDS = {
-    /* ว่างไว้จนกว่าจะมี Web App URL ของโปรเจกต์ prod (ตัวเดียวกับที่ /admin/ ใช้) */
-    prod: '',
+    /* salesranger-TOPSHOP-be(prod) — backend ตัวเดียวกับที่ /admin/ ใช้ */
+    prod: 'https://script.google.com/macros/s/AKfycbxGSgR4oQLbS1kyy6c-JIj4g4ZaRUhk-bLnz3z_R2YQIu4guMsueyfxH3xK4eggRJorzQ/exec',
     uat:  'https://script.google.com/macros/s/AKfycbwsdgUjEe1RQFeuHQ3je92eok-ezYp2vVRL571eXNdRs1lfEAEXf1rSEIPFClb7GTYu7A/exec' /* TOPSHOP Backend UAT — ห้ามใส่ URL ของ production ตรงนี้ */
   };
   var LIFF_IDS = {
