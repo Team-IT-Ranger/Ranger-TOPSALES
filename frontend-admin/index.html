@@ -1436,7 +1436,8 @@ async function showCompanyPicker(){
     if (snap.data.company) { COMPANY = snap.data.company; applyCompanyName(); }
     if (snap.data.tenants) { tenantsCache = snap.data.tenants; renderPickerTenants(tenantsCache); }
   }
-  const b = await callApi('getAdminBootstrap', {});
+  let b = await callApi('getAdminBootstrap', {});
+  if (b && !b.success && /ไม่พบ action/.test(b.message || '')) b = await legacyBootstrap();
   if (b && b.success) snapSave(b);
   const r = (b && b.success) ? { success: true, data: b.tenants || [] } : { success: false, message: (b && b.message) || 'โหลดรายชื่อตัวแทนไม่สำเร็จ' };
   if (b && b.success && b.company) { COMPANY = b.company; applyCompanyName(); }
@@ -1499,6 +1500,18 @@ function applyBootstrap(b, fromSnapshot){
 }
 let DASH_FRESH_TS = 0, BOOT_IN_FLIGHT = false;   // BOOT_IN_FLIGHT = กำลังรอ getAdminBootstrap (ซึ่งมีแดชบอร์ดมาด้วย)   // แดชบอร์ดมากับ bootstrap แล้วเมื่อไหร่ — กันหน้าแรกยิง getAdminDashboard ซ้ำอีกคำขอ
 
+// ทางถอยสำหรับ deployment รุ่นเก่า: ประกอบผลลัพธ์หน้าตาเดียวกับ getAdminBootstrap จาก action เดิม
+async function legacyBootstrap(){
+  const [perm, co, dash] = await Promise.all([
+    callApi('getMyPermissions', {}), callApi('getCompanyProfile', {}), callApi('getAdminDashboard', {})
+  ]);
+  const tn = (SESSION.roleCode === 'super_admin' || SESSION.roleCode === 'owner_admin') ? await callApi('listTenants', {}) : null;
+  return { success: !!(perm && perm.success), legacy: true,
+    roleCode: perm && perm.roleCode, roleLabel: perm && perm.roleLabel, isSuperAdmin: perm && perm.isSuperAdmin,
+    permissions: (perm && perm.permissions) || null, company: (co && co.success) ? co.company : null,
+    tenants: (tn && tn.success) ? tn.data : null, dashboard: (dash && dash.success) ? dash : null };
+}
+
 async function enterApp(){
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('picker-screen').style.display = 'none';
@@ -1524,7 +1537,9 @@ async function enterApp(){
   // โหลดสิทธิ์จริงของผู้ใช้ + ชื่อบริษัท แล้ววาดเมนู/ป้ายบริบทอีกรอบ (ครั้งแรกวาดแบบเห็นทุกเมนูไปก่อนเพื่อไม่ให้หน้าค้าง)
   const snap = snapLoad();
   if (snap) applyBootstrap(snap.data, true);          // ของเมื่อครู่ — เห็นทันที
-  const b = await callApi('getAdminBootstrap', {});   // สิทธิ์ + บริษัท + ตัวแทน + แดชบอร์ด ในคำขอเดียว
+  let b = await callApi('getAdminBootstrap', {});     // สิทธิ์ + บริษัท + ตัวแทน + แดชบอร์ด ในคำขอเดียว
+  // backend รุ่นเก่า (ยังไม่ deploy) ไม่มี action นี้ — ถอยไปใช้วิธีเดิมหลายคำขอ เพื่อให้หน้าเว็บยังทำงานได้
+  if (b && !b.success && /ไม่พบ action/.test(b.message || '')) b = await legacyBootstrap();
   BOOT_IN_FLIGHT = false;
   if (b && b.success) { applyBootstrap(b, false); snapSave(b); }
   else if (!snap) { const d = document.getElementById('dash-date'); if (d) d.textContent = (b && b.message) || 'โหลดข้อมูลไม่สำเร็จ'; }
