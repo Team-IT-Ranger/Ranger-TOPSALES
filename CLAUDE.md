@@ -283,6 +283,10 @@ repo called dev "production"); dev's live deployment was never updated, so nothi
 - Admin-side Sales Order module: list/detail/open-new-sale/cancel, working both in tenant mode and
   in owner ("บริษัทเจ้าของสินค้า") mode via the HOUSE tenant (`backend/19_sales_admin.gs`).
 
+บน production (`/admin/`, เปิดใช้งาน 2026-09-24): นำเข้าใบราคาจริง 4 ชุดจาก `reference/` แล้ว **เปิดใช้งานครบทั้ง 4 ชุด**
+(ร้านค้าเหนือ-อีสาน-ตะวันออก-ใต้ / ร้านค้า กทม.-กลาง-ตะวันตก / ซุปเปอร์ชีป / ศูนย์-ตัวแทนจำหน่าย · ทุกชุด 1 ก.ค.–30 ก.ย. 2026)
+พร้อมสินค้า 13 รายการและกลุ่มลูกค้า 4 กลุ่มที่สร้างจากไฟล์ · ชุดที่ active แล้ว **แก้ไม่ได้** ต้องคัดลอกเป็นงวดใหม่เท่านั้น
+
 On UAT only (user testing on `/admin-uat/`):
 - Manual price entry/edit (2026-09-22): `createPriceList`, `clonePriceList`, `savePriceListLine`,
   `deletePriceListLine`, `savePriceListBillPromos` in `backend/17_pricing.gs`; UI on the ชุดราคา list
@@ -314,8 +318,10 @@ Pending / not started:
 - บัญชีของตัวแทนจำหน่าย (สมุดแยกของตัวแทนเอง) — ตอนนี้ตัวแทนซื้อของและเก็บสต็อกได้ แต่ไม่มีเจ้าหนี้/สมุดบัญชี
 - โอนย้าย/เบิกจ่ายสต็อกของตัวแทนแบบมีเอกสาร (เมนู 6.3/6.4 ฝั่งตัวแทนยังเป็น "เร็วๆ นี้")
 - **10505 (กาวดักแมลงวัน รุ่นแถมกาวสองหน้า): จำนวนต่อหีบไม่ตรงกันระหว่างใบราคา** — ใบร้านค้าระบุ 1x20x5x5
-  (500 ต่อหีบ) แต่ใบศูนย์ระบุ 1x20x5 (100 ต่อหีบ) · ตอนนำเข้า prod ระบบเก็บ 500 ไว้ตามใบแรกและเตือนไว้
-  ("ในระบบมี factor 500 แต่ใบราคาระบุ 100 (ไม่ได้แก้ให้)") — ต้องถามเจ้าของระบบว่าอันไหนถูก ก่อนเปิดใช้ชุดราคาศูนย์
+  (500 ต่อหีบ) แต่ใบศูนย์ระบุ 1x20x5 (100 ต่อหีบ) · **ราคาไม่เพี้ยน** เพราะ `price_list_items.unit_factor`
+  เก็บค่าของใบนั้นๆ ไว้เอง (ชุดร้านค้า = 500, ชุดศูนย์ = 100 ตรวจกับ prod แล้ว) — ที่ค้างคือ `product_units`
+  ของทะเบียนสินค้าเก็บ 500 ตามใบแรกที่นำเข้า (มีคำเตือนตอน import) ซึ่งใช้ตอนแปลงหน่วยนอกชุดราคา เช่น สต็อกรถ
+  ต้องให้เจ้าของระบบชี้ว่าค่าไหนถูกแล้วแก้ที่ทะเบียนสินค้า (แก้ได้ตลอด ไม่ต้องแตะชุดราคาที่เปิดใช้แล้ว)
 - Minor open items noted in code comments: 10505's base unit was imported as ชิ้น but is probably
   แผ่น/ซอง; a per-shop pack quantity cap (ไม่เกิน 4 แพ็ค) isn't implemented; free goods (ของแถม) are
   deferred per the user's own prioritization.
