@@ -32,6 +32,8 @@ const ctx = {
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => '' }) },
   nowStr: () => '2026-09-26 12:00:00', safeDateStr: v => String(v || ''),
   tenantObjects: (tid, n) => sheetOf(n).map(o => Object.assign({}, o)),
+  // tab ที่เพิ่มเข้ามาทีหลัง: ไฟล์ตัวแทนเก่ายังไม่มี → ต้องคืน [] ไม่ใช่ throw (ของจริงอยู่ใน 02_helpers.gs)
+  tenantObjectsIfExists: (tid, n) => (t[n] ? t[n].map(o => Object.assign({}, o)) : []),
   tenantAppend: (tid, n, o) => sheetOf(n).push(Object.assign({}, o)),
   tenantNextId: (tid, n) => sheetOf(n).reduce((m, o) => Math.max(m, parseInt(o.record_id) || 0), 0) + 1,
   // ชีตจำลองแบบ getDataRange/getRange เท่าที่ _updateOrderRow ใช้จริง
@@ -123,6 +125,13 @@ eq('ประวัติที่ส่งให้หน้าเว็บม�
   return [h.toLabel, h.toPaymentLabel, h.by]; })(), ['ส่งของแล้ว', 'ยังไม่ชำระ', 'แอดมินบริษัท']);
 
 console.log('\n── ป้ายและเส้นทางที่ส่งให้หน้าเว็บ ──');
+eq('อ่านประวัติจากไฟล์ที่ยังไม่มี tab ประวัติ (สคีมาเก่า) → ลิสต์ว่าง ไม่ใช่ error', (() => {
+  const keep = t.order_status_log; delete t.order_status_log;     // จำลองไฟล์ตัวแทนที่ยังไม่ได้ migrate
+  let out;
+  try { out = ctx.orderStatusLog('T1', 1); } catch (e) { out = 'THREW: ' + e.message; }
+  t.order_status_log = keep;
+  return out;
+})(), []);
 eq('ป้ายสถานะครบทั้งสี่', Object.keys(ctx.SO_STATUS_LABELS).length, 4);
 eq('จากรอจัดส่ง ไปได้ 3 ทาง (รวมยกเลิก)', ctx.SO_TRANSITIONS.pending_delivery, ['delivering', 'completed', 'cancelled']);
 eq('บิลที่ยกเลิกแล้วไปไหนไม่ได้เลย', ctx.SO_TRANSITIONS.cancelled, []);

@@ -65,7 +65,8 @@ function logOrderStatus(tenantId, orderId, from, to, fromPay, toPay, note, by) {
 
 /** ประวัติของบิลหนึ่งใบ เรียงเก่า→ใหม่ */
 function orderStatusLog(tenantId, orderId) {
-  return tenantObjects(tenantId, 'order_status_log')
+  // ไฟล์ตัวแทนที่ยังไม่ได้ migrate ยังไม่มี tab นี้ — ถือว่ายังไม่มีประวัติ ไม่ใช่ข้อผิดพลาด
+  return tenantObjectsIfExists(tenantId, 'order_status_log')
     .filter(function(r) { return String(r.order_id) === String(orderId); })
     .sort(function(a, b) { return safeDateStr(a.changed_at).localeCompare(safeDateStr(b.changed_at)); })
     .map(function(r) { return {

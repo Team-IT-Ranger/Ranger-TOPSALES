@@ -44,6 +44,7 @@ function getSalesOrderAdmin(session, payload) {
   var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
+  ensureTenantSheetsCurrent(tenantId);   // ไฟล์ที่สร้างก่อนมี tab ประวัติ/คอลัมน์สถานะการเงิน ต้องเติมก่อนอ่าน
   var order = null;
   tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };

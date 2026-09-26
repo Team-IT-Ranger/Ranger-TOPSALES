@@ -38,7 +38,8 @@ function ensureTenantSheetsCurrent(tenantId) {
   var key = 'tenantschema_' + tenantId + '_' + fp;
   if (cache.get(key)) return;
   try {
-    var ss = SpreadsheetApp.openById(tenantFileId(tenantId));
+    // ต้องใช้ handle เดียวกับ _getSheetByFileId (มี _ssCache ต่อคำขอ) ไม่งั้นคำขอเดียวกันอาจยังมองไม่เห็น tab ที่เพิ่งสร้าง
+    var ss = _openSpreadsheet(tenantFileId(tenantId));
     Object.keys(TENANT_SHEET_TABS).forEach(function(tabName) {
       var headers = TENANT_SHEET_TABS[tabName];
       var sh = ss.getSheetByName(tabName);

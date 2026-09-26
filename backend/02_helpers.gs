@@ -116,6 +116,16 @@ function tenantObjects(tenantId, name) { return sheetObjectsOf(tenantSheet(tenan
 function tenantAppend(tenantId, name, obj) { return appendRowToSheet(tenantSheet(tenantId, name), obj); }
 function tenantUpdate(tenantId, name, recordId, obj) { return updateRowInSheet(tenantSheet(tenantId, name), recordId, obj); }
 function tenantNextId(tenantId, name) { return nextIdOf(tenantSheet(tenantId, name)); }
+/**
+ * อ่าน tab ที่ "อาจจะยังไม่มี" ในไฟล์ของตัวแทนที่สร้างไว้ก่อนสคีมาเปลี่ยน — ไม่มี = คืน []
+ * ใช้กับตารางที่เพิ่มเข้ามาทีหลังเท่านั้น (เช่น order_status_log) ตารางหลักยังต้องพังดังๆ ถ้าหาย
+ * เพราะนั่นแปลว่าไฟล์ผิดอันหรือเสียหาย ไม่ใช่แค่ยังไม่ได้ migrate
+ */
+function tenantObjectsIfExists(tenantId, name) {
+  var ss = _openSpreadsheet(tenantFileId(tenantId));
+  var sh = ss.getSheetByName(name);
+  return sh ? sheetObjectsOf(sh) : [];
+}
 
 // ===================== GENERIC SHEET <-> OBJECT =====================
 function sheetObjectsOf(sh) {
