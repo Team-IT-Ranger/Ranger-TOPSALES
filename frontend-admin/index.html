@@ -2320,9 +2320,12 @@ function renderSaleOrderDetail(r){
     (it.productCode ? '<span class="mono-data">'+esc(it.productCode)+'</span> ' : '') + esc(it.productName) + (it.isFree ? ' <span class="unit">(ของแถม)</span>' : '') + '</td>' +
     '<td>'+esc(it.unitCode||'-')+'</td><td>'+it.qty+'</td><td class="mono-data">฿'+baht(it.price)+'</td><td class="mono-data">฿'+baht(it.lineTotal)+'</td></tr>'
   ).join('');
+  const vatPct = Math.round((o.vatRate != null ? o.vatRate : 0.07) * 100);
   document.getElementById('sod-body').innerHTML = rows +
     '<tr><td colspan="4" style="text-align:right"><b>ยอดรวมก่อนหักส่วนลด</b></td><td class="mono-data">฿'+baht(o.subtotal)+'</td></tr>' +
     (o.discount ? '<tr><td colspan="4" style="text-align:right">ส่วนลด</td><td class="mono-data">-฿'+baht(o.discount)+'</td></tr>' : '') +
+    '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้า (ไม่รวมภาษี)</td><td class="mono-data">฿'+baht(o.subtotalExVat)+'</td></tr>' +
+    '<tr><td colspan="4" style="text-align:right">ภาษีมูลค่าเพิ่ม '+vatPct+'%</td><td class="mono-data">฿'+baht(o.vatAmount)+'</td></tr>' +
     '<tr><td colspan="4" style="text-align:right"><b>สุทธิ</b></td><td class="mono-data"><b>฿'+baht(o.total)+'</b></td></tr>';
 }
 
@@ -2445,10 +2448,16 @@ function printSaleDoc(r, kind){
     if (k.showPrice) cols.push(
       { label: 'ราคา/หน่วย', align: 'r', width: '14%', value: l => l.isFree ? '-' : DocPrint.money(l.price) },
       { label: 'จำนวนเงิน', align: 'r', width: '15%', value: l => l.isFree ? '-' : DocPrint.money(l.lineTotal) });
+    /* ★ ใบกำกับภาษีตามกฎหมายไทยต้องแสดง "มูลค่าสินค้า" กับ "ภาษีมูลค่าเพิ่ม" แยกบรรทัดกัน
+       ราคาขายของเราเป็นราคารวมภาษีอยู่แล้ว จึงไล่จากยอดรวม → หักส่วนลด → ถอดภาษี → ยอดสุทธิ
+       ตัวเลขถอดมาจากที่ backend บันทึกไว้ตอนขาย ไม่ได้คำนวณเองบนหน้าเว็บ (กันปัดเศษไม่ตรงกับบัญชี) */
+    const vatPct = Math.round((o.vatRate != null ? o.vatRate : 0.07) * 100);
     const totals = k.showPrice ? [
       ['ยอดรวมก่อนหักส่วนลด', DocPrint.money(o.subtotal)],
       ...(o.discount ? [['ส่วนลด', '-' + DocPrint.money(o.discount)]] : []),
-      ['ยอดสุทธิ (รวมภาษีมูลค่าเพิ่มแล้ว)', DocPrint.money(o.total), 'grand'],
+      ['มูลค่าสินค้า (ไม่รวมภาษี)', DocPrint.money(o.subtotalExVat)],
+      ['ภาษีมูลค่าเพิ่ม ' + vatPct + '%', DocPrint.money(o.vatAmount)],
+      ['ยอดสุทธิ', DocPrint.money(o.total), 'grand'],
       ...(o.paidAmount ? [['รับชำระแล้ว', DocPrint.money(o.paidAmount)],
         ['คงค้าง', DocPrint.money(Math.max(0, (o.total||0) - (o.paidAmount||0)))]] : [])
     ] : [];
@@ -2590,6 +2599,8 @@ async function sonPreview(){
     (r.priceListName ? '<div class="activity-row"><span>ใช้ชุดราคา</span><span class="amt">'+esc(r.priceListName)+'</span></div>' : '') +
     '<div class="activity-row"><span>ยอดรวมก่อนหักส่วนลด</span><span class="amt mono-data">฿'+baht(r.subtotal)+'</span></div>' +
     (r.discount ? '<div class="activity-row"><span>ส่วนลด</span><span class="amt mono-data">-฿'+baht(r.discount)+'</span></div>' : '') +
+    '<div class="activity-row"><span>มูลค่าสินค้า (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalExVat)+'</span></div>' +
+    '<div class="activity-row"><span>ภาษีมูลค่าเพิ่ม '+Math.round((r.vatRate != null ? r.vatRate : 0.07)*100)+'%</span><span class="amt mono-data">฿'+baht(r.vatAmount)+'</span></div>' +
     '<div class="activity-row"><b>สุทธิ</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
   document.getElementById('son-confirm').style.display = '';
 }

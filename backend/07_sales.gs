@@ -126,9 +126,11 @@ function recordSale(user, payload) {
   var orderId = tenantNextId(user.tenantId, 'sales_orders');
   var createdAt = nowStr();
 
+  var vatSplit = splitVat(calc.total);   // ยอดสุทธิรวม VAT แล้ว → แยกออกมาเก็บไว้ (18_pricing_engine.gs)
   tenantAppend(user.tenantId, 'sales_orders', {
     record_id: orderId, order_code: orderCode, customer_id: payload.customerId || 0,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
+    vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
     payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),

@@ -462,11 +462,13 @@ function createArInvoice(session, payload) {
         return String(iv.tenant_id) === String(tenantId) && String(iv.sales_order_id) === String(order.record_id) && iv.status !== 'void'; })[0];
       if (dupe) return { success: false, message: 'บิลขายนี้ออกใบแจ้งหนี้ไปแล้ว (' + dupe.invoice_no + ')' };
       customerId = order.customer_id;
-      // บิลขายเก็บยอด "รวม VAT" ไว้แล้ว (ราคาขายรวมภาษี) → ถอด VAT ออกมาแยกบรรทัดบัญชี
+      // ใช้ยอดแยกภาษีที่บิลบันทึกไว้ตอนขาย (_orderVat ใน 18_pricing_engine.gs) — ไม่ถอดเองซ้ำ
+      // ถอดซ้ำคือช่องทางให้ตัวเลขบนกระดาษกับในบัญชีต่างกันทีละสตางค์ แล้วงบไม่ลงตัว
       var gross = Number(order.total) || 0;
       if (!(gross > 0)) return { success: false, message: 'บิลขายนี้ยอดเป็นศูนย์' };
-      subtotal = _money(gross / (1 + AR_VAT_RATE));
-      vat = _money(gross - subtotal);
+      var ov = _orderVat(order);
+      subtotal = _money(ov.exVat);
+      vat = _money(ov.vat);
       salesOrderId = order.record_id;
       note = note || ('ออกจากบิลขาย ' + (order.order_code || order.record_id));
     } else {

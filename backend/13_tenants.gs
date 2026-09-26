@@ -7,8 +7,12 @@
 var TENANT_SHEET_TABS = {
   // status = สถานะการส่งของ · payment_status = สถานะการเงิน (สองแกนแยกกัน — ดู 34_sales_status.gs)
   //   ส่งของแล้วแต่ยังไม่เก็บเงิน กับ เก็บเงินแล้วแต่ยังไม่ส่ง เป็นคนละเรื่องกัน จะยัดเป็นสถานะเดียวไม่ได้
+  // subtotal/discount/total เป็นยอด "รวม VAT แล้ว" (ราคาขายของเราเป็นราคารวมภาษี)
+  // vat_rate/subtotal_ex_vat/vat_amount = ยอดแยกภาษี ณ เวลาที่ขาย — เก็บไว้เลยไม่คำนวณย้อนหลัง
+  // เพราะอัตราภาษีเปลี่ยนได้ และใบกำกับภาษีที่พิมพ์ไปแล้วต้องตรงกับตัวเลขในระบบตลอดไป
   sales_orders:        ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at',
-    'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by'],
+    'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by',
+    'vat_rate','subtotal_ex_vat','vat_amount'],
   // qty/price/line_total เป็น "หน่วยที่ขายจริง" (เช่น ลัง) ตรงกับที่ลูกค้าเห็นบนบิล
   // base_qty คือจำนวนแปลงเป็นหน่วยฐานแล้ว (qty × unit_factor) ใช้ตัดสต็อกและเช็คโปรโมชั่นเท่านั้น
   order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free'],

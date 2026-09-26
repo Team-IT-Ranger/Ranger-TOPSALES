@@ -92,5 +92,24 @@ eq('normUnitCode: คำไทย/รหัสเก่า -> มาตรฐา
    ['CT', 'CT', 'CT', 'PK', 'PK', 'PC', 'PC', 'PC', 'PC', 'PC']);
 eq('unitLabelOf: รหัส -> ชื่อไทยที่ใช้ทั้งระบบ', ['CT','PK','PC'].map(c => ctx.unitLabelOf(c)), ['ลัง','แพ็ค','ชิ้น']);
 
+console.log('\n-- แยกภาษีมูลค่าเพิ่มออกจากราคาขาย (ราคาของเราเป็นราคารวมภาษี) --');
+eq('ถอด VAT 7% ออกจาก 107 บาท', (() => { const v = ctx.splitVat(107); return [v.exVat, v.vat, v.gross]; })(), [100, 7, 107]);
+eq('ยอดที่หารไม่ลงตัว ต้องบวกกลับได้เท่าเดิมเป๊ะ (กันงบไม่ลงตัวเพราะปัดเศษ)', (() => {
+  const bad = [];
+  for (let cents = 1; cents <= 2000; cents++) {
+    const gross = Math.round(cents * 13.37) / 100;          // ยอดสารพัดแบบที่หารด้วย 1.07 ไม่ลงตัว
+    const v = ctx.splitVat(gross);
+    if (Math.round((v.exVat + v.vat) * 100) !== Math.round(gross * 100)) bad.push(gross);
+  }
+  return bad.length;
+})(), 0);
+eq('ยอดศูนย์ไม่พัง', (() => { const v = ctx.splitVat(0); return [v.exVat, v.vat]; })(), [0, 0]);
+eq('อัตราอื่นก็สั่งได้ (เผื่อกฎหมายเปลี่ยน / สินค้าอัตราศูนย์)', (() => {
+  const v = ctx.splitVat(100, 0); return [v.exVat, v.vat]; })(), [100, 0]);
+eq('ยอดที่ปัดเศษแล้วภาษีตรงกับที่บัญชีคิด', (() => {
+  const v = ctx.splitVat(31456);
+  return [v.exVat, v.vat, Math.round((v.exVat + v.vat) * 100) / 100];
+})(), [29398.13, 2057.87, 31456]);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

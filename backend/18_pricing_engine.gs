@@ -6,6 +6,31 @@
 var VAT_RATE = 0.07;
 function _round2(n) { return Math.round(n * 100) / 100; }
 
+/**
+ * ถอด VAT ออกจากยอดที่ "รวมภาษีแล้ว" — ราคาขายทุกช่องของเราเป็นราคารวม VAT
+ * (ใบรายการขายของบริษัทพิมพ์ราคารวมภาษีมาแต่ไหนแต่ไร ชุดราคาจึงเก็บแบบนั้นตรงๆ)
+ * ใช้ตัวเดียวกันทุกที่ที่ต้องแยกภาษี — บิลขาย / ใบกำกับภาษีที่พิมพ์ / ใบแจ้งหนี้ลูกหนี้
+ * จะได้ไม่มีวันปัดเศษไม่ตรงกันระหว่างกระดาษกับบัญชี
+ */
+function splitVat(grossInclVat, rate) {
+  var r = rate === undefined || rate === null ? VAT_RATE : Number(rate);
+  var gross = _round2(Number(grossInclVat) || 0);
+  var exVat = _round2(gross / (1 + r));
+  return { rate: r, gross: gross, exVat: exVat, vat: _round2(gross - exVat) };
+}
+
+/**
+ * ยอดแยกภาษีของบิลหนึ่งใบ — ใช้ค่าที่บันทึกไว้ตอนขายก่อนเสมอ
+ * บิลที่บันทึกก่อนมีคอลัมน์นี้ (หรือแถวที่ยังว่าง) ถึงจะถอดสดจากยอดรวมให้ ณ อัตราปัจจุบัน
+ */
+function _orderVat(order) {
+  var saved = Number(order.vat_amount);
+  if (order.vat_amount !== '' && order.vat_amount !== null && order.vat_amount !== undefined && !isNaN(saved)) {
+    return { rate: Number(order.vat_rate) || VAT_RATE, exVat: Number(order.subtotal_ex_vat) || 0, vat: saved };
+  }
+  return splitVat(Number(order.total) || 0);
+}
+
 // ชำระแบบเครดิต = ใช้ราคาเครดิต, อย่างอื่น (เงินสด/โอน/เช็ค) = ราคาเงินสด — รหัสตาม payment_types
 function isCreditPayment(code) { code = String(code || '').toLowerCase(); return code === 'credit_term' || code === 'credit'; }
 
