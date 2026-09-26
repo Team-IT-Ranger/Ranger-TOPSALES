@@ -1313,7 +1313,9 @@ async function handleLineCallback(){
       const nm = (data.lineProfile && data.lineProfile.displayName) || '';
       document.getElementById('su-name').value = nm;   // ชื่อใน LINE เป็นชื่อผู้ใช้ตั้งต้น
       const badge = document.getElementById('su-line-badge');
-      badge.textContent = 'ยืนยันตัวตนกับ LINE เรียบร้อย' + (nm ? (' — ' + nm) : '') + ' · ไม่ต้องตั้งรหัสผ่าน';
+      const lid = (data.lineProfile && data.lineProfile.userId) || '';
+      badge.innerHTML = 'ยืนยันตัวตนกับ LINE เรียบร้อย' + (nm ? (' — ' + esc(nm)) : '') + ' · ไม่ต้องตั้งรหัสผ่าน' +
+        (lid ? '<br><span class="unit">LINE User ID ของคุณ: <b class="mono-data">' + esc(lid) + '</b> — ถ้าคุณมีบัญชีในระบบอยู่แล้ว ส่งรหัสนี้ให้ผู้ดูแลผูกให้ แทนการสมัครใหม่</span>' : '');
       badge.style.display = 'block';
       const ok = document.getElementById('signup-ok');
       ok.textContent = 'เหลือแค่เลือกสังกัดแล้วส่งคำขอ'; ok.style.display = 'block';

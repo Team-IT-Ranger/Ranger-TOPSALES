@@ -90,6 +90,87 @@ function resetAdminPasswordDev() {
   Logger.log('ไม่พบ username: ' + username + ' — ลองรัน listAdminUsernamesForRecovery() ดูชื่อที่มีอยู่ก่อน');
 }
 
+/* ═══════════ กู้คืนการเข้าสู่ระบบด้วย LINE ═══════════
+ * อาการ: กด "เข้าสู่ระบบด้วย LINE" แล้วระบบพาไปหน้าลงทะเบียนใหม่ทุกครั้ง (หรือบอกว่ารออนุมัติ)
+ * สาเหตุที่พบบ่อยที่สุด: **ยังไม่มีบัญชีแอดมินแถวไหนที่คอลัมน์ line_user_id เป็น LINE id นั้น**
+ *   - createFirstSuperAdmin() / setupProductionEnvironment() สร้างบัญชีโดย "ไม่ได้" ผูก LINE ให้
+ *   - ผูกผ่านหน้าเว็บ (linkAdminLineId) ต้องล็อกอินเป็น Ultra Admin ก่อน ซึ่งเข้าไม่ได้อยู่แล้ว = ไก่กับไข่
+ * จึงต้องผูกจาก editor หนึ่งครั้ง (รันในนามเจ้าของโปรเจกต์ ไม่ต้องมี session)
+ *
+ * วิธีใช้: เลือกฟังก์ชัน diagnoseLineLogin → Run (ดูก่อนว่าเป็นอะไร) แล้วค่อย bindAdminLineId → Run
+ * ดูผลที่ Execution log (Ctrl+Enter)
+ */
+
+// แก้ 2 ค่านี้ก่อน Run — ใช้ร่วมกันทั้ง diagnoseLineLogin() และ bindAdminLineId()
+var FIX_LINE_USER_ID = 'U94dedbdbc8da0378b4762e2e35a73c99';   // ← LINE user id ที่จะผูก
+var FIX_ADMIN_USERNAME = '';   // ← username ที่จะผูกให้ · เว้นว่าง = บัญชี super_admin แถวแรกที่เจอ
+
+/** รายงานอย่างเดียว ไม่แก้อะไร — บอกให้ครบว่าทำไมล็อกอินด้วย LINE ไม่ผ่าน */
+function diagnoseLineLogin() {
+  ensureSchemaCurrent();   // กันกรณีชีตยังไม่มีคอลัมน์ line_user_id (เพิ่มเข้ามาทีหลัง)
+  var headers = centralSheet('admin_users').getRange(1, 1, 1, centralSheet('admin_users').getLastColumn()).getValues()[0];
+  Logger.log('สภาพแวดล้อม: ENV_NAME=' + (_envName() || '(ไม่ได้ตั้ง = prod)'));
+  Logger.log('คอลัมน์ line_user_id ในชีต admin_users: ' + (headers.indexOf('line_user_id') >= 0 ? 'มี' : '❌ ไม่มี — รัน setupCentralSheet() ก่อน'));
+
+  var rows = centralObjects('admin_users');
+  Logger.log('บัญชีแอดมินทั้งหมด ' + rows.length + ' บัญชี:');
+  rows.forEach(function(u) {
+    Logger.log('  ' + String(u.username) + ' | role=' + (u.role_code || '(ยังไม่มีบทบาท)') +
+      ' | tenant=' + (u.tenant_id || '(บริษัท)') + ' | status=' + u.status +
+      ' | LINE=' + (u.line_user_id ? u.line_user_id : '(ยังไม่ผูก)') +
+      ' | รหัสผ่าน=' + (String(u.password_hash || '').trim() ? 'มี' : 'ไม่มี (ล็อกอินได้ทาง LINE เท่านั้น)'));
+  });
+
+  var target = _adminByLineId(FIX_LINE_USER_ID);
+  if (!target) {
+    Logger.log('❌ ไม่มีบัญชีไหนผูกกับ ' + FIX_LINE_USER_ID + ' — นี่คือสาเหตุ: หน้าเว็บจึงพาไปลงทะเบียนใหม่');
+    Logger.log('   แก้ด้วยการ Run ฟังก์ชัน bindAdminLineId()');
+    return;
+  }
+  Logger.log('พบบัญชีที่ผูกไว้แล้ว: ' + target.username);
+  var gate = _adminAccountGate(target);
+  Logger.log(gate ? ('❌ แต่ยังเข้าไม่ได้เพราะ: ' + gate.message) : '✅ บัญชีนี้เข้าใช้งานได้ตามปกติ — ถ้ายังเข้าไม่ได้ ปัญหาอยู่ฝั่งหน้าเว็บ/เบราว์เซอร์');
+}
+
+/** ผูก LINE id เข้ากับบัญชีแอดมิน แล้วเปิดใช้งานบัญชีนั้นให้พร้อมเข้าระบบ */
+function bindAdminLineId() {
+  ensureSchemaCurrent();
+  var lineId = String(FIX_LINE_USER_ID || '').trim();
+  if (!isLineUserId(lineId)) { Logger.log('❌ รูปแบบ LINE user id ไม่ถูกต้อง (ต้องเป็น U ตามด้วย hex 32 ตัว): ' + lineId); return; }
+
+  var rows = centralObjects('admin_users');
+  if (!rows.length) { Logger.log('❌ ยังไม่มีบัญชีแอดมินเลย — รัน createFirstSuperAdmin() ก่อน'); return; }
+
+  var target = null;
+  if (FIX_ADMIN_USERNAME) {
+    rows.forEach(function(u) { if (String(u.username).toLowerCase() === String(FIX_ADMIN_USERNAME).toLowerCase()) target = u; });
+    if (!target) { Logger.log('❌ ไม่พบ username: ' + FIX_ADMIN_USERNAME + ' — Run diagnoseLineLogin() ดูรายชื่อที่มีอยู่'); return; }
+  } else {
+    rows.forEach(function(u) { if (!target && String(u.role_code) === 'super_admin') target = u; });
+    if (!target) { Logger.log('❌ ไม่มีบัญชี super_admin ในระบบ — ระบุ FIX_ADMIN_USERNAME เอง หรือรัน createFirstSuperAdmin()'); return; }
+  }
+
+  var dup = _adminByLineId(lineId);
+  if (dup && String(dup.record_id) !== String(target.record_id)) {
+    Logger.log('❌ LINE นี้ผูกกับบัญชี "' + dup.username + '" อยู่แล้ว (1 LINE = 1 บัญชี) — ยกเลิกของเดิมก่อน');
+    return;
+  }
+
+  // ผูก LINE + ทำให้บัญชีพร้อมใช้งานจริง (เครื่องมือกู้คืนสำหรับเจ้าของระบบ จึงเปิดสถานะให้ด้วยถ้ายังค้าง)
+  var patch = { line_user_id: lineId };
+  var notes = [];
+  if (String(target.status) !== ADMIN_STATUS_ACTIVE) { patch.status = ADMIN_STATUS_ACTIVE; notes.push('เปลี่ยนสถานะจาก "' + target.status + '" เป็น active'); }
+  if (!String(target.role_code || '').trim()) { patch.role_code = 'super_admin'; notes.push('ตั้งบทบาทเป็น super_admin (เดิมว่าง)'); }
+  centralUpdate('admin_users', target.record_id, patch);
+  centralInvalidate('admin_users');
+
+  Logger.log('✅ ผูก ' + lineId + ' เข้ากับบัญชี "' + target.username + '" แล้ว');
+  notes.forEach(function(n) { Logger.log('   · ' + n); });
+  var after = _adminByLineId(lineId);
+  Logger.log(after ? '   ตรวจซ้ำแล้วอ่านกลับมาได้จริง — กด "เข้าสู่ระบบด้วย LINE" ที่หน้าแอดมินได้เลย'
+                   : '   ⚠️ เขียนแล้วแต่อ่านกลับไม่เจอ — ตรวจว่าชีต admin_users มีคอลัมน์ line_user_id จริงไหม');
+}
+
 // สินค้าที่สร้างไว้ก่อนมีฟิลด์ product_code (เพิ่มเข้ามาทีหลัง) จะไม่มีรหัส — ช่อง "รหัสสินค้า" ในตาราง
 // ขึ้น "-" ว่างเปล่า รันตัวนี้ครั้งเดียวเพื่อตั้งรหัสอัตโนมัติให้ทุกแถวที่ยังไม่มี (รูปแบบ P0001, P0002, ...
 // เรียงตาม record_id) กันไม่ให้ว่างเฉยๆ เท่านั้น — อยากได้รหัสที่มีความหมายกว่านี้ ไปแก้เองทีหลังได้

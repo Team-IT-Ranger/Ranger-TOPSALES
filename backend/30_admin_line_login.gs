@@ -75,7 +75,7 @@ function adminLoginWithLine(payload) {
     cache.put(SIGNUP_TICKET_PREFIX + ticket, JSON.stringify({
       lineUserId: profile.userId, displayName: profile.displayName || '' }), 900);
     return { success: false, needRegister: true, signupTicket: ticket,
-      message: 'LINE นี้ยังไม่ได้ผูกกับบัญชีผู้ใช้ — ลงทะเบียนขอใช้งานก่อน',
+      message: 'LINE นี้ยังไม่ได้ผูกกับบัญชีผู้ใช้ในระบบ (' + profile.userId + ') — ลงทะเบียนขอใช้งาน หรือให้ผู้ดูแลผูก LINE นี้เข้ากับบัญชีเดิมของคุณ',
       lineProfile: { userId: profile.userId, displayName: profile.displayName || '' } };
   }
   // บัญชีที่ยังไม่มีชื่อ (เช่นสร้างจากสคริปต์) เติมชื่อจาก LINE ให้ — ไม่ทับชื่อที่ตั้งไว้แล้ว
