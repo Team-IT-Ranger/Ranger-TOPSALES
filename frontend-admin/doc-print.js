@@ -72,6 +72,8 @@
     '.docsheet .dp-sign div{flex:1;text-align:center;font-size:.95em}',
     '.docsheet .dp-sign .dp-line{border-top:1px dotted #555;margin:0 .4em .35em;height:2.6em}',
     '.docsheet .dp-pg{text-align:right;font-size:.85em;color:#666;margin-top:.5em}',
+    '.docsheet .dp-carry{display:flex;justify-content:space-between;border-top:1px solid #B9C3D2;',
+    '  padding:.35em .5em;font-weight:600;background:#F6F8FC;font-size:.98em}',
     '.docsheet .dp-wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}',
     '.docsheet .dp-wm span{font-size:9em;font-weight:800;color:rgba(200,30,30,.13);transform:rotate(-24deg);letter-spacing:.1em}',
     /* ตอนสั่งพิมพ์: เหลือแค่กระดาษ */
@@ -80,8 +82,9 @@
     '  body>.doc-ov.show{display:block !important;position:static;background:#fff;padding:0;overflow:visible}',
     '  .doc-bar{display:none !important}',
     '  .doc-pages{padding:0}',
-    '  .docsheet{box-shadow:none;margin:0;page-break-after:always;break-after:page}',
-    '  .docsheet:last-child{page-break-after:auto;break-after:auto}',
+    /* ★ สั่งตัด "ก่อน" แผ่นที่สองเป็นต้นไป ไม่ใช่ตัด "หลัง" ทุกแผ่น — ตัดหลังแผ่นสุดท้ายด้วย = ได้กระดาษเปล่าเพิ่มทุกครั้ง */
+    '  .docsheet{box-shadow:none;margin:0}',
+    '  .docsheet + .docsheet{page-break-before:always;break-before:page}',
     '  @page{size:A4;margin:0}',
     '}'
   ].join('\n');
@@ -91,6 +94,14 @@
   var money = function (n) { return (parseFloat(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 
   var ov = null, pagesEl = null, blobUrl = null;
+
+  /** ขนาดตัวอักษรฐานที่แอปตั้งไว้จริง (ตั้งค่าต่อบริษัทได้) — ต้องยกไปใส่ในไฟล์ที่เปิดแท็บใหม่ด้วย */
+  function docBaseFontSize() {
+    try {
+      var v = getComputedStyle(document.documentElement).getPropertyValue('--doc-fs');
+      return (v || '').trim();
+    } catch (e) { return ''; }
+  }
 
   function ensureShell() {
     if (ov) return;
@@ -147,13 +158,13 @@
       var take = 0, lastPage = false;
 
       // ลองให้เป็นหน้าสุดท้าย (มียอดรวม+ช่องลงชื่อ) ก่อน — ถ้าที่เหลือทั้งหมดใส่ลงได้ก็จบที่หน้านี้
-      if (fits(render(rows.slice(i), true))) { take = rest; lastPage = true; }
+      if (fits(render(rows.slice(i), true, i))) { take = rest; lastPage = true; }
       else {
         // ไม่พอ → หน้านี้เป็นหน้ากลาง ไล่เติมแถวจนเริ่มล้นแล้วถอยกลับหนึ่งแถว
         var lo = 0, hi = rest;
         while (lo < hi) {                       // ค้นหาแบบแบ่งครึ่ง เร็วกว่าไล่ทีละแถวมากเมื่อรายการยาว
           var mid = Math.ceil((lo + hi) / 2);
-          if (fits(render(rows.slice(i, i + mid), false))) lo = mid; else hi = mid - 1;
+          if (fits(render(rows.slice(i, i + mid), false, i))) lo = mid; else hi = mid - 1;
         }
         take = lo;
         if (take === 0) take = 1;               // แถวเดียวยังไม่พอ = ข้อมูลแถวนั้นยาวผิดปกติ ปล่อยให้ล้นดีกว่าวนไม่จบ
@@ -177,7 +188,8 @@
     // ทางออกสำรอง: ลิงก์จริงที่ผู้ใช้คลิกเอง (คลิกลิงก์นับเป็น user activation) — ไฟล์ต้องพก CSS ไปเอง
     var html = '<!doctype html><html lang="th"><head><meta charset="utf-8"><title>' + E(title) + '</title>' +
       '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
-      '<style>body{margin:0;background:#8891a3}' + CSS + '</style></head>' +
+      // ★ ไฟล์นี้ไม่ได้โหลด :root ของแอป — ต้องประกาศตัวแปรที่ .docsheet ใช้ซ้ำที่นี่เอง
+      '<style>:root{--doc-fs:' + (docBaseFontSize() || '10px') + '}body{margin:0;background:#8891a3}' + CSS + '</style></head>' +
       '<body>' + pagesHtml.join('') + '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script></body></html>';
     if (blobUrl) URL.revokeObjectURL(blobUrl);
     blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
@@ -229,6 +241,12 @@
     return cols ? '<div class="dp-party">' + cols + '</div>' : '';
   }
 
+  /* 2.3 หน้ากลางต้องบอกยอดยกไป และหน้าถัดไปรับยอดยกมา — ไม่งั้นคนอ่านรวมเลขเองไม่ได้
+     และไม่รู้ว่าได้กระดาษครบหรือเปล่า (เอกสารไม่มีราคาไม่ต้องมี) */
+  function carryRow(label, amount) {
+    return '<div class="dp-carry"><span>' + E(label) + '</span><span>' + E(money(amount)) + '</span></div>';
+  }
+
   function docFoot(spec) {
     var totals = (spec.totals || []).map(function (t) {
       return '<tr' + (t[2] === 'grand' ? ' class="dp-grand"' : '') + '><td>' + E(t[0]) + '</td><td>' + E(t[1]) + '</td></tr>';
@@ -266,15 +284,32 @@
     var wm = spec.watermark ? '<div class="dp-wm"><span>' + E(spec.watermark) + '</span></div>' : '';
 
     var rowsHtml = spec.lines.map(function (l, i) { return docRowHtml(spec, l, i); });
-    var render = function (rows, withFooter, pageNo, pageCount) {
+    // ยอดของแต่ละบรรทัด ใช้คิดยอดยกไป/ยกมา (เอกสารที่ไม่พิมพ์ราคาไม่ต้องมี)
+    var amounts = spec.carry === false ? null : spec.lines.map(function (l) { return (l._free ? 0 : (parseFloat(l.lineTotal) || 0)); });
+    var render = function (rows, withFooter, pageNo, pageCount, carryIn, carryOut) {
       return '<div class="docsheet">' + wm +
         docHead(spec, pageNo || 1, pageCount || 1) + docParty(spec) +
+        (carryIn !== null && carryIn !== undefined ? carryRow('ยอดยกมาจากหน้าที่แล้ว', carryIn) : '') +
         '<table class="dp-tbl">' + colgroup + thead + '<tbody>' + rows.join('') + '</tbody></table>' +
-        (withFooter ? docFoot(spec) : '<div class="dp-foot"><div class="dp-pg">มีต่อหน้าถัดไป →</div></div>') +
+        (withFooter ? docFoot(spec)
+          : (carryOut !== null && carryOut !== undefined ? carryRow('ยอดยกไปหน้าถัดไป', carryOut) : '') +
+            '<div class="dp-foot"><div class="dp-pg">มีต่อหน้าถัดไป →</div></div>') +
         '</div>';
     };
-    var pages = paginate(rowsHtml, function (rows, withFooter) { return render(rows, withFooter, 1, 2); });
-    var html = pages.map(function (p, i) { return render(p.rows, p.last, i + 1, pages.length); });
+    // ตอนวัดความสูงต้องใส่แถบยอดยกไป/ยกมาเข้าไปด้วย ไม่งั้นสูงไม่ตรงกับของจริงแล้วหน้าสุดท้ายจะล้น
+    var pages = paginate(rowsHtml, function (rows, withFooter, startIndex) {
+      var cIn = (amounts && startIndex > 0) ? 0 : null;
+      var cOut = (amounts && !withFooter) ? 0 : null;
+      return render(rows, withFooter, 1, 2, cIn, cOut);
+    });
+    var running = 0, at = 0;
+    var html = pages.map(function (p, i) {
+      var cIn = (amounts && i > 0) ? running : null;
+      for (var k = 0; k < p.rows.length; k++) running += amounts ? amounts[at + k] : 0;
+      at += p.rows.length;
+      var cOut = (amounts && !p.last) ? running : null;
+      return render(p.rows, p.last, i + 1, pages.length, cIn, cOut);
+    });
     show((spec.title || 'เอกสาร') + (spec.docNo ? ' ' + spec.docNo : ''), html, { xlsx: spec.xlsx });
   }
 

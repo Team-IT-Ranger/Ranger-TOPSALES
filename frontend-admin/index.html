@@ -2236,7 +2236,7 @@ function renderSalesOrdersTable(){
     '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
     '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
     '<td class="mono-data">'+esc(o.createdAt)+'</td>' +
-    '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'delivery\')">พิมพ์</button></td></tr>'
+    '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'invoice\')">พิมพ์</button></td></tr>'
   ).join('');
 }
 /* พิมพ์ซ้ำได้ตลอดจากในตาราง โดยไม่ต้องเข้าหน้ารายละเอียดก่อน (ใบเดิมหาย/เปื้อนเป็นเรื่องปกติ) */
@@ -2297,7 +2297,8 @@ function renderSaleOrderDetail(r){
   document.getElementById('sod-meta').innerHTML = esc(o.customer) + ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
     ' · ' + esc(o.createdAt) + (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
   document.getElementById('sod-actions').innerHTML =
-    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'delivery\')">ใบส่งของ/ใบกำกับภาษี</button> ' +
+    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'invoice\')">ใบกำกับภาษี</button> ' +
+    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'delivery\')">ใบส่งสินค้า (ไม่มีราคา)</button> ' +
     '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'picking\')">ใบจัดของ</button> ' +
     ((o.paymentStatus === 'paid') ? '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'receipt\')">ใบเสร็จรับเงิน</button> ' : '') +
     (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
@@ -2385,13 +2386,18 @@ function ensureDocPrint(){
     document.head.appendChild(s);
   });
 }
+/* บิลใบเดียวออกเอกสารได้หลายชนิด คนละหน้าที่กัน (docs/sales-status-and-printing-guide.md ข้อ 2.5)
+   ★ "ใบส่งสินค้า" ไม่พิมพ์ราคาโดยตั้งใจ — เอกสารใบนี้ผ่านมือคนขับและผู้รับปลายทางซึ่งไม่ใช่คู่สัญญาการค้า
+     ราคาที่ตกลงกันไม่ควรหลุดไปกับของ · งานรถเร่ของเราของผ่านมือคนนอกเยอะกว่าขายหน้าร้านมาก เรื่องนี้จึงสำคัญ
+   ช่องลงชื่อสะท้อนหน้าที่ทางธุรกิจของเอกสารนั้น ไม่ใช่ของประดับ (ข้อ 2.4) */
 const SO_DOC_KINDS = {
-  delivery: { title: 'ใบส่งของ / ใบกำกับภาษี', signers: ['ผู้ส่งของ','ผู้รับสินค้า'], showPrice: true, showBank: true },
+  invoice:  { title: 'ใบกำกับภาษี / ใบส่งของ', signers: ['ผู้ขาย','ผู้รับสินค้า'], showPrice: true, showBank: true },
+  delivery: { title: 'ใบส่งสินค้า',             signers: ['ผู้จัดของ','ผู้จัดส่ง','ผู้รับสินค้า'], showPrice: false, showBank: false },
   receipt:  { title: 'ใบเสร็จรับเงิน',          signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false },
   picking:  { title: 'ใบจัดของ',                signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false }
 };
 function printSaleDoc(r, kind){
-  const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.delivery;
+  const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.invoice;
   const o = r.order, iss = r.issuer || {};
   ensureDocPrint().then(() => {
     const cols = [
@@ -2408,12 +2414,12 @@ function printSaleDoc(r, kind){
       ['ยอดรวมก่อนหักส่วนลด', DocPrint.money(o.subtotal)],
       ...(o.discount ? [['ส่วนลด', '-' + DocPrint.money(o.discount)]] : []),
       ['ยอดสุทธิ (รวมภาษีมูลค่าเพิ่มแล้ว)', DocPrint.money(o.total), 'grand'],
-      ...(kind === 'delivery' && o.paidAmount ? [['รับชำระแล้ว', DocPrint.money(o.paidAmount)],
+      ...(kind === 'invoice' && o.paidAmount ? [['รับชำระแล้ว', DocPrint.money(o.paidAmount)],
         ['คงค้าง', DocPrint.money(Math.max(0, (o.total||0) - (o.paidAmount||0)))]] : [])
     ] : [];
     DocPrint.doc({
       title: k.title, docNo: o.code, issuer: iss,
-      subLabel: kind === 'delivery' ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : '',
+      subLabel: k.showPrice ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : '',
       metaRight: [['เลขที่', o.code], ['วันที่', (o.createdAt || '').substring(0, 10)],
         ['สถานะ', SO_LABELS[o.status] || o.status], ['การชำระเงิน', PAY_LABELS[o.paymentStatus || 'unpaid'] || '-']],
       parties: [
@@ -2424,6 +2430,7 @@ function printSaleDoc(r, kind){
       ],
       columns: cols, lines: r.items, totals: totals,
       note: o.note || '', signers: k.signers, showBank: k.showBank,
+      carry: k.showPrice,   // ยอดยกไป/ยกมา มีเฉพาะเอกสารที่พิมพ์ราคา
       watermark: o.status === 'cancelled' ? 'ยกเลิก' : '',
       xlsx: { filename: o.code, headers: cols.map(c => c.label),
         rows: r.items.map((l, i) => cols.map(c => String(c.value(l, i)))) }

@@ -257,7 +257,8 @@ function cancelSalesOrderAdmin(session, payload) {
   if (order.status === 'cancelled') return { success: false, message: 'บิลนี้ถูกยกเลิกไปแล้ว' };
 
   // คืนสต็อกรถ ถ้าเคยตัดไปแล้วและ sale_by เป็นพนักงานจริง (ไม่ใช่ 'admin:' ที่ไม่ผูกกับรถคันไหน)
-  if (order.fulfillment_type === 'immediate' && order.sale_by && String(order.sale_by).indexOf('admin:') !== 0) {
+  // saleStockTaken() คือนิยามเดียวกับที่ใช้ตัดของ — ย้ายจุดตัดเมื่อไหร่ ตรงนี้ขยับตามเอง (34_sales_status.gs)
+  if (saleStockTaken(order) && order.sale_by && String(order.sale_by).indexOf('admin:') !== 0) {
     var need = {};
     tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
       .forEach(function(it) { need[String(it.product_id)] = (need[String(it.product_id)] || 0) - (parseFloat(it.base_qty) || 0); });
