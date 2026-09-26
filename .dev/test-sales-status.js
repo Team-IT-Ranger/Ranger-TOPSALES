@@ -18,6 +18,11 @@ const t = {   // ชีตของตัวแทน T1
   order_status_log: []
 };
 const sheetOf = n => { if (!t[n]) t[n] = []; return t[n]; };
+// คลังกลางของตัวแทน T1 (ชีตกลาง ไม่ใช่ชีตของตัวแทน) + บัญชีคุมการเคลื่อนไหว
+const WH = { warehouse_stock: [{ tenant_id: 'T1', warehouse_id: 'W1', product_id: '101', qty: 50, avg_cost: 10 },
+                               { tenant_id: 'T1', warehouse_id: 'W1', product_id: '102', qty: 4,  avg_cost: 20 }] };
+const LEDGER = [];
+const whQty = pid => { const r = WH.warehouse_stock.find(x => String(x.product_id) === String(pid)); return r ? r.qty : 0; };
 const CACHE = {};
 const ctx = {
   console, JSON, String, Number, Object, Array, Date, isNaN, isFinite, parseInt, parseFloat, RegExp, Math,
@@ -46,9 +51,20 @@ const ctx = {
       getRange: (row, col) => ({ setValue: v => { rows[row - 2][hdr[col - 1]] = v; } }) };
   },
   ensureTenantSheetsCurrent: () => {},
+  HOUSE_TENANT_ID: 'HOUSE',
+  _ensureScopeWarehouse: () => 'W1',
+  _scoped: (name, scope) => (WH[name] || []).filter(r => String(r.tenant_id || '') === String(scope || '')),
+  _applyStockIn: (scope, wh, pid, qty, cost, moveType, refType, refId, note, by) => {
+    const row = (WH.warehouse_stock || []).find(r => String(r.tenant_id || '') === String(scope || '')
+      && String(r.warehouse_id) === String(wh) && String(r.product_id) === String(pid));
+    if (row) row.qty = (Number(row.qty) || 0) + qty;
+    else WH.warehouse_stock.push({ tenant_id: scope || '', warehouse_id: wh, product_id: pid, qty: qty, avg_cost: cost });
+    LEDGER.push({ pid: String(pid), qty, moveType, refId: String(refId) });
+  },
   _requirePermission: () => null,
   _salesTenantId: (session, payload) => session.tenant_id || (payload && payload.tenantId) || null,
-  centralObjects: () => []
+  centralObjects: name => (name === 'products'
+    ? [{ record_id: 101, name: 'น้ำยาล้างจาน' }, { record_id: 102, name: 'ผงซักฟอก' }] : [])
 };
 vm.createContext(ctx);
 ['20_purchasing_master.gs', '34_sales_status.gs'].forEach(f => {
@@ -125,6 +141,53 @@ eq('ประวัติที่ส่งให้หน้าเว็บม�
   return [h.toLabel, h.toPaymentLabel, h.by]; })(), ['ส่งของแล้ว', 'ยังไม่ชำระ', 'แอดมินบริษัท']);
 
 console.log('\n── ป้ายและเส้นทางที่ส่งให้หน้าเว็บ ──');
+console.log('\n== จุดตัดสต็อก: office_delivery ตัดตอน "กำลังจัดส่ง" ==');
+t.sales_orders.push({ record_id: 10, order_code: 'SO-OD-1', customer_id: 1, total: 900, payment_method: 'credit',
+  fulfillment_type: 'office_delivery', status: 'pending_delivery', payment_status: 'unpaid', paid_amount: 0,
+  sale_by: 'admin:owner', created_at: '2026-09-27 09:00:00' });
+t.order_items = [{ record_id: 1, order_id: 10, product_id: 101, base_qty: 12 },
+                 { record_id: 2, order_id: 10, product_id: 102, base_qty: 3 }];
+eq('บิลที่ยังรอจัดส่ง ถือว่ายังไม่ได้ตัดของ', ctx.saleStockTaken(row(10)), false);
+eq('ยังไม่แตะคลังเลยตอนเปิดบิล', [whQty(101), whQty(102)], [50, 4]);
+
+r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'delivering' });
+eq('เข้า "กำลังจัดส่ง" → ตัดของออกจากคลัง', [r.success, whQty(101), whQty(102)], [true, 38, 1]);
+eq('  บอกในข้อความว่าตัดสต็อกแล้ว', /ตัดสต็อกออกจากคลังแล้ว/.test(r.message), true);
+eq('  เขียนบัญชีคุมการเคลื่อนไหวเป็นยอดติดลบ', LEDGER.filter(l => l.moveType === 'sale_out').map(l => l.qty), [-12, -3]);
+eq('  ตอนนี้ถือว่าของถูกตัดไปแล้ว', ctx.saleStockTaken(row(10)), true);
+
+LEDGER.length = 0;
+r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'completed' });
+eq('เดินต่อไป "ส่งของแล้ว" → ★ ห้ามตัดซ้ำ', [r.success, whQty(101), whQty(102), LEDGER.length], [true, 38, 1, 0]);
+
+r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'delivering' });
+eq('ถอยจาก "ส่งของแล้ว" กลับมา "กำลังจัดส่ง" ก็ไม่ขยับสต็อก (ยังเลยจุดตัดอยู่)', [whQty(101), whQty(102)], [38, 1]);
+r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'pending_delivery' });
+eq('ถอยกลับก่อนจุดตัด → คืนของเข้าคลังครบ', [r.success, whQty(101), whQty(102)], [true, 50, 4]);
+eq('  บอกในข้อความว่าคืนของแล้ว', /คืนของเข้าคลังแล้ว/.test(r.message), true);
+
+console.log('\n== ห้ามข้ามขั้น (ข้ามแล้วของออกโดยไม่มีใครหักยอด) ==');
+fails('รอจัดส่ง → ส่งของแล้ว ตรงๆ ไม่ได้', ctx.updateSalesOrderStatus(S, { id: 10, status: 'completed' }), /ไม่ได้/);
+eq('  และสต็อกไม่ถูกแตะ', [whQty(101), whQty(102)], [50, 4]);
+
+console.log('\n== ของในคลังไม่พอ ==');
+t.sales_orders.push({ record_id: 11, order_code: 'SO-OD-2', customer_id: 1, total: 100, payment_method: 'cash',
+  fulfillment_type: 'office_delivery', status: 'pending_delivery', payment_status: 'unpaid', paid_amount: 0,
+  created_at: '2026-09-27 09:30:00' });
+t.order_items.push({ record_id: 3, order_id: 11, product_id: 101, base_qty: 5 },
+                   { record_id: 4, order_id: 11, product_id: 102, base_qty: 99 });
+LEDGER.length = 0;
+r = ctx.updateSalesOrderStatus(S, { id: 11, status: 'delivering' });
+eq('ของไม่พอ → ปฏิเสธ พร้อมบอกว่าตัวไหนขาดเท่าไหร่', [r.success, /ผงซักฟอก \(มี 4 ต้องใช้ 99\)/.test(r.message)], [false, true]);
+eq('  ★ ไม่ตัดครึ่งๆ กลางๆ — ตัวที่พอก็ต้องไม่ถูกแตะ', [whQty(101), whQty(102), LEDGER.length], [50, 4, 0]);
+eq('  สถานะไม่เปลี่ยนตาม', row(11).status, 'pending_delivery');
+
+console.log('\n== ขายจากรถยังตัดตอนบันทึกบิลเหมือนเดิม ==');
+eq('บิลขายจากรถถือว่าตัดของแล้วเสมอ ไม่ว่าสถานะอะไร', [
+  ctx.saleStockTaken({ fulfillment_type: 'immediate', status: 'completed' }),
+  ctx.saleStockTaken({ fulfillment_type: 'immediate', status: 'pending_delivery' })], [true, true]);
+eq('คลังของบริษัทขายตรง (HOUSE) = คลังกลาง scope ว่าง', [ctx._saleStockScope('HOUSE'), ctx._saleStockScope('T1')], ['', 'T1']);
+
 eq('อ่านประวัติจากไฟล์ที่ยังไม่มี tab ประวัติ (สคีมาเก่า) → ลิสต์ว่าง ไม่ใช่ error', (() => {
   const keep = t.order_status_log; delete t.order_status_log;     // จำลองไฟล์ตัวแทนที่ยังไม่ได้ migrate
   let out;
@@ -133,7 +196,7 @@ eq('อ่านประวัติจากไฟล์ที่ยังไ�
   return out;
 })(), []);
 eq('ป้ายสถานะครบทั้งสี่', Object.keys(ctx.SO_STATUS_LABELS).length, 4);
-eq('จากรอจัดส่ง ไปได้ 3 ทาง (รวมยกเลิก)', ctx.SO_TRANSITIONS.pending_delivery, ['delivering', 'completed', 'cancelled']);
+eq('จากรอจัดส่ง ไปได้แค่ "กำลังจัดส่ง" หรือยกเลิก (ข้ามจุดตัดสต็อกไม่ได้)', ctx.SO_TRANSITIONS.pending_delivery, ['delivering', 'cancelled']);
 eq('บิลที่ยกเลิกแล้วไปไหนไม่ได้เลย', ctx.SO_TRANSITIONS.cancelled, []);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

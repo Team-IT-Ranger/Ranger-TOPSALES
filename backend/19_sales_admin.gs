@@ -243,26 +243,41 @@ function recordSaleAdmin(session, payload) {
   return { success: true, orderId: orderId, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType };
 }
 
-// ยกเลิกบิลขาย — เฉพาะที่ยังไม่ถูกยกเลิกซ้ำ ถ้าเคยตัดสต็อกรถไปแล้ว (fulfillmentType='immediate') จะคืนสต็อกกลับให้อัตโนมัติ
-// payload: { id, tenantId? }
+// ยกเลิกบิลขาย — คืนของเข้าที่เดิมให้อัตโนมัติถ้าบิลนี้เลยจุดตัดสต็อกไปแล้ว (สต็อกรถ หรือ คลังกลาง)
+// payload: { id, tenantId?, note? }
+// อยู่ใต้ _withDocLock เพราะเขียนทั้งสต็อกคลังและยอดสรุปรายวัน — ต้องไม่ชนกับคำขออื่นที่กำลังขยับสต็อกอยู่
 function cancelSalesOrderAdmin(session, payload) {
   var err = _requirePermission(session, 'sales', 'edit'); if (err) return err;
   payload = payload || {};
   var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+  ensureTenantSheetsCurrent(tenantId);
+  return _withDocLock(function() { return _cancelSalesOrderCore(session, payload, tenantId); });
+}
 
+function _cancelSalesOrderCore(session, payload, tenantId) {
   var order = null;
   tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
   if (order.status === 'cancelled') return { success: false, message: 'บิลนี้ถูกยกเลิกไปแล้ว' };
 
-  // คืนสต็อกรถ ถ้าเคยตัดไปแล้วและ sale_by เป็นพนักงานจริง (ไม่ใช่ 'admin:' ที่ไม่ผูกกับรถคันไหน)
-  // saleStockTaken() คือนิยามเดียวกับที่ใช้ตัดของ — ย้ายจุดตัดเมื่อไหร่ ตรงนี้ขยับตามเอง (34_sales_status.gs)
-  if (saleStockTaken(order) && order.sale_by && String(order.sale_by).indexOf('admin:') !== 0) {
-    var need = {};
-    tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
-      .forEach(function(it) { need[String(it.product_id)] = (need[String(it.product_id)] || 0) - (parseFloat(it.base_qty) || 0); });
-    if (Object.keys(need).length) { _cutVanStock(tenantId, order.sale_by, need, order.record_id, 'cancel'); cacheClearUser(order.sale_by); }
+  // คืนของเข้าที่เดิม ถ้าบิลนี้เลยจุดตัดสต็อกไปแล้ว — saleStockTaken() คือนิยามเดียวกับที่ใช้ตอนตัดของ
+  // ย้ายจุดตัดเมื่อไหร่ ตรงนี้ขยับตามเองทันที (guide ข้อ 1.4 · ดู 34_sales_status.gs)
+  // ไม่คืน = ของหายจากระบบถาวรทั้งที่ยังวางอยู่ และไม่มีอะไรเตือนเลย เพราะยอดขายกับยอดสต็อกลดพร้อมกันดูสมเหตุสมผล
+  if (saleStockTaken(order)) {
+    if (String(order.fulfillment_type) === 'immediate') {
+      // ขายจากรถ: คืนเข้าสต็อกรถของคนที่ขาย (บิลที่แอดมินเปิดเองแบบไม่ผูกกับรถคันไหน ไม่มีอะไรให้คืน)
+      if (order.sale_by && String(order.sale_by).indexOf('admin:') !== 0) {
+        var need = {};
+        tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
+          .forEach(function(it) { need[String(it.product_id)] = (need[String(it.product_id)] || 0) - (parseFloat(it.base_qty) || 0); });
+        if (Object.keys(need).length) { _cutVanStock(tenantId, order.sale_by, need, order.record_id, 'cancel'); cacheClearUser(order.sale_by); }
+      }
+    } else {
+      // สำนักงานจัดส่ง: ของถูกตัดจากคลังกลางตอนเข้าสถานะ "กำลังจัดส่ง" — คืนกลับเข้าคลังเดิม
+      var back = applySaleWarehouseStock(tenantId, order, 1, 'ยกเลิกบิล ' + order.order_code, session.adminUserId);
+      if (!back.success) return back;
+    }
   }
 
   var sh = tenantSheet(tenantId, 'sales_orders');

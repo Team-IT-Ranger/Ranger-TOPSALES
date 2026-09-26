@@ -22,11 +22,11 @@ var SO_STATUS_LABELS = {
   pending_delivery: 'รอสำนักงานจัดส่ง', delivering: 'กำลังจัดส่ง', completed: 'ส่งของแล้ว', cancelled: 'ยกเลิกแล้ว'
 };
 /* ไปไหนต่อได้บ้างจากสถานะปัจจุบัน — ย้อนกลับได้หนึ่งขั้น (กดผิดเป็นเรื่องปกติ) แต่บิลที่ยกเลิกแล้วเปิดคืนไม่ได้
- * ต่างจากคู่มือ (guide ข้อ 1.1 ที่ห้ามข้ามขั้นเด็ดขาด) ตรงที่เรายอมให้ pending_delivery → completed ได้เลย
- * **โดยตั้งใจ** เพราะขั้น 'delivering' ของเราไม่มีผลข้างเคียงใดๆ (ไม่ตัด ไม่จองสต็อก) เป็นแค่ป้ายบอกสถานะงาน
- * ร้านเล็กที่ส่งเองวันเดียวจบจะได้ไม่ต้องกดสองครั้งเปล่าๆ — **ถ้าวันไหนขั้นนี้มีผลกับสต็อกเมื่อไหร่ ต้องลบทางลัดนี้ทิ้งทันที** */
+ * **ห้ามข้ามขั้น** (guide ข้อ 1.1): pending_delivery ไป completed ตรงๆ ไม่ได้ เพราะ delivering คือจุดที่ตัด
+ * สต็อกออกจากคลัง ข้ามได้เมื่อไหร่ของก็ออกไปโดยไม่มีใครหักยอด แล้วไม่มีอะไรฟ้องเลย
+ * (เคยเปิดทางลัดนี้ไว้ตอน delivering ยังไม่มีผลข้างเคียง — ปิดทิ้ง 2026-09-27 พร้อมกับตอนใส่จุดตัดสต็อก) */
 var SO_TRANSITIONS = {
-  pending_delivery: [SO_DELIVERING, SO_COMPLETED, SO_CANCELLED],
+  pending_delivery: [SO_DELIVERING, SO_CANCELLED],
   delivering:       [SO_COMPLETED, SO_PENDING, SO_CANCELLED],
   completed:        [SO_DELIVERING, SO_CANCELLED],
   cancelled:        []
@@ -36,16 +36,75 @@ var SO_TRANSITIONS = {
  * **ขายจากรถ (fulfillment_type = 'immediate')**: ตัดสต็อกรถของพนักงานคนนั้น **ตอนบันทึกบิล** จุดเดียว
  *   (`_cutVanStock` ใน 07_sales.gs) เพราะของออกจากรถถึงมือลูกค้าไปแล้วจริงๆ ณ วินาทีที่กดบันทึก
  *   การเปลี่ยนสถานะหลังจากนั้น **ไม่แตะสต็อกอีกเลย** — ตัดซ้ำคือบั๊กที่มองไม่เห็นจากหน้าจอ
- * **ให้สำนักงานจัดส่ง (office_delivery)**: ★ ตอนนี้ยัง **ไม่มีจุดตัดสต็อกเลย** ทั้งสต็อกรถและคลังกลาง
- *   (warehouse_stock ถูกเขียนโดยงานรับของเข้าคลังเท่านั้น — 22_purchase_order.gs)
- *   เป็นช่องว่างที่รู้ตัว ยังไม่ได้เลือกว่าจะตัดที่ขั้นไหน ต้องให้เจ้าของระบบตัดสินใจก่อน
+ * **ให้สำนักงานจัดส่ง (office_delivery)**: ตัดจาก **คลังกลาง** (warehouse_stock) ตอนเข้าสถานะ
+ *   **"กำลังจัดส่ง" (delivering)** — เจ้าของระบบเลือกเอง 2026-09-27 · เหตุผลเดียวกับที่ Hippo Village
+ *   ตัดที่ ready_to_ship: ของถูกหยิบออกจากชั้นและแพ็คขึ้นรถแล้ว มันไม่ได้อยู่ในคลังอีกต่อไปตั้งแต่ตอนนั้น
+ *   ถ้ารอตัดตอน "ส่งของแล้ว" ระบบจะบอกว่ามีของ ทั้งที่ของนอนอยู่ในกล่อง แล้วจะมีคนมาขายซ้ำ
+ *   ถอยกลับเป็น "รอจัดส่ง" = คืนของเข้าคลัง · ยกเลิกหลังเลยจุดนี้ = คืนของเข้าคลังเช่นกัน
  *
- * SO_STOCK_TAKEN = สถานะที่ "ของถูกตัดไปแล้ว" — ทำให้จุดที่ตัด กับ จุดที่ต้องคืนของตอนยกเลิก
+ * saleStockTaken() = นิยามเดียวของ "ของถูกตัดไปแล้ว" ทำให้จุดที่ตัด กับ จุดที่ต้องคืนของตอนยกเลิก
  * อ้างนิยามเดียวกัน วันที่ย้ายจุดตัด แก้ที่นี่ที่เดียวแล้วทั้งสองฝั่งขยับตามพร้อมกัน (guide ข้อ 1.4)
- * ตอนนี้ผูกกับ fulfillment_type ไม่ใช่ status เพราะการตัดเกิดตอนเปิดบิล ไม่ได้เกิดตอนเดินสถานะ
+ * **ห้ามตัดซ้ำในขั้นถัดไปเด็ดขาด** — updateSalesOrderStatus เทียบค่าก่อน/หลังแล้วขยับเฉพาะตอนค่าเปลี่ยน
  */
+var SO_STOCK_TAKEN_STATUSES = [SO_DELIVERING, SO_COMPLETED];
 function saleStockTaken(order) {
-  return String(order && order.fulfillment_type) === 'immediate';
+  if (!order) return false;
+  if (String(order.fulfillment_type) === 'immediate') return true;          // ตัดไปแล้วตั้งแต่บันทึกบิล
+  return SO_STOCK_TAKEN_STATUSES.indexOf(_soStatusOf(order)) !== -1;
+}
+
+/** คลังที่บิลนี้ตัดของออก — ตัวแทนใช้คลังของตัวเอง - ขายตรงของบริษัท (HOUSE) ใช้คลังกลางของบริษัท (scope ว่าง) */
+function _saleStockScope(tenantId) {
+  return String(tenantId) === HOUSE_TENANT_ID ? '' : String(tenantId || '');
+}
+
+/** รวมจำนวนหน่วยฐานต่อสินค้าของบิลใบนี้ (รวมของแถม เพราะของแถมก็ออกจากคลังจริง) */
+function _saleBaseQtyByProduct(tenantId, orderId) {
+  var need = {};
+  tenantObjects(tenantId, 'order_items')
+    .filter(function(it) { return String(it.order_id) === String(orderId); })
+    .forEach(function(it) {
+      var pid = String(it.product_id);
+      need[pid] = (need[pid] || 0) + (parseFloat(it.base_qty) || 0);
+    });
+  return need;
+}
+
+/**
+ * ขยับสต็อกคลังกลางของบิล office_delivery - dir = -1 ตัดออก - dir = +1 คืนเข้า
+ * ของไม่พอ = ไม่ขยับอะไรเลยสักตัว (เช็คให้ครบก่อนค่อยเขียน ไม่ตัดครึ่งๆ กลางๆ แล้วค้างไว้แบบนั้น)
+ * ต้องเรียกใต้ _withDocLock เท่านั้น - ใช้ _applyStockIn ตัวเดียวกับงานรับของเข้าคลัง (22_purchase_order.gs)
+ */
+function applySaleWarehouseStock(tenantId, order, dir, reason, userId) {
+  var scope = _saleStockScope(tenantId);
+  var warehouseId = _ensureScopeWarehouse(scope);
+  var need = _saleBaseQtyByProduct(tenantId, order.record_id);
+  var pids = Object.keys(need);
+  if (!pids.length) return { success: true, moved: 0 };
+
+  var stock = {}, cost = {};
+  _scoped('warehouse_stock', scope).forEach(function(r) {
+    if (String(r.warehouse_id) !== String(warehouseId)) return;
+    stock[String(r.product_id)] = Number(r.qty) || 0;
+    cost[String(r.product_id)] = Number(r.avg_cost) || 0;
+  });
+
+  if (dir < 0) {
+    var names = {};
+    centralObjects('products').forEach(function(pr) { names[String(pr.record_id)] = pr.name; });
+    var short = [];
+    pids.forEach(function(pid) {
+      var have = stock[pid] || 0;
+      if (have < need[pid]) short.push((names[pid] || ('สินค้า ' + pid)) + ' (มี ' + have + ' ต้องใช้ ' + need[pid] + ')');
+    });
+    if (short.length) return { success: false, message: 'ของในคลังไม่พอ: ' + short.join(' · ') };
+  }
+
+  pids.forEach(function(pid) {
+    _applyStockIn(scope, warehouseId, pid, dir * need[pid], cost[pid] || 0,
+      dir < 0 ? 'sale_out' : 'sale_return', 'SALES_ORDER', order.record_id, reason, userId);
+  });
+  return { success: true, moved: pids.length };
 }
 
 var PAY_UNPAID = 'unpaid', PAY_PARTIAL = 'partial', PAY_PAID = 'paid';
@@ -144,6 +203,15 @@ function updateSalesOrderStatus(session, payload) {
         if (fromStatus === SO_CANCELLED) return { success: false, message: 'บิลที่ยกเลิกแล้วเปลี่ยนสถานะไม่ได้' };
         if (SO_TRANSITIONS[fromStatus].indexOf(toStatus) === -1) {
           return { success: false, message: 'เปลี่ยนจาก "' + SO_STATUS_LABELS[fromStatus] + '" เป็น "' + SO_STATUS_LABELS[toStatus] + '" ไม่ได้' };
+        }
+        // ★ ขยับสต็อกเฉพาะตอนค่า "ของถูกตัดไปแล้ว" เปลี่ยน — ขั้นถัดไปจากจุดตัดจึงไม่ตัดซ้ำ
+        var wasTaken = saleStockTaken(order);
+        var willTake = saleStockTaken({ fulfillment_type: order.fulfillment_type, status: toStatus });
+        if (wasTaken !== willTake) {
+          var mv = applySaleWarehouseStock(tenantId, order, willTake ? -1 : 1,
+            'บิล ' + order.order_code + ' -> ' + SO_STATUS_LABELS[toStatus], session.adminUserId);
+          if (!mv.success) return mv;
+          changes.push(willTake ? 'ตัดสต็อกออกจากคลังแล้ว' : 'คืนของเข้าคลังแล้ว');
         }
         fields.status = toStatus;
         if (toStatus === SO_COMPLETED) fields.delivered_at = nowStr();
