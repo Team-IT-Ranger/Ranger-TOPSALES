@@ -999,7 +999,11 @@
             <div class="form-actions">
               <button class="btn" onclick="loadDbLayout()">ดูตำแหน่งไฟล์</button>
               <button class="btn btn-primary" id="dbl-fix" onclick="organizeDbFiles()">จัดระเบียบไฟล์ตามโครงสร้าง</button>
+              <button class="btn" id="dbl-schema" onclick="syncTenantSchemaUI()">ปรับสคีมาไฟล์ตัวแทน</button>
             </div>
+            <p class="form-hint">"ปรับสคีมาไฟล์ตัวแทน" = เติม tab/คอลัมน์ที่ขาดให้ไฟล์ของตัวแทนที่สร้างไว้ก่อนระบบเพิ่มฟิลด์ใหม่
+              (เช่น สถานะการเงินของบิลขาย และตารางประวัติสถานะ) — ข้อมูลเดิมไม่ถูกแตะ รันซ้ำได้ ปกติระบบเติมให้เองอยู่แล้วตอนบันทึกบิล
+              ปุ่มนี้ไว้สั่งให้ครบทุกรายทันทีโดยไม่ต้องรอ</p>
           </div>
         </section>
 
@@ -3457,6 +3461,15 @@ async function organizeDbFiles(){
   document.getElementById('dbl-list').innerHTML = r.report.map(x =>
     '<div class="activity-row"><span>'+esc(x.what)+'<br><span class="unit">'+esc(x.name || x.fileId)+' → '+esc(x.target)+'</span></span>' +
     '<span class="amt">'+(x.status.indexOf('ย้ายไม่ได้') === 0 ? '<span class="pill wait">'+esc(x.status)+'</span>' : '<span class="pill ok">'+esc(x.status)+'</span>')+'</span></div>').join('');
+}
+// เติม tab/คอลัมน์ที่ขาดให้ไฟล์ตัวแทนทุกราย (backend: syncTenantSheets ใน 13_tenants.gs — super_admin เท่านั้น)
+async function syncTenantSchemaUI(){
+  const btn = document.getElementById('dbl-schema');
+  btn.disabled = true; btn.textContent = 'กำลังปรับสคีมา...';
+  const r = await callApi('syncTenantSheets', {});
+  btn.disabled = false; btn.textContent = 'ปรับสคีมาไฟล์ตัวแทน';
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
 }
 async function loadTenantsQuiet(){ const r = await callApi('listTenants', {}); if (r.success) tenantsCache = r.data; }
 function onAdminRoleChange(){
