@@ -31,7 +31,8 @@ function listSalesOrdersAdmin(session, payload) {
       customer: custName[String(o.customer_id)] || 'ลูกค้าทั่วไป',
       subtotal: parseFloat(o.subtotal) || 0, discount: parseFloat(o.discount) || 0, total: parseFloat(o.total) || 0,
       paymentMethod: o.payment_method, fulfillmentType: o.fulfillment_type, status: o.status,
-      saleBy: o.sale_by, note: o.note || '', createdAt: safeDateStr(o.created_at)
+      paymentStatus: orderPaymentStatus(o), paidAmount: parseFloat(o.paid_amount) || 0,
+      deliveredAt: safeDateStr(o.delivered_at), saleBy: o.sale_by, note: o.note || '', createdAt: safeDateStr(o.created_at)
     }; });
   return { success: true, data: data };
 }
@@ -61,16 +62,46 @@ function getSalesOrderAdmin(session, payload) {
   var discounts = tenantObjects(tenantId, 'order_discounts').filter(function(d) { return String(d.order_id) === String(order.record_id); });
 
   var cust = customers[String(order.customer_id)];
+  var status = String(order.status || '');
   return { success: true,
     order: {
       id: order.record_id, code: order.order_code, customerId: order.customer_id,
-      customer: cust ? cust.name : 'ลูกค้าทั่วไป', customerPhone: cust ? cust.phone : '', customerAddress: cust ? cust.address : '',
+      customer: cust ? customerFullName(cust) : 'ลูกค้าทั่วไป', customerCode: cust ? (cust.customer_code || '') : '',
+      customerPhone: cust ? cust.phone : '', customerAddress: cust ? cust.address : '',
+      customerShipTo: cust ? (cust.ship_to_address || '') : '', customerTaxId: cust ? (cust.tax_id || '') : '',
+      customerTaxBranch: cust ? (cust.tax_branch_code || '') : '',
       subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
-      paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: order.status,
+      paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: status,
+      statusLabel: SO_STATUS_LABELS[status] || status,
+      paymentStatus: orderPaymentStatus(order), paymentLabel: SO_PAYMENT_LABELS[orderPaymentStatus(order)] || '',
+      paidAmount: parseFloat(order.paid_amount) || 0,
+      deliveredAt: safeDateStr(order.delivered_at), paidAt: safeDateStr(order.paid_at),
+      nextStatuses: (SO_TRANSITIONS[status] || []).filter(function(x) { return x !== 'cancelled'; })
+        .map(function(x) { return { code: x, label: SO_STATUS_LABELS[x] }; }),
       saleBy: order.sale_by, note: order.note || '', createdAt: safeDateStr(order.created_at)
     },
+    issuer: _docIssuer(session, tenantId),
+    statusLog: orderStatusLog(tenantId, order.record_id),
     items: items, discounts: discounts
   };
+}
+
+/**
+ * หัวเอกสาร = "ใครเป็นคนออกบิลนี้" — ตัวแทนออกในนามตัวแทน · บริษัทขายตรง (HOUSE) ออกในนามบริษัท
+ * รวมมากับ getSalesOrderAdmin เลย เพื่อไม่ให้หน้าพิมพ์ต้องยิงคำขอเพิ่ม (ค่าคงที่ต่อคำขอ ~1.6 วิ)
+ */
+function _docIssuer(session, tenantId) {
+  var tenant = null;
+  centralObjects('tenants').forEach(function(t) { if (String(t.tenant_id) === String(tenantId)) tenant = t; });
+  var co = _companyDto(_companyRow());
+  if (!tenant || isFlagOn(tenant.is_house)) {
+    return { name: co.legalName || co.name, taxId: co.taxId, branchCode: co.branchCode, address: co.address,
+      phone: co.phone, email: co.email, logoUrl: co.logoUrl,
+      bankName: co.bankName, bankAccountNo: co.bankAccountNo, bankAccountName: co.bankAccountName };
+  }
+  return { name: tenant.name || '', taxId: tenant.tax_id || '', branchCode: tenant.branch_code || '',
+    address: tenant.address || '', phone: tenant.phone || '', email: tenant.email || '', logoUrl: tenant.logo_url || '',
+    bankName: tenant.bank_name || '', bankAccountNo: tenant.bank_account_no || '', bankAccountName: tenant.bank_account_name || '' };
 }
 
 // ทดลองคิดราคาก่อนกดบันทึกจริง — เครื่องยนต์เดียวกับ recordSaleAdmin เป๊ะ (payload เหมือน recordSaleAdmin แต่ไม่บันทึก)
@@ -115,6 +146,7 @@ function recordSaleAdmin(session, payload) {
   var custGate = customerSaleGate(custRow, payload.paymentType);   // ปิดการใช้งาน / ระงับเครดิต (ดู 33_customers.gs)
   if (custGate) return custGate;
 
+  ensureTenantSheetsCurrent(tenantId);   // ไฟล์ตัวแทนที่สร้างก่อนมีคอลัมน์สถานะการเงิน/ประวัติ ต้องเติมให้ก่อนเขียน
   var fulfillmentType = payload.fulfillmentType === 'immediate' ? 'immediate' : 'office_delivery';
   var soldByLineUserId = String(payload.soldByLineUserId || '').trim();
   if (fulfillmentType === 'immediate') {
@@ -162,8 +194,13 @@ function recordSaleAdmin(session, payload) {
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
+    payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),
+    paid_amount: initialPaymentStatus(payload.paymentType, fulfillmentType) === 'paid' ? calc.total : 0,
+    delivered_at: fulfillmentType === 'immediate' ? createdAt : '', paid_at: '',
     sale_by: saleBy, lat: '', lng: '', map: '', note: noteParts.join(' · '), created_at: createdAt
   });
+  logOrderStatus(tenantId, orderId, '', fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
+    '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอดมิน', session.displayName || session.username);
 
   bumpSalesDaily(tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
   touchCustomerLastSale(payload.customerId, createdAt);                  // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
@@ -233,5 +270,7 @@ function cancelSalesOrderAdmin(session, payload) {
     if (String(data[i][idCol]) === String(order.record_id)) { sh.getRange(i + 1, statusCol + 1).setValue('cancelled'); break; }
   }
   bumpSalesDaily(tenantId, _dOnly(order.created_at), -1, -(parseFloat(order.total) || 0));   // หักออกจากยอดสรุปรายวัน
+  logOrderStatus(tenantId, order.record_id, String(order.status || ''), 'cancelled', orderPaymentStatus(order), orderPaymentStatus(order),
+    String(payload.note || 'ยกเลิกบิล'), session.displayName || session.username);
   return { success: true };
 }

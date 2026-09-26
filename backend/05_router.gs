@@ -63,6 +63,7 @@ var ADMIN_ACTION_MAP = {
   previewSaleAdmin:       previewSaleAdmin,
   recordSaleAdmin:        recordSaleAdmin,
   cancelSalesOrderAdmin:  cancelSalesOrderAdmin,
+  updateSalesOrderStatus: updateSalesOrderStatus,   // เปลี่ยนสถานะส่งของ/การเงิน (34_sales_status.gs)
 
   listProductsAdmin:      listProductsAdmin,
   addProduct:             addProduct,
@@ -120,6 +121,7 @@ var ADMIN_ACTION_MAP = {
   migrateUnitCodes:       migrateUnitCodes,
   getDatabaseLayout:      getDatabaseLayout,
   organizeDatabaseFiles:  organizeDatabaseFiles,
+  syncTenantSheets:       syncTenantSheets,        // เติม tab/คอลัมน์ที่ขาดให้ไฟล์ตัวแทนทุกราย (13_tenants.gs)
   listTenants:            listTenants,
   updateTenantStatus:     updateTenantStatus,
 

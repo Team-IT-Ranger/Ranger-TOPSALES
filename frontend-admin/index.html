@@ -599,18 +599,27 @@
             <div><h1>บิลขาย</h1><p id="so-head-desc">รายการบิลขาย — เปิดบิลขายเองได้จากที่นี่โดยไม่ต้องผ่านแอปมือถือ</p></div>
             <button class="btn btn-primary" onclick="openSaleOrderNew()">+ เปิดบิลขาย</button>
           </div>
-          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
             <select id="so-filter-status" onchange="renderSalesOrdersTable()">
-              <option value="">ทุกสถานะ</option>
-              <option value="completed">เสร็จสิ้น (ตัดสต็อกแล้ว)</option>
+              <option value="">ทุกสถานะการส่ง</option>
               <option value="pending_delivery">รอสำนักงานจัดส่ง</option>
+              <option value="delivering">กำลังจัดส่ง</option>
+              <option value="completed">ส่งของแล้ว</option>
               <option value="cancelled">ยกเลิกแล้ว</option>
             </select>
-            <input id="so-filter-search" placeholder="ค้นหาชื่อร้าน/เลขที่บิล" oninput="renderSalesOrdersTable()" style="flex:1;min-width:220px">
+            <select id="so-filter-pay" onchange="renderSalesOrdersTable()">
+              <option value="">ทุกสถานะการเงิน</option>
+              <option value="unpaid">ยังไม่ชำระ</option>
+              <option value="partial">ชำระบางส่วน</option>
+              <option value="paid">ชำระแล้ว</option>
+            </select>
+            <input id="so-filter-search" placeholder="ค้นหาชื่อร้าน/เลขที่บิล" oninput="renderSalesOrdersTable()" style="flex:1;min-width:200px">
+            <button class="btn btn-sm" onclick="printSalesOrderList()">พิมพ์รายงาน</button>
+            <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>วันที่</th></tr></thead>
-            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>วันที่</th><th></th></tr></thead>
+            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -623,10 +632,12 @@
             </div>
             <div id="sod-actions"></div>
           </div>
+          <div id="sod-status-card"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead>
             <tbody id="sod-body"></tbody>
           </table></div>
+          <div id="sod-history"></div>
         </section>
 
         <!-- ═══ งานขาย: เปิดบิลขายใหม่ ═══ -->
@@ -2119,9 +2130,8 @@ async function saveDocSeriesUI(){
 const custLabel = c => ((c.customer_code ? c.customer_code + ' · ' : '') + (c.name_prefix ? c.name_prefix + ' ' : '') + (c.name || '')).trim();
 let salesOrdersCache = [], customersCache = [], paymentTypesCache = [], currentSaleOrderId = null, sonPreviewData = null;
 const PRODUCT_UNITS_CACHE = {};
-const SO_STATUS = { completed:['ok','เสร็จสิ้น'], pending_delivery:['wait','รอจัดส่ง'], cancelled:['off','ยกเลิกแล้ว'] };
-const soPill = st => { const s = SO_STATUS[st] || ['wait', st]; return '<span class="pill '+s[0]+'">'+esc(s[1])+'</span>'; };
-const soFulfillLabel = f => f === 'immediate' ? 'ตัดสต็อกรถทันที' : 'รอสำนักงานจัดส่ง';
+// ป้ายสถานะอยู่ที่ SO_LABELS/PAY_LABELS ด้านล่าง (ตรงกับ 34_sales_status.gs) — อย่าตั้งชุดที่สองขึ้นมาอีก
+const soFulfillLabel = f => f === 'immediate' ? 'ตัดสต็อกรถทันที' : 'สำนักงานจัดส่ง';
 async function ensurePaymentTypesCache(){
   if (paymentTypesCache.length) return;
   const r = await callApi('listPaymentTypes', {});
@@ -2129,19 +2139,63 @@ async function ensurePaymentTypesCache(){
 }
 const payLabel = code => { const p = paymentTypesCache.find(x => x.code === code); return p ? p.name : (code || '-'); };
 
-function renderSalesOrdersTable(){
-  const body = document.getElementById('salesorders-body');
+/* สถานะบิลขายสองแกน — ป้ายต้องตรงกับ backend (34_sales_status.gs) เป๊ะ */
+const SO_LABELS = { pending_delivery:'รอสำนักงานจัดส่ง', delivering:'กำลังจัดส่ง', completed:'ส่งของแล้ว', cancelled:'ยกเลิกแล้ว' };
+const SO_PILL   = { pending_delivery:'wait', delivering:'wait', completed:'ok', cancelled:'off' };
+const PAY_LABELS = { unpaid:'ยังไม่ชำระ', partial:'ชำระบางส่วน', paid:'ชำระแล้ว' };
+const PAY_PILL   = { unpaid:'off', partial:'wait', paid:'ok' };
+const soStatusPill = st => '<span class="pill '+(SO_PILL[st]||'')+'">'+(SO_LABELS[st]||esc(st||'-'))+'</span>';
+const soPayPill = ps => '<span class="pill '+(PAY_PILL[ps]||'')+'">'+(PAY_LABELS[ps]||'-')+'</span>';
+function soFilteredRows(){
   const statusF = document.getElementById('so-filter-status').value;
+  const payF = document.getElementById('so-filter-pay').value;
   const q = document.getElementById('so-filter-search').value.trim().toLowerCase();
   let rows = salesOrdersCache;
   if (statusF) rows = rows.filter(o => o.status === statusF);
+  if (payF) rows = rows.filter(o => (o.paymentStatus || 'unpaid') === payF);
   if (q) rows = rows.filter(o => (o.customer||'').toLowerCase().indexOf(q) !== -1 || (o.code||'').toLowerCase().indexOf(q) !== -1);
-  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">ไม่พบบิลขาย</td></tr>'; return; }
+  return rows;
+}
+function renderSalesOrdersTable(){
+  const body = document.getElementById('salesorders-body');
+  const rows = soFilteredRows();
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="9">ไม่พบบิลขาย</td></tr>'; return; }
   body.innerHTML = rows.map(o =>
     '<tr class="clickable-row" onclick="openSaleOrderDetail('+o.id+')"><td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
     '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
-    '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soPill(o.status)+'</td><td class="mono-data">'+esc(o.createdAt)+'</td></tr>'
+    '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
+    '<td class="mono-data">'+esc(o.createdAt)+'</td>' +
+    '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'delivery\')">พิมพ์</button></td></tr>'
   ).join('');
+}
+/* พิมพ์ซ้ำได้ตลอดจากในตาราง โดยไม่ต้องเข้าหน้ารายละเอียดก่อน (ใบเดิมหาย/เปื้อนเป็นเรื่องปกติ) */
+async function printSaleOrderById(id, kind){
+  const [r] = await Promise.all([callApi('getSalesOrderAdmin', { id }), ensureDocPrint()]);
+  if (!r.success) { toast(r.message, true); return; }
+  printSaleDoc(r, kind);
+}
+function printSalesOrderList(){
+  const rows = soFilteredRows();
+  if (!rows.length) { toast('ไม่มีรายการให้พิมพ์', true); return; }
+  ensureDocPrint().then(() => DocPrint.table({
+    title: 'รายงานบิลขาย', subtitle: scopeLabelForPrint(), issuerName: (SESSION && SESSION.displayName) || '',
+    headers: ['เลขที่บิล','ลูกค้า','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','วันที่'],
+    weights: [1.5,3,1.2,1,1.3,1.4,1.2,1.5],
+    align: ['','','r','c','c','c','c','c'],
+    rows: rows.map(o => [o.code, o.customer, baht(o.total), payLabel(o.paymentMethod),
+      soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-', o.createdAt]),
+    note: 'รวมยอดสุทธิ ' + baht(rows.reduce((t,o) => t + (o.status === 'cancelled' ? 0 : (o.total||0)), 0)) + ' บาท (ไม่รวมบิลที่ยกเลิก)',
+    filename: 'รายงานบิลขาย'
+  }));
+}
+function exportSalesOrderList(){
+  const rows = soFilteredRows();
+  if (!rows.length) { toast('ไม่มีรายการให้ส่งออก', true); return; }
+  ensureDocPrint().then(() => DocPrint.xlsx({
+    filename: 'บิลขาย', headers: ['เลขที่บิล','ลูกค้า','ยอดก่อนส่วนลด','ส่วนลด','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','วันที่'],
+    rows: rows.map(o => [o.code, o.customer, baht(o.subtotal), baht(o.discount), baht(o.total), payLabel(o.paymentMethod),
+      soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-', o.createdAt])
+  }));
 }
 async function loadSalesOrders(){
   const body = document.getElementById('salesorders-body');
@@ -2164,12 +2218,20 @@ async function openSaleOrderDetail(id){
   if (currentSaleOrderId !== id) return; // ผู้ใช้กดออกไปหน้าอื่นระหว่างรอโหลด
   renderSaleOrderDetail(r);
 }
+let SOD_DATA = null;   // ข้อมูลใบที่เปิดอยู่ ใช้พิมพ์เอกสารโดยไม่ต้องยิงคำขอซ้ำ
 function renderSaleOrderDetail(r){
+  SOD_DATA = r;
   const o = r.order;
   document.getElementById('sod-title').textContent = o.code;
   document.getElementById('sod-meta').innerHTML = esc(o.customer) + ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
-    ' · ' + soPill(o.status) + ' · ' + esc(o.createdAt) + (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
-  document.getElementById('sod-actions').innerHTML = o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '';
+    ' · ' + esc(o.createdAt) + (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
+  document.getElementById('sod-actions').innerHTML =
+    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'delivery\')">ใบส่งของ/ใบกำกับภาษี</button> ' +
+    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'picking\')">ใบจัดของ</button> ' +
+    ((o.paymentStatus === 'paid') ? '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'receipt\')">ใบเสร็จรับเงิน</button> ' : '') +
+    (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
+  renderSaleOrderStatusCard(r);
+  renderSaleOrderHistory(r);
   const rows = r.items.map(it =>
     '<tr'+(it.isFree ? ' style="background:var(--blue-pale)"' : '')+'><td>' +
     (it.productCode ? '<span class="mono-data">'+esc(it.productCode)+'</span> ' : '') + esc(it.productName) + (it.isFree ? ' <span class="unit">(ของแถม)</span>' : '') + '</td>' +
@@ -2180,6 +2242,125 @@ function renderSaleOrderDetail(r){
     (o.discount ? '<tr><td colspan="4" style="text-align:right">ส่วนลด</td><td class="mono-data">-฿'+baht(o.discount)+'</td></tr>' : '') +
     '<tr><td colspan="4" style="text-align:right"><b>สุทธิ</b></td><td class="mono-data"><b>฿'+baht(o.total)+'</b></td></tr>';
 }
+
+/* ── กล่องสถานะ: สองแกนแยกกันชัดเจน พร้อมปุ่มเดินไปขั้นถัดไป ── */
+function renderSaleOrderStatusCard(r){
+  const o = r.order, box = document.getElementById('sod-status-card');
+  if (o.status === 'cancelled') {
+    box.innerHTML = '<div class="form-card"><b>บิลนี้ถูกยกเลิกแล้ว</b> <span class="unit">เปลี่ยนสถานะต่อไม่ได้</span></div>';
+    return;
+  }
+  const steps = ['pending_delivery','delivering','completed'];
+  const at = steps.indexOf(o.status);
+  const stepBar = steps.map((st, i) =>
+    '<span class="pill '+(i <= at ? 'ok' : '')+'" style="'+(i > at ? 'opacity:.45' : '')+'">'+(i+1)+'. '+SO_LABELS[st]+'</span>').join(' <span class="unit">→</span> ');
+  const nextBtns = (o.nextStatuses || []).map(n =>
+    '<button class="btn btn-sm btn-primary" onclick="setSaleOrderStatus(\''+n.code+'\')">เปลี่ยนเป็น: '+esc(n.label)+'</button>').join(' ');
+  const outstanding = Math.max(0, (o.total || 0) - (o.paidAmount || 0));
+  const payBtns = o.paymentStatus === 'paid'
+    ? '<button class="btn btn-sm" onclick="setSaleOrderPayment(0)">ยกเลิกการรับชำระ</button>'
+    : '<button class="btn btn-sm btn-primary" onclick="setSaleOrderPaidFull()">รับชำระครบ ฿'+baht(outstanding)+'</button> ' +
+      '<button class="btn btn-sm" onclick="askSaleOrderPartial()">รับชำระบางส่วน…</button>';
+  box.innerHTML = '<div class="form-card"><div class="form-grid g2">' +
+    '<div><div class="unit">สถานะการส่งของ</div><div style="margin:6px 0 10px">'+stepBar+'</div>' +
+      (o.deliveredAt ? '<div class="unit">ส่งของเมื่อ '+esc(o.deliveredAt)+'</div>' : '') +
+      '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+nextBtns+'</div></div>' +
+    '<div><div class="unit">สถานะการเงิน</div><div style="margin:6px 0 10px">'+soPayPill(o.paymentStatus) +
+      ' <span class="mono-data">รับแล้ว ฿'+baht(o.paidAmount)+' / ฿'+baht(o.total)+'</span></div>' +
+      (o.paidAt ? '<div class="unit">รับเงินเมื่อ '+esc(o.paidAt)+'</div>' : '') +
+      '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+payBtns+'</div></div>' +
+    '</div></div>';
+}
+function renderSaleOrderHistory(r){
+  const box = document.getElementById('sod-history');
+  const log = r.statusLog || [];
+  if (!log.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="form-card"><h3>ประวัติสถานะ</h3><div class="table-wrap"><table>' +
+    '<thead><tr><th>เมื่อ</th><th>การส่งของ</th><th>การเงิน</th><th>หมายเหตุ</th><th>โดย</th></tr></thead><tbody>' +
+    log.map(h => '<tr><td class="mono-data">'+esc(h.at)+'</td>' +
+      '<td>'+(h.fromLabel ? esc(h.fromLabel)+' → ' : '')+esc(h.toLabel)+'</td>' +
+      '<td>'+(h.fromPaymentLabel !== h.toPaymentLabel ? (h.fromPaymentLabel ? esc(h.fromPaymentLabel)+' → ' : '')+esc(h.toPaymentLabel) : '-')+'</td>' +
+      '<td class="wrap">'+esc(h.note||'-')+'</td><td>'+esc(h.by||'-')+'</td></tr>').join('') +
+    '</tbody></table></div></div>';
+}
+async function applySaleOrderStatus(payload){
+  const r = await callApi('updateSalesOrderStatus', Object.assign({ id: currentSaleOrderId }, payload));
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  const row = salesOrdersCache.find(x => x.id === currentSaleOrderId);
+  if (row) { row.status = r.status; row.paymentStatus = r.paymentStatus; row.deliveredAt = r.deliveredAt; }
+  openSaleOrderDetail(currentSaleOrderId);   // โหลดใบเดิมใหม่เพื่อให้ได้ประวัติและปุ่มขั้นถัดไปที่ถูกต้อง
+}
+function setSaleOrderStatus(status){ return applySaleOrderStatus({ status }); }
+function setSaleOrderPaidFull(){ return applySaleOrderStatus({ paymentStatus: 'paid' }); }
+function setSaleOrderPayment(amount){ return applySaleOrderStatus({ paidAmount: amount }); }
+function askSaleOrderPartial(){
+  const o = SOD_DATA.order;
+  const v = prompt('รับชำระมาแล้วทั้งหมดกี่บาท? (ยอดบิล ' + baht(o.total) + ')', String(o.paidAmount || 0));
+  if (v === null) return;
+  const n = parseFloat(String(v).replace(/,/g, ''));
+  if (isNaN(n)) { toast('กรุณากรอกตัวเลข', true); return; }
+  return applySaleOrderStatus({ paidAmount: n });
+}
+
+/* ── พิมพ์เอกสารของบิลขาย — ชุดช่องลงชื่อเดินตามลำดับงานจริงของเอกสารแต่ละชนิด ── */
+function ensureDocPrint(){
+  if (window.DocPrint) return Promise.resolve(window.DocPrint);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'doc-print.js?v=20260926';
+    s.onload = () => resolve(window.DocPrint);
+    s.onerror = () => { toast('โหลดตัวพิมพ์เอกสารไม่สำเร็จ', true); reject(new Error('doc-print')); };
+    document.head.appendChild(s);
+  });
+}
+const SO_DOC_KINDS = {
+  delivery: { title: 'ใบส่งของ / ใบกำกับภาษี', signers: ['ผู้ส่งของ','ผู้รับสินค้า'], showPrice: true, showBank: true },
+  receipt:  { title: 'ใบเสร็จรับเงิน',          signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false },
+  picking:  { title: 'ใบจัดของ',                signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false }
+};
+function printSaleDoc(r, kind){
+  const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.delivery;
+  const o = r.order, iss = r.issuer || {};
+  ensureDocPrint().then(() => {
+    const cols = [
+      { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
+      { label: 'รหัส', code: true, width: '14%', value: l => l.productCode || '-' },
+      { label: 'รายการ', value: l => l.productName + (l.isFree ? '  (ของแถม)' : '') },
+      { label: 'หน่วย', align: 'c', width: '11%', value: l => l.unitCode || '-' },
+      { label: 'จำนวน', align: 'r', width: '10%', value: l => String(l.qty) }
+    ];
+    if (k.showPrice) cols.push(
+      { label: 'ราคา/หน่วย', align: 'r', width: '14%', value: l => l.isFree ? '-' : DocPrint.money(l.price) },
+      { label: 'จำนวนเงิน', align: 'r', width: '15%', value: l => l.isFree ? '-' : DocPrint.money(l.lineTotal) });
+    const totals = k.showPrice ? [
+      ['ยอดรวมก่อนหักส่วนลด', DocPrint.money(o.subtotal)],
+      ...(o.discount ? [['ส่วนลด', '-' + DocPrint.money(o.discount)]] : []),
+      ['ยอดสุทธิ (รวมภาษีมูลค่าเพิ่มแล้ว)', DocPrint.money(o.total), 'grand'],
+      ...(kind === 'delivery' && o.paidAmount ? [['รับชำระแล้ว', DocPrint.money(o.paidAmount)],
+        ['คงค้าง', DocPrint.money(Math.max(0, (o.total||0) - (o.paidAmount||0)))]] : [])
+    ] : [];
+    DocPrint.doc({
+      title: k.title, docNo: o.code, issuer: iss,
+      subLabel: kind === 'delivery' ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : '',
+      metaRight: [['เลขที่', o.code], ['วันที่', (o.createdAt || '').substring(0, 10)],
+        ['สถานะ', SO_LABELS[o.status] || o.status], ['การชำระเงิน', PAY_LABELS[o.paymentStatus || 'unpaid'] || '-']],
+      parties: [
+        { label: 'ลูกค้า', name: o.customer, code: o.customerCode, address: o.customerAddress,
+          taxId: o.customerTaxId, branchCode: o.customerTaxBranch, phone: o.customerPhone },
+        { label: kind === 'picking' ? 'จัดส่งที่' : 'สถานที่ส่งของ',
+          name: o.customerShipTo ? '' : 'ตามที่อยู่ลูกค้า', address: o.customerShipTo || o.customerAddress }
+      ],
+      columns: cols, lines: r.items, totals: totals,
+      note: o.note || '', signers: k.signers, showBank: k.showBank,
+      watermark: o.status === 'cancelled' ? 'ยกเลิก' : '',
+      xlsx: { filename: o.code, headers: cols.map(c => c.label),
+        rows: r.items.map((l, i) => cols.map(c => String(c.value(l, i)))) }
+    });
+  });
+}
+const soFulfillText = t => t === 'immediate' ? 'ตัดสต็อกรถทันที' : 'สำนักงานจัดส่ง';
+const scopeLabelForPrint = () => (ACTIVE_TENANT_ID ? ('ตัวแทน: ' + (tenantsCache.find(t => t.tenantId === ACTIVE_TENANT_ID) || {}).name) : (COMPANY.name || 'บริษัทเจ้าของสินค้า'));
 function closeSaleOrderDetail(){
   _switchProductView('view-salesorders', 'บิลขาย');
   document.querySelectorAll('.sb-action, .sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === 'salesorders'));

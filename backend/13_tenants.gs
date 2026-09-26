@@ -5,7 +5,10 @@
  */
 
 var TENANT_SHEET_TABS = {
-  sales_orders:        ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at'],
+  // status = สถานะการส่งของ · payment_status = สถานะการเงิน (สองแกนแยกกัน — ดู 34_sales_status.gs)
+  //   ส่งของแล้วแต่ยังไม่เก็บเงิน กับ เก็บเงินแล้วแต่ยังไม่ส่ง เป็นคนละเรื่องกัน จะยัดเป็นสถานะเดียวไม่ได้
+  sales_orders:        ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at',
+    'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by'],
   // qty/price/line_total เป็น "หน่วยที่ขายจริง" (เช่น ลัง) ตรงกับที่ลูกค้าเห็นบนบิล
   // base_qty คือจำนวนแปลงเป็นหน่วยฐานแล้ว (qty × unit_factor) ใช้ตัดสต็อกและเช็คโปรโมชั่นเท่านั้น
   order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free'],
@@ -16,9 +19,65 @@ var TENANT_SHEET_TABS = {
   visits:              ['record_id','customer_id','line_user_id','check_in_at','lat','lng','has_order'],
   visit_notes:         ['record_id','visit_id','note','created_at'],
   competitor_logs:     ['record_id','visit_id','customer_id','brand','product','price','created_at'],
+  // ประวัติการเปลี่ยนสถานะบิลขาย — ไม่ลบ ไม่ทับ (หลักเดียวกับ pr_approvals ของงานซื้อ) ใช้สอบกลับว่าใครเปลี่ยนอะไรเมื่อไหร่
+  order_status_log:    ['record_id','order_id','from_status','to_status','from_payment','to_payment','note','changed_by','changed_at'],
   doc_number_series:   ['record_id','doc_type','prefix','date_format','running_digits','reset_cycle','separator','is_active'],
   doc_number_counters: ['doc_type','period_key','last_number']
 };
+
+/**
+ * เติม tab/คอลัมน์ที่ขาดให้ไฟล์ของตัวแทนที่สร้างไว้ก่อนสคีมาเปลี่ยน (คู่กับ ensureSchemaCurrent ของชีตกลาง)
+ * ไฟล์ตัวแทนไม่ได้อยู่ในชีตเดียวกับสคีมากลาง จึงต้องมีตัวไล่ให้เองแบบนี้
+ * เปิดไฟล์ตัวแทน 1 ครั้ง ≈ 1.5 วินาที → กันด้วยลายนิ้วมือใน CacheService ตรวจจริงอย่างมาก 6 ชม./ตัวแทน
+ */
+function ensureTenantSheetsCurrent(tenantId) {
+  if (!tenantId) return;
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(TENANT_SHEET_TABS));
+  var fp = digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('').substring(0, 12);
+  var cache = CacheService.getScriptCache();
+  var key = 'tenantschema_' + tenantId + '_' + fp;
+  if (cache.get(key)) return;
+  try {
+    var ss = SpreadsheetApp.openById(tenantFileId(tenantId));
+    Object.keys(TENANT_SHEET_TABS).forEach(function(tabName) {
+      var headers = TENANT_SHEET_TABS[tabName];
+      var sh = ss.getSheetByName(tabName);
+      if (!sh) {
+        sh = ss.insertSheet(tabName);
+        sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#0B7B52').setFontColor('#ffffff');
+        sh.setFrozenRows(1);
+        return;
+      }
+      var lastCol = sh.getLastColumn();
+      var current = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+      var missing = headers.filter(function(h) { return current.indexOf(h) === -1; });
+      if (missing.length) {
+        sh.getRange(1, current.length + 1, 1, missing.length).setValues([missing])
+          .setFontWeight('bold').setBackground('#0B7B52').setFontColor('#ffffff');
+      }
+    });
+    SpreadsheetApp.flush();
+    cache.put(key, '1', 21600);
+  } catch (e) {
+    Logger.log('ensureTenantSheetsCurrent(' + tenantId + '): ' + e);   // ล้มแล้วไม่ทำให้คำขอพัง จะลองใหม่ครั้งหน้า
+  }
+}
+
+/** super_admin กดเองเมื่ออยากให้ไฟล์ตัวแทนทุกรายตามสคีมาล่าสุดทันที ไม่ต้องรอแคชหมดอายุ */
+function syncTenantSheets(session) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  var cache = CacheService.getScriptCache();
+  var done = [];
+  centralObjects('tenants').forEach(function(t) {
+    if (!t.sheet_file_id) return;
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(TENANT_SHEET_TABS));
+    var fp = digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('').substring(0, 12);
+    cache.remove('tenantschema_' + t.tenant_id + '_' + fp);
+    ensureTenantSheetsCurrent(t.tenant_id);
+    done.push(t.tenant_id);
+  });
+  return { success: true, tenants: done, message: 'ปรับสคีมาไฟล์ตัวแทน ' + done.length + ' ราย: ' + done.join(', ') };
+}
 
 function _buildTenantSpreadsheet(tenantId, tenantName) {
   var newSS = SpreadsheetApp.create('Ranger-TOPSALES-' + tenantId);   // ไฟล์เก่าที่สร้างก่อนเปลี่ยนชื่อแอปยังใช้ชื่อ salesranger-TOPSHOP-*

@@ -81,6 +81,7 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
 }
 
 function recordSale(user, payload) {
+  ensureTenantSheetsCurrent(user.tenantId);   // เหตุผลเดียวกับ recordSaleAdmin (19_sales_admin.gs)
   var fulfillmentType = payload.fulfillmentType === 'office_delivery' ? 'office_delivery' : 'immediate';
 
   // สถานะลูกค้าเป็นตัวกั้น: ปิดการใช้งาน = ขายไม่ได้ · ระงับเครดิต = ขายได้เฉพาะเงินสด (ดู 33_customers.gs)
@@ -130,9 +131,14 @@ function recordSale(user, payload) {
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
+    payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),
+    paid_amount: initialPaymentStatus(payload.paymentType, fulfillmentType) === 'paid' ? calc.total : 0,
+    delivered_at: fulfillmentType === 'immediate' ? createdAt : '', paid_at: '',
     sale_by: user.lineUserId, lat: payload.latitude || '', lng: payload.longitude || '',
     map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt
   });
+  logOrderStatus(user.tenantId, orderId, '', fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
+    '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอปมือถือ', user.displayName || user.lineUserId);
 
   bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
   touchCustomerLastSale(payload.customerId, createdAt);                       // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
