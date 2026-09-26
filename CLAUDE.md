@@ -145,6 +145,12 @@ it fills the gaps around them.
   · เจอ+active → ออก session เหมือนล็อกอินปกติ (`_issueAdminSession` ใช้ร่วมกับ `adminLogin`)
   · เจอแต่ pending/rejected/ระงับ → บอกสถานะ · ไม่เจอ → `needRegister` + โปรไฟล์ LINE แล้วหน้าเว็บเปิดฟอร์มสมัคร
     โดย**ล็อกช่อง LINE User ID ที่ยืนยันแล้ว**ไว้ให้ (สมัครทางนี้จึงเป็นตัวตนจริง ไม่ใช่พิมพ์เอง)
+- **เข้าด้วย LINE ไม่ได้ / ระบบพาไปหน้าลงทะเบียนใหม่ทุกครั้ง** = ไม่มีบัญชีแถวไหนที่ `admin_users.line_user_id`
+  ตรงกับ LINE id นั้น · `createFirstSuperAdmin()` และ `setupProductionEnvironment()` **ไม่ได้ผูก LINE ให้**
+  และ `linkAdminLineId` ต้องมี session ของ Ultra Admin ก่อน = ไก่กับไข่ · แก้ด้วยการเปิด Apps Script editor
+  ของ env นั้นแล้ว Run **`diagnoseLineLogin()`** (รายงานอย่างเดียว) → **`bindAdminLineId()`** (ผูกให้จริง)
+  ใน `99_dev_tools.gs` แก้ค่า `FIX_LINE_USER_ID` / `FIX_ADMIN_USERNAME` ที่หัวฟังก์ชันก่อน Run ·
+  **ไม่ต้อง deploy ใหม่** เพราะ editor รันโค้ดที่ HEAD ของโปรเจกต์ ไม่ใช่โค้ดในเวอร์ชันที่ deploy ไว้
 - **ต้องตั้ง Callback URL ใน LINE Login channel** ให้ตรงกับ `redirect_uri` ที่หน้าเว็บส่ง (origin + path ของหน้า
   โดยตัด `index.html` ทิ้ง): `https://team-it-ranger.github.io/Ranger-TOPSALES/admin/` และ `.../admin-uat/`
   ไม่ตรง = LINE ตอบ 400 invalid redirect_uri ตั้งแต่ขั้นแรก
