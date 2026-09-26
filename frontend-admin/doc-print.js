@@ -74,6 +74,17 @@
     '.docsheet .dp-pg{text-align:right;font-size:.85em;color:#666;margin-top:.5em}',
     '.docsheet .dp-carry{display:flex;justify-content:space-between;border-top:1px solid #B9C3D2;',
     '  padding:.35em .5em;font-weight:600;background:#F6F8FC;font-size:.98em}',
+    /* ── สติกเกอร์ปะหน้าพัสดุ 100x150 มม. — กระดาษคนละขนาดกับ A4 ใช้แผ่นเดียวกันแต่ย่อ padding และขยายตัวอักษร ── */
+    '.docsheet.dp-label{width:100mm;height:150mm;padding:5mm;font-size:var(--doc-label-fs,12px);line-height:1.35}',
+    '.docsheet.dp-label .dp-lb-from{border-bottom:1px solid #111;padding-bottom:.5em;font-size:.95em}',
+    '.docsheet.dp-label .dp-lb-code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1.5em;font-weight:700;',
+    '  text-align:center;border:2px solid #111;border-radius:.3em;padding:.25em;margin:.5em 0}',
+    '.docsheet.dp-label .dp-lb-to{border:2px solid #111;border-radius:.3em;padding:.6em;flex:1}',
+    '.docsheet.dp-label .dp-lb-to .dp-lb-lbl{font-size:.85em;color:#444}',
+    '.docsheet.dp-label .dp-lb-to .dp-lb-name{font-size:1.6em;font-weight:700;line-height:1.25;margin:.15em 0}',
+    '.docsheet.dp-label .dp-lb-to .dp-lb-addr{font-size:1.15em}',
+    '.docsheet.dp-label .dp-lb-to .dp-lb-tel{font-size:1.3em;font-weight:700;margin-top:.4em}',
+    '.docsheet.dp-label .dp-lb-foot{display:flex;justify-content:space-between;gap:.6em;margin-top:.5em;font-size:.95em}',
     '.docsheet .dp-wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}',
     '.docsheet .dp-wm span{font-size:9em;font-weight:800;color:rgba(200,30,30,.13);transform:rotate(-24deg);letter-spacing:.1em}',
     /* ตอนสั่งพิมพ์: เหลือแค่กระดาษ */
@@ -85,7 +96,7 @@
     /* ★ สั่งตัด "ก่อน" แผ่นที่สองเป็นต้นไป ไม่ใช่ตัด "หลัง" ทุกแผ่น — ตัดหลังแผ่นสุดท้ายด้วย = ได้กระดาษเปล่าเพิ่มทุกครั้ง */
     '  .docsheet{box-shadow:none;margin:0}',
     '  .docsheet + .docsheet{page-break-before:always;break-before:page}',
-    '  @page{size:A4;margin:0}',
+    /* ขนาดกระดาษไม่ได้อยู่ตรงนี้ — setPaper() ฉีด @page ให้ตรงกับชนิดเอกสารตอนแสดง (A4 หรือสติกเกอร์) */
     '}'
   ].join('\n');
 
@@ -178,9 +189,20 @@
     return pages;
   }
 
+  /* @page เปลี่ยนตามชนิดกระดาษไม่ได้ด้วยคลาส (ไม่ใช่ selector ของ element) — ต้องฉีด <style> ตอนแสดงเอกสาร */
+  function setPaper(paper) {
+    var st = document.getElementById('dp-page-size');
+    if (!st) { st = document.createElement('style'); st.id = 'dp-page-size'; document.head.appendChild(st); }
+    st.textContent = paper === 'label100x150'
+      ? '@media print{@page{size:100mm 150mm;margin:0}}'
+      : '@media print{@page{size:A4;margin:0}}';
+    return paper === 'label100x150' ? '@page{size:100mm 150mm;margin:0}' : '@page{size:A4;margin:0}';
+  }
+
   function show(title, pagesHtml, opts) {
     ensureShell();
     opts = opts || {};
+    var pageRule = setPaper(opts.paper);
     ov.querySelector('#dp-title').textContent = title;
     ov.querySelector('#dp-count').textContent = pagesHtml.length + ' หน้า';
     pagesEl.innerHTML = pagesHtml.join('');
@@ -189,7 +211,8 @@
     var html = '<!doctype html><html lang="th"><head><meta charset="utf-8"><title>' + E(title) + '</title>' +
       '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
       // ★ ไฟล์นี้ไม่ได้โหลด :root ของแอป — ต้องประกาศตัวแปรที่ .docsheet ใช้ซ้ำที่นี่เอง
-      '<style>:root{--doc-fs:' + (docBaseFontSize() || '10px') + '}body{margin:0;background:#8891a3}' + CSS + '</style></head>' +
+      '<style>:root{--doc-fs:' + (docBaseFontSize() || '10px') + '}body{margin:0;background:#8891a3}' +
+      CSS + '\n' + pageRule + '</style></head>' +
       '<body>' + pagesHtml.join('') + '<script>window.onload=function(){setTimeout(function(){window.print();},400);};<\/script></body></html>';
     if (blobUrl) URL.revokeObjectURL(blobUrl);
     blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
@@ -313,6 +336,34 @@
     show((spec.title || 'เอกสาร') + (spec.docNo ? ' ' + spec.docNo : ''), html, { xlsx: spec.xlsx });
   }
 
+  /* ── ใบปะหน้าพัสดุ (สติกเกอร์) ──────────────────────────────────────────────
+     ไม่มีตารางรายการ = ไม่ต้องแบ่งหน้า · ตัวอักษรใหญ่พอให้อ่านจากระยะแขน และห้ามมีราคาเด็ดขาด
+     (เอกสารใบนี้ติดอยู่บนกล่องตลอดทาง คนเห็นระหว่างทางเยอะที่สุดในบรรดาเอกสารทั้งหมด) */
+  function docPrintLabel(spec) {
+    ensureShell();
+    var to = spec.to || {}, from = spec.from || {};
+    var sheets = [];
+    var count = Math.max(1, parseInt(spec.boxes, 10) || 1);
+    for (var b = 1; b <= count; b++) {
+      sheets.push('<div class="docsheet dp-label">' +
+        '<div class="dp-lb-from"><b>ผู้ส่ง</b> ' + E(from.name || '') +
+          (from.phone ? ' · โทร. ' + E(from.phone) : '') +
+          (from.address ? '<div>' + E(from.address) + '</div>' : '') + '</div>' +
+        '<div class="dp-lb-code">' + E(spec.docNo || '') + (count > 1 ? '  (' + b + '/' + count + ')' : '') + '</div>' +
+        '<div class="dp-lb-to">' +
+          '<div class="dp-lb-lbl">ผู้รับ</div>' +
+          '<div class="dp-lb-name">' + E(to.name || '') + '</div>' +
+          '<div class="dp-lb-addr">' + E(to.address || '') + '</div>' +
+          (to.phone ? '<div class="dp-lb-tel">โทร. ' + E(to.phone) + '</div>' : '') +
+        '</div>' +
+        '<div class="dp-lb-foot"><span>' + E(spec.dateStr || '') + '</span>' +
+          '<span>' + E(spec.summary || '') + '</span></div>' +
+        (spec.note ? '<div style="font-size:.9em;margin-top:.3em">' + E(spec.note) + '</div>' : '') +
+        '</div>');
+    }
+    show('ใบปะหน้าพัสดุ ' + (spec.docNo || ''), sheets, { paper: 'label100x150' });
+  }
+
   /* ── รายงานตาราง ────────────────────────────────────────────────────────── */
   function docPrintTable(spec) {
     ensureShell();
@@ -369,5 +420,6 @@
     document.head.appendChild(s);
   }
 
-  window.DocPrint = { doc: docPrintDoc, table: docPrintTable, xlsx: docPrintXlsx, close: close, money: money, esc: E };
+  window.DocPrint = { doc: docPrintDoc, table: docPrintTable, label: docPrintLabel, xlsx: docPrintXlsx,
+    close: close, money: money, esc: E };
 })();

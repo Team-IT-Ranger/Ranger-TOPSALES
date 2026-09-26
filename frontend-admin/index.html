@@ -326,6 +326,13 @@
   .btn:active:not(:disabled){ transform:translateY(1px) scale(.985); box-shadow:inset 0 2px 5px rgba(15,27,45,.16); }
   .btn:disabled{ cursor:not-allowed; opacity:.55; }
   /* ระหว่างรอเซิร์ฟเวอร์: ปุ่มค้างเป็นสีจาง + วงกลมหมุน บอกว่า "กำลังทำงานอยู่" ไม่ใช่ "ค้าง" */
+  /* เมนูพิมพ์เอกสารของบิลขาย — หล่นลงมาใต้ปุ่ม */
+  .sod-print-menu{ position:relative; display:inline-block; }
+  .sod-print-list{ display:none; position:absolute; right:0; top:calc(100% + 6px); z-index:40; min-width:230px;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow-md); padding:6px; }
+  .sod-print-list.open{ display:block; }
+  .sod-print-list .btn{ display:flex; width:100%; justify-content:flex-start; text-align:left; height:auto; padding:8px 10px; }
+  .sod-print-list .btn:hover{ background:var(--surface-2); }
   .btn.is-busy{ position:relative; color:transparent !important; pointer-events:none; }
   .btn.is-busy::after{ content:''; position:absolute; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px;
     border:2px solid currentColor; border-top-color:transparent; border-radius:50%; color:var(--ink-soft);
@@ -2236,7 +2243,7 @@ function renderSalesOrdersTable(){
     '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
     '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
     '<td class="mono-data">'+esc(o.createdAt)+'</td>' +
-    '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'invoice\')">พิมพ์</button></td></tr>'
+    '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'salesorder\')">พิมพ์</button></td></tr>'
   ).join('');
 }
 /* พิมพ์ซ้ำได้ตลอดจากในตาราง โดยไม่ต้องเข้าหน้ารายละเอียดก่อน (ใบเดิมหาย/เปื้อนเป็นเรื่องปกติ) */
@@ -2297,10 +2304,14 @@ function renderSaleOrderDetail(r){
   document.getElementById('sod-meta').innerHTML = esc(o.customer) + ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
     ' · ' + esc(o.createdAt) + (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
   document.getElementById('sod-actions').innerHTML =
-    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'invoice\')">ใบกำกับภาษี</button> ' +
-    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'delivery\')">ใบส่งสินค้า (ไม่มีราคา)</button> ' +
-    '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'picking\')">ใบจัดของ</button> ' +
-    ((o.paymentStatus === 'paid') ? '<button class="btn btn-sm" onclick="printSaleDoc(SOD_DATA,\'receipt\')">ใบเสร็จรับเงิน</button> ' : '') +
+    '<div class="sod-print-menu">' +
+      '<button class="btn btn-sm" onclick="toggleSoPrintMenu(event)">พิมพ์เอกสาร ▾</button>' +
+      '<div class="sod-print-list" id="sod-print-list">' +
+        SO_DOC_MENU.map(code => '<button class="btn btn-ghost btn-sm" onclick="closeSoPrintMenu();printSaleDoc(SOD_DATA,\''+code+'\')">' +
+          esc(SO_DOC_KINDS[code].title) + (SO_DOC_KINDS[code].showPrice === false || SO_DOC_KINDS[code].label
+            ? ' <span class="unit">(ไม่มีราคา)</span>' : '') +
+          (code === 'parcel' ? ' <span class="unit">100×150 มม.</span>' : '') + '</button>').join('') +
+      '</div></div> ' +
     (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
   renderSaleOrderStatusCard(r);
   renderSaleOrderHistory(r);
@@ -2313,6 +2324,23 @@ function renderSaleOrderDetail(r){
     '<tr><td colspan="4" style="text-align:right"><b>ยอดรวมก่อนหักส่วนลด</b></td><td class="mono-data">฿'+baht(o.subtotal)+'</td></tr>' +
     (o.discount ? '<tr><td colspan="4" style="text-align:right">ส่วนลด</td><td class="mono-data">-฿'+baht(o.discount)+'</td></tr>' : '') +
     '<tr><td colspan="4" style="text-align:right"><b>สุทธิ</b></td><td class="mono-data"><b>฿'+baht(o.total)+'</b></td></tr>';
+}
+
+/* ใบปะหน้าพัสดุ 100×150 มม. — ★ ห้ามมีราคา ใบนี้ติดอยู่บนกล่องตลอดทาง คนเห็นระหว่างทางเยอะที่สุด
+   จำนวนกล่องถามตอนสั่งพิมพ์ เพราะระบบไม่รู้ว่าแพ็คกี่กล่อง (พิมพ์ซ้ำได้ตลอด ไม่ต้องเก็บค่า) */
+function printParcelLabel(r){
+  const o = r.order, iss = r.issuer || {};
+  const boxes = parseInt(prompt('พิมพ์ใบปะหน้ากี่กล่อง? (จะได้เลข 1/2, 2/2 … บนแต่ละใบ)', '1'), 10);
+  if (!boxes || boxes < 1) return;
+  const cases = r.items.reduce((n, it) => n + (String(it.unitCode || '').toUpperCase() === 'CT' ? (it.qty || 0) : 0), 0);
+  ensureDocPrint().then(() => DocPrint.label({
+    docNo: o.code, boxes: boxes, dateStr: (o.createdAt || '').substring(0, 10),
+    from: { name: iss.name || '', phone: iss.phone || '', address: iss.address || '' },
+    to: { name: o.customer + (o.customerCode ? ' [' + o.customerCode + ']' : ''),
+      address: o.customerShipTo || o.customerAddress || '', phone: o.customerPhone || '' },
+    summary: r.items.length + ' รายการ' + (cases ? ' · ' + cases + ' ลัง' : ''),
+    note: o.note || ''
+  }));
 }
 
 /* ── กล่องสถานะ: สองแกนแยกกันชัดเจน พร้อมปุ่มเดินไปขั้นถัดไป ── */
@@ -2386,19 +2414,26 @@ function ensureDocPrint(){
     document.head.appendChild(s);
   });
 }
-/* บิลใบเดียวออกเอกสารได้หลายชนิด คนละหน้าที่กัน (docs/sales-status-and-printing-guide.md ข้อ 2.5)
-   ★ "ใบส่งสินค้า" ไม่พิมพ์ราคาโดยตั้งใจ — เอกสารใบนี้ผ่านมือคนขับและผู้รับปลายทางซึ่งไม่ใช่คู่สัญญาการค้า
-     ราคาที่ตกลงกันไม่ควรหลุดไปกับของ · งานรถเร่ของเราของผ่านมือคนนอกเยอะกว่าขายหน้าร้านมาก เรื่องนี้จึงสำคัญ
+/* บิลใบเดียวออกเอกสารได้หลายชนิด คนละหน้าที่กัน (guide ข้อ 2.5)
+   ห้าแบบแรกคือชุดเดียวกับเมนูพิมพ์ของ Hippo Village (reference/sales order print menu.png)
+   ★ "ใบส่งสินค้า" ไม่พิมพ์ราคาโดยตั้งใจ — ใบนี้ผ่านมือคนขับและผู้รับปลายทางซึ่งไม่ใช่คู่สัญญาการค้า
+     ราคาที่ตกลงกันไม่ควรหลุดไปกับของ · งานรถเร่ของผ่านมือคนนอกเยอะกว่าขายหน้าร้านมาก เรื่องนี้จึงสำคัญ
+   ★ "ใบเสร็จรับเงิน / ใบส่งสินค้า" คือใบเดียวทำสองหน้าที่ — ใช้ตอนเก็บเงินพร้อมส่งของ (มีราคา)
    ช่องลงชื่อสะท้อนหน้าที่ทางธุรกิจของเอกสารนั้น ไม่ใช่ของประดับ (ข้อ 2.4) */
 const SO_DOC_KINDS = {
-  invoice:  { title: 'ใบกำกับภาษี / ใบส่งของ', signers: ['ผู้ขาย','ผู้รับสินค้า'], showPrice: true, showBank: true },
-  delivery: { title: 'ใบส่งสินค้า',             signers: ['ผู้จัดของ','ผู้จัดส่ง','ผู้รับสินค้า'], showPrice: false, showBank: false },
-  receipt:  { title: 'ใบเสร็จรับเงิน',          signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false },
-  picking:  { title: 'ใบจัดของ',                signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false }
+  salesorder:  { title: 'ใบสั่งขาย', signers: ['ผู้สั่งซื้อ','ผู้ขาย','ผู้อนุมัติ'], showPrice: true, showBank: true },
+  receipt:     { title: 'ใบเสร็จรับเงิน', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false },
+  receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true },
+  delivery:    { title: 'ใบส่งสินค้า', signers: ['ผู้จัดของ','ผู้จัดส่ง','ผู้รับสินค้า'], showPrice: false, showBank: false },
+  parcel:      { title: 'ใบปะหน้าพัสดุ', label: true },
+  picking:     { title: 'ใบจัดของ', signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false }
 };
+// เรียงตามเมนูจริง — ใบจัดของเป็นของเราเพิ่มเอง (ใช้ตอนโหลดของขึ้นรถ) จึงต่อท้าย
+const SO_DOC_MENU = ['salesorder', 'receipt', 'receiptdlv', 'delivery', 'parcel', 'picking'];
 function printSaleDoc(r, kind){
-  const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.invoice;
+  const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.salesorder;
   const o = r.order, iss = r.issuer || {};
+  if (k.label) return printParcelLabel(r);
   ensureDocPrint().then(() => {
     const cols = [
       { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
@@ -2414,7 +2449,7 @@ function printSaleDoc(r, kind){
       ['ยอดรวมก่อนหักส่วนลด', DocPrint.money(o.subtotal)],
       ...(o.discount ? [['ส่วนลด', '-' + DocPrint.money(o.discount)]] : []),
       ['ยอดสุทธิ (รวมภาษีมูลค่าเพิ่มแล้ว)', DocPrint.money(o.total), 'grand'],
-      ...(kind === 'invoice' && o.paidAmount ? [['รับชำระแล้ว', DocPrint.money(o.paidAmount)],
+      ...(o.paidAmount ? [['รับชำระแล้ว', DocPrint.money(o.paidAmount)],
         ['คงค้าง', DocPrint.money(Math.max(0, (o.total||0) - (o.paidAmount||0)))]] : [])
     ] : [];
     DocPrint.doc({
@@ -2437,6 +2472,13 @@ function printSaleDoc(r, kind){
     });
   });
 }
+function toggleSoPrintMenu(e){
+  e.stopPropagation();
+  const el = document.getElementById('sod-print-list');
+  el.classList.toggle('open');
+  if (el.classList.contains('open')) setTimeout(() => document.addEventListener('click', closeSoPrintMenu, { once: true }), 0);
+}
+function closeSoPrintMenu(){ const el = document.getElementById('sod-print-list'); if (el) el.classList.remove('open'); }
 const soFulfillText = t => t === 'immediate' ? 'ตัดสต็อกรถทันที' : 'สำนักงานจัดส่ง';
 const scopeLabelForPrint = () => (ACTIVE_TENANT_ID ? ('ตัวแทน: ' + (tenantsCache.find(t => t.tenantId === ACTIVE_TENANT_ID) || {}).name) : (COMPANY.name || 'บริษัทเจ้าของสินค้า'));
 function closeSaleOrderDetail(){
