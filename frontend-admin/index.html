@@ -319,6 +319,19 @@
   .btn-primary:hover{ background:#2455BE; border-color:#2455BE; }
   .btn-ghost:hover{ background:var(--surface-2); }
   .btn-sm{ height:30px; padding:0 11px; font-size:12.5px; }
+  /* ── กดแล้วต้องรู้ว่ากดติด ──
+     ผู้ใช้กดซ้ำเพราะไม่มีอะไรบอกว่ากดไปแล้ว → ยุบปุ่มลงทันทีที่กด (ก่อน network ตอบ)
+     ต้องใส่ transition ของ transform ด้วย ไม่งั้นเด้งกลับแบบกระตุก */
+  .btn{ transition:background .12s,border-color .12s,color .12s,transform .06s,box-shadow .12s; }
+  .btn:active:not(:disabled){ transform:translateY(1px) scale(.985); box-shadow:inset 0 2px 5px rgba(15,27,45,.16); }
+  .btn:disabled{ cursor:not-allowed; opacity:.55; }
+  /* ระหว่างรอเซิร์ฟเวอร์: ปุ่มค้างเป็นสีจาง + วงกลมหมุน บอกว่า "กำลังทำงานอยู่" ไม่ใช่ "ค้าง" */
+  .btn.is-busy{ position:relative; color:transparent !important; pointer-events:none; }
+  .btn.is-busy::after{ content:''; position:absolute; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px;
+    border:2px solid currentColor; border-top-color:transparent; border-radius:50%; color:var(--ink-soft);
+    animation:btnspin .6s linear infinite; }
+  .btn-primary.is-busy::after{ color:#fff; }
+  @keyframes btnspin{ to{ transform:rotate(360deg); } }
   /* กฎกลาง: ช่องกรอกทุกตัวในทุกหน้าหน้าตาเดียวกัน แม้จะไม่ได้ใส่คลาส (เดิมบางหน้าใช้ <select>/<input> เปล่า ๆ
      เลยได้หน้าตา default ของเบราว์เซอร์ มุมเหลี่ยม ไม่มีกรอบ ดูหลุดจากหน้าอื่น) */
   .view input:not([type=checkbox]):not([type=radio]):not([type=file]),.view select,.view textarea{
@@ -1253,10 +1266,62 @@ const isOn = v => v === true || v === 'TRUE' || v === 'true' || v === 1 || v ===
 const baht = n => (parseFloat(n) || 0).toLocaleString('th-TH', {minimumFractionDigits:2, maximumFractionDigits:2});
 
 /* ── API (doPost เดียว, text/plain กัน CORS preflight) ── */
+/* ══════════════ กันกดซ้ำ — ทำที่จุดคอขวดเดียวคือ callApi() ไม่ไล่ใส่ทีละปุ่ม ══════════════
+   สามชั้น ทำงานร่วมกัน:
+     1) ปุ่มที่กดถูกปิด + ขึ้นวงหมุนทันที (ผู้ใช้เห็นว่ากดติดแล้ว)
+     2) action เดียวกันที่ยังค้างอยู่ ถูกบล็อกก่อนถึง network
+     3) action ที่สร้างของใหม่แนบ requestId ไปด้วย — เซิร์ฟเวอร์ทำครั้งเดียวต่อ id ถึงคำขอจะไปถึงสองรอบ
+        (กรณีเน็ตหลุดหลังบันทึกสำเร็จแล้วผู้ใช้กดใหม่ — ชั้น 1-2 กันไม่ได้ ดู 35_idempotency.gs)
+   เพิ่ม action ใหม่ที่เขียนข้อมูล = ใส่ใน MUTATING_ACTIONS ด้วยเสมอ ลืมแล้วไม่พัง แต่เสียการกันซ้ำเงียบๆ */
+const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','updateSalesOrderStatus',
+  'addCustomerAdmin','updateCustomerAdmin','addCustomerGroup','addProduct','updateProduct','uploadProductImage',
+  'createPriceList','clonePriceList','savePriceListLine','deletePriceListLine','savePriceListBillPromos',
+  'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
+  'createTenant','updateTenantStatus','saveCompanyProfile','updateTenantProfile','saveRole','deleteRole',
+  'createAdminUser','updateAdminUser','approveAdminUser','rejectAdminUser','linkAdminLineId','changeMyPassword',
+  'updateStaffAdmin','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
+  'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
+  'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
+  'createArInvoice','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
+  'migrateUnitCodes','rebuildSalesDaily']);
+// action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
+const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
+  'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin']);
+const INFLIGHT = new Set();
+const newRequestId = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+// ปุ่มที่ผู้ใช้เพิ่งกด (ตอน callApi ถูกเรียกจาก onclick ปุ่มนั้นยังเป็น activeElement อยู่)
+function _pressedButton(){
+  const el = document.activeElement;
+  return (el && el.tagName === 'BUTTON' && !el.disabled) ? el : null;
+}
+function _setBusy(btn, on){
+  if (!btn) return;
+  btn.disabled = on;
+  btn.classList.toggle('is-busy', on);
+}
+
 async function callApi(action, payload){
   const body = Object.assign({}, payload || {});
   // Ultra Admin สวมสิทธิ์ตัวแทนอยู่ → แนบ tenantId ให้ทุก action อัตโนมัติ (ฝั่ง backend มีแค่ super_admin เท่านั้นที่ยอมรับค่านี้)
   if (ACTIVE_TENANT_ID && !body.tenantId) body.tenantId = ACTIVE_TENANT_ID;
+  const guarded = MUTATING_ACTIONS.has(action);
+  if (guarded) {
+    if (INFLIGHT.has(action)) return { success: false, busy: true, message: 'กำลังบันทึกรายการนี้อยู่ กรุณารอสักครู่' };
+    INFLIGHT.add(action);
+    // requestId สร้างที่นี่ครั้งเดียวต่อการกดหนึ่งครั้ง — ผู้เรียกส่ง requestId มาเองได้ถ้าต้องการคุมรอบการลองใหม่
+    if (IDEMPOTENT_ACTIONS.has(action) && !body.requestId) body.requestId = newRequestId();
+  }
+  const btn = guarded ? _pressedButton() : null;
+  _setBusy(btn, true);
+  try {
+    return await _callApiSend(action, body);
+  } finally {
+    if (guarded) INFLIGHT.delete(action);
+    _setBusy(btn, false);
+  }
+}
+
+async function _callApiSend(action, body){
   const send = async () => {
     const res = await fetch(BACKEND_URL, {
       method: 'POST',
@@ -1279,6 +1344,8 @@ async function callApi(action, payload){
   // ไม่ throw ที่นี่ — data.success เป็น false อยู่แล้ว ทุกที่ที่เรียก callApi เช็ค !r.success และ return
   // เองอยู่แล้ว การ throw ซ้ำมีแต่ทำให้เกิด unhandled promise rejection เปล่าๆ
   if (data.authError) { doLogout(); toast('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', true); }
+  // เซิร์ฟเวอร์บอกว่าเคยบันทึกรายการนี้ไปแล้ว (requestId ซ้ำ) — ไม่ใช่ความผิดพลาด แต่ต้องบอกให้ผู้ใช้รู้ว่าไม่ได้เพิ่มใบที่สอง
+  if (data.duplicate) toast(data.message, true);
   return data;
 }
 

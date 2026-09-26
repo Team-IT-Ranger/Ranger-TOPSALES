@@ -113,8 +113,18 @@
   .env-bar{ background:var(--orange-soft); color:#7A4E10; border-bottom:1px solid #F0D9B0; font-weight:700; padding:4px; }
   .card,.prod{ border-radius:var(--r-card); box-shadow:var(--shadow-sm); }
   .kpi{ border-radius:12px; box-shadow:var(--shadow-sm); }
-  .btn{ border-radius:var(--r-ctl); }
+  .btn{ border-radius:var(--r-ctl); transition:transform .06s,box-shadow .12s,background .12s; }
   .btn-sm{ border-radius:8px; }
+  /* กดแล้วต้องรู้ว่ากดติด — บนมือถือไม่มี hover ให้ดู ปุ่มจึงต้องยุบลงทันทีที่นิ้วแตะ */
+  .btn:active:not(:disabled){ transform:translateY(1px) scale(.98); box-shadow:inset 0 2px 6px rgba(15,27,45,.18); }
+  .btn:disabled{ cursor:not-allowed; }
+  /* ระหว่างรอเซิร์ฟเวอร์: ซ่อนข้อความ ขึ้นวงหมุนแทน — บอกว่ากำลังทำงาน ไม่ใช่ค้าง */
+  .btn.is-busy{ position:relative; color:transparent !important; pointer-events:none; }
+  .btn.is-busy > *{ visibility:hidden; }
+  .btn.is-busy::after{ content:''; position:absolute; left:50%; top:50%; width:16px; height:16px; margin:-8px 0 0 -8px;
+    border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:btnspin .6s linear infinite; }
+  .btn:not(.btn-primary):not(.btn-green).is-busy::after{ border-color:var(--ink-soft); border-top-color:transparent; }
+  @keyframes btnspin{ to{ transform:rotate(360deg); } }
   .inp,.prod select,.step input{ border-radius:var(--r-ctl); }
   .inp:focus,.prod select:focus,.step input:focus,textarea:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
   .step button{ border-radius:var(--r-ctl); }
@@ -317,7 +327,27 @@ let DATA = { products: [], customers: [] };
 // เรียก backend — แนบ idToken ของ LINE ทุกครั้ง (backend ยืนยันกับ LINE แล้วใช้ sub เป็นตัวตนจริง)
 // text/plain เลี่ยง CORS preflight (ดู backend/README.md)
 // เน็ตหลุด/หมดเวลา = throw (ผู้เรียกตัดสินใจเองว่าจะเข้าคิวหรือแจ้งผู้ใช้) · backend ตอบ error = { success:false, message }
+/* ══════════════ กันกดซ้ำ ══════════════
+   ผู้ใช้กดซ้ำเพราะไม่รู้ว่ากดไปแล้วหรือยัง → เคยได้บิลซ้ำเข้าระบบมาแล้ว
+     1) ปุ่มที่กดถูกปิด + ขึ้นวงหมุนทันที (pressBusy)
+     2) action เดียวกันที่ยังค้างอยู่ ถูกบล็อกก่อนถึง network
+     3) บิล/สต็อกแนบ requestId ที่สร้าง "ตอนประกอบข้อมูล" ครั้งเดียว — ส่งซ้ำกี่รอบเซิร์ฟเวอร์ก็บันทึกใบเดียว
+        สำคัญมากกับคิวออฟไลน์: บิลในคิวพก requestId เดิมติดตัวไปด้วย การส่งซ้ำจึงไม่เกิดใบที่สอง */
+const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor']);
+const INFLIGHT = new Set();
+const newRequestId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+function pressBusy(btn, on){ if (!btn) return; btn.disabled = on; btn.classList.toggle('is-busy', on); }
+
 async function api(action, payload, timeoutMs = 45000, retriedAuth = false){
+  if (MUTATING.has(action) && !retriedAuth) {
+    if (INFLIGHT.has(action)) return { success: false, busy: true, message: 'กำลังบันทึกรายการนี้อยู่ กรุณารอสักครู่' };
+    INFLIGHT.add(action);
+    try { return await _apiSend(action, payload, timeoutMs, retriedAuth); }
+    finally { INFLIGHT.delete(action); }
+  }
+  return _apiSend(action, payload, timeoutMs, retriedAuth);
+}
+async function _apiSend(action, payload, timeoutMs = 45000, retriedAuth = false){
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeoutMs);
   let out;
   try {
@@ -525,7 +555,8 @@ async function flushQueue(){
     const s = q[i];
     try {
       const r = await api('recordSale', s);
-      if (r.success) ok++; else { bad++; keep.push(Object.assign({}, s, { lastError: r.message || 'บันทึกไม่สำเร็จ' })); }
+      // duplicate = เคยบันทึกไปแล้วตั้งแต่รอบก่อน (requestId เดิม) — ถือว่าสำเร็จ เอาออกจากคิวได้
+      if (r.success || r.duplicate) ok++; else { bad++; keep.push(Object.assign({}, s, { lastError: r.message || 'บันทึกไม่สำเร็จ' })); }
     } catch (e) { keep.push(...q.slice(i)); break; }
   }
   saveQueue(keep);
@@ -638,12 +669,15 @@ function clearCart(){ if (!confirm('ล้างตะกร้าทั้ง�
 async function submitSale(){
   if (!CART.length) return;
   const btn = $('cb-save'); if (btn.disabled) return;
-  btn.disabled = true; const label = btn.innerHTML; btn.textContent = 'กำลังบันทึก...';   // เก็บ innerHTML เพราะปุ่มมีไอคอน SVG อยู่ข้างใน
+  const label = btn.innerHTML;   // เก็บ innerHTML เพราะปุ่มมีไอคอน SVG อยู่ข้างใน
+  pressBusy(btn, true);
   try {
     const gps = await getGPS();
     const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: $('s-office').checked ? 'office_delivery' : 'immediate',
       items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })),
-      latitude: gps.lat, longitude: gps.lng, googleMap: gps.map, savedAt: new Date().toISOString() };
+      latitude: gps.lat, longitude: gps.lng, googleMap: gps.map, savedAt: new Date().toISOString(),
+      // สร้างครั้งเดียวต่อ "ความตั้งใจจะบันทึกหนึ่งบิล" — ส่งใหม่/ส่งจากคิวใช้ค่าเดิม เซิร์ฟเวอร์จึงบันทึกใบเดียว
+      requestId: newRequestId() };
     if (!navigator.onLine) {
       const q = loadQueue(); q.push(sale); saveQueue(q);
       afterSale(); toast('ไม่มีสัญญาณ — เก็บบิลเข้าคิวแล้ว (' + q.length + ' บิลรอส่ง)', 'ok');
@@ -652,13 +686,16 @@ async function submitSale(){
     let r;
     try { r = await api('recordSale', sale, 60000); }
     catch (e) {
-      // ไม่รู้ว่าเซิร์ฟเวอร์ได้รับแล้วหรือยัง — ห้ามเข้าคิวอัตโนมัติ (เสี่ยงบิลซ้ำ) ให้คนเช็คยอดวันนี้ก่อน
-      toast('ไม่แน่ใจว่าบันทึกสำเร็จ (' + e.message + ') — เช็คยอดวันนี้ที่หน้าแรกก่อนกดซ้ำ', 'err'); return;
+      // ไม่รู้ว่าเซิร์ฟเวอร์ได้รับแล้วหรือยัง — แต่บิลนี้มี requestId ติดตัวแล้ว ส่งซ้ำก็ไม่เกิดใบที่สอง
+      // จึงเข้าคิวให้ปลอดภัยกว่าทิ้งไป (ถ้าใบแรกบันทึกสำเร็จจริง เซิร์ฟเวอร์จะตอบว่าซ้ำแล้วคิวจะถูกเคลียร์เอง)
+      const q = loadQueue(); q.push(sale); saveQueue(q);
+      afterSale(); toast('ส่งไม่ถึงเซิร์ฟเวอร์ — เก็บเข้าคิวไว้ส่งใหม่ (' + q.length + ' บิลรอส่ง)', 'err'); return;
     }
+    if (r.duplicate) { afterSale(); toast(r.message, 'err'); return; }   // เคยบันทึกไปแล้ว ไม่ได้เพิ่มใบที่สอง
     if (!r.success) { toast(r.message || 'บันทึกไม่สำเร็จ', 'err'); return; }
     afterSale(); toast('บิล ' + (r.orderCode || '') + ' · ฿' + baht(r.total), 'ok');
     refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
-  } finally { btn.disabled = false; btn.innerHTML = label; renderCartBar(); }
+  } finally { pressBusy(btn, false); btn.innerHTML = label; renderCartBar(); }
 }
 function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
@@ -682,11 +719,12 @@ function setStockQty(pid, v){ const n = parseInt(v); if (isNaN(n) || (STOCK_MODE
 async function submitStock(){
   const ids = Object.keys(STOCK_QTY); if (!ids.length) return toast('ยังไม่ได้กรอกจำนวน', 'err');
   if (!navigator.onLine) return toast('ต้องมีสัญญาณจึงจะบันทึกสต็อกได้', 'err');
-  const btn = $('st-btn'); btn.disabled = true;
+  const btn = $('st-btn'); pressBusy(btn, true);
+  const rid = newRequestId();
   try {
     const r = STOCK_MODE === 'restock'
-      ? await api('restockVan', { items: ids.map(id => ({ productId: id, qty: STOCK_QTY[id] })) })
-      : await api('submitCount', { items: ids.map(id => ({ productId: id, countedQty: STOCK_QTY[id] })) });
+      ? await api('restockVan', { requestId: rid, items: ids.map(id => ({ productId: id, qty: STOCK_QTY[id] })) })
+      : await api('submitCount', { requestId: rid, items: ids.map(id => ({ productId: id, countedQty: STOCK_QTY[id] })) });
     if (!r.success) return toast(r.message, 'err');
     toast(STOCK_MODE === 'restock' ? 'เบิกของขึ้นรถแล้ว' : 'บันทึกผลตรวจนับแล้ว', 'ok');
     STOCK_QTY = {}; await refreshData(true); renderStock();

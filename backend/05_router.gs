@@ -30,6 +30,10 @@ function _handleMobileActionCore(lineUserId, action, payload) {
     }
 
     var user = { lineUserId: lineUserId, tenantId: userStatus.tenantId, role: userStatus.role, name: userStatus.name };
+    // กันบันทึกซ้ำที่จุดเดียว: action ที่สร้างของใหม่ + หน้าเว็บแนบ requestId มา = ทำงานครั้งเดียวต่อ id (35_idempotency.gs)
+    if (IDEMPOTENT_ACTIONS[action]) {
+      return withIdempotency(_idemKey(lineUserId, action, payload), function() { return ACTION_MAP[action](user, payload || {}); });
+    }
     return ACTION_MAP[action](user, payload || {});
   } catch (e) {
     Logger.log('ERROR [' + action + ']: ' + (e.stack || e.message));
@@ -179,11 +183,20 @@ var ADMIN_ACTION_MAP = {
   exportExpressSales:     exportExpressSales
 };
 
+/** คีย์กันซ้ำผูกกับผู้ใช้+action ด้วย เผื่อ requestId ของสองเครื่องบังเอิญชนกัน (และกันคนอื่นยิง id ทับ) */
+function _idemKey(who, action, payload) {
+  var rid = String((payload && (payload.requestId || payload.clientRequestId)) || '').trim();
+  return rid ? (String(who || '') + '|' + action + '|' + rid) : '';
+}
+
 // เรียกจาก doPost() (04_auth.gs) หลัง resolve session แล้วเท่านั้น
 function _handleAdminActionCore(session, action, payload) {
   try {
     var fn = ADMIN_ACTION_MAP[action];
     if (!fn) return { success: false, message: 'ไม่พบ action: ' + action };
+    if (IDEMPOTENT_ACTIONS[action]) {
+      return withIdempotency(_idemKey(session.adminUserId, action, payload), function() { return fn(session, payload || {}); });
+    }
     return fn(session, payload || {});
   } catch (e) {
     Logger.log('ADMIN ERROR [' + action + ']: ' + (e.stack || e.message));
