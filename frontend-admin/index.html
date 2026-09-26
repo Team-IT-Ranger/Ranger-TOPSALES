@@ -580,22 +580,17 @@
 
         <!-- ═══ CUSTOMERS ═══ -->
         <section class="view" id="view-customers">
-          <div class="view-head"><div><h1>ลูกค้า</h1><p>ร้านค้าของตัวแทนนี้ — ผูกกลุ่มร้านค้าไว้ใช้กับเงื่อนไขโปรโมชั่น</p></div></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>ชื่อร้าน</th><th>กลุ่ม</th><th>เบอร์โทร</th><th>ที่อยู่</th><th>สถานะ</th></tr></thead>
-            <tbody id="customers-body"><tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr></tbody>
-          </table></div>
-          <div class="form-card">
-            <h3>เพิ่มลูกค้าใหม่</h3>
-            <div class="form-grid g2">
-              <div class="field"><label>ชื่อร้าน</label><input id="c-name" placeholder="เช่น ร้านป้าแดง มินิมาร์ท"></div>
-              <div class="field"><label>กลุ่มร้านค้า</label><select id="c-group"><option value="0">— ไม่ระบุ —</option></select></div>
-              <div class="field"><label>เบอร์โทร</label><input id="c-phone" placeholder="08X-XXX-XXXX"></div>
-              <div class="field"><label>เลขผู้เสียภาษี</label><input id="c-tax"></div>
-              <div class="field span2"><label>ที่อยู่</label><input id="c-addr"></div>
-            </div>
-            <div class="form-actions"><button class="btn btn-primary" onclick="addCustomerUI()">+ เพิ่มลูกค้า</button></div>
+          <div class="view-head">
+            <div><h1>ลูกค้า</h1><p>ทะเบียนร้านค้า — กลุ่มลูกค้าเป็นตัวกำหนดชุดราคา · เครดิตที่ตั้งไว้ถูกใช้คิดวันครบกำหนดของใบแจ้งหนี้</p></div>
+            <button class="btn btn-primary" onclick="openCustomerModal()">+ เพิ่มลูกค้า</button>
           </div>
+          <div class="field" style="max-width:340px;margin-bottom:12px">
+            <input id="c-search" placeholder="ค้นหา: รหัส / ชื่อร้าน / เบอร์โทร / เลขภาษี" oninput="renderCustomers()">
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>รหัส</th><th>ชื่อร้าน</th><th>กลุ่ม / ประเภท</th><th>เบอร์โทร</th><th>เครดิต</th><th>ซื้อล่าสุด</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="customers-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+          </table></div>
         </section>
 
         <!-- ═══ งานขาย: รายการบิลขาย ═══ -->
@@ -1914,40 +1909,116 @@ async function toggleStaffStatus(lineUserId, currentStatus){
   loadDashboard();
 }
 
-/* ══════════════ CUSTOMERS ══════════════ */
+/* ══════════════ CUSTOMERS ══════════════
+   ทะเบียนลูกค้าโครงสร้างใหม่ (2026-09-26) — backend ส่ง r.customers (camelCase, มีชื่อเต็มคำนวณมาแล้ว)
+   ของเก่า r.data ยังส่งมาด้วยเผื่อ deployment ที่ยังไม่ได้อัปเดต จึงรองรับทั้งสองแบบ
+   บันทึกแล้วแก้ custMasterCache แล้ววาดใหม่ ไม่โหลดทั้งลิสต์ซ้ำ (กติกาข้อ 4 ใน CLAUDE.md) */
+let custMasterCache = [];
+const CUST_STATUS = { active: ['ใช้งาน','ok'], blocked: ['ระงับเครดิต','wait'], inactive: ['ปิด','off'] };
+const CUST_MODES = { van: 'รถเร่', preorder: 'พรีออเดอร์' };
+function custStatusOf(c){ return c.status || (c.isActive ? 'active' : 'inactive'); }
+function renderCustomers(){
+  const body = document.getElementById('customers-body');
+  const q = (document.getElementById('c-search').value || '').trim().toLowerCase();
+  const gName = {}; customerGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
+  const chName = {}; distChannelsCache.forEach(x => chName[String(x.record_id)] = x.name);
+  const rows = !q ? custMasterCache : custMasterCache.filter(c =>
+    [c.code, c.fullName, c.name, c.phone, c.taxId, c.areaCode].some(v => String(v||'').toLowerCase().includes(q)));
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+(custMasterCache.length?'ไม่พบลูกค้าที่ค้นหา':'ยังไม่มีลูกค้า')+'</td></tr>'; return; }
+  body.innerHTML = rows.map(c => {
+    const st = CUST_STATUS[custStatusOf(c)] || CUST_STATUS.active;
+    const kind = [gName[String(c.groupId)], chName[String(c.channelId)], CUST_MODES[c.salesMode]].filter(Boolean).join(' · ');
+    const credit = c.paymentType === 'credit' ? ('เชื่อ ' + (c.paymentTermsDays||0) + ' วัน') : 'เงินสด';
+    return '<tr><td class="mono-data">'+esc(c.code||'-')+'</td><td class="wrap">'+esc(c.fullName||c.name)+'</td>' +
+      '<td class="wrap">'+esc(kind||'-')+'</td><td class="mono-data">'+esc(c.phone||'-')+'</td>' +
+      '<td>'+esc(credit)+'</td><td class="mono-data">'+esc(c.lastSaleAt||'-')+'</td>' +
+      '<td><span class="pill '+st[1]+'">'+st[0]+'</span></td>' +
+      '<td><button class="btn btn-sm" onclick="openCustomerModal('+c.id+')">แก้ไข</button></td></tr>';
+  }).join('');
+}
 async function loadCustomers(){
   const body = document.getElementById('customers-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
-  const [, r] = await Promise.all([ensureCustomerGroups(), callApi('listCustomersAdmin', {})]);
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีลูกค้า</td></tr>'; return; }
-  const gName = {}; customerGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
-  body.innerHTML = r.data.map(c =>
-    '<tr><td>'+esc(c.name)+'</td><td>'+esc(gName[String(c.group_id)]||'-')+'</td><td class="mono-data">'+esc(c.phone||'-')+'</td>' +
-    '<td class="wrap">'+esc(c.address||'-')+'</td>' +
-    '<td><span class="pill '+(String(c.is_active)==='TRUE'?'ok':'off')+'">'+(String(c.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td></tr>'
-  ).join('');
+  body.innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+  const [, , r] = await Promise.all([ensureCustomerGroups(), ensureDistChannels(), callApi('listCustomersAdmin', {})]);
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
+  custMasterCache = r.customers || (r.data || []).map(c => ({
+    id: c.record_id, code: c.customer_code || '', name: c.name, fullName: ((c.name_prefix?c.name_prefix+' ':'')+c.name).trim(),
+    groupId: c.group_id, channelId: c.channel_id || '', salesMode: c.sales_mode || '', areaCode: c.area_code || '',
+    phone: c.phone || '', taxId: c.tax_id || '', paymentType: c.payment_type || 'cash',
+    paymentTermsDays: c.payment_terms_days || 0, lastSaleAt: c.last_sale_at || '',
+    status: c.status || '', isActive: String(c.is_active) === 'TRUE'
+  }));
+  renderCustomers();
 }
-async function addCustomerUI(){
-  const name = document.getElementById('c-name').value.trim();
-  if (!name) { toast('กรุณากรอกชื่อร้าน', true); return; }
-  const r = await callApi('addCustomerAdmin', {
-    name, groupId: parseInt(document.getElementById('c-group').value) || 0,
-    phone: document.getElementById('c-phone').value.trim(),
-    taxId: document.getElementById('c-tax').value.trim(),
-    address: document.getElementById('c-addr').value.trim()
-  });
-  if (!r.success) { toast(r.message, true); return; }
-  toast('เพิ่มลูกค้าสำเร็จ');
-  ['c-name','c-phone','c-tax','c-addr'].forEach(id => document.getElementById(id).value = '');
-  loadCustomers();
+let distChannelsCache = [];
+async function ensureDistChannels(){
+  if (distChannelsCache.length) return;
+  const r = await callApi('listDistributionChannels', {});
+  if (r.success) distChannelsCache = r.data.filter(x => String(x.is_active) !== 'FALSE');
 }
+/* ฟอร์มลูกค้าเต็มรูปแบบ — ใช้โมดัลตัวเดียวกับหน้าชุดราคา (plModal/plModalErr/plBusy) */
+function openCustomerModal(id){
+  const c = id ? custMasterCache.find(x => String(x.id) === String(id)) : null;
+  const v = (k, d) => esc(c && c[k] !== undefined && c[k] !== null ? c[k] : (d === undefined ? '' : d));
+  const sel = (list, cur, blank) => (blank ? '<option value="">'+blank+'</option>' : '') +
+    list.map(o => '<option value="'+esc(o[0])+'"'+(String(cur||'')===String(o[0])?' selected':'')+'>'+esc(o[1])+'</option>').join('');
+  const groups = customerGroupsCache.map(g => [g.record_id, g.name]);
+  const channels = distChannelsCache.map(x => [x.record_id, x.name]);
+  plModal('<h3>'+(c ? 'แก้ไขลูกค้า ' + esc(c.code) : 'เพิ่มลูกค้าใหม่')+'</h3>' +
+    '<p class="form-hint">'+(c ? 'รหัสลูกค้าเปลี่ยนไม่ได้ (เอกสารเก่าอ้างถึงอยู่)' : 'ระบบออกรหัสลูกค้าให้อัตโนมัติ (C0001, C0002, …) แยกเล่มของแต่ละตัวแทน')+'</p>' +
+    '<div class="form-grid g2">' +
+      plField('คำนำหน้า', '<input id="cm-prefix" value="'+v('namePrefix')+'" placeholder="บริษัท / ร้าน / คุณ / หจก.">') +
+      plField('ชื่อร้าน / ชื่อนิติบุคคล', '<input id="cm-name" value="'+v('name')+'" placeholder="เช่น ป้าแดง มินิมาร์ท">') +
+      plField('กลุ่มลูกค้า <span class="unit">(กำหนดชุดราคา)</span>', '<select id="cm-group">'+sel(groups, c?c.groupId:'', '— ไม่ระบุ —')+'</select>') +
+      plField('ประเภทร้าน / ช่องทาง', '<select id="cm-channel">'+sel(channels, c?c.channelId:'', '— ไม่ระบุ —')+'</select>') +
+      plField('รูปแบบการขาย', '<select id="cm-mode">'+sel([['van','รถเร่ (ขายจากรถทันที)'],['preorder','พรีออเดอร์ (ส่งทีหลัง)']], c?c.salesMode:'', '— ไม่ระบุ —')+'</select>') +
+      plField('เขต / สายวิ่ง', '<input id="cm-area" value="'+v('areaCode')+'">') +
+      plField('ผู้ติดต่อ', '<input id="cm-contact" value="'+v('contactName')+'">') +
+      plField('เบอร์โทร', '<input id="cm-phone" value="'+v('phone')+'">') +
+      plField('อีเมล', '<input id="cm-email" value="'+v('email')+'">') +
+      plField('เลขประจำตัวผู้เสียภาษี <span class="unit">(13 หลัก)</span>', '<input id="cm-tax" value="'+v('taxId')+'">') +
+      plField('สาขา <span class="unit">(00000 = สำนักงานใหญ่)</span>', '<input id="cm-taxbr" value="'+v('taxBranchCode')+'">') +
+      plField('รหัสไปรษณีย์', '<input id="cm-post" value="'+v('postcode')+'">') +
+    '</div>' +
+    plField('ที่อยู่ <span class="unit">(ตามที่พิมพ์บนใบกำกับภาษี)</span>', '<input id="cm-addr" value="'+v('address')+'">') +
+    plField('ที่อยู่จัดส่ง <span class="unit">(เว้นว่าง = ส่งตามที่อยู่ด้านบน)</span>', '<input id="cm-shipto" value="'+v('shipToAddress')+'">') +
+    '<div class="form-grid g2">' +
+      plField('การชำระเงิน', '<select id="cm-paytype">'+sel([['cash','เงินสด'],['credit','เครดิต']], c?c.paymentType:'cash')+'</select>') +
+      plField('เครดิต (วัน)', '<input id="cm-terms" type="number" min="0" max="365" value="'+v('paymentTermsDays', 0)+'">') +
+      plField('วงเงินเครดิต (บาท)', '<input id="cm-limit" type="number" min="0" value="'+v('creditLimit', 0)+'">') +
+      plField('สถานะ', '<select id="cm-status">'+sel([['active','ใช้งาน'],['blocked','ระงับเครดิต (ขายสดได้)'],['inactive','ปิดการใช้งาน']], c?custStatusOf(c):'active')+'</select>') +
+    '</div>' +
+    plField('หมายเหตุ', '<input id="cm-note" value="'+v('note')+'">') +
+    plModalActions('saveCustomerUI('+(c?c.id:'')+')', c ? 'บันทึกการแก้ไข' : 'เพิ่มลูกค้า'));
+}
+function saveCustomerUI(id){ return plBusy(async () => {
+  const v = k => (document.getElementById(k).value || '').trim();
+  if (!v('cm-name')) return plModalErr('กรุณากรอกชื่อร้าน');
+  const payload = { namePrefix: v('cm-prefix'), name: v('cm-name'), groupId: parseInt(v('cm-group')) || 0,
+    channelId: v('cm-channel'), salesMode: v('cm-mode'), areaCode: v('cm-area'),
+    contactName: v('cm-contact'), phone: v('cm-phone'), email: v('cm-email'),
+    taxId: v('cm-tax'), taxBranchCode: v('cm-taxbr'), postcode: v('cm-post'),
+    address: v('cm-addr'), shipToAddress: v('cm-shipto'),
+    paymentType: v('cm-paytype'), paymentTermsDays: v('cm-terms') || 0, creditLimit: v('cm-limit') || 0,
+    status: v('cm-status'), note: v('cm-note') };
+  if (id) payload.id = id;
+  const r = await callApi(id ? 'updateCustomerAdmin' : 'addCustomerAdmin', payload);
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message || 'บันทึกแล้ว');
+  const row = { id: id || r.customerId, code: id ? (custMasterCache.find(x => String(x.id) === String(id))||{}).code : r.customerCode,
+    fullName: (payload.namePrefix ? payload.namePrefix + ' ' : '') + payload.name, isActive: payload.status !== 'inactive',
+    lastSaleAt: id ? (custMasterCache.find(x => String(x.id) === String(id))||{}).lastSaleAt : '' };
+  const merged = Object.assign({}, payload, row);
+  const at = custMasterCache.findIndex(x => String(x.id) === String(merged.id));
+  if (at >= 0) custMasterCache[at] = Object.assign({}, custMasterCache[at], merged); else custMasterCache.push(merged);
+  renderCustomers();
+}); }
 async function ensureCustomerGroups(){
   if (customerGroupsCache.length) return;
   const r = await callApi('listCustomerGroups', {});
   if (r.success) customerGroupsCache = r.data;
   const opts = customerGroupsCache.map(g => '<option value="'+g.record_id+'">'+esc(g.name)+'</option>').join('');
-  ['c-group','pr-custgroup'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = el.innerHTML.split('</option>')[0] + '</option>' + opts; });
+  ['pr-custgroup'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = el.innerHTML.split('</option>')[0] + '</option>' + opts; });
 }
 
 /* ══════════════ ข้อมูลกลาง: กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน ══════════════ */
@@ -2042,6 +2113,8 @@ async function saveDocSeriesUI(){
    โหมด "ตัวแทน" (tenant_admin หรือ Ultra Admin ที่สวมสิทธิ์อยู่แล้ว) → เซิร์ฟเวอร์รู้ตัวแทนจาก session/ACTIVE_TENANT_ID เอง
    โหมด "บริษัทเจ้าของสินค้า" (owner, ไม่ได้สวมสิทธิ์ตัวแทนไหน) → ไม่ต้องเลือกอะไร เซิร์ฟเวอร์จะใช้ "ตัวแทนบ้าน" ของบริษัท
    เองโดยอัตโนมัติ (_salesTenantId ใน 14_permissions.gs) เพราะบริษัทเองก็มีพนักงานขายตรง ยอดเข้าบริษัทเอง */
+/* ป้ายชื่อลูกค้าที่ใช้ในดรอปดาวน์ทุกหน้า: รหัส · คำนำหน้า+ชื่อ (ทะเบียนลูกค้าใหม่ 2026-09-26) */
+const custLabel = c => ((c.customer_code ? c.customer_code + ' · ' : '') + (c.name_prefix ? c.name_prefix + ' ' : '') + (c.name || '')).trim();
 let salesOrdersCache = [], customersCache = [], paymentTypesCache = [], currentSaleOrderId = null, sonPreviewData = null;
 const PRODUCT_UNITS_CACHE = {};
 const SO_STATUS = { completed:['ok','เสร็จสิ้น'], pending_delivery:['wait','รอจัดส่ง'], cancelled:['off','ยกเลิกแล้ว'] };
@@ -2166,7 +2239,7 @@ async function openSaleOrderNew(){
   custSel.innerHTML = '<option value="">กำลังโหลด...</option>';
   const [custR] = await Promise.all([callApi('listCustomersAdmin', {}), ensureStaffCache(), ensureProductsForSale(), ensurePaymentTypesCache()]);
   customersCache = custR.success ? custR.data.filter(c => isOn(c.is_active)) : [];
-  custSel.innerHTML = '<option value="">— เลือกลูกค้า —</option>' + customersCache.map(c => '<option value="'+c.record_id+'">'+esc(c.name)+'</option>').join('');
+  custSel.innerHTML = '<option value="">— เลือกลูกค้า —</option>' + customersCache.map(c => '<option value="'+c.record_id+'">'+esc(custLabel(c))+'</option>').join('');
 
   const paySel = document.getElementById('son-pay');
   paySel.innerHTML = paymentTypesCache.map(p => '<option value="'+esc(p.code)+'">'+esc(p.name)+'</option>').join('');
@@ -3894,7 +3967,7 @@ async function openArInvoiceForm(){
     plField('บิลขาย', '<select id="arf-order" onchange="arToggleManual()"><option value="">— กรอกเอง —</option>' +
       orders.map(o => '<option value="'+esc(o.id)+'" data-cust="'+esc(o.customerId)+'">'+esc(o.orderCode)+' · '+esc(o.customerName)+' · ฿'+bahtPlain(o.total)+'</option>').join('') + '</select>') +
     '<div id="arf-manual">' +
-      plField('ลูกค้า', '<select id="arf-cust">'+optsOf(customersCache, 'record_id', 'name')+'</select>') +
+      plField('ลูกค้า', '<select id="arf-cust">'+customersCache.map(c => '<option value="'+esc(c.record_id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
       '<div class="form-grid g2">' + plField('ยอดก่อน VAT', '<input id="arf-sub" type="number" min="0" step="0.01">') +
         plField('VAT (เว้นว่าง = 7%)', '<input id="arf-vat" type="number" min="0" step="0.01">') + '</div>' +
     '</div>' +

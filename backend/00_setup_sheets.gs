@@ -52,7 +52,23 @@ var CENTRAL_SHEETS = {
   // barcode: บาร์โค้ด "ชุด" ของหน่วยนี้โดยเฉพาะ unique เฉพาะสินค้า+หน่วยนี้ (หน่วยขายเพิ่มเติมไม่มี group_barcode เพราะ concept กลุ่มอยู่ที่ระดับหน่วยฐานเท่านั้น)
   product_units: ['record_id','product_id','unit_code','unit_label','unit_factor','price','is_active','barcode'],
 
-  customers: ['record_id','name','tenant_id','group_id','phone','tax_id','address','subdistrict_id','district_id','province_id','lat','lng','is_active','created_at','external_code'],
+  // ── ทะเบียนลูกค้า — ประกอบแถวผ่าน buildCustomerFields() ใน 33_customers.gs เท่านั้น ──
+  // customer_code: รหัสลูกค้าที่คนอ่าน/พิมพ์บนเอกสาร (C0001…) unique ต่อตัวแทน · คนละเรื่องกับ record_id (คีย์ภายใน)
+  //   และคนละเรื่องกับ external_code (รหัสจากระบบต้นทางตอนนำเข้า คู่กับ external_system ว่ามาจาก Express/BDC)
+  // name_prefix แยกจาก name: ใบกำกับภาษีต้องพิมพ์ "บริษัท … จำกัด" ครบ แต่การค้นหา/เรียงต้องใช้ชื่อจริง
+  // การจัดกลุ่ม 3 แกนที่ไม่ปนกัน: group_id = กลุ่มลูกค้า (ตัวกำหนดชุดราคา) · channel_id = ประเภทร้าน/ช่องทาง
+  //   (→ distribution_channels) · sales_mode = van | preorder (ขายจากรถ vs รับออเดอร์ส่งทีหลัง)
+  // tax_branch_code: 00000 = สำนักงานใหญ่ — กฎหมายไทยบังคับให้ระบุสาขาบนใบกำกับภาษี
+  // payment_terms_days/credit_limit: เครดิตประจำร้าน — ใบแจ้งหนี้คิดวันครบกำหนดจากตรงนี้ (23_accounting.gs)
+  // status: active | inactive | blocked (ระงับเครดิต ขายสดได้) · is_active คงไว้เพราะโค้ดเดิมทั้งระบบอ่านคอลัมน์นี้
+  //   — buildCustomerFields() เขียนสองคอลัมน์นี้ให้ตรงกันเสมอ ห้ามเขียนแยกกันเอง
+  // attributes: JSON สำหรับฟิลด์ที่ยังไม่ตกผลึก (แทนคอลัมน์สำรอง rs1..rs5 ของระบบเดิมที่กลายเป็นขยะ)
+  customers: ['record_id','customer_code','name_prefix','name','name_2','tenant_id','group_id','channel_id','sales_mode',
+    'area_code','salesman_line_user_id','contact_name','phone','email','tax_id','tax_branch_code','tax_type',
+    'address','subdistrict_id','district_id','province_id','postcode','lat','lng','ship_to_address',
+    'payment_type','payment_terms_days','credit_limit','status','is_active','inactive_at',
+    'note','attributes','external_code','external_system','last_sale_at',
+    'created_at','created_by','updated_at','updated_by'],
   customer_groups: ['record_id','name','description'],
   // ข้อมูลอ้างอิงกลางเพิ่มเติม จัดการได้เฉพาะโหมด "บริษัทเจ้าของสินค้า" (module 'settings')
   distribution_channels: ['record_id','name','description','is_active'],

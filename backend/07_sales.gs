@@ -83,6 +83,14 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
 function recordSale(user, payload) {
   var fulfillmentType = payload.fulfillmentType === 'office_delivery' ? 'office_delivery' : 'immediate';
 
+  // สถานะลูกค้าเป็นตัวกั้น: ปิดการใช้งาน = ขายไม่ได้ · ระงับเครดิต = ขายได้เฉพาะเงินสด (ดู 33_customers.gs)
+  if (payload.customerId) {
+    var custRow = null;
+    centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(payload.customerId)) custRow = c; });
+    var gate = customerSaleGate(custRow, payload.paymentType);
+    if (gate) return gate;
+  }
+
   var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales');
   if (!priced.success) return priced;
   var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;
@@ -127,6 +135,7 @@ function recordSale(user, payload) {
   });
 
   bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
+  touchCustomerLastSale(payload.customerId, createdAt);                       // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
 
   items.forEach(function(it) {
     tenantAppend(user.tenantId, 'order_items', {

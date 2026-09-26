@@ -34,9 +34,12 @@ function getBootstrap(user) {
   var customers = centralObjects('customers')
     .filter(function(c) { return String(c.tenant_id) === String(user.tenantId) && isNotOff(c.is_active); })
     .map(function(c) { return {
-      id: parseInt(c.record_id), name: c.name, groupId: parseInt(c.group_id) || 0,
+      id: parseInt(c.record_id), code: c.customer_code || '', name: customerFullName(c), groupId: parseInt(c.group_id) || 0,
       phone: c.phone || '', address: c.address || '',
-      lat: parseFloat(c.lat) || 0, lng: parseFloat(c.lng) || 0
+      lat: parseFloat(c.lat) || 0, lng: parseFloat(c.lng) || 0,
+      // เครดิตประจำร้าน + สถานะ: แอปมือถือใช้ตั้งค่าเริ่มต้นช่องชำระเงิน และกันการเปิดบิลเชื่อให้ร้านที่ถูกระงับ
+      paymentType: c.payment_type || 'cash', termsDays: parseInt(c.payment_terms_days) || 0,
+      creditBlocked: String(c.status || '').toLowerCase() === CUSTOMER_STATUS_BLOCKED
     }; });
 
   var rules = _activeRules();

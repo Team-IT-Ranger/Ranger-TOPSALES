@@ -110,7 +110,10 @@ function recordSaleAdmin(session, payload) {
   var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   if (!payload.customerId) return { success: false, message: 'กรุณาระบุลูกค้า' };
-  if (!_customerInTenant(payload.customerId, tenantId)) return { success: false, message: 'ไม่พบลูกค้านี้ในตัวแทนจำหน่ายที่เลือก' };
+  var custRow = _customerInTenant(payload.customerId, tenantId);
+  if (!custRow) return { success: false, message: 'ไม่พบลูกค้านี้ในตัวแทนจำหน่ายที่เลือก' };
+  var custGate = customerSaleGate(custRow, payload.paymentType);   // ปิดการใช้งาน / ระงับเครดิต (ดู 33_customers.gs)
+  if (custGate) return custGate;
 
   var fulfillmentType = payload.fulfillmentType === 'immediate' ? 'immediate' : 'office_delivery';
   var soldByLineUserId = String(payload.soldByLineUserId || '').trim();
@@ -163,6 +166,7 @@ function recordSaleAdmin(session, payload) {
   });
 
   bumpSalesDaily(tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
+  touchCustomerLastSale(payload.customerId, createdAt);                  // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
 
   items.forEach(function(it) {
     tenantAppend(tenantId, 'order_items', {

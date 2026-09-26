@@ -58,31 +58,54 @@ function importExpressCustomers(session, payload) {
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var rows = payload.rows || [];
-  var columnMap = payload.columnMap || { name: 'name', phone: 'phone', taxId: 'taxId', address: 'address', externalCode: 'externalCode' };
   if (!rows.length) return { success: false, message: 'ไม่มีข้อมูลนำเข้า' };
+  // columnMap: ชื่อฟิลด์ของเรา → ชื่อคอลัมน์ในไฟล์ต้นทาง · ฟิลด์ที่รองรับ = ทุกคีย์ที่ buildCustomerFields รู้จัก
+  // (ค่าตั้งต้นเป็นชื่อเดียวกัน เพื่อให้ไฟล์ที่ส่งมาเป็น camelCase อยู่แล้วนำเข้าได้เลย — ดู .dev/import-customers.js)
+  var defaults = ['name','namePrefix','name2','phone','email','contactName','taxId','taxBranchCode','address','postcode',
+    'areaCode','salesMode','channelId','groupId','paymentType','paymentTermsDays','creditLimit','status','note',
+    'lat','lng','shipToAddress','attributes','lastSaleAt','externalCode','externalSystem'];
+  var columnMap = payload.columnMap || {};
+  defaults.forEach(function(k) { if (!columnMap[k]) columnMap[k] = k; });
+  var externalSystem = String(payload.externalSystem || '').trim();
 
-  var existing = centralObjects('customers').filter(function(c) { return String(c.tenant_id) === String(tenantId); });
+  var allRows = centralObjects('customers');
   var byExternalCode = {};
-  existing.forEach(function(c) { if (c.external_code) byExternalCode[String(c.external_code)] = c; });
+  allRows.forEach(function(c) {
+    if (String(c.tenant_id) !== String(tenantId)) return;
+    if (c.external_code) byExternalCode[String(c.external_code)] = c;
+  });
+  // ดัชนีรหัสลูกค้าตัวเดียวใช้ทั้งไฟล์ + สะสมแถวใหม่ไว้เขียนทีเดียว (ไฟล์จริงมีสองพันแถว เขียนทีละแถวไม่ทันเวลาของ Apps Script)
+  var codeIndex = customerCodeIndex(tenantId, allRows);
+  var nextId = centralNextId('customers');
+  var pending = [];
 
-  var created = 0, updated = 0;
-  rows.forEach(function(row) {
-    var externalCode = String(row[columnMap.externalCode] || '').trim();
-    var name = String(row[columnMap.name] || '').trim();
-    if (!name) return;
-    var fields = { name: name, phone: String(row[columnMap.phone] || ''), tax_id: String(row[columnMap.taxId] || ''), address: String(row[columnMap.address] || '') };
+  var created = 0, updated = 0, skipped = 0, errors = [];
+  rows.forEach(function(row, i) {
+    var mapped = {};
+    Object.keys(columnMap).forEach(function(field) {
+      var src = columnMap[field];
+      if (src && row[src] !== undefined && String(row[src]).trim() !== '') mapped[field] = row[src];
+    });
+    if (!String(mapped.name || '').trim()) { skipped++; return; }
+    if (externalSystem && !mapped.externalSystem) mapped.externalSystem = externalSystem;
 
+    var externalCode = String(mapped.externalCode || '').trim();
     var match = externalCode ? byExternalCode[externalCode] : null;
-    if (match) { centralUpdate('customers', match.record_id, fields); updated++; }
+    var built = buildCustomerFields(mapped, { tenantId: tenantId, existing: match, actor: session.adminUserId, codeIndex: codeIndex });
+    if (!built.ok) { if (errors.length < 20) errors.push('แถว ' + (i + 1) + ': ' + built.message); skipped++; return; }
+
+    if (match) { centralUpdate('customers', match.record_id, built.fields); updated++; }
     else {
-      fields.record_id = centralNextId('customers'); fields.tenant_id = tenantId; fields.group_id = 0;
-      fields.is_active = 'TRUE'; fields.created_at = nowStr(); fields.external_code = externalCode;
-      centralAppend('customers', fields);
+      built.fields.record_id = nextId++;
+      pending.push(built.fields);
+      if (externalCode) byExternalCode[externalCode] = built.fields;
       created++;
     }
   });
+  if (pending.length) centralAppendMany('customers', pending);
 
-  return { success: true, created: created, updated: updated };
+  return { success: true, created: created, updated: updated, skipped: skipped, errors: errors,
+    message: 'นำเข้าลูกค้า: เพิ่มใหม่ ' + created + ' · อัปเดต ' + updated + ' · ข้าม ' + skipped };
 }
 
 /**

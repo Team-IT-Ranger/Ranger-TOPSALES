@@ -480,14 +480,17 @@ function createArInvoice(session, payload) {
     var customer = null;
     centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(customerId)) customer = c; });
     if (!customer) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
-    var dueDate = payload.dueDate || _addDays(invDate, _int(payload.dueDays) || 30);
+    // วันครบกำหนด: ระบุมาเอง → ใช้ตามนั้น · ไม่ระบุ → เครดิตประจำร้าน (customers.payment_terms_days) · ไม่ได้ตั้งไว้ → 30 วัน
+    var custTerms = customerTermsDays(customer, null);
+    var dueDays = _int(payload.dueDays) || (custTerms === null ? 30 : custTerms);
+    var dueDate = payload.dueDate || _addDays(invDate, dueDays);
     if (!_validDate(dueDate)) return { success: false, message: 'วันครบกำหนดต้องเป็น yyyy-mm-dd' };
     var total = _money(subtotal + vat);
     var invId = centralNextId('ar_invoices');
     var invNo = _nextCentralDocNo('INV');
     var jr = _postJournal({ date: invDate, source: 'AR', refType: 'AR_INVOICE', refId: invId,
-      memo: 'ใบแจ้งหนี้ ' + invNo + ' ' + customer.name, createdBy: session.adminUserId, lines: [
-        { accountCode: GL_ACCT.AR, description: 'ลูกหนี้ ' + customer.name, debit: total, credit: 0, partyType: 'customer', partyId: customer.record_id },
+      memo: 'ใบแจ้งหนี้ ' + invNo + ' ' + customerFullName(customer), createdBy: session.adminUserId, lines: [
+        { accountCode: GL_ACCT.AR, description: 'ลูกหนี้ ' + customerFullName(customer), debit: total, credit: 0, partyType: 'customer', partyId: customer.record_id },
         { accountCode: GL_ACCT.SALES, description: note || 'รายได้จากการขาย', debit: 0, credit: _money(subtotal) },
         { accountCode: GL_ACCT.VAT_OUTPUT, description: 'ภาษีขาย', debit: 0, credit: _money(vat) }
       ] });
@@ -529,7 +532,7 @@ function receiveArPayment(session, payload) {
     var rcpId = centralNextId('ar_receipts');
     var rcpNo = _nextCentralDocNo('RV');
     var jr = _postJournal({ date: date, source: 'AR', refType: 'AR_RECEIPT', refId: rcpId,
-      memo: 'รับชำระ ' + rcpNo + ' ' + customer.name, createdBy: session.adminUserId, lines: [
+      memo: 'รับชำระ ' + rcpNo + ' ' + customerFullName(customer), createdBy: session.adminUserId, lines: [
         { accountCode: debitAcct, description: 'รับชำระโดย ' + method, debit: amount, credit: 0 },
         { accountCode: GL_ACCT.AR, description: 'ตัดลูกหนี้ ' + invs.map(function(x) { return x.inv.invoice_no; }).join(', '), debit: 0, credit: amount, partyType: 'customer', partyId: customer.record_id }
       ] });

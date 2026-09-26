@@ -6,16 +6,13 @@
 
 // ── Mobile App: เพิ่มลูกค้าใหม่หน้างาน ──
 function addCustomer(user, payload) {
-  if (!payload.name) return { success: false, message: 'กรุณาระบุชื่อลูกค้า' };
+  var built = buildCustomerFields(payload, { tenantId: user.tenantId, actor: user.lineUserId });
+  if (!built.ok) return { success: false, message: built.message };
   var custId = centralNextId('customers');
-  centralAppend('customers', {
-    record_id: custId, name: payload.name, tenant_id: user.tenantId, group_id: payload.groupId || 0,
-    phone: payload.phone || '', tax_id: payload.taxId || '', address: payload.address || '',
-    subdistrict_id: '', district_id: '', province_id: '',
-    lat: payload.lat || '', lng: payload.lng || '', is_active: 'TRUE', created_at: nowStr()
-  });
+  built.fields.record_id = custId;
+  centralAppend('customers', built.fields);
   cacheClear('bootstrap', user.lineUserId);
-  return { success: true, customerId: custId };
+  return { success: true, customerId: custId, customerCode: built.fields.customer_code };
 }
 
 // ── Admin App: ลูกค้า (ตัวแทน/Ultra Admin ที่สวมสิทธิ์ จัดการของตัวเอง, บริษัทเห็นทั้งหมด) ──
@@ -26,29 +23,34 @@ function listCustomersAdmin(session, payload) {
   var rows = centralObjects('customers');
   var effTenantId = _salesTenantId(session, payload || {});
   if (effTenantId) rows = rows.filter(function(c) { return String(c.tenant_id) === String(effTenantId); });
-  return { success: true, data: rows };
+  // ส่งทั้งแถวดิบ (โค้ดเดิมบางหน้าอ่านชื่อคอลัมน์ตรงๆ) และรูป camelCase ที่คำนวณชื่อเต็ม/ป้ายสาขาให้แล้ว
+  return { success: true, data: rows, customers: rows.map(customerToApi) };
 }
 
 function addCustomerAdmin(session, payload) {
   var err = _requirePermission(session, 'customers', 'edit'); if (err) return err;
   var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
-  centralAppend('customers', {
-    record_id: centralNextId('customers'), name: payload.name, tenant_id: tenantId, group_id: payload.groupId || 0,
-    phone: payload.phone || '', tax_id: payload.taxId || '', address: payload.address || '',
-    subdistrict_id: payload.subdistrictId || '', district_id: payload.districtId || '', province_id: payload.provinceId || '',
-    lat: payload.lat || '', lng: payload.lng || '', is_active: 'TRUE', created_at: nowStr()
-  });
-  return { success: true };
+  var built = buildCustomerFields(payload, { tenantId: tenantId, actor: session.adminUserId });
+  if (!built.ok) return { success: false, message: built.message };
+  built.fields.record_id = centralNextId('customers');
+  centralAppend('customers', built.fields);
+  return { success: true, customerId: built.fields.record_id, customerCode: built.fields.customer_code,
+    message: 'เพิ่มลูกค้า ' + built.fields.customer_code + ' แล้ว' };
 }
 
 function updateCustomerAdmin(session, payload) {
   var err = _requirePermission(session, 'customers', 'edit'); if (err) return err;
-  centralUpdate('customers', payload.id, {
-    name: payload.name, group_id: payload.groupId, phone: payload.phone, tax_id: payload.taxId,
-    address: payload.address, lat: payload.lat, lng: payload.lng, is_active: payload.isActive
-  });
-  return { success: true };
+  var existing = null;
+  var tenantId = _salesTenantId(session, payload || {});
+  centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(payload.id)) existing = c; });
+  if (!existing) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
+  // ตัวแทนแก้ได้เฉพาะลูกค้าของตัวเอง (บริษัทที่ไม่ได้สวมสิทธิ์ตัวแทนไหนอยู่ = ไม่จำกัด)
+  if (tenantId && String(existing.tenant_id) !== String(tenantId)) return { success: false, message: 'ลูกค้ารายนี้ไม่ได้อยู่ในตัวแทนจำหน่ายที่เลือก' };
+  var built = buildCustomerFields(payload, { existing: existing, tenantId: existing.tenant_id, actor: session.adminUserId });
+  if (!built.ok) return { success: false, message: built.message };
+  centralUpdate('customers', payload.id, built.fields);
+  return { success: true, message: 'บันทึกข้อมูลลูกค้าแล้ว' };
 }
 
 // ── Admin App: พนักงานขาย (ตัวแทน/Ultra Admin ที่สวมสิทธิ์ อนุมัติ/ปิดการใช้งานพนักงาน) ──
