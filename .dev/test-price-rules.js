@@ -33,6 +33,21 @@ const sheets = {
     // กฎที่ปิดไว้ ต้องไม่ถูกนับ
     { record_id: 5, price_list_id: 12, name: 'ปิดอยู่', match_type: 'all', priority: 50, is_active: 'FALSE' }
   ],
+  // ★ ชั้น A: ชุดราคาต้องถูก "จ่าย" ให้ตัวแทนก่อน ไม่งั้นกฎสิทธิ์จะดีแค่ไหนก็ใช้ไม่ได้
+  //   (ชุด 12 จ่ายให้ทั้ง BDC และ HOUSE เพราะร้าน C0003 เป็นของบริษัทเอง tenant_id ว่าง)
+  tenants: [
+    { tenant_id: 'BDC', name: 'บีดีซี', is_active: 'TRUE' },
+    { tenant_id: 'HOUSE', name: 'บริษัทเจ้าของสินค้า', is_active: 'TRUE', is_house: 'TRUE' },
+    { tenant_id: 'ZZZ', name: 'ตัวแทนที่ยังไม่ได้รับชุดไหนเลย', is_active: 'TRUE' }
+  ],
+  package_tenants: [
+    { record_id: 1, package_type: 'price_list', package_id: 10, tenant_id: 'BDC' },
+    { record_id: 2, package_type: 'price_list', package_id: 11, tenant_id: 'BDC' },
+    { record_id: 3, package_type: 'price_list', package_id: 12, tenant_id: 'BDC' },
+    { record_id: 4, package_type: 'price_list', package_id: 12, tenant_id: 'HOUSE' },
+    { record_id: 5, package_type: 'price_list', package_id: 13, tenant_id: 'BDC' },
+    { record_id: 6, package_type: 'price_list', package_id: 14, tenant_id: 'BDC' }
+  ],
   price_list_rule_conditions: [
     { record_id: 1, rule_id: 1, field: 'channel_id', op: 'eq', value: 'SC' },
     { record_id: 2, rule_id: 2, field: 'attr:sourceGroupCode', op: 'eq', value: 'SV02' },
@@ -70,7 +85,7 @@ const fakes = {};
   .forEach(k => fakes[k] = ctx[k]);
 vm.runInContext(B('02_helpers.gs'), ctx, { filename: '02_helpers.gs' });
 Object.keys(fakes).forEach(k => { ctx[k] = fakes[k]; });
-['28_units.gs', '33_customers.gs', '17_pricing.gs', '18_pricing_engine.gs', '36_price_rules.gs']
+['28_units.gs', '13_tenants.gs', '33_customers.gs', '17_pricing.gs', '18_pricing_engine.gs', '36_price_rules.gs', '38_package_distribution.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 vm.runInContext(/function _withDocLock\(fn\) \{[\s\S]*?\n\}/.exec(B('20_purchasing_master.gs'))[0], ctx, { filename: '20.gs' });
 
@@ -169,6 +184,36 @@ eq('  บอกชุดที่แข่งอยู่และเหตุ�
 r = ctx.explainCustomerPricing(S, { customerId: 4, date: '2026-09-27' });
 eq('ร้านที่ไม่เข้าเงื่อนไขไหนเลย บอกให้รู้ว่าจะตกไปใช้โปรโมชั่นแบบเดิม', [r.winner, /discount_rules/.test(r.message)], [null, true]);
 fails('ไม่พบลูกค้า', ctx.explainCustomerPricing(S, { customerId: 999 }), /ไม่พบลูกค้า/);
+
+console.log('\n-- ชั้น A: ชุดต้องถูกจ่ายให้ตัวแทนก่อน (38_package_distribution.gs) --');
+eq('ชุดที่จ่ายให้ตัวแทนของร้านแล้ว → ใช้ได้ตามปกติ', won(1), 'ร้านค้าทั่วไป');
+{
+  const keep = sheets.package_tenants.slice();
+  sheets.package_tenants = keep.filter(r => String(r.package_id) !== '10');
+  eq('★ ถอนชุดคืนจากตัวแทน → ร้านนั้นหาชุดราคาไม่เจอทันที', won(1), null);
+  eq('  ร้านของตัวแทนอื่นที่ยังได้ชุดอยู่ ไม่กระทบ', won(3), 'ศูนย์/ตัวแทน');
+  sheets.package_tenants = keep;
+  eq('  จ่ายคืนแล้วกลับมาใช้ได้', won(1), 'ร้านค้าทั่วไป');
+}
+{
+  const keep = sheets.package_tenants.slice();
+  sheets.package_tenants = [];
+  eq('★ ไม่มีการจ่ายชุดเลย = ไม่มีใครได้ (ไม่ใช่ "ทุกคนได้")',
+     [won(1), won(2), won(3)], [null, null, null]);
+  sheets.package_tenants = keep;
+}
+eq('กฎสิทธิ์ผ่านแต่ยังไม่ได้จ่ายชุด → explain บอกเหตุผลตรงๆ', (() => {
+  const keep = sheets.package_tenants.slice();
+  sheets.package_tenants = keep.filter(r => String(r.package_id) !== '11');
+  const x = ctx.explainCustomerPricing(S, { customerId: 2, date: '2026-09-27' });
+  const c = x.candidates.find(c => String(c.priceListId) === '11');
+  sheets.package_tenants = keep;
+  return [c.usable, /ยังไม่ได้จ่ายชุดนี้ให้ตัวแทน/.test(c.blockedBy)];
+})(), [false, true]);
+eq('ตัวแทนที่ไม่ได้รับชุดไหนเลย ขายไม่ได้แม้ร้านจะเข้าเงื่อนไขทุกข้อ', (() => {
+  const c = Object.assign({}, cust(1), { tenant_id: 'ZZZ' });
+  return ctx.resolvePriceListForCustomer(c, '2026-09-27');
+})(), null);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

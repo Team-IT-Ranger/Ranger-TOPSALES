@@ -168,7 +168,14 @@ function getPricingContextForCustomer(customerId, dateStr) {
   var hit = resolvePriceListForCustomer(cust, dateStr);
   if (!hit) return null;
   var ctx = _pricingContextForList(hit.list);
-  if (ctx) { ctx.matchedRule = hit.rule; ctx.matchedReason = hit.reason; ctx.matchedPriority = hit.priority; }
+  if (ctx) {
+    ctx.matchedRule = hit.rule; ctx.matchedReason = hit.reason; ctx.matchedPriority = hit.priority;
+    /* ★ โปรโมชั่นซ้อนบนชุดราคาได้ (เจ้าของระบบสั่ง 27 ก.ย. 2026) — ชุดราคาคือ "ราคาตั้ง"
+       โปรโมชั่นคือ "ส่วนลดเพิ่ม" · ก่อนหน้านี้ร้านที่มีชุดราคาไม่ได้โปรเลย ซึ่งแปลว่าพอจัดกลุ่มลูกค้าครบ
+       โปรโมชั่นทั้งระบบก็เงียบไปเองโดยไม่มีใครรู้ */
+    ctx.promoRules = promosForCustomer(cust);
+    ctx.customerId = cust.record_id;
+  }
   return ctx;
 }
 
@@ -188,6 +195,8 @@ function _pricingContextForList(list) {
     // สินค้าที่ห้ามลดราคา (no_discount ของ Smartsales) — ส่วนลดท้ายบิลต้องไม่กินรายการพวกนี้
     noDiscountOf: (function() { var m = {}; centralObjects('products').forEach(function(p) { if (isNoDiscountProduct(p)) m[String(p.record_id)] = 1; }); return m; })(),
     vatRate: currentVatRate(),
+    // กลุ่มสินค้า — โปรโมชั่นจับคู่รายการด้วย product_group_id เป็นหลัก
+    groupOf: (function() { var m = {}; centralObjects('products').forEach(function(p) { m[String(p.record_id)] = parseInt(p.group_id) || 0; }); return m; })(),
     billPromos: centralObjects('price_list_bill_promos').filter(function(b) { return String(b.price_list_id) === String(list.record_id); })
       .map(function(b) { return { minAmountExVat: Number(b.min_amount_ex_vat), percent: Number(b.percent) }; })
   };
@@ -266,19 +275,41 @@ function priceCart(ctx, cart, opts) {
   lines.forEach(function(l) {
     exVat += taxOfFn(l.productId) === TAX_VAT ? (l.lineTotal / (1 + rateNow)) : l.lineTotal;
   });
-  var bill = null;
-  (ctx.billPromos || []).forEach(function(b) { if (exVat >= b.minAmountExVat && (!bill || b.minAmountExVat > bill.minAmountExVat)) bill = b; });
-  /* ★ ฐานที่ลดได้ ไม่รวมรายการที่ห้ามลดราคา — ไม่งั้นสินค้าคุมราคาจะถูกลดทางอ้อมผ่านส่วนลดท้ายบิล
+  /* ★ ฐานที่ลดได้ ไม่รวมรายการที่ห้ามลดราคา — ไม่งั้นสินค้าคุมราคาจะถูกลดทางอ้อมผ่านส่วนลด
      (เกณฑ์ยอดขั้นต่ำยังนับทั้งบิลตามปกติ ลูกค้าซื้อของคุมราคาก็ยังช่วยให้ถึงขั้นได้) */
   var noDiscOf = ctx.noDiscountOf || {};
   var discountable = 0;
   lines.forEach(function(l) { if (!noDiscOf[String(l.productId)]) discountable += l.lineTotal; });
   discountable = _round2(discountable);
-  var billDiscount = bill ? _round2(discountable * bill.percent / 100) : 0;
+
+  /* ★ ลำดับ: ราคาตามขั้น → หักโปรโมชั่น → หักส่วนลดท้ายบิล → ถอด VAT
+     เกณฑ์ขั้นของส่วนลดท้ายบิลวัดจาก "ยอดที่ลูกค้าสั่ง" (ก่อนหักโปร) โดยตั้งใจ — ร้านคิดจากยอดที่ตัวเองสั่ง
+     ถ้าวัดหลังหักโปร โปรโมชั่นจะกลายเป็นตัวทำให้หลุดขั้นแล้วได้ส่วนลดรวมน้อยลงกว่าไม่มีโปร ซึ่งอธิบายไม่ได้
+     ส่วน "ฐานที่เอาไปคูณ %" หักโปรออกก่อน เพราะเป็นเงินที่ลดไปแล้วจริง จะลดซ้ำบนก้อนเดิมไม่ได้ */
+  var groupOf = ctx.groupOf || {};
+  var promo = { discount: 0, appliedRules: [], freeGoods: [] };
+  if ((ctx.promoRules || []).length && typeof computePromoDiscount === 'function') {
+    var promoItems = lines
+      .filter(function(l) { return !noDiscOf[String(l.productId)]; })
+      .map(function(l) { return { productId: Number(l.productId), qty: Number(l.qty) || 0,
+        price: Number(l.unitPrice) || 0, groupId: groupOf[String(l.productId)] || 0 }; });
+    promo = computePromoDiscount(promoItems, ctx.promoRules, true);   // true = ยังไม่คิดของแถมในเส้นทางชุดราคา
+  }
+  var promoDiscount = _round2(promo.discount || 0);
+
+  var bill = null;
+  (ctx.billPromos || []).forEach(function(b) { if (exVat >= b.minAmountExVat && (!bill || b.minAmountExVat > bill.minAmountExVat)) bill = b; });
+  var billBase = _round2(Math.max(0, discountable - promoDiscount));
+  var billDiscount = bill ? _round2(billBase * bill.percent / 100) : 0;
+
   return { success: true, lines: lines, subtotal: subtotal, subtotalExVat: _round2(exVat),
            discountableSubtotal: discountable,
-           billPercent: bill ? bill.percent : 0, billMinExVat: bill ? bill.minAmountExVat : 0, billDiscount: billDiscount,
-           total: _round2(subtotal - billDiscount), priceListId: ctx.list.record_id, priceListName: ctx.list.name };
+           promoDiscount: promoDiscount, promoRules: promo.appliedRules || [],
+           billPercent: bill ? bill.percent : 0, billMinExVat: bill ? bill.minAmountExVat : 0,
+           billBase: billBase, billDiscount: billDiscount,
+           discount: _round2(promoDiscount + billDiscount),
+           total: _round2(subtotal - promoDiscount - billDiscount),
+           priceListId: ctx.list.record_id, priceListName: ctx.list.name };
 }
 
 // แอดมินทดลองคิดราคา — payload: { priceListId | customerGroupId+date?, paymentType, isVan, items:[{productId|productCode, unitCode, qty}] }

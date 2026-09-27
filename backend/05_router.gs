@@ -96,6 +96,10 @@ var ADMIN_ACTION_MAP = {
   deletePriceListRule:    deletePriceListRule,
   previewPriceListAudience: previewPriceListAudience,
   explainCustomerPricing: explainCustomerPricing,
+  listPackageTenants:     listPackageTenants,        // จ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (38_package_distribution.gs)
+  savePackageTenants:     savePackageTenants,
+  listMyPackages:         listMyPackages,
+  migratePackageAssignments: migratePackageAssignments,
   previewCustomerBulkAssign: previewCustomerBulkAssign,  // จัดกลุ่มลูกค้าเป็นชุด (37_customer_bulk.gs)
   applyCustomerBulkAssign:   applyCustomerBulkAssign,
   deletePriceList:        deletePriceList,

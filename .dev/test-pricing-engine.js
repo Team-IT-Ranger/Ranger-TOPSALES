@@ -2,9 +2,10 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { Utilities: {}, Session: {}, console };
 vm.createContext(ctx);
-for (const f of ['28_units.gs', '17_pricing.gs', '18_pricing_engine.gs', '10_master_data.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
+for (const f of ['28_units.gs', '17_pricing.gs', '18_pricing_engine.gs', '10_master_data.gs', '11_promotions.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
 
 let failed = 0;
+const _round = n => Math.round(n * 100) / 100;
 const eq = (name, actual, expected) => {
   const ok = JSON.stringify(actual) === JSON.stringify(expected);
   console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok ? '' : '\n   expected ' + JSON.stringify(expected) + '\n   actual   ' + JSON.stringify(actual)));
@@ -213,6 +214,50 @@ eq('ธงอื่น: ค่าว่าง = ใช่ (สินค้าเ
   ctx.isSellableProduct({}), ctx.isPurchasableProduct({}), ctx.isStockProduct({}),
   ctx.isStockProduct({ is_stock: 'FALSE' }), ctx.isSellableProduct({ is_sellable: 'FALSE' })
 ], [true, true, true, false, false]);
+
+
+/* ══════════ โปรโมชั่นซ้อนบนชุดราคา (เจ้าของระบบสั่ง 27 ก.ย. 2026) ══════════
+   ก่อนหน้านี้ร้านที่มีชุดราคาไม่ได้โปรเลย — พอจัดกลุ่มลูกค้าครบทุกร้าน โปรโมชั่นทั้งระบบก็เงียบไปเอง
+   ลำดับ: ราคาตามขั้น → หักโปร → หักส่วนลดท้ายบิล → ถอด VAT */
+console.log('\n-- โปรโมชั่นซ้อนบนชุดราคา --');
+{
+  const promoRule = { id: 7, name: 'ลดกลุ่มน้ำยา 10%', productGroupId: 5, productId: 0, triggerGroupIds: [],
+    customerGroupId: 0, minQty: 0, minAmount: 0, type: 'percent', value: 10, freeProductId: 0, freeQty: 0,
+    priority: 10, stackable: true };
+  const withPromo = Object.assign({}, pctx, { groupOf: { 101: 5, 102: 5, 201: 9 }, promoRules: [promoRule] });
+  const cart50 = [{ productId: 101, unitCode: 'CT', qty: 50 }];
+
+  let q = ctx.priceCart(pctx, cart50, cash);
+  eq('ไม่มีโปรที่จ่ายให้ → ผลเหมือนเดิมทุกตัว (ของเก่าไม่กระทบ)',
+     [q.subtotal, q.promoDiscount, q.billPercent, q.total], [58500, 0, 0.5, 58207.5]);
+
+  let r2 = ctx.priceCart(withPromo, cart50, cash);
+  eq('มีโปร 10% → หักจากยอดตามขั้นราคา', [r2.subtotal, r2.promoDiscount], [58500, 5850]);
+  eq('  ★ เกณฑ์ขั้นส่วนลดท้ายบิลวัดจากยอดที่สั่ง (ก่อนหักโปร) — ไม่งั้นโปรจะทำให้หลุดขั้นแล้วได้รวมน้อยลง',
+     r2.billPercent, 0.5);
+  eq('  ฐานที่เอาไปคูณ % หักโปรออกก่อน (เงินที่ลดไปแล้วจะลดซ้ำไม่ได้)', [r2.billBase, r2.billDiscount], [52650, 263.25]);
+  eq('  ยอดสุทธิ = ราคาตามขั้น - โปร - ท้ายบิล', r2.total, 52386.75);
+  eq('  ส่วนลดรวมที่จะบันทึกลงบิล', r2.discount, 6113.25);
+  eq('  subtotal - discount = total เป๊ะ', _round(r2.subtotal - r2.discount), r2.total);
+  eq('  บอกได้ว่าโปรข้อไหนถูกใช้', r2.promoRules.map(x => x.ruleName), ['ลดกลุ่มน้ำยา 10%']);
+
+  const other = Object.assign({}, withPromo, { promoRules: [Object.assign({}, promoRule, { productGroupId: 9 })] });
+  eq('โปรของกลุ่มสินค้าอื่น ไม่โดนตะกร้านี้', ctx.priceCart(other, cart50, cash).promoDiscount, 0);
+
+  const noDisc = Object.assign({}, withPromo, { noDiscountOf: { 101: 1 } });
+  const n = ctx.priceCart(noDisc, cart50, cash);
+  eq('★ สินค้าห้ามลดราคา โปรกินไม่ได้ (เหมือนที่ส่วนลดท้ายบิลกินไม่ได้)', [n.promoDiscount, n.billDiscount], [0, 0]);
+  eq('  แต่ยังนับเข้าเกณฑ์ขั้นตามเดิม', n.billPercent, 0.5);
+
+  const freebie = Object.assign({}, withPromo, { promoRules: [Object.assign({}, promoRule,
+    { type: 'free_goods', freeProductId: 102, freeQty: 1, minQty: 10 })] });
+  eq('ของแถมยังไม่คิดในเส้นทางชุดราคา (เจ้าของระบบสั่งพักเรื่องของแถมไว้)',
+     ctx.priceCart(freebie, cart50, cash).promoDiscount, 0);
+
+  const capped = Object.assign({}, withPromo, { promoRules: [Object.assign({}, promoRule, { value: 500 })] });
+  eq('โปรลดเกินยอด → ตัดไม่ให้เกิน (ยอดสุทธิไม่ติดลบ)',
+     [ctx.priceCart(capped, cart50, cash).promoDiscount, ctx.priceCart(capped, cart50, cash).total >= 0], [58500, true]);
+}
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

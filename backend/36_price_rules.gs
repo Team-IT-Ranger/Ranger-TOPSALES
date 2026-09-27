@@ -20,6 +20,10 @@
 
 var PLR_MATCH_ALL = 'all', PLR_MATCH_ANY = 'any';
 
+/* กฎสิทธิ์ใช้ได้กับสองอย่าง: ชุดราคา และโปรโมชั่น — แถวเดิมที่ยังไม่มี target_type ถือเป็นชุดราคา */
+var PLR_TARGET_PRICE_LIST = 'price_list', PLR_TARGET_PROMO = 'promo';
+function plrTargetOf(r) { return String(r.target_type || PLR_TARGET_PRICE_LIST); }
+
 /**
  * คุณลักษณะของลูกค้าที่เอามาตั้งเงื่อนไขได้ — whitelist ตั้งใจให้จำกัด
  * เปิดให้ใส่ชื่อคอลัมน์อะไรก็ได้ = พิมพ์ผิดแล้วกฎเงียบ ไม่มีใครรู้ว่าทำไมร้านไม่เข้าเงื่อนไข
@@ -109,7 +113,8 @@ function plrRuleMatches(customer, rule, conditions) {
 }
 
 /** โหลดกฎทั้งหมดจัดกลุ่มตามชุดราคา — อ่านชีตครั้งเดียวต่อคำขอ (สองตารางนี้อยู่ในลิสต์แคชแล้ว) */
-function plrRulesByList() {
+function plrRulesByTarget(targetType) {
+  var want = String(targetType || PLR_TARGET_PRICE_LIST);
   var conds = {};
   centralObjects('price_list_rule_conditions').forEach(function(c) {
     (conds[String(c.rule_id)] = conds[String(c.rule_id)] || []).push(c);
@@ -117,10 +122,12 @@ function plrRulesByList() {
   var out = {};
   centralObjects('price_list_rules').forEach(function(r) {
     if (isFlagOff(r.is_active)) return;
+    if (plrTargetOf(r) !== want) return;
     (out[String(r.price_list_id)] = out[String(r.price_list_id)] || []).push({ rule: r, conditions: conds[String(r.record_id)] || [] });
   });
   return out;
 }
+function plrRulesByList() { return plrRulesByTarget(PLR_TARGET_PRICE_LIST); }
 
 /**
  * ชุดราคาที่ลูกค้ารายนี้ได้ ณ วันที่ — คืน { list, rule, priority, reason } หรือ null
@@ -132,11 +139,15 @@ function resolvePriceListForCustomer(customer, dateStr) {
   if (!customer) return null;
   var today = dateStr || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   var rulesByList = plrRulesByList();
+  var pkgIdx = packageTenantIndex();
   var best = null;
 
   centralObjects('price_lists').forEach(function(l) {
     if (String(l.status) !== 'active') return;
     if (_dOnly(l.valid_from) > today || _dOnly(l.valid_to) < today) return;
+    // ★ ชั้น A: ชุดนี้ถูกจ่ายให้ตัวแทนของร้านนี้หรือยัง (38_package_distribution.gs)
+    //   กฎสิทธิ์ (ชั้น B) ตอบแค่ว่า "ร้านแบบนี้ใช้ได้ไหม" ไม่ได้ตอบว่าบริษัทมอบชุดนี้ให้ตัวแทนรายนี้แล้วหรือยัง
+    if (!packageAllowedForTenant(pkgIdx, PKG_PRICE_LIST, l.record_id, customer.tenant_id)) return;
 
     var rules = rulesByList[String(l.record_id)] || [];
     var hit = null;
@@ -229,16 +240,17 @@ function listPriceListRules(session, payload) {
   var err = _requirePermission(session, 'pricing', 'view'); if (err) return err;
   payload = payload || {};
   var listId = String(payload.priceListId || '');
+  var target = String(payload.targetType || PLR_TARGET_PRICE_LIST);
   var conds = {};
   centralObjects('price_list_rule_conditions').forEach(function(c) {
     (conds[String(c.rule_id)] = conds[String(c.rule_id)] || []).push({
       id: c.record_id, field: c.field, op: c.op, value: c.value });
   });
   var rules = centralObjects('price_list_rules')
-    .filter(function(r) { return !listId || String(r.price_list_id) === listId; })
+    .filter(function(r) { return plrTargetOf(r) === target && (!listId || String(r.price_list_id) === listId); })
     .sort(function(a, b) { return (Number(b.priority) || 0) - (Number(a.priority) || 0); })
     .map(function(r) { return {
-      id: r.record_id, priceListId: r.price_list_id, name: r.name || '', matchType: r.match_type || PLR_MATCH_ALL,
+      id: r.record_id, targetType: plrTargetOf(r), priceListId: r.price_list_id, name: r.name || '', matchType: r.match_type || PLR_MATCH_ALL,
       priority: Number(r.priority) || 0, isActive: isNotOff(r.is_active), note: r.note || '',
       conditions: conds[String(r.record_id)] || [] }; });
   var meta = plrMeta();
@@ -254,11 +266,15 @@ function listPriceListRules(session, payload) {
 function savePriceListRule(session, payload) {
   var err = _requirePermission(session, 'pricing', 'edit'); if (err) return err;
   payload = payload || {};
+  var target = String(payload.targetType || PLR_TARGET_PRICE_LIST);
+  if ([PLR_TARGET_PRICE_LIST, PLR_TARGET_PROMO].indexOf(target) === -1) return { success: false, message: 'ชนิดเป้าหมายไม่ถูกต้อง' };
   var listId = String(payload.priceListId || '').trim();
-  if (!listId) return { success: false, message: 'ไม่ได้ระบุชุดราคา' };
+  var what = target === PLR_TARGET_PROMO ? 'โปรโมชั่น' : 'ชุดราคา';
+  if (!listId) return { success: false, message: 'ไม่ได้ระบุ' + what };
   var list = null;
-  centralObjects('price_lists').forEach(function(l) { if (String(l.record_id) === listId) list = l; });
-  if (!list) return { success: false, message: 'ไม่พบชุดราคานี้' };
+  centralObjects(target === PLR_TARGET_PROMO ? 'discount_rules' : 'price_lists')
+    .forEach(function(l) { if (String(l.record_id) === listId) list = l; });
+  if (!list) return { success: false, message: 'ไม่พบ' + what + 'นี้' };
 
   var conds = (payload.conditions || []).map(function(c) {
     return { field: String(c.field || '').trim(), op: String(c.op || 'eq').trim(), value: String(c.value === undefined ? '' : c.value).trim() };
@@ -276,6 +292,7 @@ function savePriceListRule(session, payload) {
   return _withDocLock(function() {
     var ruleId = payload.id ? String(payload.id) : '';
     var fields = {
+      target_type: target,
       price_list_id: listId, name: String(payload.name || '').trim(),
       match_type: String(payload.matchType) === PLR_MATCH_ANY ? PLR_MATCH_ANY : PLR_MATCH_ALL,
       priority: Number(payload.priority) || 0,
@@ -300,7 +317,7 @@ function savePriceListRule(session, payload) {
     centralAppendMany('price_list_rule_conditions', conds.map(function(c) {
       return { record_id: nextId++, rule_id: ruleId, field: c.field, op: c.op, value: c.value };
     }));
-    var res = listPriceListRules(session, { priceListId: listId });
+    var res = listPriceListRules(session, { priceListId: listId, targetType: target });
     res.message = 'บันทึกกฎสิทธิ์แล้ว';
     res.ruleId = ruleId;
     return res;
@@ -312,15 +329,18 @@ function deletePriceListRule(session, payload) {
   payload = payload || {};
   var ruleId = String(payload.id || '');
   if (!ruleId) return { success: false, message: 'ไม่ได้ระบุกฎ' };
-  var listId = '';
-  centralObjects('price_list_rules').forEach(function(r) { if (String(r.record_id) === ruleId) listId = String(r.price_list_id); });
+  var listId = '', target = PLR_TARGET_PRICE_LIST;
+  centralObjects('price_list_rules').forEach(function(r) {
+    if (String(r.record_id) !== ruleId) return;
+    listId = String(r.price_list_id); target = plrTargetOf(r);
+  });
   if (!listId) return { success: false, message: 'ไม่พบกฎนี้' };
   return _withDocLock(function() {
     deleteRowsWhere(centralSheet('price_list_rule_conditions'), 'rule_id', ruleId);
     deleteRowsWhere(centralSheet('price_list_rules'), 'record_id', ruleId);
     centralInvalidate('price_list_rule_conditions');
     centralInvalidate('price_list_rules');
-    var res = listPriceListRules(session, { priceListId: listId });
+    var res = listPriceListRules(session, { priceListId: listId, targetType: target });
     res.message = 'ลบกฎแล้ว';
     return res;
   });
@@ -365,11 +385,13 @@ function explainCustomerPricing(session, payload) {
   if (!cust) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
   var today = payload.date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   var rulesByList = plrRulesByList();
+  var pkgIdx = packageTenantIndex();
   var candidates = [];
 
   centralObjects('price_lists').forEach(function(l) {
     var active = String(l.status) === 'active';
     var inDate = !(_dOnly(l.valid_from) > today || _dOnly(l.valid_to) < today);
+    var given = packageAllowedForTenant(pkgIdx, PKG_PRICE_LIST, l.record_id, cust.tenant_id);
     var rules = rulesByList[String(l.record_id)] || [];
     var hit = null, why = '';
     if (rules.length) {
@@ -384,8 +406,9 @@ function explainCustomerPricing(session, payload) {
     if (hit === null) return;
     candidates.push({ priceListId: l.record_id, name: l.name, priority: hit, reason: why,
       status: l.status, validFrom: _dOnly(l.valid_from), validTo: _dOnly(l.valid_to),
-      usable: active && inDate,
-      blockedBy: !active ? ('สถานะ: ' + l.status) : (!inDate ? 'นอกช่วงวันที่' : '') });
+      usable: active && inDate && given,
+      blockedBy: !given ? ('ยังไม่ได้จ่ายชุดนี้ให้ตัวแทน ' + (cust.tenant_id || '(บริษัท)'))
+                : !active ? ('สถานะ: ' + l.status) : (!inDate ? 'นอกช่วงวันที่' : '') });
   });
 
   var winner = resolvePriceListForCustomer(cust, today);

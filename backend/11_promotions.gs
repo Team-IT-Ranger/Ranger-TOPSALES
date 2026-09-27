@@ -53,18 +53,45 @@ function _customerGroupId(customerId) {
 }
 
 // items: [{ productId, qty, price, groupId }]  (ราคาต่อหน่วยตาม unit ที่ขาย — ไม่แปลงหน่วยข้ามชิ้น/แพ็ค/ลัง ใน phase นี้)
-function applyPromotions(items, customerId) {
-  var custGroupId = _customerGroupId(customerId);
+/**
+ * โปรโมชั่นที่ "ร้านรายนี้มีสิทธิ์ใช้" — ผ่านสองชั้นเหมือนชุดราคา
+ *   ชั้น A  บริษัทจ่ายโปรนี้ให้ตัวแทนของร้านแล้วหรือยัง (38_package_distribution.gs)
+ *   ชั้น B  ร้านเข้าเงื่อนไขไหม — กฎสิทธิ์ถ้ามี (36_price_rules.gs) ไม่งั้นใช้ customer_group_id แบบเดิม
+ * customer = แถวลูกค้าดิบ (null = คิดโปรแบบไม่ผูกร้าน ใช้กับหน้าทดลองคิดราคา)
+ */
+function promosForCustomer(customer) {
   var rules = _activeRules();
-  var subtotal = items.reduce(function(s, it) { return s + it.price * it.qty; }, 0);
+  if (!customer) return rules;
+  var pkgIdx = packageTenantIndex();
+  var rulesByTarget = typeof plrRulesByTarget === 'function' ? plrRulesByTarget(PLR_TARGET_PROMO) : {};
+  var custGroupId = parseInt(customer.group_id) || 0;
+  return rules.filter(function(r) {
+    if (!packageAllowedForTenant(pkgIdx, PKG_PROMO, r.id, customer.tenant_id)) return false;
+    var own = rulesByTarget[String(r.id)] || [];
+    if (own.length) {
+      for (var i = 0; i < own.length; i++) {
+        if (plrRuleMatches(customer, own[i].rule, own[i].conditions)) return true;
+      }
+      return false;   // ตั้งกฎไว้แล้วไม่เข้าสักข้อ = ไม่ได้ (กฎมีไว้จำกัด ไม่ใช่มีไว้เฉยๆ)
+    }
+    return r.customerGroupId === 0 || r.customerGroupId === custGroupId;
+  });
+}
 
+/**
+ * แกนการคิดส่วนลดจากโปรโมชั่น — แยกออกมาเพื่อให้เส้นทาง "มีชุดราคา" (18_pricing_engine.gs)
+ * กับเส้นทางเดิม (ไม่มีชุดราคา) ใช้ตรรกะตัวเดียวกัน ไม่ใช่เขียนสองชุดแล้วค่อยๆ เพี้ยนออกจากกัน
+ * items: [{ productId, qty, price, groupId }] · rules: ผลจาก promosForCustomer()
+ * skipFreeGoods: เส้นทางชุดราคายังไม่คิดของแถม (เจ้าของระบบสั่งพักเรื่องของแถมไว้)
+ */
+function computePromoDiscount(items, rules, skipFreeGoods) {
+  var subtotal = items.reduce(function(s, it) { return s + it.price * it.qty; }, 0);
   var freeGoods = [];
   var appliedRules = [];
   var discount = 0;
   var bestNonStackable = null;
 
   rules.forEach(function(r) {
-    if (r.customerGroupId !== 0 && r.customerGroupId !== custGroupId) return;
 
     // เลือกรายการที่เข้าเงื่อนไข trigger: ถ้ามี triggerGroupIds ให้คละหลายกลุ่มได้,
     // ไม่งั้น fallback ไป productId/productGroupId เดี่ยว
@@ -82,6 +109,7 @@ function applyPromotions(items, customerId) {
     if (r.minAmount > 0 && matchedAmount < r.minAmount) return;
 
     if (r.type === 'free_goods') {
+      if (skipFreeGoods) return;
       var times = r.minQty > 0 ? Math.floor(matchedQty / r.minQty) : 1;
       if (times > 0 && r.freeProductId > 0) {
         freeGoods.push({ ruleId: r.id, ruleName: r.name, productId: r.freeProductId, qty: times * r.freeQty, applied: true });
@@ -107,6 +135,12 @@ function applyPromotions(items, customerId) {
   if (discount > subtotal) discount = subtotal; // กันส่วนลดเกินยอดขาย
 
   return { subtotal: subtotal, discount: discount, total: subtotal - discount, appliedRules: appliedRules, freeGoods: freeGoods };
+}
+
+/** เส้นทางเดิม: ร้านที่กลุ่มไม่มีชุดราคาใช้งานอยู่ — ราคามาจาก products แล้วหักโปรโมชั่น */
+function applyPromotions(items, customerId) {
+  var customer = typeof plrCustomerRow === 'function' ? plrCustomerRow(customerId) : null;
+  return computePromoDiscount(items, promosForCustomer(customer), false);
 }
 
 // ── Admin CRUD (ฝั่งบริษัทเจ้าของสินค้าเท่านั้น) ──

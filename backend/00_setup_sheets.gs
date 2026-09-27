@@ -73,7 +73,9 @@ var CENTRAL_SHEETS = {
   // ── สิทธิ์เข้าถึงชุดราคา (36_price_rules.gs) ──
   // 1 ชุดราคามีได้หลายกฎ · กฎหนึ่ง = กลุ่มเป้าหมายหนึ่ง มีลำดับความสำคัญของตัวเอง (priority สูงชนะ)
   // ชุดที่ยังไม่มีกฎแต่มี customer_group_id = มีกฎซ่อน "กลุ่มลูกค้า = ค่านั้น" ลำดับ 0 (ของเดิมทำงานต่อได้)
-  price_list_rules: ['record_id','price_list_id','name','match_type','priority','is_active','note','created_at','created_by'],
+  // target_type: price_list (ค่าว่าง = price_list เพื่อความเข้ากันได้กับแถวเดิม) | promo — กฎสิทธิ์ชุดเดียวกัน
+  // ใช้ได้ทั้งกับชุดราคาและโปรโมชั่น · price_list_id เก็บ id ของเป้าหมายตามชนิดนั้น (ชื่อคอลัมน์คงไว้ไม่ให้ของเดิมพัง)
+  price_list_rules: ['record_id','target_type','price_list_id','name','match_type','priority','is_active','note','created_at','created_by'],
   // match_type: all = ต้องผ่านทุกเงื่อนไข · any = ผ่านข้อใดข้อหนึ่ง
   // field รับได้เฉพาะที่อยู่ใน PLR_FIELDS หรือขึ้นต้น attr: (ไปอ่าน customers.attributes)
   price_list_rule_conditions: ['record_id','rule_id','field','op','value'],
@@ -106,6 +108,12 @@ var CENTRAL_SHEETS = {
   payment_types: ['record_id','code','name','is_active'],
 
   discount_rules: ['record_id','name','scope','product_group_id','product_id','trigger_group_ids','customer_group_id','min_qty','min_amount','type','value','free_product_id','free_qty','priority','stackable','date_start','date_end','is_active'],
+
+  // ═══ การจ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (38_package_distribution.gs) ═══
+  // 1 แถว = ชุดนี้จ่ายให้ตัวแทนรายนี้ · ไม่มีแถว = ไม่มีตัวแทนรายไหนได้ใช้ (ไม่ใช่ "ทุกคน" — กติกาเจ้าของระบบ
+  // 27 ก.ย. 2026 "จะไม่เอาทุกชุดไปโยนให้ตัวแทนแบบเหมารวม") · ชุดที่มีอยู่ก่อนกติกานี้เขียนย้อนหลังด้วย
+  // migratePackageAssignments() ให้ครบทุกตัวแทน ของที่ขายอยู่จะได้ไม่สะดุด
+  package_tenants: ['record_id','package_type','package_id','tenant_id','assigned_at','assigned_by'],
 
   // ═══════════ งานซื้อ (PR → PO → รับของเข้าคลัง) — ดู 20_purchasing_master.gs, 21_purchase_requisition.gs, 22_purchase_order.gs ═══════════
   // ทั้งหมดเป็นข้อมูล "ฝั่งบริษัทเจ้าของสินค้า" จึงอยู่ Central Sheet (ตัวแทนไม่ได้ซื้อของเอง)

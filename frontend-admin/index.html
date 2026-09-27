@@ -475,6 +475,12 @@
   .plr-cond .plr-f{grid-area:f}.plr-cond .plr-o{grid-area:o}
   .plr-cond .plr-vw{grid-area:v}.plr-cond .plr-x{grid-area:x}
 }
+/* ชิปเลือกตัวแทนสำหรับ "จ่ายชุดให้ตัวแทน" — เช็คบ็อกซ์เปล่าๆ เรียงกันอ่านยากเมื่อมีตัวแทนหลายราย */
+.pkg-chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
+.pkg-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--line,#E4E9F1);
+  border-radius:999px;cursor:pointer;background:var(--card,#fff);font-size:.94em;user-select:none}
+.pkg-chip input{margin:0;width:15px;height:15px;flex:none}
+.pkg-chip.is-on{border-color:#2B63D9;background:#EEF3FE;color:#1B4BB0}
 </style>
 </head>
 <body>
@@ -915,6 +921,13 @@
             <thead><tr><th>สินค้า</th><th>บรรจุ</th><th>ราคาตั้ง (ไม่รวม VAT)</th><th>ช่วงจำนวน</th><th>เงินสด (รวม VAT)</th><th>ลด %</th><th>เครดิต (รวม VAT)</th><th>ลด %</th></tr></thead>
             <tbody id="pld-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
           </table></div>
+          <div class="form-card" id="pld-dist-card">
+            <h3>จ่ายให้ตัวแทน — ใครได้ใช้ชุดนี้</h3>
+            <p class="form-hint">ชั้นแรกของสองชั้น: บริษัทเลือกว่าจะมอบชุดนี้ให้ตัวแทนรายไหนบ้าง
+              จากนั้นค่อยกำหนดด้วยกฎด้านล่างว่า <b>ภายในตัวแทนนั้น</b> ร้านแบบไหนได้ใช้ ·
+              ตัวแทนแก้เองไม่ได้ ดูได้อย่างเดียว</p>
+            <div id="pld-dist"></div>
+          </div>
           <div class="form-card" id="pld-rules-card">
             <h3>สิทธิ์เข้าถึง — ใครได้ราคาชุดนี้</h3>
             <p class="form-hint">ตั้งได้จากคุณลักษณะใดของร้านก็ได้ ไม่จำกัดแค่กลุ่มลูกค้า · หนึ่งชุดมีได้หลายกฎ
@@ -976,7 +989,8 @@
 
         <!-- ═══ PROMOTIONS ═══ -->
         <section class="view" id="view-promotions">
-          <div class="view-head"><div><h1>โปรโมชั่น</h1><p>ควบคุมจากส่วนกลาง ใช้ได้กับทุกตัวแทน — เครื่องยนต์คำนวณซ้ำเสมอตอนบันทึกขายจริง</p></div></div>
+          <div class="view-head"><div><h1>โปรโมชั่น</h1><p>ควบคุมจากส่วนกลาง — เลือกได้ว่าโปรไหนจ่ายให้ตัวแทนรายใด และภายในตัวแทนนั้นร้านแบบไหนได้ใช้ ·
+      โปรซ้อนบนชุดราคาได้ (ชุดราคา = ราคาตั้ง · โปร = ส่วนลดเพิ่ม) · เครื่องยนต์คำนวณซ้ำเสมอตอนบันทึกขายจริง</p></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อ</th><th>ประเภท</th><th>มูลค่า</th><th>ช่วงเวลา</th><th>สถานะ</th><th></th></tr></thead>
             <tbody id="promotions-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
@@ -1371,7 +1385,9 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
   'createArInvoice','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
-  'migrateUnitCodes','rebuildSalesDaily']);
+  'migrateUnitCodes','rebuildSalesDaily',
+  'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
+  'savePackageTenants','migratePackageAssignments']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin']);
@@ -3140,6 +3156,7 @@ function renderPriceListDetail(d){
     return rows.concat(packs).join('');
   }).join('');
   loadPriceListRules();
+  loadPackageTenants(PKG_PRICE_LIST, currentPriceListId, 'pld-dist');
   const pc = document.getElementById('pld-promos-card');
   pc.style.display = (d.billPromos.length || editing) ? '' : 'none';
   pltInit(d);
@@ -3317,10 +3334,10 @@ function submitClonePriceList(){ return plBusy(async () => {
 
 /* ══════════════ สิทธิ์เข้าถึงชุดราคา (36_price_rules.gs) ══════════════
    กฎ = กลุ่มเป้าหมายหนึ่งของชุดราคา · เงื่อนไขอ้างคุณลักษณะของร้าน · ลำดับสูงสุดชนะเมื่อเข้าหลายชุด */
-let PLR_META = null, PLR_RULES = [];
+let PLR_META = null, PLR_RULES = [], PLR_TARGET = 'price_list';
 async function ensureRuleMeta(){
   if (PLR_META) return PLR_META;
-  const r = await callApi('listPriceListRules', { priceListId: currentPriceListId });
+  const r = await callApi('listPriceListRules', { priceListId: currentPriceListId, targetType: PLR_TARGET });
   if (r.success) { PLR_META = plrMetaOf(r); PLR_RULES = r.data; }
   return PLR_META;
 }
@@ -3328,7 +3345,8 @@ async function loadPriceListRules(){
   const box = document.getElementById('pld-rules');
   if (!box) return;
   box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
-  const r = await callApi('listPriceListRules', { priceListId: currentPriceListId });
+  PLR_TARGET = 'price_list';
+  const r = await callApi('listPriceListRules', { priceListId: currentPriceListId, targetType: PLR_TARGET });
   if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   PLR_META = plrMetaOf(r); PLR_RULES = r.data;
   renderPriceListRules();
@@ -3344,10 +3362,16 @@ function plrCondText(c){
 }
 function renderPriceListRules(){
   const box = document.getElementById('pld-rules');
-  const d = PLD_CACHE[currentPriceListId];
+  const isPromo = PLR_TARGET === 'promo';
+  const d = isPromo ? null : PLD_CACHE[currentPriceListId];
   const legacy = d && d.list && d.list.customerGroupId ? d.list.customerGroupName || ('กลุ่ม ' + d.list.customerGroupId) : '';
   if (!PLR_RULES.length) {
-    box.innerHTML = legacy
+    /* โปรโมชั่นมี "กลุ่มลูกค้า" ในตัวมันเองอยู่แล้ว (customer_group_id) การไม่ตั้งกฎจึงไม่ได้แปลว่าไม่มีใครได้
+       — คนละความหมายกับชุดราคา ข้อความจึงต้องแยกกัน ไม่งั้นจะไปหลอกให้คนตั้งกฎทั้งที่ไม่จำเป็น */
+    box.innerHTML = isPromo
+      ? '<p class="form-hint">ยังไม่ได้ตั้งกฎ — โปรนี้ใช้ <b>กลุ่มลูกค้าที่ตั้งไว้ในตัวโปร</b> ตามเดิม ' +
+        '(ตั้งเป็น "ทุกกลุ่ม" ไว้ก็คือทุกร้านของตัวแทนที่ได้รับโปรนี้) · ตั้งกฎเมื่อไหร่ กฎจะมีผลแทน</p>'
+      : legacy
       ? '<div class="activity-row"><span>ยังไม่ได้ตั้งกฎ — ใช้แบบเดิมคือ <b>กลุ่มลูกค้า: '+esc(legacy)+'</b> <span class="unit">(ลำดับ 0)</span></span></div>' +
         '<p class="form-hint">ตั้งกฎเพิ่มได้โดยไม่ต้องลบของเดิม กฎที่ลำดับมากกว่า 0 จะชนะกฎเดิมนี้</p>'
       : '<p class="form-hint">ยังไม่มีกฎ และชุดนี้ไม่ได้ผูกกลุ่มลูกค้าไว้ — <b>ตอนนี้จึงยังไม่มีร้านไหนได้ราคาชุดนี้</b></p>';
@@ -3473,7 +3497,7 @@ async function tryRuleAudience(){
 function saveRuleUI(id){ return plBusy(async () => {
   const conds = readRuleConds();
   if (!conds.length) return plModalErr('ต้องมีเงื่อนไขอย่างน้อยหนึ่งข้อ');
-  const r = await callApi('savePriceListRule', { id: id || undefined, priceListId: currentPriceListId,
+  const r = await callApi('savePriceListRule', { id: id || undefined, priceListId: currentPriceListId, targetType: PLR_TARGET,
     name: document.getElementById('plr-name').value.trim(), matchType: document.getElementById('plr-match').value,
     priority: parseInt(document.getElementById('plr-pri').value) || 0,
     isActive: document.getElementById('plr-active').value === '1', conditions: conds });
@@ -3485,6 +3509,78 @@ async function deleteRuleUI(id){
   const r = await callApi('deletePriceListRule', { id });
   if (!r.success) { toast(r.message, true); return; }
   PLR_RULES = r.data; renderPriceListRules(); toast(r.message);
+}
+
+/* ══════════════ จ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (38_package_distribution.gs) ══════════════
+   สองชั้นที่ต้องผ่านทั้งคู่ · ชั้น A นี้คือ "บริษัทมอบชุดให้ใคร" ส่วนชั้น B (กฎสิทธิ์) คือ "ร้านแบบไหนได้ใช้"
+   ★ ไม่เลือกตัวแทนเลย = ไม่มีใครได้ใช้ ไม่ใช่ "ทุกคนได้" — การ์ดจึงต้องพูดเรื่องนี้ออกมาดังๆ
+     ชุดที่ไม่มีใครได้จะขายไม่ออกโดยไม่มีอะไรฟ้อง จนกว่าพนักงานจะเปิดบิลไม่ได้หน้าร้าน */
+const PKG_PRICE_LIST = 'price_list', PKG_PROMO = 'promo';
+const PKG_LABEL = { price_list: 'ชุดราคา', promo: 'โปรโมชั่น' };
+const PKG_STATE = {};   // 'ชนิด|id' → { assigned:[], tenants:[] }
+
+async function loadPackageTenants(type, id, boxId){
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listPackageTenants', { packageType: type, packageId: id });
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  PKG_STATE[type+'|'+id] = { assigned: r.assigned || [], tenants: r.tenants || [] };
+  renderPackageTenants(type, id, boxId);
+}
+function renderPackageTenants(type, id, boxId){
+  const box = document.getElementById(boxId);
+  const st = PKG_STATE[type+'|'+id];
+  if (!box || !st) return;
+  const on = {}; st.assigned.forEach(t => on[t] = 1);
+  const chips = st.tenants.map(t =>
+    '<label class="pkg-chip'+(on[t.tenantId]?' is-on':'')+'">' +
+      '<input type="checkbox" value="'+esc(t.tenantId)+'"'+(on[t.tenantId]?' checked':'')+
+      ' onchange="this.closest(\'.pkg-chip\').classList.toggle(\'is-on\', this.checked)">' +
+      '<span>'+esc(t.name)+(t.isHouse?' <span class="unit">(ขายตรง)</span>':'')+'</span></label>').join('');
+  box.innerHTML =
+    (st.assigned.length
+      ? '<p class="form-hint">ตอนนี้จ่ายให้ <b>'+st.assigned.length+'</b> ตัวแทน จากทั้งหมด '+st.tenants.length+'</p>'
+      : '<p class="form-hint" style="background:#FDF3E2;color:#8A5A12;border:1px solid #F0DCB4;border-radius:8px;padding:8px 11px">' +
+        '<b>ยังไม่ได้จ่าย'+PKG_LABEL[type]+'นี้ให้ตัวแทนรายไหนเลย</b> — ตอนนี้จึงยังไม่มีใครได้ใช้</p>') +
+    '<div class="pkg-chips" id="'+boxId+'-chips">'+(chips || '<span class="form-hint">ยังไม่มีตัวแทนในระบบ</span>')+'</div>' +
+    '<div class="form-actions">' +
+      '<button class="btn btn-sm" onclick="pkgToggleAll(\''+boxId+'\', true)">เลือกทั้งหมด</button>' +
+      '<button class="btn btn-sm" onclick="pkgToggleAll(\''+boxId+'\', false)">ไม่เลือกเลย</button>' +
+      '<button class="btn btn-primary btn-sm" onclick="savePackageTenantsUI(\''+type+'\', '+JSON.stringify(id)+', \''+boxId+'\')">บันทึกการจ่ายชุด</button></div>';
+}
+function pkgToggleAll(boxId, on){
+  document.querySelectorAll('#'+boxId+'-chips input').forEach(i => {
+    i.checked = on; i.closest('.pkg-chip').classList.toggle('is-on', on);
+  });
+}
+function savePackageTenantsUI(type, id, boxId){ return plBusy(async () => {
+  const ids = [...document.querySelectorAll('#'+boxId+'-chips input:checked')].map(i => i.value);
+  const r = await callApi('savePackageTenants', { packageType: type, packageId: id, tenantIds: ids });
+  if (!r.success) { toast(r.message, true); return; }
+  PKG_STATE[type+'|'+id].assigned = r.assigned || [];
+  renderPackageTenants(type, id, boxId);
+  toast(r.message);
+}); }
+
+/* โมดัลสำหรับโปรโมชั่น — หน้าโปรเป็นตาราง ไม่มีหน้ารายละเอียดของตัวเอง จึงเปิดเป็นหน้าต่างแทนการ์ด */
+async function openPromoDistribution(id, name){
+  plModal('<h3>จ่ายโปรโมชั่นให้ตัวแทน</h3><p class="form-hint">'+esc(name)+'</p>' +
+    '<div id="promo-dist"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
+  await loadPackageTenants(PKG_PROMO, id, 'promo-dist');
+}
+async function openPromoRules(id, name){
+  PLR_META = null; currentPriceListId = id; PLR_TARGET = PKG_PROMO;
+  const r = await callApi('listPriceListRules', { priceListId: id, targetType: PKG_PROMO });
+  if (!r.success) { toast(r.message, true); return; }
+  PLR_META = plrMetaOf(r); PLR_RULES = r.data;
+  plModal('<h3>สิทธิ์ของลูกค้า — ร้านแบบไหนได้โปรนี้</h3><p class="form-hint">'+esc(name)+
+    ' · ไม่ตั้งกฎเลย = ใช้ "กลุ่มลูกค้า" ที่ตั้งไว้ในตัวโปรตามเดิม · ตั้งกฎแล้วกฎมีผลแทน</p>' +
+    '<div id="pld-rules"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
+    '<button class="btn btn-primary" onclick="openRuleModal(null)">+ เพิ่มกฎสิทธิ์</button></div>');
+  renderPriceListRules();
 }
 
 /* ══════════════ จัดกลุ่มลูกค้าเป็นชุด (37_customer_bulk.gs) ══════════════
@@ -3869,7 +3965,11 @@ function renderPromotionsTable(){
     return '<tr><td>'+esc(p.name)+'</td><td>'+(PROMO_TYPE_LABEL[p.type]||p.type)+'</td><td class="mono-data">'+val+'</td>' +
       '<td class="mono-data">'+period+'</td>' +
       '<td><span class="pill '+(isOn(p.is_active)?'ok':'off')+'">'+(isOn(p.is_active)?'ใช้งาน':'ปิด')+'</span></td>' +
-      '<td>'+(isOn(p.is_active) ? '<button class="btn btn-sm" onclick="deactivatePromotionUI('+p.record_id+')">ปิดใช้งาน</button>' : '')+'</td></tr>';
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-sm" onclick="openPromoDistribution('+p.record_id+', '+JSON.stringify(String(p.name))+')">จ่ายให้ตัวแทน</button> ' +
+        '<button class="btn btn-sm" onclick="openPromoRules('+p.record_id+', '+JSON.stringify(String(p.name))+')">สิทธิ์ลูกค้า</button> ' +
+        (isOn(p.is_active) ? '<button class="btn btn-sm" onclick="deactivatePromotionUI('+p.record_id+')">ปิดใช้งาน</button>' : '') +
+      '</td></tr>';
   }).join('');
 }
 async function loadPromotions(){

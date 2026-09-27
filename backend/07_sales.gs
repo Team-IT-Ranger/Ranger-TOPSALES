@@ -71,8 +71,11 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
     if (!priced.success) return { success: false, message: priced.message, code: priced.code };
     items.forEach(function(it, i) { it.price = priced.lines[i].unitPrice; it.lineTotal = priced.lines[i].lineTotal; });
     priceListUsed = pricingCtx.list;
-    calc = { subtotal: priced.subtotal, discount: priced.billDiscount, total: priced.total, freeGoods: [],
-             appliedRules: priced.billPercent ? [{ ruleId: 'BILL', ruleName: 'ส่วนลดท้ายบิล ' + priced.billPercent + '% (ยอดรวมครบ ' + priced.billMinExVat + ' บาท ไม่รวม VAT)', type: 'percent', value: priced.billPercent }] : [] };
+    /* ★ discount ที่บันทึกลงบิลต้องเป็นส่วนลด "รวมทุกชั้น" ให้ subtotal - discount = total เสมอ
+       priced.total หักทั้งโปรโมชั่นและส่วนลดท้ายบิลไปแล้ว ถ้าบันทึกแค่ billDiscount ตัวเลขบนบิลจะไม่ลงกัน */
+    calc = { subtotal: priced.subtotal, discount: priced.discount, total: priced.total, freeGoods: [],
+             appliedRules: (priced.promoRules || []).concat(
+               priced.billPercent ? [{ ruleId: 'BILL', ruleName: 'ส่วนลดท้ายบิล ' + priced.billPercent + '% (ยอดรวมครบ ' + priced.billMinExVat + ' บาท ไม่รวม VAT)', type: 'percent', value: priced.billDiscount }] : []) };
   } else {
     calc = applyPromotions(itemsWithGroup, customerId);
   }
