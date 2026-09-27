@@ -205,16 +205,20 @@ var CENTRAL_SHEETS = {
 // → รัน setupCentralSheet() ให้เองอัตโนมัติ "ครั้งเดียว" ตอนแอดมินล็อกอิน
 // เทียบลายนิ้วมือ (MD5) กับที่เคยใช้ไว้ใน Script Properties — ไม่ต้องจำไปรัน setup ด้วยมืออีก
 // ล้มเหลวไม่ทำให้ล็อกอินพัง (แค่ไม่บันทึกลายนิ้วมือ จะลองใหม่ครั้งหน้า)
-function ensureSchemaCurrent() {
+/**
+ * @param force true = ไม่สนลายนิ้วมือ ลงมือเติมเลย — ใช้ตอนถูกเรียกเพราะ "หาชีตไม่เจอ" (centralSheet)
+ *   ซึ่งแปลว่าของจริงกับลายนิ้วมือไม่ตรงกันอยู่แล้ว การเช็คลายนิ้วมือจะทำให้ไม่ยอมซ่อม
+ */
+function ensureSchemaCurrent(force) {
   try {
     var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify({ sheets: CENTRAL_SHEETS, ownerModules: OWNER_MODULES, tenantModules: TENANT_MODULES }));
     var fp = digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
+    if (!force && props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
     var lock = LockService.getScriptLock();
     if (!lock.tryLock(30000)) return false;
     try {
-      if (props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
+      if (!force && props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
       setupCentralSheet();
       props.setProperty('SCHEMA_FINGERPRINT', fp);
       return true;

@@ -70,7 +70,26 @@ function centralFileId() {
   if (!id) throw new Error('ยังไม่ได้ตั้งค่า CENTRAL_SHEET_FILEID ใน Script Properties');
   return id;
 }
-function centralSheet(name) { return _getSheetByFileId(centralFileId(), name); }
+/**
+ * ★ ชีตกลางที่ "เพิ่งเพิ่มในโค้ด" จะยังไม่มีอยู่จริงจนกว่าจะมีคนล็อกอิน (ensureSchemaCurrent ทำงานตอนออก session)
+ *   ช่วงหลัง deploy จึงมีหน้าต่างที่ action ใหม่ล้มด้วย "ไม่พบ Sheet: …" ทั้งที่โค้ดถูกต้องทุกอย่าง
+ *   เจอมาแล้วสามรอบ (order_status_log · package_tenants · free_goods_sets) — แก้ที่นี่ทีเดียวจบ
+ *   แทนการไล่ใส่ ensureSchemaCurrent() ในทุก action ใหม่ ซึ่งจะลืมแน่นอนในครั้งที่สี่
+ *
+ *   เติมเฉพาะชื่อที่อยู่ใน CENTRAL_SHEETS จริง (พิมพ์ชื่อชีตผิดต้องยังล้มให้เห็น) และลองครั้งเดียวต่อ
+ *   execution ต่อชื่อ — ไม่งั้นชื่อที่ผิดจริงจะวน setupCentralSheet ทุกครั้งที่ถูกเรียก
+ */
+var _schemaTopUpTried = {};
+function centralSheet(name) {
+  try {
+    return _getSheetByFileId(centralFileId(), name);
+  } catch (e) {
+    if (_schemaTopUpTried[name] || typeof CENTRAL_SHEETS === 'undefined' || !CENTRAL_SHEETS[name]) throw e;
+    _schemaTopUpTried[name] = true;
+    if (typeof ensureSchemaCurrent === 'function') ensureSchemaCurrent(true);
+    return _getSheetByFileId(centralFileId(), name);
+  }
+}
 function centralObjects(name) {
   if (_objMemo[name]) return _objMemo[name];
   if (SHEET_CACHE_TABLES[name]) {
