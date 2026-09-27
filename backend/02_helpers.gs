@@ -25,6 +25,7 @@ var SHEET_CACHE_TABLES = {
   products: 1, product_units: 1, product_groups: 1, customers: 1, customer_groups: 1,
   tenants: 1, roles: 1, role_permissions: 1, company_profile: 1,
   price_lists: 1, price_list_items: 1, price_list_bill_promos: 1,
+  price_list_rules: 1, price_list_rule_conditions: 1,
   distribution_channels: 1, payment_types: 1, discount_rules: 1,
   vendors: 1, warehouses: 1, approval_flows: 1, approval_flow_steps: 1, gl_accounts: 1
 };

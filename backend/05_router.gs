@@ -90,6 +90,11 @@ var ADMIN_ACTION_MAP = {
   importPriceList:        importPriceList,
   updatePriceList:        updatePriceList,
   setPriceListStatus:     setPriceListStatus,
+  listPriceListRules:     listPriceListRules,        // สิทธิ์เข้าถึงชุดราคา (36_price_rules.gs)
+  savePriceListRule:      savePriceListRule,
+  deletePriceListRule:    deletePriceListRule,
+  previewPriceListAudience: previewPriceListAudience,
+  explainCustomerPricing: explainCustomerPricing,
   deletePriceList:        deletePriceList,
   createPriceList:        createPriceList,
   clonePriceList:         clonePriceList,

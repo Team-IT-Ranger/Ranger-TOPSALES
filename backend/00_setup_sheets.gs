@@ -66,6 +66,13 @@ var CENTRAL_SHEETS = {
   price_list_items: ['record_id','price_list_id','line_id','product_id','unit_code','unit_factor','min_qty','max_qty',
     'list_price_ex_vat','cash_price_incl_vat','credit_price_incl_vat','van_only','suggested_price','retail_price','tier_label'],
   price_list_bill_promos: ['record_id','price_list_id','min_amount_ex_vat','percent'],
+  // ── สิทธิ์เข้าถึงชุดราคา (36_price_rules.gs) ──
+  // 1 ชุดราคามีได้หลายกฎ · กฎหนึ่ง = กลุ่มเป้าหมายหนึ่ง มีลำดับความสำคัญของตัวเอง (priority สูงชนะ)
+  // ชุดที่ยังไม่มีกฎแต่มี customer_group_id = มีกฎซ่อน "กลุ่มลูกค้า = ค่านั้น" ลำดับ 0 (ของเดิมทำงานต่อได้)
+  price_list_rules: ['record_id','price_list_id','name','match_type','priority','is_active','note','created_at','created_by'],
+  // match_type: all = ต้องผ่านทุกเงื่อนไข · any = ผ่านข้อใดข้อหนึ่ง
+  // field รับได้เฉพาะที่อยู่ใน PLR_FIELDS หรือขึ้นต้น attr: (ไปอ่าน customers.attributes)
+  price_list_rule_conditions: ['record_id','rule_id','field','op','value'],
   // หน่วยขายเพิ่มเติมของสินค้า นอกเหนือจากหน่วยฐาน (products.unit/base_price)
   // เช่น สินค้าเป็น "ชิ้น" ฐาน แต่ขายเป็น "แพ็ค" (factor 6) หรือ "ลัง" (factor 12) ได้ด้วย คนละราคา
   // อ้างอิงจากไฟล์ export จริงของ SmartVan BackOffice (Export_Express) ที่เก็บ UnitCode+UnitFactor แยกจากกัน

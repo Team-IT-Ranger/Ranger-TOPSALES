@@ -157,6 +157,21 @@ function findActivePriceList(customerGroupId, dateStr) {
   return best;
 }
 
+/**
+ * ชุดราคาของ "ลูกค้ารายนี้" — ผ่านกฎสิทธิ์ (36_price_rules.gs) ไม่ใช่ดูแค่กลุ่มลูกค้า
+ * เส้นทางขายทุกทางควรเรียกตัวนี้ ส่วน getPricingContext(groupId) เก็บไว้ให้หน้า "ทดลองคิดราคา"
+ * ที่ผู้ใช้เลือกกลุ่มลูกค้าเองโดยไม่ได้อ้างอิงร้านจริง
+ */
+function getPricingContextForCustomer(customerId, dateStr) {
+  var cust = plrCustomerRow(customerId);
+  if (!cust) return null;
+  var hit = resolvePriceListForCustomer(cust, dateStr);
+  if (!hit) return null;
+  var ctx = _pricingContextForList(hit.list);
+  if (ctx) { ctx.matchedRule = hit.rule; ctx.matchedReason = hit.reason; ctx.matchedPriority = hit.priority; }
+  return ctx;
+}
+
 // { list, items:[price_list_items แถวดิบ], billPromos:[{minAmountExVat,percent}] } หรือ null (ไม่มีชุดราคาที่ใช้ได้ → ใช้ราคาแบบเดิม)
 function getPricingContext(customerGroupId, dateStr) {
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');

@@ -61,7 +61,7 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
   // ร้านที่กลุ่มของร้านมีชุดราคา "ใช้งาน" ณ วันนี้ → ชุดราคาเป็นแหล่งราคาเดียว (ขั้นบันได/เงินสด-เครดิต/แพ็คเฉพาะ Cash Van/
   // โปรท้ายบิล) ห้ามซ้อนกับ discount_rules แบบเดิม (ส่วนลดจะเบิ้ล) และสินค้าที่ไม่อยู่ในชุดราคา = ขายไม่ได้ (ดีกว่าขายผิดราคา)
   // ไม่มีชุดราคาที่ใช้ได้ → ทำงานแบบเดิมทุกอย่าง
-  var pricingCtx = getPricingContext(_customerGroupId(customerId));
+  var pricingCtx = getPricingContextForCustomer(customerId);   // ผ่านกฎสิทธิ์ (36_price_rules.gs)
   var priceListUsed = null;
   var calc;
   if (pricingCtx) {
@@ -222,7 +222,7 @@ function _cutVanStock(tenantId, lineUserId, need, orderId, movementType) {
 // payload: { customerId, paymentType, items:[{productId, unitCode, qty}] }
 // ไม่มีชุดราคาที่ใช้ได้ → { success:true, priceList:null } (ให้แอปใช้ราคาจากข้อมูลตั้งต้นแบบเดิม)
 function quoteSale(user, payload) {
-  var ctx = getPricingContext(_customerGroupId(payload.customerId));
+  var ctx = getPricingContextForCustomer(payload.customerId);   // ต้องตรงกับตอนบันทึกบิลเป๊ะ
   if (!ctx) return { success: true, priceList: null };
   var res = priceCart(ctx, (payload.items || []).map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
     { isCredit: isCreditPayment(payload.paymentType), isVan: user.role === 'van_sales' });
