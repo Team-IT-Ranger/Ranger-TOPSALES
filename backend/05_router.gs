@@ -90,6 +90,7 @@ var ADMIN_ACTION_MAP = {
   importPriceList:        importPriceList,
   updatePriceList:        updatePriceList,
   setPriceListStatus:     setPriceListStatus,
+  listPriceListChanges:   listPriceListChanges,      // ประวัติการแก้ราคาของชุดที่ใช้งานอยู่ (17_pricing.gs)
   listPriceListRules:     listPriceListRules,        // สิทธิ์เข้าถึงชุดราคา (36_price_rules.gs)
   savePriceListRule:      savePriceListRule,
   deletePriceListRule:    deletePriceListRule,

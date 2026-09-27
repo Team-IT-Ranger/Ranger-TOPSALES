@@ -66,6 +66,10 @@ var CENTRAL_SHEETS = {
   price_list_items: ['record_id','price_list_id','line_id','product_id','unit_code','unit_factor','min_qty','max_qty',
     'list_price_ex_vat','cash_price_incl_vat','credit_price_incl_vat','van_only','suggested_price','retail_price','tier_label'],
   price_list_bill_promos: ['record_id','price_list_id','min_amount_ex_vat','percent'],
+  // ประวัติการแก้ราคาของชุดที่ "เปิดใช้งานแล้ว" — เดิมห้ามแก้ชุดที่ใช้งานอยู่เพื่อให้ตอบได้ว่า
+  // ราคา ณ วันนั้นคือเท่าไร · ตอนนี้แก้ได้แล้ว (ความยืดหยุ่นช่วงเริ่มใช้งาน) จึงต้องเก็บประวัติแทน
+  // ไม่งั้นจะเสียความสามารถนั้นไปเฉยๆ · บิลเก่าไม่กระทบอยู่แล้วเพราะเก็บราคาไว้ในบรรทัดของตัวเอง
+  price_list_change_log: ['record_id','price_list_id','action','detail','changed_by','changed_at'],
   // ── สิทธิ์เข้าถึงชุดราคา (36_price_rules.gs) ──
   // 1 ชุดราคามีได้หลายกฎ · กฎหนึ่ง = กลุ่มเป้าหมายหนึ่ง มีลำดับความสำคัญของตัวเอง (priority สูงชนะ)
   // ชุดที่ยังไม่มีกฎแต่มี customer_group_id = มีกฎซ่อน "กลุ่มลูกค้า = ค่านั้น" ลำดับ 0 (ของเดิมทำงานต่อได้)

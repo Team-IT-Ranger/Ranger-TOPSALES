@@ -262,14 +262,48 @@ function deletePriceList(session, payload) {
  */
 
 // เรียกหลังได้ lock แล้วเท่านั้น (อ่านสถานะล่าสุดใต้ lock กันคนอื่นเปิดใช้งานระหว่างแก้)
-function _draftListOrError(id) {
+/**
+ * ชุดราคาที่แก้ได้ — **แก้ชุดที่ใช้งานอยู่ได้** (เจ้าของระบบสั่ง 2026-09-27:
+ * ช่วงเริ่มใช้งานจริงต้องแก้ราคาเฉพาะหน้าได้ การบังคับให้คัดลอกเป็นงวดใหม่ทุกครั้งยุ่งเกินไป)
+ *
+ * ★ บิลเก่าไม่กระทบ — `order_items` เก็บราคาที่ขายจริงไว้ในบรรทัดของตัวเองตั้งแต่ตอนบันทึก
+ *   ไม่ได้ไปอ่านจากชุดราคาย้อนหลัง (เหตุผลเดิมที่ห้ามแก้จึงแรงเกินจริง)
+ * ★ สิ่งที่เสียไปจริงคือ "ราคาทางการ ณ วันนั้นคือเท่าไร" → ชดเชยด้วย price_list_change_log
+ *   ทุกการแก้ชุดที่เปิดใช้งานแล้วถูกบันทึกไว้ ใครแก้ แก้อะไร เมื่อไหร่
+ * ★ ชุดที่เก็บถาวร (archived) ยังแก้ไม่ได้ — เป็นบันทึกของงวดที่ปิดไปแล้ว
+ *   ต้องแก้จริงๆ ให้ย้อนสถานะกลับมาก่อน (กดปุ่มเดียว)
+ */
+function _editableListOrError(id) {
   var list = null;
   centralObjects('price_lists').forEach(function(l) { if (String(l.record_id) === String(id)) list = l; });
   if (!list) return { error: { success: false, message: 'ไม่พบชุดราคานี้' } };
-  if (list.status !== 'draft') return { error: { success: false, message: 'แก้ได้เฉพาะชุดราคาสถานะร่าง — ชุดที่ใช้งาน/เก็บถาวรแล้วห้ามแก้ (บิลเก่าอ้างราคาย้อนหลัง) ให้ "คัดลอกเป็นงวดใหม่" แล้วแก้ในชุดใหม่แทน' } };
-  // ชุดที่เคยเปิดใช้งานแล้วถูกย้อนเป็นร่าง (archived → draft) ก็ห้ามแก้เหมือนกัน — อาจมีบิลอ้างราคาชุดนี้อยู่
-  if (String(list.activated_at || '') !== '') return { error: { success: false, message: 'ชุดนี้เคยเปิดใช้งานแล้ว (อาจมีบิลอ้างราคาอยู่) แก้ไม่ได้แม้ย้อนเป็นร่าง — ให้ "คัดลอกเป็นงวดใหม่" แล้วแก้ในชุดใหม่แทน' } };
+  if (String(list.status) === 'archived') {
+    return { error: { success: false, message: 'ชุดราคาที่เก็บถาวรแล้วแก้ไม่ได้ — เป็นบันทึกของงวดที่ปิดไปแล้ว ถ้าต้องแก้จริงๆ ให้เปลี่ยนสถานะกลับมาเป็นใช้งาน/ร่างก่อน' } };
+  }
   return { list: list };
+}
+
+/** บันทึกประวัติเฉพาะชุดที่เปิดใช้งานแล้ว (ชุดร่างยังไม่มีใครใช้ ไม่ต้องเก็บให้รก) */
+function _logPriceChange(list, session, action, detail) {
+  if (!list || String(list.status) !== 'active') return;
+  try {
+    centralAppend('price_list_change_log', {
+      record_id: centralNextId('price_list_change_log'), price_list_id: list.record_id,
+      action: action, detail: String(detail || '').substring(0, 400),
+      changed_by: String((session && (session.displayName || session.username)) || ''), changed_at: nowStr()
+    });
+  } catch (e) { Logger.log('_logPriceChange: ' + e); }   // ประวัติเขียนไม่ได้ ไม่ควรทำให้การแก้ราคาล้ม
+}
+
+/** ประวัติการแก้ของชุดราคาหนึ่งชุด (ใหม่สุดขึ้นก่อน) */
+function listPriceListChanges(session, payload) {
+  var err = _requirePermission(session, 'pricing', 'view'); if (err) return err;
+  payload = payload || {};
+  var rows = centralObjects('price_list_change_log')
+    .filter(function(r) { return String(r.price_list_id) === String(payload.priceListId); })
+    .sort(function(a, b) { return safeDateStr(b.changed_at).localeCompare(safeDateStr(a.changed_at)); })
+    .map(function(r) { return { action: r.action, detail: r.detail, by: r.changed_by, at: safeDateStr(r.changed_at) }; });
+  return { success: true, data: rows };
 }
 
 function _withPricingLock(fn) {
@@ -390,7 +424,7 @@ function savePriceListLine(session, payload) {
   }
 
   return _withPricingLock(function() {
-    var got = _draftListOrError(payload.priceListId); if (got.error) return got.error;
+    var got = _editableListOrError(payload.priceListId); if (got.error) return got.error;
     var list = got.list, lineKey = payload.lineId == null || payload.lineId === '' ? null : String(payload.lineId);
     var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
     for (var i = 0; i < productIds.length; i++) if (!products[productIds[i]]) return { success: false, message: 'ไม่พบสินค้า id ' + productIds[i] };
@@ -442,6 +476,9 @@ function savePriceListLine(session, payload) {
     });
 
     if (lineKey !== null) _deleteRowsMatching(centralSheet('price_list_items'), function(o) { return String(o.price_list_id) === String(list.record_id) && String(o.line_id) === lineKey; });
+    _logPriceChange(list, session, lineKey === null ? 'เพิ่มรายการ' : 'แก้ราคา',
+      productIds.map(function(pid) { return products[pid].product_code; }).join(', ') + ' → ' +
+      tiers.map(function(t) { return (t.min || 1) + '+ ' + (t.cash !== null ? t.cash : t.credit); }).join(' · '));
     centralAppendMany('price_list_items', items);
     centralAppendMany('product_units', newUnits);
 
@@ -465,7 +502,8 @@ function deletePriceListLine(session, payload) {
   var err = _requirePermission(session, 'pricing', 'edit'); if (err) return err;
   if (payload.lineId == null || payload.lineId === '') return { success: false, message: 'ไม่ระบุรายการที่จะลบ' };
   return _withPricingLock(function() {
-    var got = _draftListOrError(payload.priceListId); if (got.error) return got.error;
+    var got = _editableListOrError(payload.priceListId); if (got.error) return got.error;
+    _logPriceChange(got.list, session, 'ลบรายการ', 'line_id ' + payload.lineId);
     var n = _deleteRowsMatching(centralSheet('price_list_items'), function(o) {
       return String(o.price_list_id) === String(got.list.record_id) && String(o.line_id) === String(payload.lineId);
     });
@@ -485,7 +523,9 @@ function savePriceListBillPromos(session, payload) {
   promos.sort(function(a, b) { return a.min - b.min; });
   for (var j = 1; j < promos.length; j++) if (promos[j].min === promos[j - 1].min) return { success: false, message: 'มียอดขั้นต่ำซ้ำกัน (฿' + promos[j].min + ')' };
   return _withPricingLock(function() {
-    var got = _draftListOrError(payload.priceListId); if (got.error) return got.error;
+    var got = _editableListOrError(payload.priceListId); if (got.error) return got.error;
+    _logPriceChange(got.list, session, 'แก้ส่วนลดท้ายบิล',
+      promos.map(function(b) { return 'ครบ ' + b.min + ' ลด ' + b.pct + '%'; }).join(' · ') || '(ลบทั้งหมด)');
     deleteRowsWhere(centralSheet('price_list_bill_promos'), 'price_list_id', got.list.record_id);
     var promoId = centralNextId('price_list_bill_promos');
     centralAppendMany('price_list_bill_promos', promos.map(function(b, i) {

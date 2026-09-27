@@ -34,9 +34,15 @@ it fills the gaps around them.
   fixed 6%; it changes occasionally. Workflow for a new period: "คัดลอกเป็นงวดใหม่" (clone the
   previous list as a draft) → edit only the changed lines → เปิดใช้งาน. The centre group uses one
   price per product, so the line modal defaults to a single tier (1 หีบขึ้นไป).
-- Price lists are editable **only while `draft` and never activated** (`activated_at` empty) —
-  `_draftListOrError()` in `backend/17_pricing.gs`. Active/archived lists, and drafts that were
-  once active, are frozen because old bills reference their prices; change them by cloning.
+- **แก้ราคาชุดที่ใช้งานอยู่ได้** (เจ้าของระบบสั่ง 2026-09-27 — ช่วงเริ่มใช้งานต้องแก้เฉพาะหน้าได้
+  การบังคับให้คัดลอกเป็นงวดใหม่ทุกครั้งยุ่งเกินไป) · `_editableListOrError()` ใน `backend/17_pricing.gs`
+  ยอมทั้ง `draft` และ `active` · **`archived` ยังห้ามแก้** เป็นบันทึกของงวดที่ปิดแล้ว (ย้อนสถานะก่อนถ้าจำเป็น)
+  · `activated_at` ไม่กั้นอีกแล้ว
+  - **บิลเก่าไม่กระทบ** — `order_items` เก็บราคาที่ขายจริงไว้ในบรรทัดของตัวเองตั้งแต่ตอนบันทึก
+    ไม่ได้อ่านจากชุดราคาย้อนหลัง (เหตุผลเดิมที่ห้ามแก้จึงแรงเกินจริง)
+  - สิ่งที่เสียไปคือ "ราคาทางการ ณ วันนั้น" → ชดเชยด้วย **`price_list_change_log`** ทุกการแก้ชุดที่
+    เปิดใช้งานแล้วถูกบันทึก (ใครแก้ แก้อะไร เมื่อไหร่) · ชุดร่างไม่บันทึก (ยังไม่มีใครใช้ราคานั้น)
+    · อ่านผ่าน action `listPriceListChanges` · **เพิ่มจุดแก้ราคาใหม่ต้องเรียก `_logPriceChange()` ด้วยเสมอ**
 - A customer/shop belongs to exactly **one** price list at a time (by customer group × period).
 - Van packs (แพ็ค) sell **only via Cash Van, only for cash** — enforced server-side in
   `priceCart()` (`backend/18_pricing_engine.gs`): `PACK_VAN_ONLY` / `PACK_CASH_ONLY` error codes.

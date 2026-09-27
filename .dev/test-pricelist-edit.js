@@ -16,12 +16,12 @@ class FakeSheet {
   deleteRows(n, count) { this.rows.splice(n - 1, count); }
 }
 const sheets = {};
-['price_lists', 'price_list_items', 'price_list_bill_promos', 'products', 'product_units', 'customer_groups'].forEach(n => { sheets[n] = new FakeSheet(CENTRAL_SHEETS[n]); });
+['price_lists', 'price_list_items', 'price_list_bill_promos', 'price_list_change_log', 'products', 'product_units', 'customer_groups'].forEach(n => { sheets[n] = new FakeSheet(CENTRAL_SHEETS[n]); });
 const objs = sh => sh.rows.slice(1).filter(r => r[0] !== '' && r[0] != null).map(r => Object.fromEntries(sh.rows[0].map((h, i) => [h, r[i]])));
 const append = (sh, o) => sh.rows.push(sh.rows[0].map(h => (o[h] !== undefined ? o[h] : '')));
 let lockHeld = false;
 const ctx = {
-  console, Utilities: {}, Session: {},
+  console, Utilities: {}, Session: {}, Logger: { log() {} },
   LockService: { getScriptLock: () => ({ tryLock() { if (lockHeld) return false; lockHeld = true; return true; }, releaseLock() { lockHeld = false; } }) },
   centralSheet: n => sheets[n],
   centralObjects: n => objs(sheets[n]),
@@ -129,20 +129,39 @@ r = ctx.deletePriceListLine(S, { priceListId: L1, lineId: soapLine });
 eq('ลบ line สบู่', [r.success, r.deleted, itemsOf(L1).some(i => i.line_id === soapLine)], [true, 1, false]);
 eq('  ลบซ้ำ → ปฏิเสธ', ctx.deletePriceListLine(S, { priceListId: L1, lineId: soapLine }).success, false);
 
-// ── เปิดใช้งานแล้วห้ามแตะ ──
+// ── ชุดที่เปิดใช้งานอยู่ "แก้ได้" (เจ้าของระบบสั่ง 2026-09-27) แต่ต้องทิ้งประวัติไว้ ──
+// บิลเก่าไม่กระทบเพราะ order_items เก็บราคาที่ขายจริงไว้ในบรรทัดของตัวเองอยู่แล้ว
+// สิ่งที่เสียไปคือ "ราคาทางการ ณ วันนั้น" จึงต้องมี price_list_change_log มาแทน
 ctx.setPriceListStatus(S, { id: L1, status: 'active' });
-const snap = JSON.stringify([itemsOf(L1), objs(sheets.price_list_bill_promos)]);
-eq('active: savePriceListLine → ปฏิเสธ', ctx.savePriceListLine(S, Object.assign({}, lineIn, { productIds: [301] })).success, false);
-eq('active: แก้ line เดิม → ปฏิเสธ', ctx.savePriceListLine(S, Object.assign({}, lineIn, { lineId: xLine })).success, false);
-eq('active: deletePriceListLine → ปฏิเสธ', ctx.deletePriceListLine(S, { priceListId: L1, lineId: xLine }).success, false);
-eq('active: savePriceListBillPromos → ปฏิเสธ', ctx.savePriceListBillPromos(S, { priceListId: L1, promos: [] }).success, false);
-eq('  ข้อมูลชุด active ไม่เปลี่ยนแม้แต่แถวเดียว', JSON.stringify([itemsOf(L1), objs(sheets.price_list_bill_promos)]), snap);
+sheets.price_list_change_log = new FakeSheet(CENTRAL_SHEETS.price_list_change_log);
+const snapActive = JSON.stringify(itemsOf(L1));
+// ทำกับ "แถวชั่วคราว" แล้วลบทิ้ง เพื่อให้ชุดราคากลับสภาพเดิมก่อนไปเทสต์ clone ด้านล่าง
+r = ctx.savePriceListLine(S, Object.assign({}, lineIn, { productIds: [301] }));
+eq('active: เพิ่มรายการใหม่ได้', r.success, true);
+const tmpLine = r.line.lineId;
+eq('active: แก้ราคารายการเดิมได้', ctx.savePriceListLine(S, Object.assign({}, lineIn, { productIds: [301], lineId: tmpLine })).success, true);
+eq('active: ลบรายการได้', ctx.deletePriceListLine(S, { priceListId: L1, lineId: tmpLine }).success, true);
+eq('active: แก้ส่วนลดท้ายบิลได้', ctx.savePriceListBillPromos(S, { priceListId: L1, promos: [{ minAmountExVat: 20000, percent: 2 }] }).success, true);
+eq('  ★ ทุกการแก้ถูกบันทึกประวัติไว้ครบ', objs(sheets.price_list_change_log).length, 4);
+eq('  ประวัติบอกว่าทำอะไร และใครทำเมื่อไหร่', (() => { const l = objs(sheets.price_list_change_log);
+  return [l.map(x => x.action), !!l[0].changed_at]; })(),
+  [['เพิ่มรายการ', 'แก้ราคา', 'ลบรายการ', 'แก้ส่วนลดท้ายบิล'], true]);
+eq('  อ่านประวัติผ่าน action ได้', ctx.listPriceListChanges(S, { priceListId: L1 }).data.length, 4);
+eq('  ชุดราคากลับสภาพเดิมหลังลบแถวชั่วคราว', JSON.stringify(itemsOf(L1)), snapActive);
+
 ctx.setPriceListStatus(S, { id: L1, status: 'archived' });
-eq('archived: savePriceListLine → ปฏิเสธ', ctx.savePriceListLine(S, Object.assign({}, lineIn, { productIds: [301] })).success, false);
+eq('archived: ยังห้ามแก้ (เป็นบันทึกของงวดที่ปิดแล้ว)', [
+  ctx.savePriceListLine(S, Object.assign({}, lineIn, { productIds: [301] })).success,
+  ctx.deletePriceListLine(S, { priceListId: L1, lineId: xLine }).success,
+  ctx.savePriceListBillPromos(S, { priceListId: L1, promos: [] }).success], [false, false, false]);
+eq('  ข้อมูลชุดที่เก็บถาวรไม่ขยับ', JSON.stringify(itemsOf(L1)), snapActive);
+
 ctx.setPriceListStatus(S, { id: L1, status: 'draft' });
-eq('เคย active แล้วย้อนเป็นร่าง → ยังห้ามแก้ (activated_at ไม่ว่าง)', [ctx.savePriceListLine(S, Object.assign({}, lineIn, { productIds: [301] })).success,
-   ctx.deletePriceListLine(S, { priceListId: L1, lineId: xLine }).success, ctx.savePriceListBillPromos(S, { priceListId: L1, promos: [] }).success], [false, false, false]);
-eq('  ข้อมูลยังไม่เปลี่ยน', JSON.stringify([itemsOf(L1), objs(sheets.price_list_bill_promos)]), snap);
+r = ctx.savePriceListLine(S, Object.assign({}, lineIn, { productIds: [301] }));
+eq('เคย active แล้วย้อนเป็นร่าง → แก้ได้ (activated_at ไม่กั้นอีกแล้ว)', r.success, true);
+eq('  ชุดร่างไม่ต้องเก็บประวัติ (ยังไม่มีใครใช้ราคานี้)', objs(sheets.price_list_change_log).length, 4);
+ctx.deletePriceListLine(S, { priceListId: L1, lineId: r.line.lineId });
+eq('  คืนสภาพก่อนไปเทสต์ถัดไป', JSON.stringify(itemsOf(L1)), snapActive);
 ctx.setPriceListStatus(S, { id: L1, status: 'active' });
 
 // ── clone งวดใหม่ ──
@@ -157,7 +176,7 @@ eq('  โปรระดับบิลถูกก๊อป', objs(sheets.price
 const newLine = dstRows[0].line_id;
 r = ctx.savePriceListLine(S, { priceListId: L2, lineId: newLine, productIds: [101, 102, 201], caseFactor: 60, listExVat: 1200, tiers: [{ min: 1, max: null, cashInclVat: 1150, creditInclVat: 1160 }] });
 eq('  แก้ราคาในชุดใหม่ได้', r.success, true);
-eq('  ชุดต้นฉบับ (active) ราคาเดิมไม่เปลี่ยน', itemsOf(L1).map(i => i.cash_price_incl_vat), [1111, 1111, 1111]);
+eq('  แก้ชุดใหม่แล้วต้นฉบับไม่ขยับตาม (คนละชุดกันจริง)', itemsOf(L1).map(i => i.cash_price_incl_vat), [1111, 1111, 1111]);
 eq('  ชุดใหม่ได้ราคาใหม่', itemsOf(L2).map(i => i.cash_price_incl_vat), [1150, 1150, 1150]);
 eq('clone ต้นทางไม่มีจริง → ปฏิเสธ', ctx.clonePriceList(S, { id: 999, name: 'x', validFrom: '2027-01-01', validTo: '2027-03-31' }).success, false);
 eq('clone ไม่ตั้งชื่อ → ปฏิเสธ', ctx.clonePriceList(S, { id: L1, name: ' ', validFrom: '2027-01-01', validTo: '2027-03-31' }).success, false);

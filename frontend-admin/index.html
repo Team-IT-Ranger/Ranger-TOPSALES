@@ -3075,10 +3075,19 @@ function renderPriceListDetail(d){
   if (!plEditable(l)) PLD_EDIT = false;
   const editing = PLD_EDIT;
   document.getElementById('pld-actions').innerHTML = plActionButtons(l);
+  /* แถบโหมดแก้ไข — ข้อความต่างกันตามว่าแก้ชุดร่างหรือชุดที่ขายอยู่จริง
+     ชุดที่ใช้งานอยู่ต้องเตือนให้ชัดว่ามีผลกับบิลใบถัดไปทันที ไม่ใช่ "รอเปิดใช้งานก่อน" แบบชุดร่าง */
   document.getElementById('pld-editbar').innerHTML = editing
-    ? '<div class="form-card" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="openLineModal(null)">+ เพิ่มรายการราคา</button>' +
-      '<span class="form-hint" style="margin:0">โหมดแก้ไข — กด "แก้ไข" ที่รายการใดก็ได้ บันทึกทีละรายการ มีผลทันทีกับชุดร่างนี้ (ยังไม่กระทบการขายจนกว่าจะเปิดใช้งาน)</span></div>'
-    : (plEditable(l) ? '' : '<p class="form-hint" style="margin:0 0 12px">ชุดที่'+(l.status==='active'?'ใช้งานอยู่':l.status==='archived'?'เก็บถาวรแล้ว':'เคยเปิดใช้งานแล้ว')+'แก้ราคาไม่ได้ (บิลเก่าอ้างราคาย้อนหลัง) — ต้องการเปลี่ยนราคา กด "คัดลอกเป็นงวดใหม่" แล้วแก้ในชุดใหม่</p>');
+    ? '<div class="form-card" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' +
+        (plLiveEdit(l) ? ';background:#FDF3E2;border-color:#F0DCB4' : '') + '">' +
+      '<button class="btn btn-primary btn-sm" onclick="openLineModal(null)">+ เพิ่มรายการราคา</button>' +
+      '<span class="form-hint" style="margin:0' + (plLiveEdit(l) ? ';color:#8A5A12' : '') + '">' +
+      (plLiveEdit(l)
+        ? '<b>กำลังแก้ชุดที่ใช้งานอยู่</b> — ราคาใหม่มีผลกับบิลที่เปิดหลังจากนี้ทันที · บิลที่ออกไปแล้วไม่เปลี่ยน (เก็บราคาไว้ในบิลของตัวเอง) · ทุกการแก้ถูกบันทึกประวัติไว้'
+        : 'โหมดแก้ไข — กด "แก้ไข" ที่รายการใดก็ได้ บันทึกทีละรายการ มีผลทันทีกับชุดร่างนี้ (ยังไม่กระทบการขายจนกว่าจะเปิดใช้งาน)') +
+      '</span></div>'
+    : (plEditable(l) ? ''
+        : '<p class="form-hint" style="margin:0 0 12px">ชุดที่เก็บถาวรแล้วแก้ราคาไม่ได้ — เป็นบันทึกของงวดที่ปิดไปแล้ว ถ้าต้องแก้จริงๆ ให้เปลี่ยนสถานะกลับมาเป็นใช้งานก่อน</p>');
   const body = document.getElementById('pld-body');
   if (!d.lines.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+(editing?'ยังไม่มีรายการ — กด "+ เพิ่มรายการราคา"':'ไม่มีรายการ')+'</td></tr>'; }
   else body.innerHTML = d.lines.map((ln, idx) => {
@@ -3171,7 +3180,11 @@ async function deletePriceListUI(){
    ทุกการบันทึกแก้ PLD_CACHE / pricelistsCache แล้ววาดใหม่ ไม่โหลดทั้งลิสต์ซ้ำ */
 let PLD_EDIT = false;
 // ร่างที่ไม่เคยเปิดใช้งาน (ชุดที่เคย active แล้วย้อนเป็นร่าง อาจมีบิลอ้างราคาอยู่ — backend ก็ห้ามเหมือนกัน)
-const plEditable = l => l.status === 'draft' && !l.activatedAt;
+/* แก้ราคาได้ทั้งชุดร่างและชุดที่ใช้งานอยู่ (เจ้าของระบบสั่ง 2026-09-27 — ช่วงเริ่มใช้งานต้องแก้เฉพาะหน้าได้
+   การบังคับให้คัดลอกเป็นงวดใหม่ทุกครั้งยุ่งเกินไป) · เก็บถาวรแล้วยังห้ามแก้ เป็นบันทึกของงวดที่ปิดไปแล้ว
+   บิลเก่าไม่กระทบเพราะเก็บราคาที่ขายจริงไว้ในบรรทัดของตัวเอง — แต่การแก้ชุดที่ใช้งานอยู่ถูกบันทึกประวัติไว้ */
+const plEditable = l => l.status !== 'archived';
+const plLiveEdit = l => l.status === 'active';
 function plModal(html){ const m = document.getElementById('pl-modal'); m.querySelector('.modal-box').innerHTML = html; m.style.display = 'flex'; const f = m.querySelector('input:not([type=checkbox]),select'); if (f) f.focus(); }
 function plModalClose(){ document.getElementById('pl-modal').style.display = 'none'; }
 function plModalErr(msg){ const e = document.getElementById('plm-err'); if (e) { e.textContent = msg; e.style.display = msg ? 'block' : 'none'; } }
