@@ -3,7 +3,7 @@
  *
  *   node .dev/import-customers.js --file reference/ARMAS.DBF          --tenant HOUSE --dry
  *   node .dev/import-customers.js --file reference/customer_for_bdc.xlsx --tenant TNKN --dry
- *   BACKEND_URL='<exec url>' ADMIN_TOKEN='<token>' node .dev/import-customers.js --file ... --tenant ...
+ *   BACKEND_URL='<exec url>' ADMIN_USER='<user>' ADMIN_PASS='<pass>' node .dev/import-customers.js --file ... --tenant ... --commit
  *
  * --dry (ค่าตั้งต้น) = อ่านไฟล์ แปลง แล้วรายงานอย่างเดียว ไม่แตะ backend
  * ต้องมี --commit ถึงจะยิงเข้า backend จริง (นำเข้าทับด้วย external_code — รันซ้ำได้ ไม่เกิดแถวซ้ำ)
@@ -190,17 +190,25 @@ console.log('\nตัวอย่างแถวที่แปลงแล้�
 rows.slice(0, 2).forEach(m => console.log(JSON.stringify(m, null, 1)));
 
 if (!COMMIT) {
-  console.log('\n[dry run] ยังไม่ได้เขียนอะไรลง backend — ใส่ --commit พร้อม BACKEND_URL/ADMIN_TOKEN เพื่อนำเข้าจริง');
+  console.log('\n[dry run] ยังไม่ได้เขียนอะไรลง backend — ใส่ --commit พร้อม BACKEND_URL/ADMIN_USER/ADMIN_PASS เพื่อนำเข้าจริง');
   process.exit(0);
 }
 
 /* ── ส่งเข้า backend เป็นก้อน (Apps Script มีเวลาจำกัด 6 นาทีต่อคำขอ) ── */
-const BACKEND_URL = process.env.BACKEND_URL, ADMIN_TOKEN = process.env.ADMIN_TOKEN;
-if (!BACKEND_URL || !ADMIN_TOKEN) { console.error('ต้องตั้ง BACKEND_URL และ ADMIN_TOKEN'); process.exit(1); }
+const BACKEND_URL = process.env.BACKEND_URL;
+const USER = process.env.ADMIN_USER, PASS = process.env.ADMIN_PASS;
+if (!BACKEND_URL || !USER || !PASS) { console.error('ต้องตั้ง BACKEND_URL, ADMIN_USER, ADMIN_PASS'); process.exit(1); }
 if (!TENANT) { console.error('ต้องระบุ --tenant (ตัวแทนที่ลูกค้าชุดนี้สังกัด)'); process.exit(1); }
+// ส่งทีละ 300 แถว — Apps Script มีเพดานเวลา 6 นาทีต่อคำขอ ยิงสองพันแถวรวดเดียวไม่ทัน
 const CHUNK = 300;
 
 (async () => {
+  const lg = await fetch(BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'adminLogin', payload: { username: USER, password: PASS } }) });
+  const login = await lg.json();
+  if (!login.success) { console.error('เข้าสู่ระบบไม่สำเร็จ: ' + login.message); process.exit(1); }
+  const ADMIN_TOKEN = login.token;
+
   let created = 0, updated = 0, skipped = 0;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const part = rows.slice(i, i + CHUNK);
