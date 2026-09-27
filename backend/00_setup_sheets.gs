@@ -55,7 +55,7 @@ var CENTRAL_SHEETS = {
     'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions','alias_codes','tax_status',
     'name_en','sales_unit_code','sales_unit_factor','purchase_unit_code','purchase_unit_factor','carton_barcode',
     'packing_text','weight_kg','is_stock','is_sellable','is_purchasable','no_discount','reorder_point',
-    'last_purchase_price','last_purchase_date','note','created_at','created_by','updated_at','updated_by'],
+    'last_purchase_price','last_purchase_date','note','external_system','created_at','created_by','updated_at','updated_by'],
   product_groups: ['record_id','name','description'],
   // ── ชุดราคา/ส่วนลดตามกลุ่มลูกค้า (ใบรายการขายรายไตรมาส) — ดู 17_pricing.gs ──
   //  price_lists: 1 ชุด = 1 กลุ่มลูกค้า × 1 ช่วงเวลา, status: draft | active | archived (valid_from/to เป็นข้อความ yyyy-MM-dd)
