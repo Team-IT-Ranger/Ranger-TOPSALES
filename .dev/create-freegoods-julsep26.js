@@ -61,9 +61,13 @@ const PLAN = [
     group: 'pet40-FOC', freeFrom: 'pet40',
     tiers: [ { min: 5, minU: 'CT', qty: 6, u: 'PC', note: 'ซื้อ 5 ลัง FOC 6 กระป๋อง' },
              { min: 1, minU: 'CT', qty: 1, u: 'PC', note: 'ซื้อ 1 ลัง FOC 1 กระป๋อง' } ] },
+  // "Ranger Dry" = Dry Spray (เจ้าของระบบยืนยัน 27 ก.ย. 2026) — คนละกลไกกับชุดร้านใหม่ จึงได้พร้อมกันได้
+  { key: 'dryspray', name: 'Sales out: Ranger Dry (1-31 ก.ค. 69)', from: '2026-07-01', to: '2026-07-31',
+    group: 'dry-FOC', freeFrom: 'dryspray',
+    tiers: [ { min: 30, minU: 'CT', qty: 1, u: 'CT', note: 'ซื้อ 30 ลัง FOC 1 ลัง' } ] },
   { key: 'dryspray', name: 'Sales out: Ranger Dry Spray — ร้านใหม่ (1 ก.ค.-31 ส.ค. 69)', from: '2026-07-01', to: '2026-08-31',
-    group: 'dryspray-FOC', freeFrom: 'dryspray',
-    note: 'เฉพาะร้านค้าใหม่ที่ยังไม่เคยซื้อ — ต้องตั้งกฎสิทธิ์เพิ่มเอง ระบบยังไม่มีคุณลักษณะ "เคยซื้อหรือยัง"',
+    group: 'dryspray-new-FOC', freeFrom: 'dryspray', newShopsOnly: true,
+    note: 'เฉพาะร้านค้าใหม่ — ผูกกับรายชื่อร้านค้าที่แอดมินระบุเอง (40_customer_lists.gs)',
     tiers: [ { min: 5, minU: 'CT', qty: 5, u: 'PK', note: 'ซื้อ 5 ลัง FOC 5 แพ็ค' },
              { min: 1, minU: 'CT', qty: 1, u: 'PK', note: 'ซื้อ 1 ลัง FOC 1 แพ็ค' } ] }
 ];
@@ -125,6 +129,22 @@ const PLAN = [
         minQty: t.min, minUnitCode: t.minU,
         freeProductId: b.freeProduct.record_id, freeQty: t.qty, freeUnitCode: t.u, note: t.note });
       if (!r.success) console.log('   ✗ ขั้น "' + t.note + '" — ' + r.message);
+    }
+    /* ★ "ร้านค้าใหม่ที่ยังไม่เคยซื้อ" ตัดสินด้วยคน ไม่ใช่ last_sale_at — ผูกกับรายชื่อที่แอดมินทำเอง
+       สร้างรายชื่อเปล่าให้ แล้วให้คนไปใส่รหัสร้านเอง · รายชื่อว่าง = ยังไม่มีร้านไหนได้ ซึ่งปลอดภัยกว่าเดา */
+    if (spec.newShopsOnly) {
+      const lists = await call('listCustomerLists', {});
+      let nl = (lists.data || []).find(l => /ร้านค้าใหม่/.test(l.name));
+      if (!nl) {
+        const c = await call('saveCustomerList', { name: 'ร้านค้าใหม่ที่ยังไม่เคยซื้อ (ก.ค.-ส.ค. 69)',
+          note: 'ตามใบอนุมัติ Promotion Jul-Sep\'26 — แอดมินเป็นผู้ใส่รหัสร้านที่เข้าเกณฑ์' });
+        nl = { id: c.id };
+        console.log('   + สร้างรายชื่อ "ร้านค้าใหม่ฯ" (ยังว่าง — ต้องใส่รหัสร้านเอง)');
+      }
+      const rule = await call('savePriceListRule', { targetType: 'free_goods', priceListId: set.id,
+        name: 'เฉพาะร้านในรายชื่อ "ร้านค้าใหม่"', matchType: 'all', priority: 10,
+        conditions: [{ field: 'member_of_list', op: 'in', value: String(nl.id) }] });
+      if (!rule.success) console.log('   ✗ ผูกกฎร้านใหม่ไม่ได้ — ' + rule.message);
     }
     const asg = await call('savePackageTenants', { packageType: 'free_goods', packageId: set.id, tenantIds: [TENANT] });
     console.log('✓ ' + b.spec.name + ' (ชุด #' + set.id + ', ' + b.tiers.length + ' ขั้น) → จ่ายให้ ' + (asg.assigned || []).join(', '));
