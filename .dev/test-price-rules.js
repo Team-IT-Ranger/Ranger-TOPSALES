@@ -77,7 +77,8 @@ const ctx = {
   centralInvalidate: () => {},
   deleteRowsWhere: (sh, col, v) => { const n = sh.__name; sheets[n] = sheetOf(n).filter(r => String(r[col]) !== String(v)); },
   nowStr: () => '2026-09-27 10:00:00', safeDateStr: v => String(v || ''),
-  _requirePermission: () => null
+  _requirePermission: () => null,
+  ensureSchemaCurrent: () => false
 };
 vm.createContext(ctx);
 const fakes = {};
@@ -198,8 +199,8 @@ eq('ชุดที่จ่ายให้ตัวแทนของร้า�
 {
   const keep = sheets.package_tenants.slice();
   sheets.package_tenants = [];
-  eq('★ ไม่มีการจ่ายชุดเลย = ไม่มีใครได้ (ไม่ใช่ "ทุกคนได้")',
-     [won(1), won(2), won(3)], [null, null, null]);
+  eq('★ ตารางการจ่ายชุดว่างทั้งตาราง = ยังไม่เริ่มใช้เรื่องนี้ → ราคายังทำงานเหมือนเดิมทุกร้าน',
+     [won(1), won(2), won(3)], ['ร้านค้าทั่วไป', 'ซุปเปอร์ชีป', 'ศูนย์/ตัวแทน']);
   sheets.package_tenants = keep;
 }
 eq('กฎสิทธิ์ผ่านแต่ยังไม่ได้จ่ายชุด → explain บอกเหตุผลตรงๆ', (() => {

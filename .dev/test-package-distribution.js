@@ -50,7 +50,8 @@ const ctx = {
   _requirePermission: () => null,
   _salesTenantId: (s, p) => (s.tenant_id || (p && p.tenantId) || 'HOUSE'),
   _ensureHouseTenant: () => 'HOUSE',
-  _withDocLock: fn => fn()
+  _withDocLock: fn => fn(),
+  ensureSchemaCurrent: () => false
 };
 vm.createContext(ctx);
 const fakes = {};
@@ -84,10 +85,18 @@ const AGENT = { adminUserId: '3', role_code: 'admin', tenant_id: 'BDC' };
 const cust = id => sheets.customers.find(c => c.record_id === id);
 const assigned = (type, id) => ctx.packageTenantsOf(type, id);
 
-console.log('-- ค่าตั้งต้น: ไม่ระบุ = ไม่มีใครได้ --');
-eq('★ ชุดที่ยังไม่ได้จ่าย ไม่มีตัวแทนรายไหนได้ใช้ (ไม่ใช่ "ทุกคนได้")',
-  ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'price_list', 10, 'BDC'), false);
-eq('  โปรโมชั่นก็เหมือนกัน', ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'promo', 50, 'BDC'), false);
+console.log('-- ยังไม่เคยตั้งค่าเลย ต่างจาก "ตั้งแล้วแต่ไม่ได้ให้ใคร" --');
+eq('★ ตารางว่างทั้งตาราง = ยังไม่เริ่มใช้เรื่องนี้ → ยังไม่กั้น (ไม่งั้นหลัง deploy ทั้งระบบขายไม่ได้ทันที)',
+  [ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'price_list', 10, 'BDC'),
+   ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'promo', 50, 'BDC')], [true, true]);
+{
+  // พอมีการจ่ายชุดแม้แถวเดียวในระบบ = เริ่มใช้แล้ว → ชุดที่ไม่ได้ถูกจ่ายถูกกั้นทันที
+  sheets.package_tenants.push({ record_id: 999, package_type: 'price_list', package_id: 11, tenant_id: 'NKN' });
+  eq('★ มีการจ่ายชุดแล้วแม้แถวเดียว → ชุดอื่นที่ยังไม่ได้จ่าย ถูกกั้นทันที',
+    ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'price_list', 10, 'BDC'), false);
+  eq('  ชุดที่ถูกจ่ายให้ตัวแทนนั้น ใช้ได้', ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'price_list', 11, 'NKN'), true);
+  sheets.package_tenants = [];
+}
 
 console.log('\n-- จ่ายชุดให้ตัวแทน --');
 {

@@ -25,14 +25,28 @@ PKG_TYPES[PKG_PROMO] = { label: 'โปรโมชั่น', sheet: 'discount_
 
 function _pkgKey(type, id) { return String(type) + '|' + String(id); }
 
-/** ดัชนี { 'ชนิด|id': { tenantId: 1 } } — อ่านชีตครั้งเดียวต่อคำขอ (ตารางนี้อยู่ในลิสต์แคชแล้ว) */
+/**
+ * ดัชนีการจ่ายชุด — อ่านชีตครั้งเดียวต่อคำขอ (ตารางนี้อยู่ในลิสต์แคชแล้ว)
+ * @return { map: { 'ชนิด|id': { tenantId: 1 } }, any: มีการจ่ายชุดอย่างน้อยหนึ่งแถวไหม }
+ *
+ * ★ ชีตอาจยังไม่มี: สคีมาถูกเติมตอนล็อกอินครั้งถัดไป (ensureSchemaCurrent) ไม่ใช่ตอน deploy
+ *   จึงมีช่วงหลัง deploy ที่ตารางนี้ยังไม่เกิด — อ่านไม่ได้ต้องไม่ทำให้ทั้งระบบล้ม
+ */
 function packageTenantIndex() {
-  var idx = {};
-  centralObjects('package_tenants').forEach(function(r) {
+  var rows = [];
+  try {
+    rows = centralObjects('package_tenants');
+  } catch (e) {
+    // ชีตยังไม่มี → เติมสคีมาให้แล้วลองใหม่ครั้งเดียว (deploy ใหม่แล้วยังไม่มีใครล็อกอิน)
+    try { ensureSchemaCurrent(); rows = centralObjects('package_tenants'); }
+    catch (e2) { Logger.log('packageTenantIndex: อ่าน package_tenants ไม่ได้ — ' + e2); rows = []; }
+  }
+  var map = {};
+  rows.forEach(function(r) {
     var k = _pkgKey(r.package_type, r.package_id);
-    (idx[k] = idx[k] || {})[String(r.tenant_id)] = 1;
+    (map[k] = map[k] || {})[String(r.tenant_id)] = 1;
   });
-  return idx;
+  return { map: map, any: rows.length > 0 };
 }
 
 /**
@@ -41,7 +55,12 @@ function packageTenantIndex() {
  * tenantId ว่าง = ขายในนามบริษัทเอง ซึ่งใช้ตัวแทนบ้าน HOUSE (ดู _salesTenantId) จึงเทียบกับ HOUSE
  */
 function packageAllowedForTenant(idx, type, id, tenantId) {
-  var set = idx[_pkgKey(type, id)];
+  /* ★ ยังไม่มีการจ่ายชุด "สักแถวเดียวในระบบ" = ยังไม่ได้เริ่มใช้เรื่องนี้ → ยังไม่กั้น
+     ต่างจาก "ชุดนี้ไม่ได้ถูกจ่ายให้ใคร" ซึ่งกั้นตามกติกา · ถ้าเหมารวมสองอย่างนี้เป็นอันเดียวกัน
+     ช่วงหลัง deploy ก่อนรัน migratePackageAssignments จะกลายเป็นว่า "ทุกร้านในระบบเปิดบิลไม่ได้"
+     ทันที โดยไม่มีอะไรฟ้องนอกจากพนักงานขายโทรมา — ราคาที่แพงเกินไปสำหรับค่าตั้งต้น */
+  if (!idx || !idx.any) return true;
+  var set = idx.map[_pkgKey(type, id)];
   if (!set) return false;                       // ไม่ระบุ = ไม่มีใครได้
   var t = String(tenantId || HOUSE_TENANT_ID);
   return set[t] === 1;
@@ -49,7 +68,7 @@ function packageAllowedForTenant(idx, type, id, tenantId) {
 
 /** รายชื่อตัวแทนที่ได้รับชุดนี้ (เรียงตามรหัส) */
 function packageTenantsOf(type, id) {
-  var set = packageTenantIndex()[_pkgKey(type, id)] || {};
+  var set = packageTenantIndex().map[_pkgKey(type, id)] || {};
   return Object.keys(set).sort();
 }
 
@@ -125,7 +144,8 @@ function migratePackageAssignments(session) {
   var tenants = _pkgAssignableTenants().map(function(t) { return t.tenantId; });
   if (!tenants.length) return { success: false, message: 'ยังไม่มีตัวแทนในระบบ' };
 
-  var idx = packageTenantIndex();
+  ensureSchemaCurrent();          // ชีตอาจยังไม่เกิดถ้ายังไม่มีใครล็อกอินหลัง deploy
+  var idx = packageTenantIndex().map;
   var rows = [], report = [];
   var nextId = centralNextId('package_tenants');
   [PKG_PRICE_LIST, PKG_PROMO].forEach(function(type) {
