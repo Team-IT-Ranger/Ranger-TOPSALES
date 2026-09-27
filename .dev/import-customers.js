@@ -3,7 +3,8 @@
  *
  *   node .dev/import-customers.js --file reference/ARMAS.DBF          --tenant HOUSE --dry
  *   node .dev/import-customers.js --file reference/customer_for_bdc.xlsx --tenant TNKN --dry
- *   BACKEND_URL='<exec url>' ADMIN_USER='<user>' ADMIN_PASS='<pass>' node .dev/import-customers.js --file ... --tenant ... --commit
+ *   BACKEND_URL='<exec url>' ADMIN_TOKEN='<token จากแอป>' node .dev/import-customers.js --file ... --tenant ... --commit
+ *   (หรือใช้ ADMIN_USER/ADMIN_PASS แทน ADMIN_TOKEN ก็ได้)
  *
  * --dry (ค่าตั้งต้น) = อ่านไฟล์ แปลง แล้วรายงานอย่างเดียว ไม่แตะ backend
  * ต้องมี --commit ถึงจะยิงเข้า backend จริง (นำเข้าทับด้วย external_code — รันซ้ำได้ ไม่เกิดแถวซ้ำ)
@@ -190,24 +191,37 @@ console.log('\nตัวอย่างแถวที่แปลงแล้�
 rows.slice(0, 2).forEach(m => console.log(JSON.stringify(m, null, 1)));
 
 if (!COMMIT) {
-  console.log('\n[dry run] ยังไม่ได้เขียนอะไรลง backend — ใส่ --commit พร้อม BACKEND_URL/ADMIN_USER/ADMIN_PASS เพื่อนำเข้าจริง');
+  console.log('\n[dry run] ยังไม่ได้เขียนอะไรลง backend — ใส่ --commit พร้อม BACKEND_URL + (ADMIN_TOKEN หรือ ADMIN_USER/ADMIN_PASS) เพื่อนำเข้าจริง');
   process.exit(0);
 }
 
 /* ── ส่งเข้า backend เป็นก้อน (Apps Script มีเวลาจำกัด 6 นาทีต่อคำขอ) ── */
 const BACKEND_URL = process.env.BACKEND_URL;
-const USER = process.env.ADMIN_USER, PASS = process.env.ADMIN_PASS;
-if (!BACKEND_URL || !USER || !PASS) { console.error('ต้องตั้ง BACKEND_URL, ADMIN_USER, ADMIN_PASS'); process.exit(1); }
+if (!BACKEND_URL) { console.error('ต้องตั้ง BACKEND_URL'); process.exit(1); }
 if (!TENANT) { console.error('ต้องระบุ --tenant (ตัวแทนที่ลูกค้าชุดนี้สังกัด)'); process.exit(1); }
 // ส่งทีละ 300 แถว — Apps Script มีเพดานเวลา 6 นาทีต่อคำขอ ยิงสองพันแถวรวดเดียวไม่ทัน
 const CHUNK = 300;
 
-(async () => {
-  const lg = await fetch(BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'adminLogin', payload: { username: USER, password: PASS } }) });
-  const login = await lg.json();
+const call = async body => {
+  const res = await fetch(BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  const txt = await res.text();
+  try { return JSON.parse(txt); } catch (e) { throw new Error('เซิร์ฟเวอร์ตอบผิดรูปแบบ: ' + txt.slice(0, 200)); }
+};
+
+/* ยืนยันตัวตน: ใช้ ADMIN_TOKEN ก่อนถ้ามี (session ของแอป อายุจำกัด ปลอดภัยกว่าเอารหัสผ่านจริงมาใส่ในคำสั่ง)
+   หา token: ล็อกอินแอดมินในเบราว์เซอร์ → เปิด DevTools Console → พิมพ์ TOKEN แล้ว copy ค่าที่ได้
+   ไม่มี token ค่อยใช้ ADMIN_USER/ADMIN_PASS (บัญชีที่สมัครผ่าน LINE จะไม่มีรหัสผ่าน ใช้วิธีนี้ไม่ได้) */
+async function resolveToken(callFn) {
+  if (process.env.ADMIN_TOKEN) return process.env.ADMIN_TOKEN;
+  const u = process.env.ADMIN_USER, p = process.env.ADMIN_PASS;
+  if (!u || !p) { console.error('ต้องตั้ง ADMIN_TOKEN หรือ ADMIN_USER + ADMIN_PASS'); process.exit(1); }
+  const login = await callFn({ action: 'adminLogin', payload: { username: u, password: p } });
   if (!login.success) { console.error('เข้าสู่ระบบไม่สำเร็จ: ' + login.message); process.exit(1); }
-  const ADMIN_TOKEN = login.token;
+  return login.token;
+}
+
+(async () => {
+  const ADMIN_TOKEN = await resolveToken(call);
 
   let created = 0, updated = 0, skipped = 0;
   for (let i = 0; i < rows.length; i += CHUNK) {

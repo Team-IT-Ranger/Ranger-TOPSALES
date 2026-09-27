@@ -2,8 +2,8 @@
  * นำเข้าทะเบียนสินค้าจากไฟล์ของระบบเดิม เข้าทะเบียนสินค้าส่วนกลาง
  *
  *   node .dev/import-products.js --file reference/customer_for_bdc.xlsx --sheet item --dry
- *   BACKEND_URL='<exec url>' ADMIN_USER='<user>' ADMIN_PASS='<pass>' \
- *     node .dev/import-products.js --file ... --sheet item --commit
+ *   BACKEND_URL='<exec url>' ADMIN_TOKEN='<token จากแอป>' node .dev/import-products.js --file ... --commit
+ *   (หรือใช้ ADMIN_USER/ADMIN_PASS แทน ADMIN_TOKEN ก็ได้)
  *
  * --dry (ค่าตั้งต้น) = อ่านไฟล์ แปลง รายงาน ไม่แตะ backend
  * จับคู่ด้วย **รหัสสินค้า (product_code)** เป็นหลัก — ของที่มีอยู่แล้วถูกอัปเดต ไม่ใช่สร้างซ้ำ
@@ -85,23 +85,33 @@ console.log('\nตัวอย่างที่จะส่งเข้าร�
 rows.slice(0, 2).forEach(m => console.log(JSON.stringify(m, null, 1)));
 
 if (!COMMIT) {
-  console.log('\n[dry run] ยังไม่ได้เขียนอะไรลง backend — ใส่ --commit พร้อม BACKEND_URL/ADMIN_USER/ADMIN_PASS เพื่อนำเข้าจริง');
+  console.log('\n[dry run] ยังไม่ได้เขียนอะไรลง backend — ใส่ --commit พร้อม BACKEND_URL + (ADMIN_TOKEN หรือ ADMIN_USER/ADMIN_PASS) เพื่อนำเข้าจริง');
   process.exit(0);
 }
 
 const BACKEND_URL = process.env.BACKEND_URL;
-const USER = process.env.ADMIN_USER, PASS = process.env.ADMIN_PASS;
-if (!BACKEND_URL || !USER || !PASS) { console.error('ต้องตั้ง BACKEND_URL, ADMIN_USER, ADMIN_PASS'); process.exit(1); }
+if (!BACKEND_URL) { console.error('ต้องตั้ง BACKEND_URL'); process.exit(1); }
 const call = async body => {
   const res = await fetch(BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
   const txt = await res.text();
   try { return JSON.parse(txt); } catch (e) { throw new Error('เซิร์ฟเวอร์ตอบผิดรูปแบบ: ' + txt.slice(0, 200)); }
 };
 
-(async () => {
-  const login = await call({ action: 'adminLogin', payload: { username: USER, password: PASS } });
+/* ยืนยันตัวตน: ใช้ ADMIN_TOKEN ก่อนถ้ามี (session ของแอป อายุจำกัด ปลอดภัยกว่าเอารหัสผ่านจริงมาใส่ในคำสั่ง)
+   หา token: ล็อกอินแอดมินในเบราว์เซอร์ → เปิด DevTools Console → พิมพ์ TOKEN แล้ว copy ค่าที่ได้
+   ไม่มี token ค่อยใช้ ADMIN_USER/ADMIN_PASS (บัญชีที่สมัครผ่าน LINE จะไม่มีรหัสผ่าน ใช้วิธีนี้ไม่ได้) */
+async function resolveToken(callFn) {
+  if (process.env.ADMIN_TOKEN) return process.env.ADMIN_TOKEN;
+  const u = process.env.ADMIN_USER, p = process.env.ADMIN_PASS;
+  if (!u || !p) { console.error('ต้องตั้ง ADMIN_TOKEN หรือ ADMIN_USER + ADMIN_PASS'); process.exit(1); }
+  const login = await callFn({ action: 'adminLogin', payload: { username: u, password: p } });
   if (!login.success) { console.error('เข้าสู่ระบบไม่สำเร็จ: ' + login.message); process.exit(1); }
-  const r = await call({ action: 'importExpressProducts', token: login.token,
+  return login.token;
+}
+
+(async () => {
+  const token = await resolveToken(call);
+  const r = await call({ action: 'importExpressProducts', token: token,
     payload: { rows, externalSystem: 'bdc' } });
   if (!r.success) { console.error('นำเข้าไม่สำเร็จ: ' + r.message); process.exit(1); }
   console.log('\n' + r.message);
