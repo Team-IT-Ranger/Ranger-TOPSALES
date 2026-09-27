@@ -78,9 +78,18 @@
     transition:width var(--sb-dur) var(--sb-ease);
     box-shadow:2px 0 20px rgba(18,27,32,.25);
   }
-  .main-area{ margin-left:var(--sb-w); flex:1; min-width:0; transition:margin-left var(--sb-dur) var(--sb-ease); }
+  /* ── ฟรีโซน: สำรองพื้นที่ที่เมนูจะยืดออกไว้ถาวร ──
+     เดิม margin-left ของหน้างานวิ่งตามความกว้างเมนูจริง (76px ↔ 264px) พอเมาส์กวาดโดนเมนู
+     ทั้งหน้าจึงเลื่อนไป-มา 188px ตาลายมาก โดยเฉพาะตอนกำลังกรอกฟอร์ม
+     ตอนนี้จองที่ไว้เท่าเมนูตอนกางเสมอ เมนูหุบก็แค่เหลือแถบว่าง — **หน้างานไม่ขยับเลยสักพิกเซล**
+     (เมนูเป็น position:fixed อยู่แล้ว การยืด/หุบจึงไม่ดันอะไรทั้งนั้น มีแต่ margin ตัวนี้ที่เคยดัน) */
+  .main-area{ margin-left:var(--sb-w); flex:1; min-width:0; }
   body.sb-collapsed .sidebar{ width:var(--sb-cw); overflow:visible; }
-  body.sb-collapsed .main-area{ margin-left:var(--sb-cw); }
+  /* จอแคบ จองที่ 264px ไม่ไหว — ย่อที่จองเหลือเท่าเมนูหุบ แล้วให้เมนูกางทับหน้างานไปเลย
+     (ยังไม่ขยับเหมือนกัน เพราะที่จองคงที่ ไม่ได้วิ่งตามเมนู) */
+  @media (max-width:1180px){
+    .main-area, body.sb-collapsed .main-area{ margin-left:var(--sb-cw); }
+  }
   body.sb-collapsed .sb-nav{ overflow:hidden; }
   body.sb-collapsed .sb-header{ overflow:hidden; }
 
