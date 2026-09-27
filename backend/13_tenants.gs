@@ -256,13 +256,18 @@ function uploadTenantLogo(session, payload) {
 
 function updateTenantStatus(session, payload) {
   var err = _requirePermission(session, 'tenants', 'edit'); if (err) return err;
-  var rows = centralObjects('tenants');
   var sh = centralSheet('tenants');
-  for (var i = 0; i < rows.length; i++) {
-    if (String(rows[i].tenant_id) === String(payload.tenantId)) {
-      sh.getRange(i + 2, 5).setValue(payload.isActive ? 'TRUE' : 'FALSE'); // col 5 = is_active
-      return { success: true };
-    }
+  var data = sh.getDataRange().getValues();
+  // หาคอลัมน์จากหัวตาราง — ของเดิมเขียนลงคอลัมน์ที่ 5 ตรงๆ ซึ่งจะเขียนผิดช่องทันทีที่มีใครแทรกคอลัมน์
+  var cId = data[0].indexOf('tenant_id'), cActive = data[0].indexOf('is_active');
+  if (cId === -1 || cActive === -1) return { success: false, message: 'ตาราง tenants ไม่มีคอลัมน์ที่ต้องใช้' };
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][cId]) !== String(payload.tenantId)) continue;
+    sh.getRange(i + 1, cActive + 1).setValue(payload.isActive ? 'TRUE' : 'FALSE');
+    // ★ tenants อยู่ในลิสต์แคชข้ามคำขอ (SHEET_CACHE_TABLES) — เขียนชีตแบบดิบต้องล้างแคชเอง
+    //   ไม่งั้นปิดตัวแทนแล้วรายชื่อยังโชว์ว่าเปิดอยู่อีกห้านาที เหมือนกดไม่ติด
+    centralInvalidate('tenants');
+    return { success: true, message: (payload.isActive ? 'เปิดใช้งาน' : 'ปิดใช้งาน') + 'ตัวแทน ' + payload.tenantId + ' แล้ว' };
   }
   return { success: false, message: 'ไม่พบตัวแทนนี้' };
 }
