@@ -2324,7 +2324,10 @@ function renderSaleOrderDetail(r){
   document.getElementById('sod-body').innerHTML = rows +
     '<tr><td colspan="4" style="text-align:right"><b>ยอดรวมก่อนหักส่วนลด</b></td><td class="mono-data">฿'+baht(o.subtotal)+'</td></tr>' +
     (o.discount ? '<tr><td colspan="4" style="text-align:right">ส่วนลด</td><td class="mono-data">-฿'+baht(o.discount)+'</td></tr>' : '') +
-    '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้า (ไม่รวมภาษี)</td><td class="mono-data">฿'+baht(o.subtotalExVat)+'</td></tr>' +
+    (o.vatMixed
+      ? '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้าที่ยกเว้นภาษี</td><td class="mono-data">฿'+baht(o.exemptAmount)+'</td></tr>' +
+        '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้าที่เสียภาษี</td><td class="mono-data">฿'+baht(o.taxableExVat)+'</td></tr>'
+      : '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้า (ไม่รวมภาษี)</td><td class="mono-data">฿'+baht(o.subtotalExVat)+'</td></tr>') +
     '<tr><td colspan="4" style="text-align:right">ภาษีมูลค่าเพิ่ม '+vatPct+'%</td><td class="mono-data">฿'+baht(o.vatAmount)+'</td></tr>' +
     '<tr><td colspan="4" style="text-align:right"><b>สุทธิ</b></td><td class="mono-data"><b>฿'+baht(o.total)+'</b></td></tr>';
 }
@@ -2452,10 +2455,14 @@ function printSaleDoc(r, kind){
        ราคาขายของเราเป็นราคารวมภาษีอยู่แล้ว จึงไล่จากยอดรวม → หักส่วนลด → ถอดภาษี → ยอดสุทธิ
        ตัวเลขถอดมาจากที่ backend บันทึกไว้ตอนขาย ไม่ได้คำนวณเองบนหน้าเว็บ (กันปัดเศษไม่ตรงกับบัญชี) */
     const vatPct = Math.round((o.vatRate != null ? o.vatRate : 0.07) * 100);
+    // บิลที่มีของยกเว้นภาษีปนอยู่ ต้องแยกมูลค่าสองก้อนให้เห็น ไม่งั้นสรรพากรตรวจไม่ได้ว่าภาษีคิดจากฐานไหน
     const totals = k.showPrice ? [
       ['ยอดรวมก่อนหักส่วนลด', DocPrint.money(o.subtotal)],
       ...(o.discount ? [['ส่วนลด', '-' + DocPrint.money(o.discount)]] : []),
-      ['มูลค่าสินค้า (ไม่รวมภาษี)', DocPrint.money(o.subtotalExVat)],
+      ...(o.vatMixed
+        ? [['มูลค่าสินค้าที่ยกเว้นภาษี', DocPrint.money(o.exemptAmount)],
+           ['มูลค่าสินค้าที่เสียภาษี', DocPrint.money(o.taxableExVat)]]
+        : [['มูลค่าสินค้า (ไม่รวมภาษี)', DocPrint.money(o.subtotalExVat)]]),
       ['ภาษีมูลค่าเพิ่ม ' + vatPct + '%', DocPrint.money(o.vatAmount)],
       ['ยอดสุทธิ', DocPrint.money(o.total), 'grand'],
       ...(o.paidAmount ? [['รับชำระแล้ว', DocPrint.money(o.paidAmount)],
@@ -2599,7 +2606,10 @@ async function sonPreview(){
     (r.priceListName ? '<div class="activity-row"><span>ใช้ชุดราคา</span><span class="amt">'+esc(r.priceListName)+'</span></div>' : '') +
     '<div class="activity-row"><span>ยอดรวมก่อนหักส่วนลด</span><span class="amt mono-data">฿'+baht(r.subtotal)+'</span></div>' +
     (r.discount ? '<div class="activity-row"><span>ส่วนลด</span><span class="amt mono-data">-฿'+baht(r.discount)+'</span></div>' : '') +
-    '<div class="activity-row"><span>มูลค่าสินค้า (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalExVat)+'</span></div>' +
+    (r.vatMixed
+      ? '<div class="activity-row"><span>มูลค่าสินค้าที่ยกเว้นภาษี</span><span class="amt mono-data">฿'+baht(r.exemptAmount)+'</span></div>' +
+        '<div class="activity-row"><span>มูลค่าสินค้าที่เสียภาษี</span><span class="amt mono-data">฿'+baht(r.taxableExVat)+'</span></div>'
+      : '<div class="activity-row"><span>มูลค่าสินค้า (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalExVat)+'</span></div>') +
     '<div class="activity-row"><span>ภาษีมูลค่าเพิ่ม '+Math.round((r.vatRate != null ? r.vatRate : 0.07)*100)+'%</span><span class="amt mono-data">฿'+baht(r.vatAmount)+'</span></div>' +
     '<div class="activity-row"><b>สุทธิ</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
   document.getElementById('son-confirm').style.display = '';
@@ -2626,7 +2636,12 @@ async function sonSubmit(){
    คัดลอกแนวคิดมาจากระบบ Item Master ของ Hippo Village (ITEM_FIELDS / renderItemTable / _itemCmp /
    openItemModal / submitItemForm) ปรับให้เข้ากับ backend ของ TOPSALES เอง (Drive แทน base64,
    มีแค่ประเภทเดียวคือ "สินค้า" ไม่ต้องมีระบบแท็บหลายประเภทแบบต้นฉบับ) ══════════════ */
-const VAT_TYPE_LABEL = { none:'ไม่มี VAT', included:'รวม VAT', excluded:'แยก VAT' };
+/* สถานะภาษีของสินค้า — ค่าว่างคือคิด VAT ตามปกติ (สินค้าเดิมทุกตัวจึงถูกต้องอยู่แล้ว)
+   เลิกใช้ช่อง vat_type เดิมบนฟอร์มแล้ว: ป้าย "ไม่มี VAT" ของมันหมายถึง "ยังไม่ได้ตั้งค่า"
+   ไม่ใช่ "ยกเว้นภาษี" และไม่มีโค้ดไหนอ่านเลย — ปล่อยไว้ในชีตเฉยๆ แต่ไม่ให้แก้จากหน้านี้อีก
+   จะได้ไม่มีใครตั้งแล้วนึกว่าสินค้าตัวนั้นไม่เสียภาษี */
+const TAX_STATUS_LABEL = { '':'คิด VAT 7%', vat:'คิด VAT 7%', exempt:'ยกเว้น VAT', zero:'อัตราศูนย์' };
+const taxStatusOf = p => { const v = String(p.tax_status||'').toLowerCase(); return (v==='exempt'||v==='zero') ? v : ''; };
 // key = ชื่อ field ในฟอร์ม/payload (camelCase ตามที่ backend รับ), dataKey = ชื่อคอลัมน์จริงใน Sheet (snake_case)
 const PRODUCT_FIELDS = [
   // product_code = เลขประจำตัวสินค้า สำคัญอันดับ 1, unique ทั้งระบบ (บังคับฝั่ง backend) — อยู่ฟิลด์แรกเสมอ
@@ -2638,9 +2653,9 @@ const PRODUCT_FIELDS = [
   { key:'unit', dataKey:'unit', label:'หน่วยฐาน (ไทย)', type:'text', placeholder:'ชิ้น', default:'ชิ้น' },
   { key:'unitCode', dataKey:'unit_code', label:'รหัสหน่วยฐาน (อังกฤษ)', type:'text', placeholder:'pcs', default:'pcs', hint:'(เช่นเดียวกับรหัสหน่วยในหน่วยขายเพิ่มเติม)' },
   { key:'groupId', dataKey:'group_id', label:'กลุ่มสินค้า', type:'select', optionsFrom:'productGroups', parseType:'int' },
-  { key:'vatType', dataKey:'vat_type', label:'VAT', type:'select', default:'none', options:[
-    {value:'none',label:'ไม่มี VAT'}, {value:'included',label:'รวม VAT (7%)'}, {value:'excluded',label:'แยก VAT (7%)'}
-  ] },
+  { key:'taxStatus', dataKey:'tax_status', label:'สถานะภาษี', type:'select', default:'', options:[
+    {value:'',label:'คิด VAT 7% (ปกติ)'}, {value:'exempt',label:'ยกเว้น VAT'}, {value:'zero',label:'อัตราศูนย์'}
+  ], hint:'(ราคาที่กรอกเป็นราคารวมภาษีแล้วเสมอ — สินค้ายกเว้นภาษีจะไม่ถูกถอด 7% ออกตอนออกใบกำกับ)' },
   { key:'barcode', dataKey:'barcode', label:'บาร์โค้ด (ชุด)', type:'text', placeholder:'สแกน/พิมพ์บาร์โค้ด', hint:'(unique เฉพาะสินค้า+หน่วยนี้)' },
   { key:'groupBarcode', dataKey:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', type:'text', placeholder:'ไม่บังคับ', hint:'(ซ้ำกับสินค้าอื่นได้ ถ้าเป็นของชิ้นเดียวกันจริง)' }
 ];
@@ -2652,7 +2667,8 @@ const PRODUCT_TABLE_COLS = [
   { key:'name', label:'ชื่อ', sortVal:p=>p.name },
   { key:'base_price', label:'ราคาฐาน', numeric:true, sortVal:p=>parseFloat(p.base_price)||0, render:p=>'฿'+baht(p.base_price), cls:'mono-data' },
   { key:'cost_price', label:'ราคาทุน', numeric:true, sortVal:p=>(p.cost_price?parseFloat(p.cost_price):null), render:p=>(p.cost_price?'฿'+baht(p.cost_price):'-'), cls:'mono-data' },
-  { key:'vat_type', label:'VAT', sortVal:p=>VAT_TYPE_LABEL[p.vat_type]||'', render:p=>VAT_TYPE_LABEL[p.vat_type]||'-' },
+  { key:'tax_status', label:'ภาษี', sortVal:p=>TAX_STATUS_LABEL[taxStatusOf(p)],
+    render:p=>{ const v = taxStatusOf(p); return v ? '<span class="pill wait">'+TAX_STATUS_LABEL[v]+'</span>' : '<span class="unit">VAT 7%</span>'; } },
   { key:'unit', label:'หน่วยฐาน (ไทย)', sortVal:p=>p.unit },
   { key:'unit_code', label:'รหัสหน่วย (Eng)', sortVal:p=>p.unit_code, cls:'mono-data' },
   { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
@@ -2830,7 +2846,7 @@ async function saveProductForm(){
   }
 
   const fields = { product_code:payload.productCode, name:payload.name, base_price:payload.basePrice, cost_price:payload.costPrice,
-    vat_type:payload.vatType, unit:payload.unit, unit_code:payload.unitCode, group_id:payload.groupId,
+    tax_status:payload.taxStatus, unit:payload.unit, unit_code:payload.unitCode, group_id:payload.groupId,
     external_code:payload.externalCode, barcode:payload.barcode, group_barcode:payload.groupBarcode };
   if (isEditing) {
     const p = productsCache.find(x => String(x.record_id) === String(productId));

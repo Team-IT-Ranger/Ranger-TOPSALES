@@ -111,5 +111,61 @@ eq('ยอดที่ปัดเศษแล้วภาษีตรงกั�
   return [v.exVat, v.vat, Math.round((v.exVat + v.vat) * 100) / 100];
 })(), [29398.13, 2057.87, 31456]);
 
+console.log('\n-- สินค้ายกเว้น VAT ปนอยู่ในบิลเดียวกัน --');
+const TAXMAP = { P1: 'vat', P2: 'vat', E1: 'exempt', Z1: 'zero' };
+const taxOf = pid => TAXMAP[pid] || 'vat';
+
+eq('สถานะภาษี: ว่าง/ไม่รู้จัก = คิด VAT · เก็บเฉพาะค่าที่รู้จัก', [
+  ctx.productTaxStatus({}), ctx.productTaxStatus({ tax_status: '' }), ctx.productTaxStatus({ tax_status: 'none' }),
+  ctx.productTaxStatus({ tax_status: 'exempt' }), ctx.productTaxStatus({ tax_status: 'ZERO' })
+], ['vat', 'vat', 'vat', 'exempt', 'zero']);
+eq('  vat_type เดิมไม่มีผลกับภาษีเลย (คนละคอลัมน์โดยตั้งใจ)', ctx.productTaxStatus({ vat_type: 'none' }), 'vat');
+
+eq('บิลที่มีแต่ของคิดภาษี', (() => {
+  const b = ctx.saleVatBreakdown([{ productId:'P1', lineTotal: 107 }], 0, taxOf);
+  return [b.taxableExVat, b.vat, b.exemptAmount, b.mixed];
+})(), [100, 7, 0, false]);
+
+eq('บิลที่มีแต่ของยกเว้นภาษี → ภาษีเป็นศูนย์ ไม่ถูกถอด 7% ออก', (() => {
+  const b = ctx.saleVatBreakdown([{ productId:'E1', lineTotal: 500 }], 0, taxOf);
+  return [b.exVat, b.vat, b.exemptAmount, b.mixed];
+})(), [500, 0, 500, false]);
+
+eq('อัตราศูนย์ก็ไม่มีภาษีบวกในราคาเหมือนกัน', (() => {
+  const b = ctx.saleVatBreakdown([{ productId:'Z1', lineTotal: 300 }], 0, taxOf);
+  return [b.vat, b.exemptAmount];
+})(), [0, 300]);
+
+eq('บิลผสม ไม่มีส่วนลด', (() => {
+  const b = ctx.saleVatBreakdown([{ productId:'P1', lineTotal: 107 }, { productId:'E1', lineTotal: 500 }], 0, taxOf);
+  return [b.taxableExVat, b.vat, b.exemptAmount, b.total, b.mixed];
+})(), [100, 7, 500, 607, true]);
+
+eq('★ ส่วนลดท้ายบิลเฉลี่ยตามสัดส่วน ไม่ใช่หักจากฝั่งใดฝั่งหนึ่ง', (() => {
+  // ของคิดภาษี 600 + ยกเว้น 400 = 1000 ลด 100 → ลดฝั่งภาษี 60 ฝั่งยกเว้น 40
+  const b = ctx.saleVatBreakdown([{ productId:'P1', lineTotal: 600 }, { productId:'E1', lineTotal: 400 }], 100, taxOf);
+  const netVat = 540, ex = Math.round((netVat/1.07)*100)/100;
+  return [b.exemptAmount, b.taxableExVat, b.vat, b.total, Math.round((b.taxableExVat + b.vat + b.exemptAmount)*100)/100];
+})(), [360, 504.67, 35.33, 900, 900]);
+
+eq('  ถ้าหักส่วนลดทั้งก้อนจากฝั่งภาษี ภาษีจะผิดไปเท่านี้ (เทียบให้เห็น)', (() => {
+  const wrong = Math.round(((600-100)/1.07)*7/100*100)/100;   // วิธีผิด
+  const b = ctx.saleVatBreakdown([{ productId:'P1', lineTotal: 600 }, { productId:'E1', lineTotal: 400 }], 100, taxOf);
+  return b.vat !== wrong;
+})(), true);
+
+eq('ทุกกรณี มูลค่าไม่รวมภาษี + ภาษี ต้องเท่ายอดสุทธิเป๊ะ', (() => {
+  const bad = [];
+  for (let i = 1; i <= 800; i++) {
+    const a = Math.round(i * 13.37) / 100, e = Math.round(i * 7.91) / 100, d = Math.round(i * 1.13) / 100;
+    const b = ctx.saleVatBreakdown([{ productId:'P1', lineTotal: a }, { productId:'E1', lineTotal: e }], d, taxOf);
+    if (Math.round((b.exVat + b.vat) * 100) !== Math.round(b.total * 100)) bad.push([a, e, d]);
+    if (Math.round((b.taxableExVat + b.exemptAmount) * 100) !== Math.round(b.exVat * 100)) bad.push(['ex', a, e, d]);
+  }
+  return bad.length;
+})(), 0);
+
+eq('บิลเปล่า/ยอดศูนย์ไม่พัง', (() => { const b = ctx.saleVatBreakdown([], 0, taxOf); return [b.total, b.vat, b.exVat]; })(), [0, 0, 0]);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

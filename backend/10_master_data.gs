@@ -130,7 +130,8 @@ function addProduct(session, payload) {
     unit: payload.unit || UNIT_LABELS.PC, unit_code: normUnitCode(payload.unitCode, UNIT_PC), group_id: payload.groupId || 0, is_active: 'TRUE',
     external_code: payload.externalCode || '',
     barcode: payload.barcode || '', group_barcode: payload.groupBarcode || '',
-    cost_price: payload.costPrice || 0, vat_type: payload.vatType || 'none', image_url: ''
+    cost_price: payload.costPrice || 0, vat_type: payload.vatType || 'none', image_url: '',
+    tax_status: payload.taxStatus === 'exempt' || payload.taxStatus === 'zero' ? payload.taxStatus : ''
   });
   // ส่ง record_id ที่เพิ่งสร้างกลับไปด้วย — ฝั่ง frontend จะได้แพตช์ cache ในเครื่องได้เลย ไม่ต้องโหลดซ้ำ
   return { success: true, id: recordId };
@@ -166,6 +167,8 @@ function updateProduct(session, payload) {
   if (payload.groupBarcode !== undefined) fields.group_barcode = payload.groupBarcode;
   if (payload.costPrice !== undefined) fields.cost_price = payload.costPrice;
   if (payload.vatType !== undefined) fields.vat_type = payload.vatType;
+  // '' = คิด VAT ตามปกติ (ค่าตั้งต้น) — เก็บเฉพาะค่าที่รู้จัก กันพิมพ์อะไรแปลกๆ เข้ามาแล้วภาษีเพี้ยนทั้งระบบ
+  if (payload.taxStatus !== undefined) fields.tax_status = (payload.taxStatus === 'exempt' || payload.taxStatus === 'zero') ? payload.taxStatus : '';
   if (payload.externalCode !== undefined) fields.external_code = payload.externalCode;
   if (payload.aliasCodes !== undefined) {
     var aliases = String(payload.aliasCodes || '').split(',').map(function(c) { return c.trim(); }).filter(Boolean);

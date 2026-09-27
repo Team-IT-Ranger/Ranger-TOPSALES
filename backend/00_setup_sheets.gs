@@ -34,8 +34,12 @@ var CENTRAL_SHEETS = {
   // vat_type: 'none' | 'included' | 'excluded' (VAT ใช้อัตรา 7% คงที่ตามกฎหมายไทย ไม่ต้องเก็บอัตราแยกรายสินค้า)
   // alias_codes: รหัสอื่นของสินค้าตัวเดียวกัน คั่นด้วย , (เช่น ใบราคาเขียน "10189 / 10191" = product_code 10189 + alias 10191)
   //   ต้อง unique รวมกับ product_code ของสินค้าทุกตัว — ใช้จับคู่ตอนนำเข้าใบราคา/ไฟล์ขาย
+  // tax_status: สถานะภาษีของสินค้าตัวนี้ — '' หรือ 'vat' = คิด VAT 7% ตามปกติ · 'exempt' = ยกเว้นภาษี · 'zero' = อัตราศูนย์
+  //   ★ คนละคอลัมน์กับ vat_type ที่มีมาแต่เดิมโดยตั้งใจ — vat_type ค่า default คือ 'none' ซึ่งแปลว่า "ยังไม่ได้ตั้ง"
+  //   ไม่ใช่ "ไม่มีภาษี" ถ้าเอามาใช้ตรงๆ สินค้าทุกตัวในระบบจะกลายเป็นยกเว้นภาษีทันที (ไม่มีโค้ดไหนอ่าน vat_type เลย)
+  //   คอลัมน์ใหม่นี้ค่าว่าง = คิด VAT จึงไม่ต้อง migrate อะไร ของเดิมทำงานถูกตั้งแต่แถวแรก
   products: ['record_id','product_code','name','base_price','unit','unit_code','group_id','is_active','external_code',
-    'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions','alias_codes'],
+    'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions','alias_codes','tax_status'],
   product_groups: ['record_id','name','description'],
   // ── ชุดราคา/ส่วนลดตามกลุ่มลูกค้า (ใบรายการขายรายไตรมาส) — ดู 17_pricing.gs ──
   //  price_lists: 1 ชุด = 1 กลุ่มลูกค้า × 1 ช่วงเวลา, status: draft | active | archived (valid_from/to เป็นข้อความ yyyy-MM-dd)

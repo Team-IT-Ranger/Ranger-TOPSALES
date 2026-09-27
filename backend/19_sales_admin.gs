@@ -73,6 +73,7 @@ function getSalesOrderAdmin(session, payload) {
       customerTaxBranch: cust ? (cust.tax_branch_code || '') : '',
       subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
       vatRate: _orderVat(order).rate, subtotalExVat: _orderVat(order).exVat, vatAmount: _orderVat(order).vat,
+      exemptAmount: _orderVat(order).exemptAmount, taxableExVat: _orderVat(order).taxableExVat, vatMixed: _orderVat(order).mixed,
       paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: status,
       statusLabel: SO_STATUS_LABELS[status] || status,
       paymentStatus: orderPaymentStatus(order), paymentLabel: SO_PAYMENT_LABELS[orderPaymentStatus(order)] || '',
@@ -125,7 +126,8 @@ function previewSaleAdmin(session, payload) {
     lines: priced.items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty, unitPrice: it.price, lineTotal: it.lineTotal }; }),
     freeGoods: priced.calc.freeGoods, subtotal: priced.calc.subtotal, discount: priced.calc.discount, total: priced.calc.total,
     // ให้คนเปิดบิลเห็นภาษีก่อนกดบันทึก — ตัวเลขชุดเดียวกับที่จะถูกบันทึกลงบิลจริง
-    vatRate: splitVat(priced.calc.total).rate, subtotalExVat: splitVat(priced.calc.total).exVat, vatAmount: splitVat(priced.calc.total).vat,
+    vatRate: priced.calc.vat.rate, subtotalExVat: priced.calc.vat.exVat, vatAmount: priced.calc.vat.vat,
+    exemptAmount: priced.calc.vat.exemptAmount, taxableExVat: priced.calc.vat.taxableExVat, vatMixed: priced.calc.vat.mixed,
     priceListName: priced.priceListUsed ? priced.priceListUsed.name : null
   };
 }
@@ -193,11 +195,11 @@ function recordSaleAdmin(session, payload) {
   noteParts.push('เปิดจากแอดมินโดย ' + (session.displayName || session.username));
   if (payload.note) noteParts.push(String(payload.note));
 
-  var vatSplit = splitVat(calc.total);   // เหตุผลเดียวกับ recordSale (07_sales.gs)
+  var vatSplit = calc.vat;   // เหตุผลเดียวกับ recordSale (07_sales.gs)
   tenantAppend(tenantId, 'sales_orders', {
     record_id: orderId, order_code: orderCode, customer_id: payload.customerId,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
-    vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat,
+    vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat, exempt_amount: vatSplit.exemptAmount,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
     payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),

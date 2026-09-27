@@ -77,6 +77,9 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
     calc = applyPromotions(itemsWithGroup, customerId);
   }
 
+  // แยกภาษีจากรายการจริง — ต้องทำหลังได้ราคาสุดท้ายแล้ว และใช้ได้ทั้งสองทาง (ชุดราคา / โปรโมชั่นแบบเดิม)
+  calc.vat = saleVatBreakdown(items, calc.discount, function(pid) { return productTaxStatus(productMap[String(pid)]); });
+
   return { success: true, items: items, calc: calc, priceListUsed: priceListUsed };
 }
 
@@ -126,11 +129,11 @@ function recordSale(user, payload) {
   var orderId = tenantNextId(user.tenantId, 'sales_orders');
   var createdAt = nowStr();
 
-  var vatSplit = splitVat(calc.total);   // ยอดสุทธิรวม VAT แล้ว → แยกออกมาเก็บไว้ (18_pricing_engine.gs)
+  var vatSplit = calc.vat;   // แยกภาษีจากรายการจริง รองรับของยกเว้นภาษีปนในบิล (18_pricing_engine.gs)
   tenantAppend(user.tenantId, 'sales_orders', {
     record_id: orderId, order_code: orderCode, customer_id: payload.customerId || 0,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
-    vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat,
+    vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat, exempt_amount: vatSplit.exemptAmount,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
     payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),
