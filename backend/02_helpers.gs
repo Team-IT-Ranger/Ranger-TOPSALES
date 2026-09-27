@@ -185,6 +185,54 @@ function isFlagOff(v) {
 }
 function isNotOff(v) { return !isFlagOff(v); }
 
+/**
+ * แก้บางคอลัมน์ของ "หลายแถวพร้อมกัน" ด้วย setValues คอลัมน์ละครั้ง
+ * ทำไมต้องมี: centralUpdate แก้ทีละแถว = 1 การเขียนต่อแถว · จัดกลุ่มลูกค้า 2,000 ร้านจะชน
+ * เพดานเวลา 6 นาทีของ Apps Script ไปไกล · ตัวนี้เขียนเท่ากับจำนวน "คอลัมน์ที่เปลี่ยน" เท่านั้น
+ * เขียนเฉพาะคอลัมน์เป้าหมาย ไม่เขียนทั้งช่วง เพื่อไม่ให้ค่าอย่างเลขผู้เสียภาษีที่ตั้งรูปแบบเป็นข้อความไว้
+ * ถูกชีตแปลงกลับเป็นตัวเลขตอนเขียนทับ
+ * @param matchFn  function(obj) -> true ถ้าจะแก้แถวนี้
+ * @param setObj   { ชื่อคอลัมน์: ค่าใหม่ } · ค่าใหม่เป็นฟังก์ชันได้ รับ obj เดิมคืนค่าใหม่
+ * @return { matched, changed, columns }
+ */
+function updateColumnsWhere(sh, matchFn, setObj) {
+  var keys = Object.keys(setObj || {});
+  if (!keys.length) return { matched: 0, changed: 0, columns: 0 };
+  try { centralInvalidate(sh.getName()); } catch (e) {}
+  var data = sh.getDataRange().getValues();
+  if (data.length < 2) return { matched: 0, changed: 0, columns: 0 };
+  var headers = data[0], idx = {};
+  keys.forEach(function(k) { idx[k] = headers.indexOf(k); });
+  var rows = [];      // แปลงเป็น object ครั้งเดียว ใช้ทั้งตอนเทียบเงื่อนไขและตอนคิดค่าใหม่
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === '' || data[i][0] === null) { rows.push(null); continue; }
+    var o = {};
+    for (var j = 0; j < headers.length; j++) o[headers[j]] = data[i][j];
+    rows.push(o);
+  }
+  var matched = 0, touched = {};
+  for (var r = 0; r < rows.length; r++) {
+    if (!rows[r] || !matchFn(rows[r])) continue;
+    matched++;
+    keys.forEach(function(k) {
+      var c = idx[k]; if (c === -1) return;
+      var v = typeof setObj[k] === 'function' ? setObj[k](rows[r]) : setObj[k];
+      if (v === undefined) return;                       // undefined = ไม่แตะคอลัมน์นี้ของแถวนี้
+      if (String(data[r + 1][c]) === String(v)) return;  // ค่าเดิมอยู่แล้ว ไม่ต้องนับว่าเปลี่ยน
+      data[r + 1][c] = v; touched[k] = true;
+    });
+  }
+  var cols = Object.keys(touched), changed = 0;
+  cols.forEach(function(k) {
+    var c = idx[k];
+    var col = [];
+    for (var i = 1; i < data.length; i++) col.push([data[i][c]]);
+    sh.getRange(2, c + 1, col.length, 1).setValues(col);
+    changed++;
+  });
+  return { matched: matched, changed: changed, columns: cols };
+}
+
 // ลบทุกแถวที่คอลัมน์ colName = value (ลบจากล่างขึ้นบน ไม่ให้เลขแถวเลื่อน)
 function deleteRowsWhere(sh, colName, value) {
   try { centralInvalidate(sh.getName()); } catch (e) {}

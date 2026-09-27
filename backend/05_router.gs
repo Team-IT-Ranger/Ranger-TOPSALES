@@ -96,6 +96,8 @@ var ADMIN_ACTION_MAP = {
   deletePriceListRule:    deletePriceListRule,
   previewPriceListAudience: previewPriceListAudience,
   explainCustomerPricing: explainCustomerPricing,
+  previewCustomerBulkAssign: previewCustomerBulkAssign,  // จัดกลุ่มลูกค้าเป็นชุด (37_customer_bulk.gs)
+  applyCustomerBulkAssign:   applyCustomerBulkAssign,
   deletePriceList:        deletePriceList,
   createPriceList:        createPriceList,
   clonePriceList:         clonePriceList,

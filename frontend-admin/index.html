@@ -462,6 +462,19 @@
   /* ปุ่มเข้าสู่ระบบด้วย LINE — วางท้ายสุดเพื่อให้ชนะกฎ .btn ของธีม light/minimal ด้านบน */
   #line-login-btn.btn-line{background:#06C755;border:1px solid #06C755;color:#fff;font-weight:600}
   #line-login-btn.btn-line:hover{background:#05b34c;border-color:#05b34c;color:#fff}
+/* แถวเงื่อนไข (กฎสิทธิ์ชุดราคา + จัดกลุ่มลูกค้าเป็นชุด) — กริดไม่ใช่ flex-wrap
+   เพราะ flex ทำให้ปุ่มลบตกลงไปอยู่บรรทัดของตัวเองทันทีที่ช่องค่ากว้างขึ้น อ่านยากและดูเหมือนพัง */
+.plr-cond{display:grid;gap:8px;align-items:center;margin-bottom:8px;
+  grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.2fr) 36px}
+.plr-cond>*{min-width:0}
+.plr-cond select,.plr-cond input{width:100%}
+.plr-cond .plr-x{width:36px;padding:0;justify-self:end}
+.plr-cond .plr-vw .unit{display:block;margin-top:3px}
+@media (max-width:900px){
+  .plr-cond{grid-template-columns:minmax(0,1fr) 36px;grid-template-areas:"f x" "o o" "v v"}
+  .plr-cond .plr-f{grid-area:f}.plr-cond .plr-o{grid-area:o}
+  .plr-cond .plr-vw{grid-area:v}.plr-cond .plr-x{grid-area:x}
+}
 </style>
 </head>
 <body>
@@ -658,8 +671,12 @@
         <section class="view" id="view-customers">
           <div class="view-head">
             <div><h1>ลูกค้า</h1><p>ทะเบียนร้านค้า — กลุ่มลูกค้าเป็นตัวกำหนดชุดราคา · เครดิตที่ตั้งไว้ถูกใช้คิดวันครบกำหนดของใบแจ้งหนี้</p></div>
-            <button class="btn btn-primary" onclick="openCustomerModal()">+ เพิ่มลูกค้า</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn" onclick="openBulkAssign()">จัดกลุ่มเป็นชุด</button>
+              <button class="btn btn-primary" onclick="openCustomerModal()">+ เพิ่มลูกค้า</button>
+            </div>
           </div>
+          <div id="c-ungrouped"></div>
           <div class="field" style="max-width:340px;margin-bottom:12px">
             <input id="c-search" placeholder="ค้นหา: รหัส / ชื่อร้าน / เบอร์โทร / เลขภาษี" oninput="renderCustomers()">
           </div>
@@ -2072,7 +2089,20 @@ let custMasterCache = [];
 const CUST_STATUS = { active: ['ใช้งาน','ok'], blocked: ['ระงับเครดิต','wait'], inactive: ['ปิด','off'] };
 const CUST_MODES = { van: 'รถเร่', preorder: 'พรีออเดอร์' };
 function custStatusOf(c){ return c.status || (c.isActive ? 'active' : 'inactive'); }
+/* ★ ร้านที่ไม่มีกลุ่มลูกค้า "ขายไม่ได้" เพราะกลุ่มเป็นตัวชี้ชุดราคา — แต่ในตารางมันดูเหมือนแถวปกติทุกอย่าง
+   นำเข้าข้อมูลทีเป็นพันร้านแล้วไม่มีอะไรฟ้อง คือเจอตอนพนักงานเปิดบิลไม่ได้หน้างาน */
+function renderUngroupedNotice(){
+  const box = document.getElementById('c-ungrouped');
+  if (!box) return;
+  const n = custMasterCache.filter(c => !c.groupId || String(c.groupId) === '0').length;
+  box.innerHTML = !n ? '' :
+    '<div class="card" style="background:#FDF3E2;border-color:#F0DCB4;color:#8A5A12;padding:11px 14px;margin-bottom:12px;' +
+    'display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
+    '<span style="flex:1"><b>ลูกค้า ' + n + ' ร้านยังไม่ได้จัดกลุ่ม</b> — ร้านที่ไม่มีกลุ่มลูกค้าจะหาชุดราคาไม่เจอ จึงเปิดบิลขายไม่ได้</span>' +
+    '<button class="btn btn-sm" onclick="openBulkAssign()">จัดกลุ่มเป็นชุด</button></div>';
+}
 function renderCustomers(){
+  renderUngroupedNotice();
   const body = document.getElementById('customers-body');
   const q = (document.getElementById('c-search').value || '').trim().toLowerCase();
   const gName = {}; customerGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
@@ -3291,7 +3321,7 @@ let PLR_META = null, PLR_RULES = [];
 async function ensureRuleMeta(){
   if (PLR_META) return PLR_META;
   const r = await callApi('listPriceListRules', { priceListId: currentPriceListId });
-  if (r.success) { PLR_META = { fields: r.fields, ops: r.ops }; PLR_RULES = r.data; }
+  if (r.success) { PLR_META = plrMetaOf(r); PLR_RULES = r.data; }
   return PLR_META;
 }
 async function loadPriceListRules(){
@@ -3300,7 +3330,7 @@ async function loadPriceListRules(){
   box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
   const r = await callApi('listPriceListRules', { priceListId: currentPriceListId });
   if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
-  PLR_META = { fields: r.fields, ops: r.ops }; PLR_RULES = r.data;
+  PLR_META = plrMetaOf(r); PLR_RULES = r.data;
   renderPriceListRules();
 }
 function plrFieldLabel(f){
@@ -3335,17 +3365,71 @@ function renderPriceListRules(){
       '<button class="btn btn-sm btn-ghost" onclick="deleteRuleUI('+r.id+')">ลบ</button></span>' +
     '</div>').join('');
 }
+/* meta จาก backend มาในรูปเดียวกันทั้งหน้ากฎสิทธิ์และหน้าจัดกลุ่มลูกค้า — แปลงที่เดียว */
+function plrMetaOf(r){ return { fields: r.fields || {}, ops: r.ops || {}, choices: r.choices || {}, attrKeys: r.attrKeys || [] }; }
+
+/* ★ ช่องค่าเป็นกล่องพิมพ์เปล่าคือบ่อเกิดของกฎที่ไม่เคยเข้าเงื่อนไข: คนตั้งพิมพ์ชื่อกลุ่ม ("ร้านค้าเหนือ")
+   ลงไปทั้งที่คอลัมน์เก็บเป็นรหัส (2) แล้วไม่มีอะไรฟ้อง — ฟิลด์ที่มีตารางอ้างอิงจึงให้เลือกจากรายการเสมอ */
+function plrValueControl(field, op, value){
+  const m = PLR_META || {}, choices = (m.choices || {})[field];
+  if (op === 'empty' || op === 'notempty')
+    return '<input class="plr-v" disabled placeholder="(ตัวดำเนินการนี้ไม่ต้องใส่ค่า)" value="">';
+  if (choices && choices.length){
+    const multi = (op === 'in' || op === 'notin');
+    const sel = String(value == null ? '' : value).split(',').map(x => x.trim()).filter(Boolean);
+    const isSel = v => (multi ? sel.indexOf(String(v)) !== -1 : String(value) === String(v));
+    return '<select class="plr-v"'+(multi ? ' multiple size="'+Math.min(6, Math.max(3, choices.length))+'"' : '')+'>' +
+      (multi ? '' : '<option value="">— เลือก —</option>') +
+      choices.map(o => '<option value="'+esc(o.value)+'"'+(isSel(o.value)?' selected':'')+'>'+esc(o.label)+'</option>').join('') +
+      '</select>' + (multi ? '<span class="unit">กด Ctrl เพื่อเลือกหลายข้อ</span>' : '');
+  }
+  // ฟิลด์จาก attributes: เสนอค่าที่พบจริงในข้อมูลเป็นตัวช่วย แต่ยังพิมพ์เองได้ (ค่าที่พบอาจไม่ครบ)
+  const ak = (m.attrKeys || []).find(a => a.key === field);
+  const lid = 'plrdl-' + String(field).replace(/[^a-z0-9]/gi, '');
+  return '<input class="plr-v" placeholder="ค่าที่จะเทียบ'+(op==='in'||op==='notin'?' (คั่นด้วย ,)':'')+'"' +
+    (ak && ak.samples.length ? ' list="'+lid+'"' : '') + ' value="'+esc(value == null ? '' : value)+'">' +
+    (ak && ak.samples.length ? '<datalist id="'+lid+'">'+ak.samples.map(v => '<option value="'+esc(v)+'">').join('')+'</datalist>' : '');
+}
+function plrCondRefresh(el){
+  const row = el.closest('.plr-cond'), wrap = row.querySelector('.plr-vw');
+  const cur = wrap.querySelector('.plr-v');
+  wrap.innerHTML = plrValueControl(row.querySelector('.plr-f').value, row.querySelector('.plr-o').value, cur ? condValueOf(cur) : '');
+}
+/* เลือก "อื่นๆ" = พิมพ์ชื่อคีย์ใน attributes เอง เผื่อข้อมูลที่ยังไม่มีร้านไหนกรอก (attrKeys จึงยังไม่เห็น) */
+function plrCondFieldChanged(el){
+  if (el.value === '__custom__'){
+    const k = prompt('ชื่อคีย์ใน attributes (ไม่ต้องใส่ attr: นำหน้า)');
+    if (!k) { el.selectedIndex = 0; } else {
+      const f = 'attr:' + k.trim();
+      el.insertAdjacentHTML('beforeend', '<option value="'+esc(f)+'" selected>'+esc(plrFieldLabel(f))+'</option>');
+      el.value = f;
+    }
+  }
+  plrCondRefresh(el);
+}
+function condValueOf(el){
+  if (!el) return '';
+  if (el.tagName === 'SELECT' && el.multiple) return [...el.selectedOptions].map(o => o.value).join(',');
+  return String(el.value || '').trim();
+}
 function plrCondRow(c){
-  const f = (PLR_META && PLR_META.fields) || {};
-  const opts = Object.keys(f).map(k => '<option value="'+esc(k)+'"'+(c && c.field===k?' selected':'')+'>'+esc(f[k].label)+'</option>').join('') +
-    (c && String(c.field).indexOf('attr:')===0 ? '<option value="'+esc(c.field)+'" selected>'+esc(plrFieldLabel(c.field))+'</option>' : '');
-  const ops = Object.keys((PLR_META && PLR_META.ops) || {}).map(k =>
-    '<option value="'+esc(k)+'"'+(c && c.op===k?' selected':'')+'>'+esc(PLR_META.ops[k])+'</option>').join('');
-  return '<div class="plr-cond" style="display:flex;gap:8px;margin-bottom:6px;align-items:center;flex-wrap:wrap">' +
-    '<select class="plr-f" style="flex:1;min-width:170px">'+opts+'</select>' +
-    '<select class="plr-o" style="width:190px">'+ops+'</select>' +
-    '<input class="plr-v" style="flex:1;min-width:120px" placeholder="ค่าที่จะเทียบ" value="'+esc(c?c.value:'')+'">' +
-    '<button class="btn btn-sm" onclick="this.parentNode.remove()">✕</button></div>';
+  const m = PLR_META || {}, f = m.fields || {};
+  const cur = c ? String(c.field) : '';
+  const known = Object.keys(f).indexOf(cur) !== -1;
+  const attrOpts = (m.attrKeys || []).map(a =>
+    '<option value="'+esc(a.key)+'"'+(cur===a.key?' selected':'')+'>'+esc(plrFieldLabel(a.key))+' ('+a.count+' ร้าน)</option>').join('');
+  const extra = (cur && !known && (m.attrKeys || []).every(a => a.key !== cur))
+    ? '<option value="'+esc(cur)+'" selected>'+esc(plrFieldLabel(cur))+'</option>' : '';
+  const opts = Object.keys(f).map(k => '<option value="'+esc(k)+'"'+(cur===k?' selected':'')+'>'+esc(f[k].label)+'</option>').join('') +
+    (attrOpts ? '<optgroup label="ข้อมูลจากระบบเดิม (attributes)">'+attrOpts+'</optgroup>' : '') + extra +
+    '<option value="__custom__">อื่นๆ — พิมพ์ชื่อคีย์เอง…</option>';
+  const ops = Object.keys(m.ops || {}).map(k =>
+    '<option value="'+esc(k)+'"'+(c && c.op===k?' selected':'')+'>'+esc(m.ops[k])+'</option>').join('');
+  return '<div class="plr-cond">' +
+    '<select class="plr-f" onchange="plrCondFieldChanged(this)">'+opts+'</select>' +
+    '<select class="plr-o" onchange="plrCondRefresh(this)">'+ops+'</select>' +
+    '<span class="plr-vw">'+plrValueControl(c?c.field:Object.keys(f)[0], c?c.op:'eq', c?c.value:'')+'</span>' +
+    '<button class="btn btn-sm plr-x" title="ลบเงื่อนไขนี้" onclick="this.parentNode.remove()">✕</button></div>';
 }
 async function openRuleModal(id){
   await ensureRuleMeta();
@@ -3372,7 +3456,8 @@ async function openRuleModal(id){
 }
 function readRuleConds(){
   return [...document.querySelectorAll('#plr-conds .plr-cond')].map(el => ({
-    field: el.querySelector('.plr-f').value, op: el.querySelector('.plr-o').value, value: el.querySelector('.plr-v').value.trim() }));
+    field: el.querySelector('.plr-f').value, op: el.querySelector('.plr-o').value,
+    value: condValueOf(el.querySelector('.plr-v')) }));
 }
 /* ★ ดูก่อนกดใช้จริงเสมอ — กฎที่กว้างเกินไปจะไปทับราคาร้านที่ไม่ได้ตั้งใจ
    แล้วกว่าจะรู้ก็ตอนออกบิลผิดราคาไปแล้ว */
@@ -3401,6 +3486,89 @@ async function deleteRuleUI(id){
   if (!r.success) { toast(r.message, true); return; }
   PLR_RULES = r.data; renderPriceListRules(); toast(r.message);
 }
+
+/* ══════════════ จัดกลุ่มลูกค้าเป็นชุด (37_customer_bulk.gs) ══════════════
+   ใช้ตัวสร้างเงื่อนไขชุดเดียวกับกฎสิทธิ์ชุดราคา — เรียนรู้ครั้งเดียวใช้ได้สองที่ และเงื่อนไขที่ลองแล้วพอใจ
+   ในหน้านี้ก็ยกไปเป็นกฎสิทธิ์ได้ตรงๆ
+   ★ กดยืนยันไม่ได้จนกว่าจะกดดูตัวอย่าง — งานนี้แก้ทีละพันแถวและย้อนกลับไม่ได้ */
+let CB_SETTABLE = {}, cbLastCount = null;
+function cbSetRow(key, meta){
+  const choices = (PLR_META && PLR_META.choices && PLR_META.choices[key]) || null;
+  const ctrl = choices && choices.length
+    ? '<select class="cb-set" data-k="'+esc(key)+'"><option value="">— ไม่เปลี่ยน —</option>' +
+      choices.map(o => '<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>').join('') + '</select>'
+    : '<input class="cb-set" data-k="'+esc(key)+'" placeholder="เว้นว่าง = ไม่เปลี่ยน">';
+  return plField(esc(meta.label), ctrl);
+}
+function cbReadSet(){
+  const out = {};
+  document.querySelectorAll('#cb-set .cb-set').forEach(el => {
+    const v = String(el.value || '').trim();
+    if (v) out[el.dataset.k] = v;
+  });
+  return out;
+}
+function cbReadConds(){ return readRuleConds(); }
+async function openBulkAssign(){
+  const first = await callApi('previewCustomerBulkAssign', { conditions: [] });
+  if (!first.success) { toast(first.message, true); return; }
+  PLR_META = plrMetaOf(first.meta); CB_SETTABLE = first.settable || {}; cbLastCount = null;
+  plModal('<h3>จัดกลุ่มลูกค้าเป็นชุด</h3>' +
+    '<p class="form-hint">เลือกร้านด้วยเงื่อนไข แล้วตั้งค่าให้ทุกร้านที่เข้าเงื่อนไขพร้อมกัน — ' +
+    'ทะเบียนลูกค้าตอนนี้มี ' + first.total + ' ร้าน</p>' +
+    '<div class="field"><label>เลือกร้านที่ <select id="plr-match" style="width:auto;display:inline-block">' +
+      '<option value="all">เข้าเงื่อนไขทุกข้อ (และ)</option><option value="any">เข้าข้อใดข้อหนึ่ง (หรือ)</option></select></label>' +
+      '<div id="plr-conds" style="margin-top:8px">'+plrCondRow(null)+'</div>' +
+      '<button class="btn btn-sm" onclick="document.getElementById(\'plr-conds\').insertAdjacentHTML(\'beforeend\', plrCondRow(null)); cbInvalidate()">+ เพิ่มเงื่อนไข</button>' +
+      '<button class="btn btn-sm" onclick="cbPreview()">ดูว่าโดนกี่ร้าน</button></div>' +
+    '<div id="cb-preview" style="margin:10px 0"></div>' +
+    '<div class="field"><label>ตั้งค่าให้ร้านเหล่านั้น <span class="unit">(เว้นว่างไว้ = ไม่เปลี่ยนคอลัมน์นั้น)</span></label>' +
+      '<div class="form-grid g2" id="cb-set">' + Object.keys(CB_SETTABLE).map(k => cbSetRow(k, CB_SETTABLE[k])).join('') + '</div></div>' +
+    '<div class="err" id="plm-err" style="margin:12px 0 0"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
+    '<button class="btn btn-primary" id="cb-go" disabled onclick="cbApply()">ยืนยันและตั้งค่า</button></div>');
+  // เงื่อนไขเปลี่ยนเมื่อไหร่ ตัวอย่างที่ดูไว้ก็ใช้ไม่ได้แล้ว — ต้องกดดูใหม่ก่อนถึงจะยืนยันได้อีก
+  document.getElementById('plr-conds').addEventListener('change', cbInvalidate);
+  document.getElementById('plr-conds').addEventListener('input', cbInvalidate);
+  document.getElementById('plr-match').addEventListener('change', cbInvalidate);
+}
+function cbInvalidate(){
+  cbLastCount = null;
+  const go = document.getElementById('cb-go'); if (go) go.disabled = true;
+  const box = document.getElementById('cb-preview');
+  if (box && box.innerHTML) box.innerHTML = '<p class="form-hint">เงื่อนไขเปลี่ยนแล้ว — กด "ดูว่าโดนกี่ร้าน" อีกครั้งก่อนยืนยัน</p>';
+}
+async function cbPreview(){
+  const box = document.getElementById('cb-preview');
+  box.innerHTML = '<p class="form-hint">กำลังตรวจ...</p>';
+  const r = await callApi('previewCustomerBulkAssign', { matchType: document.getElementById('plr-match').value, conditions: cbReadConds() });
+  if (!r.success) { box.innerHTML = '<p class="form-hint" style="color:var(--red)">'+esc(r.message)+'</p>'; return; }
+  if (!r.matched){
+    cbInvalidate();
+    box.innerHTML = '<p class="form-hint">'+esc(r.message || 'ไม่มีร้านไหนเข้าเงื่อนไขนี้')+'</p>';
+    return;
+  }
+  cbLastCount = r.matched;
+  document.getElementById('cb-go').disabled = false;
+  box.innerHTML = '<div class="card" style="padding:11px 14px">' +
+    '<b>เข้าเงื่อนไข ' + r.matched + ' ร้าน</b> จากทั้งหมด ' + r.total + ' ร้าน' +
+    '<div style="margin-top:6px">ตอนนี้อยู่กลุ่ม: ' +
+      r.byGroup.map(g => esc(g.name) + ' <b>' + g.count + '</b>').join(' · ') + '</div>' +
+    '<div class="form-hint" style="margin-top:6px">ตัวอย่าง: ' +
+      r.samples.slice(0, 8).map(c => esc((c.code ? c.code + ' ' : '') + c.name)).join(' · ') +
+      (r.matched > 8 ? ' … และอีก ' + (r.matched - 8) + ' ร้าน' : '') + '</div></div>';
+}
+function cbApply(){ return plBusy(async () => {
+  const set = cbReadSet();
+  if (!Object.keys(set).length) return plModalErr('ยังไม่ได้เลือกว่าจะตั้งค่าอะไร');
+  if (cbLastCount == null) return plModalErr('กด "ดูว่าโดนกี่ร้าน" ก่อน แล้วตรวจให้แน่ใจว่าใช่');
+  if (!confirm('ตั้งค่าให้ลูกค้า ' + cbLastCount + ' ร้าน — ย้อนกลับอัตโนมัติไม่ได้ ยืนยันหรือไม่?')) return;
+  const r = await callApi('applyCustomerBulkAssign', { matchType: document.getElementById('plr-match').value,
+    conditions: cbReadConds(), set, confirmCount: cbLastCount });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message);
+  custMasterCache = []; loadCustomers();
+}); }
 
 /* ★ ตอบคำถาม "ทำไมร้านนี้ได้ราคานี้" ในหน้าจอเดียว แทนที่จะต้องไล่เดาเอง */
 async function openExplainPricing(){

@@ -173,6 +173,55 @@ function plrCustomerRow(customerId) {
   return found;
 }
 
+/**
+ * ตัวเลือกสำเร็จรูปของคุณลักษณะที่เป็น "รหัสอ้างตาราง" — กลุ่มลูกค้า / ประเภทร้าน / ตัวแทน
+ * ทำไมต้องมี: ช่องค่าเป็นกล่องพิมพ์เปล่าคือบ่อเกิดของกฎที่ไม่เคยเข้าเงื่อนไข — คนตั้งพิมพ์ชื่อกลุ่ม
+ * ("ร้านค้าเหนือ") ลงไปทั้งที่คอลัมน์เก็บเป็น record_id (2) แล้วไม่มีอะไรฟ้องเลย
+ */
+function plrFieldChoices() {
+  function opts(name, valueKey, labelKey) {
+    return centralObjects(name).map(function(r) {
+      return { value: String(r[valueKey]), label: String(r[labelKey] || r[valueKey]) };
+    });
+  }
+  return {
+    group_id:   opts('customer_groups', 'record_id', 'name'),
+    channel_id: opts('distribution_channels', 'record_id', 'name'),
+    tenant_id:  centralObjects('tenants').filter(function(t) { return isNotOff(t.is_active); })
+                  .map(function(t) { return { value: String(t.tenant_id), label: String(t.name || t.tenant_id) }; }),
+    sales_mode: [{ value: 'van', label: 'ขายหน้ารถ (van)' }, { value: 'preorder', label: 'พรีออเดอร์ (preorder)' }],
+    payment_type: [{ value: 'cash', label: 'เงินสด' }, { value: 'credit', label: 'เครดิต' }],
+    status:     [{ value: 'active', label: 'ใช้งาน' }, { value: 'inactive', label: 'ปิดใช้งาน' }]
+  };
+}
+
+/**
+ * คีย์ใน customers.attributes ที่ "มีอยู่จริงในข้อมูล" — เพื่อให้หน้าเว็บเสนอเป็นตัวเลือกได้
+ * ข้อมูลที่ยกมาจากระบบเดิมอยู่ในนี้ทั้งหมด (sourceGroupCode, sourceShopType, sourceProvCode …)
+ * ถ้าไม่เสนอให้เลือก คนตั้งค่าต้องเดาชื่อคีย์เอง พิมพ์ผิดตัวเดียวกฎก็เงียบ
+ * @return [{ key, count, samples:[..] }] เรียงตามจำนวนที่พบมากไปน้อย
+ */
+function plrAttrKeys(rows) {
+  var found = {};
+  (rows || centralObjects('customers')).forEach(function(c) {
+    var a = customerAttributes(c);
+    Object.keys(a).forEach(function(k) {
+      var v = a[k]; if (v === '' || v === null || v === undefined) return;
+      var f = found[k] || (found[k] = { key: 'attr:' + k, count: 0, seen: {} });
+      f.count++;
+      if (Object.keys(f.seen).length < 8) f.seen[String(v)] = 1;
+    });
+  });
+  return Object.keys(found).map(function(k) {
+    return { key: found[k].key, count: found[k].count, samples: Object.keys(found[k].seen).sort() };
+  }).sort(function(a, b) { return b.count - a.count; });
+}
+
+/** ชุดข้อมูลที่หน้าจอตั้งเงื่อนไขต้องใช้ (ใช้ร่วมกันทั้งหน้ากฎสิทธิ์และหน้าจัดกลุ่มลูกค้าเป็นชุด) */
+function plrMeta(rows) {
+  return { fields: PLR_FIELDS, ops: PLR_OPS, choices: plrFieldChoices(), attrKeys: plrAttrKeys(rows) };
+}
+
 /* ═══════════════ หน้าจอตั้งค่า (ฝั่งบริษัทเจ้าของสินค้าเท่านั้น) ═══════════════ */
 
 /** รายการกฎของชุดราคาหนึ่งชุด + ตัวเลือกที่หน้าเว็บต้องใช้ */
@@ -192,7 +241,9 @@ function listPriceListRules(session, payload) {
       id: r.record_id, priceListId: r.price_list_id, name: r.name || '', matchType: r.match_type || PLR_MATCH_ALL,
       priority: Number(r.priority) || 0, isActive: isNotOff(r.is_active), note: r.note || '',
       conditions: conds[String(r.record_id)] || [] }; });
-  return { success: true, data: rules, fields: PLR_FIELDS, ops: PLR_OPS };
+  var meta = plrMeta();
+  return { success: true, data: rules, fields: meta.fields, ops: meta.ops,
+    choices: meta.choices, attrKeys: meta.attrKeys };
 }
 
 /**
