@@ -44,7 +44,10 @@ var PLR_FIELDS = {
   salesman_line_user_id: { label: 'พนักงานขายประจำร้าน', type: 'text' },
   tenant_id:             { label: 'ตัวแทนจำหน่าย', type: 'text' },
   status:                { label: 'สถานะลูกค้า', type: 'text' },
-  name:                  { label: 'ชื่อร้าน', type: 'text' }
+  name:                  { label: 'ชื่อร้าน', type: 'text' },
+  /* ★ อยู่ในรายชื่อที่แอดมินทำไว้เองไหม (40_customer_lists.gs) — ใช้กับเกณฑ์ที่ตัดสินด้วยคน
+     เช่น "ร้านค้าใหม่ที่ยังไม่เคยซื้อ" หรือรายชื่อร้านที่อนุมัติแนบท้ายใบโปร */
+  member_of_list:        { label: 'อยู่ในรายชื่อร้านค้า', type: 'list' }
 };
 
 /** ตัวดำเนินการ — ครอบคลุมเท่าที่ใช้จริง ไม่เปิดกว้างจนคนตั้งค่าเองไม่ถูก */
@@ -65,6 +68,10 @@ var PLR_OPS = {
 function plrCustomerValue(customer, field) {
   if (!customer) return '';
   var f = String(field || '').trim();
+  // member_of_list คืน "รายการ" ของ list id ที่ร้านนี้เป็นสมาชิก — จึงต้องใช้ตัวดำเนินการ in/notin
+  if (f === 'member_of_list') {
+    return typeof customerListsOf === 'function' ? customerListsOf(customer.record_id).join(',') : '';
+  }
   if (f.indexOf('attr:') === 0) {
     var attrs = customerAttributes(customer);
     var v = attrs[f.substring(5)];
@@ -81,6 +88,18 @@ function _plrList(v) { return String(v || '').split(',').map(function(x) { retur
 function plrConditionMatches(customer, cond) {
   var actual = _plrNorm(plrCustomerValue(customer, cond.field));
   var want = _plrNorm(cond.value);
+  /* ★ member_of_list เป็น "หลายค่า" (ร้านหนึ่งอยู่ได้หลายรายชื่อ) ตัวดำเนินการปกติจึงใช้ไม่ได้ —
+     eq จะเทียบสตริง "3,7" กับ "3" แล้วไม่ตรง ทั้งที่ร้านอยู่ในรายชื่อ 3 จริง */
+  if (String(cond.field) === 'member_of_list') {
+    var mine = _plrList(actual), wanted = _plrList(cond.value);
+    var hit = wanted.some(function(w) { return mine.indexOf(w) !== -1; });
+    switch (String(cond.op || 'in')) {
+      case 'notin': case 'ne': return !hit;
+      case 'empty':            return mine.length === 0;
+      case 'notempty':         return mine.length > 0;
+      default:                 return hit;          // in / eq = อยู่ในรายชื่อใดรายชื่อหนึ่งที่เลือก
+    }
+  }
   switch (String(cond.op || 'eq')) {
     case 'eq':         return actual === want;
     case 'ne':         return actual !== want;
@@ -200,6 +219,9 @@ function plrFieldChoices() {
     channel_id: opts('distribution_channels', 'record_id', 'name'),
     tenant_id:  centralObjects('tenants').filter(function(t) { return isNotOff(t.is_active); })
                   .map(function(t) { return { value: String(t.tenant_id), label: String(t.name || t.tenant_id) }; }),
+    member_of_list: centralObjects('customer_lists').map(function(l) {
+      return { value: String(l.record_id), label: String(l.name) + (l.tenant_id ? ' (' + l.tenant_id + ')' : ' (ของบริษัท)') };
+    }),
     sales_mode: [{ value: 'van', label: 'ขายหน้ารถ (van)' }, { value: 'preorder', label: 'พรีออเดอร์ (preorder)' }],
     payment_type: [{ value: 'cash', label: 'เงินสด' }, { value: 'credit', label: 'เครดิต' }],
     status:     [{ value: 'active', label: 'ใช้งาน' }, { value: 'inactive', label: 'ปิดใช้งาน' }]

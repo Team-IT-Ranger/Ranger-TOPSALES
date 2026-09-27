@@ -306,3 +306,53 @@ function addPaymentType(session, payload) {
   centralAppend('payment_types', { record_id: centralNextId('payment_types'), code: payload.code, name: payload.name, is_active: 'TRUE' });
   return { success: true };
 }
+
+/**
+ * สินค้าที่ยังไม่มีหน่วยขายเลย → ตั้ง "ลัง" (CT) ให้เป็นค่าเริ่มต้น (เจ้าของระบบสั่ง 27 ก.ย. 2026)
+ * สินค้าที่ไม่มีหน่วยขาย สั่งเป็นลังไม่ได้ จึงเข้าเงื่อนไขโปร/ชุดแถมที่นับเป็นลังไม่ได้เลย
+ *
+ * ★ ขนาดบรรจุไม่มีในข้อมูลไหนเลย — Express ใช้คนละระบบรหัส (800001…) และ packing_text ว่างทั้ง 94 รายการ
+ *   จึงตั้ง unit_factor = 1 เป็น "ตัวยึดที่" ไว้ก่อน แล้ว **เขียนคำเตือนลงในชื่อหน่วยเอง**
+ *   เพราะถ้าปล่อยเป็น "ลัง" เฉยๆ 1 ลังจะเท่ากับ 1 ชิ้นตลอดไป โดยไม่มีใครรู้จนกว่าสต็อกจะเพี้ยน
+ *   ชื่อหน่วยโผล่ทุกที่ที่เลือกหน่วย (หน้าเปิดบิล/ชุดราคา/ชุดแถม) คนจึงเห็นและแก้ได้ทันที
+ * รันซ้ำได้: สินค้าที่มีหน่วยขายอยู่แล้วข้าม ไม่ทับของที่ตั้งไว้
+ */
+var UNIT_FACTOR_UNCONFIRMED = 'ลัง (ยังไม่ยืนยันขนาดบรรจุ)';
+
+function ensureDefaultSalesUnit(session, payload) {
+  var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
+  payload = payload || {};
+  var has = {};
+  centralObjects('product_units').forEach(function(u) { has[String(u.product_id)] = true; });
+  var missing = centralObjects('products').filter(function(p) { return !has[String(p.record_id)]; });
+  if (!missing.length) return { success: true, added: 0, message: 'สินค้าทุกตัวมีหน่วยขายแล้ว' };
+  if (payload.dryRun) {
+    return { success: true, added: 0, wouldAdd: missing.length,
+      sample: missing.slice(0, 10).map(function(p) { return { id: p.record_id, code: p.product_code, name: p.name }; }),
+      message: 'จะตั้งหน่วย "ลัง" ให้สินค้า ' + missing.length + ' รายการ (ขนาดบรรจุตั้งเป็น 1 ไว้ก่อน ต้องแก้ทีหลัง)' };
+  }
+  var nextId = centralNextId('product_units');
+  centralAppendMany('product_units', missing.map(function(p, i) {
+    return { record_id: nextId + i, product_id: p.record_id, unit_code: UNIT_CT,
+      unit_label: UNIT_FACTOR_UNCONFIRMED, unit_factor: 1,
+      price: Number(p.base_price) || 0, is_active: 'TRUE', barcode: '' };
+  }));
+  return { success: true, added: missing.length,
+    products: missing.map(function(p) { return { id: p.record_id, code: p.product_code, name: p.name }; }),
+    message: 'ตั้งหน่วย "ลัง" ให้สินค้า ' + missing.length + ' รายการแล้ว — ' +
+      '★ ขนาดบรรจุยังเป็น 1 ลัง = 1 ชิ้น ต้องเข้าไปแก้ให้ตรงของจริง (ชื่อหน่วยเขียนเตือนไว้แล้ว)' };
+}
+
+/** สินค้าที่ขนาดบรรจุยังไม่ได้ยืนยัน — ใช้ทำรายการงานที่ต้องตามแก้ */
+function listUnconfirmedUnits(session) {
+  var err = _requirePermission(session, 'products', 'view'); if (err) return err;
+  var pname = {};
+  centralObjects('products').forEach(function(p) { pname[String(p.record_id)] = (p.product_code ? p.product_code + ' ' : '') + p.name; });
+  var rows = centralObjects('product_units').filter(function(u) {
+    return String(u.unit_label || '').indexOf('ยังไม่ยืนยัน') !== -1 || (normUnitCode(u.unit_code, '') === UNIT_CT && Number(u.unit_factor) === 1);
+  }).map(function(u) {
+    return { id: u.record_id, productId: u.product_id, product: pname[String(u.product_id)] || ('#' + u.product_id),
+      unitCode: u.unit_code, unitFactor: Number(u.unit_factor) || 0, unitLabel: u.unit_label || '' };
+  });
+  return { success: true, data: rows, message: rows.length ? 'มีสินค้า ' + rows.length + ' รายการที่ขนาดบรรจุยังไม่ยืนยัน' : 'ยืนยันขนาดบรรจุครบแล้ว' };
+}

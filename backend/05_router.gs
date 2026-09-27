@@ -74,6 +74,8 @@ var ADMIN_ACTION_MAP = {
   updateProduct:          updateProduct,
   uploadProductImage:     uploadProductImage,
   listProductUnits:       listProductUnits,
+  ensureDefaultSalesUnit: ensureDefaultSalesUnit,   // ตั้งหน่วย "ลัง" ให้สินค้าที่ยังไม่มีหน่วยขาย (10_master_data.gs)
+  listUnconfirmedUnits:   listUnconfirmedUnits,
   addProductUnit:         addProductUnit,
   updateProductUnit:      updateProductUnit,
   listProductGroups:      listProductGroups,
@@ -96,6 +98,12 @@ var ADMIN_ACTION_MAP = {
   deletePriceListRule:    deletePriceListRule,
   previewPriceListAudience: previewPriceListAudience,
   explainCustomerPricing: explainCustomerPricing,
+  listCustomerLists:      listCustomerLists,         // รายชื่อร้านค้า (40_customer_lists.gs)
+  saveCustomerList:       saveCustomerList,
+  deleteCustomerList:     deleteCustomerList,
+  listCustomerListMembers: listCustomerListMembers,
+  addCustomerListMembers: addCustomerListMembers,
+  removeCustomerListMember: removeCustomerListMember,
   listFreeGoodsSets:      listFreeGoodsSets,         // ชุดแถม (39_free_goods.gs)
   getFreeGoodsSet:        getFreeGoodsSet,
   saveFreeGoodsSet:       saveFreeGoodsSet,

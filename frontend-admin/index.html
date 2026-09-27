@@ -987,6 +987,18 @@
           </div>
         </section>
 
+        <!-- ═══ รายชื่อร้านค้า ═══ -->
+        <section class="view" id="view-custlists">
+          <div class="view-head">
+            <div><h1>รายชื่อร้านค้า</h1><p>ตารางที่แอดมินทำเองว่าร้านรหัสใดเข้าเกณฑ์ — ใช้กับเงื่อนไขที่ตัดสินด้วยคน
+              เช่น "ร้านค้าใหม่ที่ยังไม่เคยซื้อ" หรือรายชื่อร้านที่อนุมัติแนบท้ายใบโปร ·
+              เอาไปผูกเป็นเงื่อนไข "อยู่ในรายชื่อร้านค้า" ในกฎสิทธิ์ของชุดราคา/โปรโมชั่น/ชุดแถมได้</p></div>
+            <button class="btn btn-primary" onclick="openClModal(null)">+ สร้างรายชื่อ</button>
+          </div>
+          <div id="cl-list"></div>
+          <div id="cl-members" style="margin-top:14px"></div>
+        </section>
+
         <!-- ═══ ชุดแถม (ของแถม) ═══ -->
         <section class="view" id="view-freegoods">
           <div class="view-head">
@@ -1399,7 +1411,9 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
-  'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus']);
+  'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus',
+  'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
+  'ensureDefaultSalesUnit']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin']);
@@ -1788,7 +1802,8 @@ const NAV = {
       { n:'3.2', label:'เขตการขาย', items:[ {n:'3.2.1', label:'ผังเขตการขาย', view:'v-zone', mod:'zones', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
     ]},
     { n:'4', icon:'store', label:'ลูกค้าและเอกสาร', subs:[
-      { n:'4.1', label:'ลูกค้า', items:[ {n:'4.1.1', label:'รายชื่อลูกค้า', view:'customers', mod:'customers', ready:true} ] },
+      { n:'4.1', label:'ลูกค้า', items:[ {n:'4.1.1', label:'รายชื่อลูกค้า', view:'customers', mod:'customers', ready:true},
+        {n:'4.1.2', label:'รายชื่อร้านค้า (สำหรับกฎ/โปร)', view:'custlists', mod:'customers', ready:true} ] },
       { n:'4.2', label:'เลขที่เอกสาร', items:[ {n:'4.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', mod:'docnum', ready:true} ] }
     ]},
     { n:'5', icon:'cart', label:'งานซื้อ', subs:[
@@ -1828,6 +1843,7 @@ const NAV = {
       { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', mod:'sales', ready:true} ] },
       { n:'2.2', label:'ลูกค้าและพนักงาน', items:[
         {n:'2.2.1', label:'รายชื่อลูกค้า', view:'customers', mod:'customers', ready:true},
+        {n:'2.2.4', label:'รายชื่อร้านค้า (สำหรับกฎ/โปร)', view:'custlists', mod:'customers', ready:true},
         {n:'2.2.2', label:'พนักงานขาย', view:'staff', mod:'staff', ready:true}
       ]}
     ]},
@@ -2007,7 +2023,7 @@ function findMeta(view){
   return null;
 }
 const LOADERS = {
-  dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods,
+  dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
   companyprofile: loadCompanyProfile, adminusers: () => { loadAdminUsers(); loadPendingAdminUsers(); }, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
@@ -3527,6 +3543,92 @@ async function deleteRuleUI(id){
   const r = await callApi('deletePriceListRule', { id });
   if (!r.success) { toast(r.message, true); return; }
   PLR_RULES = r.data; renderPriceListRules(); toast(r.message);
+}
+
+/* ══════════════ รายชื่อร้านค้า (40_customer_lists.gs) ══════════════
+   ★ ใส่สมาชิกด้วยการ "วางรหัสร้าน" เป็นก้อน รับทั้งรหัสของเราและรหัสระบบเดิม — ใบอนุมัติจริงแนบรายชื่อมา
+     เป็นตารางรหัสของระบบเดิม ถ้าให้กรอกทีละร้านหรือรับแค่รหัสเราจะพิมพ์ผิดแน่ */
+let CL_LISTS = [], CL_CUR = null;
+
+async function loadCustLists(){
+  const box = document.getElementById('cl-list');
+  document.getElementById('cl-members').innerHTML = '';
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listCustomerLists', {});
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  CL_LISTS = r.data || [];
+  renderClLists();
+}
+function renderClLists(){
+  const box = document.getElementById('cl-list');
+  if (!CL_LISTS.length) { box.innerHTML = '<p class="form-hint">ยังไม่มีรายชื่อ — กด "สร้างรายชื่อ" เพื่อเริ่ม</p>'; return; }
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>ชื่อรายชื่อ</th><th>เจ้าของ</th><th>จำนวนร้าน</th><th>หมายเหตุ</th><th></th></tr></thead><tbody>' +
+    CL_LISTS.map(l => '<tr><td class="wrap">'+esc(l.name)+'</td>' +
+      '<td>'+(l.tenantId ? esc(l.tenantId) : '<span class="tag">บริษัท</span>')+'</td>' +
+      '<td>'+l.count+'</td><td class="wrap">'+esc(l.note||'-')+'</td>' +
+      '<td style="white-space:nowrap"><button class="btn btn-sm" onclick="openClMembers('+l.id+')">ดูร้านในรายชื่อ</button> ' +
+      (l.canEdit ? '<button class="btn btn-sm" onclick="openClModal('+l.id+')">แก้</button> ' +
+                   '<button class="btn btn-sm btn-ghost" onclick="deleteClUI('+l.id+')">ลบ</button>' : '') +
+      '</td></tr>').join('') + '</tbody></table></div>';
+}
+function openClModal(id){
+  const l = id ? (CL_LISTS.find(x => String(x.id)===String(id)) || {}) : {};
+  plModal('<h3>'+(id?'แก้ไขรายชื่อ':'สร้างรายชื่อ')+'</h3>' +
+    plField('ชื่อรายชื่อ', '<input id="cl-name" value="'+esc(l.name||'')+'" placeholder="เช่น ร้านค้าใหม่ที่ยังไม่เคยซื้อ (ก.ค.-ส.ค. 69)">') +
+    plField('หมายเหตุ', '<input id="cl-note" value="'+esc(l.note||'')+'" placeholder="อ้างอิงใบอนุมัติ / ใครอนุมัติ">') +
+    '<div class="err" id="plm-err" style="margin:12px 0 0"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button>' +
+    '<button class="btn btn-primary" onclick="saveClUI('+(id||'null')+')">บันทึก</button></div>');
+}
+function saveClUI(id){ return plBusy(async () => {
+  const r = await callApi('saveCustomerList', { id: id || undefined,
+    name: document.getElementById('cl-name').value.trim(), note: document.getElementById('cl-note').value.trim() });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message); await loadCustLists(); openClMembers(r.id);
+}); }
+async function deleteClUI(id, force){
+  const l = CL_LISTS.find(x => String(x.id)===String(id)) || {};
+  if (!force && !confirm('ลบรายชื่อ "'+(l.name||'')+'" ('+(l.count||0)+' ร้าน)?')) return;
+  const r = await callApi('deleteCustomerList', { id, force: !!force });
+  if (!r.success) {
+    // backend เตือนว่ามีกฎอ้างอยู่ — ถามซ้ำก่อนลบจริง ไม่ลบเงียบ
+    if (r.needConfirm && confirm(r.message)) return deleteClUI(id, true);
+    toast(r.message, true); return;
+  }
+  toast(r.message); document.getElementById('cl-members').innerHTML = ''; loadCustLists();
+}
+
+async function openClMembers(id){
+  CL_CUR = CL_LISTS.find(x => String(x.id)===String(id)) || { id };
+  const box = document.getElementById('cl-members');
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listCustomerListMembers', { id });
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  const rows = r.data || [];
+  box.innerHTML = '<div class="form-card"><h3>ร้านใน "'+esc(CL_CUR.name||'')+'" ('+rows.length+' ร้าน)</h3>' +
+    (CL_CUR.canEdit === false ? '<p class="form-hint">รายชื่อนี้เป็นของบริษัท ดูได้แต่แก้ไม่ได้</p>' :
+      plField('วางรหัสร้านที่จะเพิ่ม <span class="unit">(คั่นด้วยเว้นวรรค , หรือขึ้นบรรทัดใหม่ · ใช้รหัสระบบเดิมได้)</span>',
+        '<textarea id="cl-codes" rows="4" placeholder="C0001, C0002\nRSM.310040"></textarea>') +
+      '<div class="form-actions"><button class="btn btn-primary btn-sm" onclick="addClMembersUI()">เพิ่มเข้ารายชื่อ</button></div>') +
+    (rows.length ? '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>รหัสระบบเดิม</th><th>ชื่อร้าน</th><th>ตัวแทน</th><th></th></tr></thead><tbody>' +
+      rows.map(c => '<tr><td class="mono-data">'+esc(c.code||'-')+'</td><td class="mono-data">'+esc(c.externalCode||'-')+'</td>' +
+        '<td class="wrap">'+esc(c.name)+'</td><td>'+esc(c.tenantId||'-')+'</td>' +
+        '<td>'+(CL_CUR.canEdit === false ? '' : '<button class="btn btn-sm btn-ghost" onclick="removeClMemberUI('+c.id+')">เอาออก</button>')+'</td></tr>').join('') +
+      '</tbody></table></div>' : '<p class="form-hint">ยังไม่มีร้านในรายชื่อนี้ — กฎที่อ้างรายชื่อนี้จะยังไม่เข้าเงื่อนไขร้านไหน</p>') +
+    '</div>';
+}
+function addClMembersUI(){ return plBusy(async () => {
+  const codes = document.getElementById('cl-codes').value;
+  if (!codes.trim()) { toast('ยังไม่ได้ใส่รหัสร้าน', true); return; }
+  const r = await callApi('addCustomerListMembers', { id: CL_CUR.id, codes });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  await loadCustLists(); openClMembers(CL_CUR.id);
+}); }
+async function removeClMemberUI(customerId){
+  const r = await callApi('removeCustomerListMember', { id: CL_CUR.id, customerId });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message); await loadCustLists(); openClMembers(CL_CUR.id);
 }
 
 /* ══════════════ ชุดแถม (39_free_goods.gs) ══════════════
