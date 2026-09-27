@@ -22,6 +22,7 @@ function _companyDto(r) {
     name: r.name || 'บริษัทเจ้าของสินค้า', legalName: r.legal_name || '', taxId: r.tax_id || '', branchCode: r.branch_code || '',
     address: r.address || '', phone: r.phone || '', email: r.email || '', website: r.website || '', logoUrl: r.logo_url || '',
     bankName: r.bank_name || '', bankAccountNo: r.bank_account_no || '', bankAccountName: r.bank_account_name || '',
+    vatRate: _vatRatePercent(r), defaultVatType: currentVatType(),
     note: r.note || '', updatedAt: safeDateStr(r.updated_at)
   };
 }
@@ -52,6 +53,15 @@ function saveCompanyProfile(session, payload) {
       bankAccountName: 'bank_account_name', note: 'note' };
     var fields = {};
     Object.keys(map).forEach(function(k) { if (payload[k] !== undefined) fields[map[k]] = String(payload[k]).trim(); });
+    // อัตรา VAT รับมาเป็นเปอร์เซ็นต์ (7) เก็บเป็นเปอร์เซ็นต์ — แปลงเป็นทศนิยมที่ currentVatRate() ที่เดียว
+    if (payload.vatRate !== undefined) {
+      var pct = Number(payload.vatRate);
+      if (isNaN(pct) || pct < 0 || pct > 100) return { success: false, message: 'อัตรา VAT ต้องเป็นตัวเลข 0–100 (กรอกเป็นเปอร์เซ็นต์ เช่น 7)' };
+      fields.vat_rate = pct;
+    }
+    if (payload.defaultVatType !== undefined) {
+      fields.default_vat_type = String(payload.defaultVatType).toLowerCase() === 'exclusive' ? 'exclusive' : 'inclusive';
+    }
     if (taxId !== null) fields.tax_id = taxId;
     fields.updated_at = nowStr();
     fields.updated_by = session.adminUserId || '';

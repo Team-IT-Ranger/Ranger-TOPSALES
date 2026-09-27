@@ -22,9 +22,9 @@ function _poAmounts(items, vatType, discountExVat) {
   var discount = _money(discountExVat || 0);
   var net = _money(gross - discount);
   var subtotal, vat;
-  if (vatType === 'included') { subtotal = _money(net / (1 + PO_VAT_RATE)); vat = _money(net - subtotal); }
+  if (vatType === 'included') { subtotal = _money(net / (1 + _poVatRate())); vat = _money(net - subtotal); }
   else if (vatType === 'none') { subtotal = net; vat = 0; }
-  else { subtotal = net; vat = _money(net * PO_VAT_RATE); }   // 'excluded' (ค่าเริ่มต้น)
+  else { subtotal = net; vat = _money(net * _poVatRate()); }   // 'excluded' (ค่าเริ่มต้น)
   return { gross: gross, discount: discount, subtotal: subtotal, vat: vat, total: _money(subtotal + vat) };
 }
 

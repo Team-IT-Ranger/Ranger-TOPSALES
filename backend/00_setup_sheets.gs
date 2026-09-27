@@ -137,8 +137,12 @@ var CENTRAL_SHEETS = {
 
   // ข้อมูลบริษัทเจ้าของสินค้า (แถวเดียว record_id=1) — ใช้เป็นชื่อบริษัทที่โชว์ในตัวเลือกบริษัท หัวเอกสาร และใบกำกับภาษี
   // คนละเรื่องกับ tenants (ข้อมูลตัวแทนแต่ละราย) และคนละเรื่องกับ tenant 'HOUSE' ที่เป็นแค่บัญชีขายตรงของบริษัท
+  // vat_rate เก็บเป็น "เปอร์เซ็นต์" (7) — การคำนวณใช้ทศนิยม (0.07) แปลงที่ currentVatRate() จุดเดียว
+  //   อัตราภาษีเปลี่ยนได้จริง (ไทยเคยลด 10% เหลือ 7% แล้วต่ออายุเป็นช่วงๆ) จึงห้ามฮาร์ดโค้ดในโค้ด
+  // default_vat_type: inclusive = ราคาที่กรอกรวม VAT แล้ว (ค่าตั้งต้นของเรา ใบราคาบริษัทพิมพ์ราคารวมภาษีมาตลอด)
   company_profile: ['record_id','name','legal_name','tax_id','branch_code','address','phone','email','website',
-    'logo_url','bank_name','bank_account_no','bank_account_name','note','updated_at','updated_by'],
+    'logo_url','bank_name','bank_account_no','bank_account_name','note','updated_at','updated_by',
+    'vat_rate','default_vat_type'],
 
   // roles.tenant_id ว่าง = บทบาทกลางของระบบ (super_admin/owner_admin/tenant_admin)
   // มีค่า = บทบาทที่แอดมินของตัวแทนรายนั้นสร้างเอง เห็น/แก้ได้เฉพาะตัวแทนนั้น (ดู 26_roles.gs)
@@ -213,6 +217,12 @@ function setupCentralSheet() {
   _seedDefaultWarehouse();
 
   _setTextColumns(ss, 'price_lists', ['valid_from', 'valid_to']);   // กัน Sheets แปลงวันที่เป็น Date เอง (เขตเวลาไม่ตรงกัน = วันเลื่อน)
+  // เลขผู้เสียภาษี 13 หลักขึ้นต้นด้วย 0 ได้ — Sheets จะกลืนศูนย์นำหน้าทิ้งถ้าปล่อยเป็นตัวเลข
+  // แล้วใบกำกับภาษีจะผิดแบบเงียบๆ (0105552018639 → 105552018639) · กันสองชั้นคู่กับการเติมศูนย์ตอนอ่าน
+  _setTextColumns(ss, 'customers', ['tax_id', 'tax_branch_code', 'postcode', 'phone']);
+  _setTextColumns(ss, 'company_profile', ['tax_id', 'branch_code']);
+  _setTextColumns(ss, 'tenants', ['tax_id', 'branch_code']);
+  _setTextColumns(ss, 'vendors', ['tax_id', 'branch_code']);
   clearRolePermissionsCache(); // ให้สิทธิ์ที่เพิ่งเติม (เช่น settings) มีผลทันที ไม่ต้องรอแคช 5 นาที
   SpreadsheetApp.flush();
   Logger.log('Created: ' + created.join(', '));

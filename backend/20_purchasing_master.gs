@@ -9,7 +9,8 @@
  * ใช้ตัวช่วยร่วมกับโมดูลอื่น: _isTrue/_validDate/_numOrBlank (17_pricing.gs), _requirePermission (14_permissions.gs)
  */
 
-var PO_VAT_RATE = 0.07;                                  // VAT ไทยคงที่ 7% (เหมือนฝั่งขาย)
+// อัตรา VAT อ่านจากค่าตั้งของบริษัทเหมือนฝั่งขาย (currentVatRate ใน 18_pricing_engine.gs) — ห้ามฮาร์ดโค้ด
+function _poVatRate() { return typeof currentVatRate === 'function' ? currentVatRate() : 0.07; }
 function _money(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function _int(v) { var n = parseInt(v, 10); return isFinite(n) ? n : 0; }
 function _numOrNull(v) { if (v === null || v === undefined || String(v).trim() === '') return null; var n = Number(v); return isFinite(n) ? n : NaN; }

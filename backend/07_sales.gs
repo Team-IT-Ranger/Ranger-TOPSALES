@@ -77,8 +77,18 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
     calc = applyPromotions(itemsWithGroup, customerId);
   }
 
-  // แยกภาษีจากรายการจริง — ต้องทำหลังได้ราคาสุดท้ายแล้ว และใช้ได้ทั้งสองทาง (ชุดราคา / โปรโมชั่นแบบเดิม)
-  calc.vat = saleVatBreakdown(items, calc.discount, function(pid) { return productTaxStatus(productMap[String(pid)]); });
+  /* แยกภาษีจากรายการจริง — ทำหลังได้ราคาสุดท้ายแล้ว ใช้ได้ทั้งสองทาง (ชุดราคา / โปรโมชั่นแบบเดิม)
+     ภาษีตัดสินจากสองชั้น: ลูกค้า (customers.tax_type) แล้วจึงรายสินค้า (products.tax_status)
+     ลูกค้าที่ไม่อยู่ในระบบ VAT = ทั้งใบไม่มีภาษี ไม่ต้องดูรายสินค้าอีก */
+  var custRow = null;
+  if (customerId) centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(customerId)) custRow = c; });
+  var custTax = String((custRow && custRow.tax_type) || '').trim().toLowerCase();
+  var customerApplyVat = !(custTax === 'exempt' || custTax === 'zero');
+  calc.vat = saleVatBreakdown(items, calc.discount,
+    function(pid) { return customerApplyVat ? productTaxStatus(productMap[String(pid)]) : TAX_EXEMPT; });
+  calc.vat.applyVat = customerApplyVat && calc.vat.vat > 0;
+  calc.vat.vatType = currentVatType();
+  calc.vat.taxOf = function(pid) { return customerApplyVat ? productTaxStatus(productMap[String(pid)]) : TAX_EXEMPT; };
 
   return { success: true, items: items, calc: calc, priceListUsed: priceListUsed };
 }
@@ -133,6 +143,7 @@ function recordSale(user, payload) {
   tenantAppend(user.tenantId, 'sales_orders', {
     record_id: orderId, order_code: orderCode, customer_id: payload.customerId || 0,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
+    apply_vat: vatSplit.applyVat ? 'TRUE' : 'FALSE', vat_type: vatSplit.vatType,
     vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat, exempt_amount: vatSplit.exemptAmount,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
@@ -152,7 +163,7 @@ function recordSale(user, payload) {
     tenantAppend(user.tenantId, 'order_items', {
       record_id: tenantNextId(user.tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
       unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
-      price: it.price, line_total: it.lineTotal, is_free: 0
+      price: it.price, line_total: it.lineTotal, is_free: 0, tax_status: calc.vat.taxOf(it.productId)
     });
   });
   freeGoods.forEach(function(f) {

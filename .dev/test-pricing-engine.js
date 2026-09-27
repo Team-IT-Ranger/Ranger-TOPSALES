@@ -167,5 +167,42 @@ eq('ทุกกรณี มูลค่าไม่รวมภาษี + ภ
 
 eq('บิลเปล่า/ยอดศูนย์ไม่พัง', (() => { const b = ctx.saleVatBreakdown([], 0, taxOf); return [b.total, b.vat, b.exVat]; })(), [0, 0, 0]);
 
+console.log('\n-- อัตรา VAT เป็นค่าตั้ง ไม่ใช่ค่าคงที่ในโค้ด --');
+// จำลองแถวบริษัท: currentVatRate() อ่านผ่าน _companyRow()
+let COMPANY_ROW = {};
+ctx._companyRow = () => COMPANY_ROW;
+eq('ยังไม่ได้ตั้งค่า → 7% ตามกฎหมายปัจจุบัน', ctx.currentVatRate(), 0.07);
+COMPANY_ROW = { vat_rate: 10 };
+eq('ตั้ง 10 (เปอร์เซ็นต์) → คำนวณด้วย 0.10 (ทศนิยม) แปลงที่จุดเดียว', ctx.currentVatRate(), 0.1);
+eq('  ถอดภาษีตามอัตราที่ตั้งจริง ไม่ใช่ 7% เงียบๆ', (() => { const v = ctx.splitVat(110); return [v.exVat, v.vat]; })(), [100, 10]);
+COMPANY_ROW = { vat_rate: 0 };
+eq('ตั้ง 0 ได้จริง (บริษัทไม่อยู่ในระบบ VAT)', [ctx.currentVatRate(), ctx.splitVat(100).vat], [0, 0]);
+COMPANY_ROW = { vat_rate: 'เจ็ด' };
+eq('ค่าขยะ/นอกช่วง → ตกกลับไปที่ 7% ไม่ใช่ NaN', ctx.currentVatRate(), 0.07);
+COMPANY_ROW = { vat_rate: 7 };
+
+eq('ชนิดราคาอ่านจากค่าตั้ง (ของเราเป็น inclusive)', [ctx.currentVatType(),
+  (() => { COMPANY_ROW = { default_vat_type: 'exclusive' }; const t = ctx.currentVatType(); COMPANY_ROW = { vat_rate: 7 }; return t; })()],
+  ['inclusive', 'exclusive']);
+
+console.log('\n-- ★ เปลี่ยนอัตราแล้ว บิลเก่าต้องไม่ขยับ --');
+const OLD_BILL = { total: 1070, vat_rate: 0.07, subtotal_ex_vat: 1000, vat_amount: 70, exempt_amount: 0, apply_vat: 'TRUE', vat_type: 'inclusive' };
+const before = ctx._orderVat(OLD_BILL);
+COMPANY_ROW = { vat_rate: 10 };                       // รัฐขึ้นภาษีเป็น 10%
+const after = ctx._orderVat(OLD_BILL);
+eq('ใบที่ออกไปแล้วยังเป็นตัวเลขเดิมทุกค่า', [after.rate, after.exVat, after.vat], [before.rate, before.exVat, before.vat]);
+eq('  และยังเป็น 7% ของวันที่ออก ไม่ใช่ 10% ของวันนี้', [after.rate, after.vat], [0.07, 70]);
+eq('บิลใหม่หลังเปลี่ยนอัตรา ใช้อัตราใหม่', ctx.splitVat(110).vat, 10);
+COMPANY_ROW = { vat_rate: 7 };
+
+eq('บิลเก่าที่ยังไม่มีคอลัมน์ภาษีเลย → ถอดสดให้ ณ อัตราปัจจุบัน', (() => {
+  const v = ctx._orderVat({ total: 107 }); return [v.vat, v.applyVat];
+})(), [7, true]);
+
+console.log('\n-- ค่าว่างของ "คิด VAT ไหม" ต้องแปลว่าคิด --');
+eq('ว่าง/null/undefined = คิด VAT', [ctx.vatFlagOn(''), ctx.vatFlagOn(null), ctx.vatFlagOn(undefined)], [true, true, true]);
+eq('ปิดชัดเจนเท่านั้นถึงไม่คิด', [ctx.vatFlagOn('FALSE'), ctx.vatFlagOn(false), ctx.vatFlagOn(0), ctx.vatFlagOn('no')], [false, false, false, false]);
+eq('เปิดชัดเจน', [ctx.vatFlagOn('TRUE'), ctx.vatFlagOn(true), ctx.vatFlagOn(1)], [true, true, true]);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

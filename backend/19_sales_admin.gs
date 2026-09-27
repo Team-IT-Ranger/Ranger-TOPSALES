@@ -58,7 +58,8 @@ function getSalesOrderAdmin(session, payload) {
     .map(function(it) { var p = products[String(it.product_id)]; return {
       productId: it.product_id, productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)',
       unitCode: it.unit_code, unitFactor: it.unit_factor, qty: parseFloat(it.qty) || 0, baseQty: parseFloat(it.base_qty) || 0,
-      price: parseFloat(it.price) || 0, lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1'
+      price: parseFloat(it.price) || 0, lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1',
+      taxStatus: String(it.tax_status || '') || productTaxStatus(p)
     }; });
   var discounts = tenantObjects(tenantId, 'order_discounts').filter(function(d) { return String(d.order_id) === String(order.record_id); });
 
@@ -74,6 +75,7 @@ function getSalesOrderAdmin(session, payload) {
       subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
       vatRate: _orderVat(order).rate, subtotalExVat: _orderVat(order).exVat, vatAmount: _orderVat(order).vat,
       exemptAmount: _orderVat(order).exemptAmount, taxableExVat: _orderVat(order).taxableExVat, vatMixed: _orderVat(order).mixed,
+      applyVat: _orderVat(order).applyVat && _orderVat(order).vat > 0, vatType: _orderVat(order).vatType,
       paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: status,
       statusLabel: SO_STATUS_LABELS[status] || status,
       paymentStatus: orderPaymentStatus(order), paymentLabel: SO_PAYMENT_LABELS[orderPaymentStatus(order)] || '',
@@ -128,6 +130,7 @@ function previewSaleAdmin(session, payload) {
     // ให้คนเปิดบิลเห็นภาษีก่อนกดบันทึก — ตัวเลขชุดเดียวกับที่จะถูกบันทึกลงบิลจริง
     vatRate: priced.calc.vat.rate, subtotalExVat: priced.calc.vat.exVat, vatAmount: priced.calc.vat.vat,
     exemptAmount: priced.calc.vat.exemptAmount, taxableExVat: priced.calc.vat.taxableExVat, vatMixed: priced.calc.vat.mixed,
+    applyVat: priced.calc.vat.applyVat, vatType: priced.calc.vat.vatType,
     priceListName: priced.priceListUsed ? priced.priceListUsed.name : null
   };
 }
@@ -199,6 +202,7 @@ function recordSaleAdmin(session, payload) {
   tenantAppend(tenantId, 'sales_orders', {
     record_id: orderId, order_code: orderCode, customer_id: payload.customerId,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
+    apply_vat: vatSplit.applyVat ? 'TRUE' : 'FALSE', vat_type: vatSplit.vatType,
     vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat, exempt_amount: vatSplit.exemptAmount,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
     status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
@@ -217,7 +221,7 @@ function recordSaleAdmin(session, payload) {
     tenantAppend(tenantId, 'order_items', {
       record_id: tenantNextId(tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
       unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
-      price: it.price, line_total: it.lineTotal, is_free: 0
+      price: it.price, line_total: it.lineTotal, is_free: 0, tax_status: calc.vat.taxOf(it.productId)
     });
   });
   freeGoods.forEach(function(f) {

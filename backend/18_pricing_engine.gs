@@ -3,7 +3,38 @@
  * priceCart() เป็นฟังก์ชันล้วน (ไม่แตะชีต) เพื่อทดสอบได้ — ข้อมูลโหลดโดย getPricingContext()
  * ข้อมูลชุดราคา/โครงตาราง ดู 17_pricing.gs
  */
-var VAT_RATE = 0.07;
+/* อัตราสำรองเมื่อยังไม่ได้ตั้งค่าบริษัท — **ห้ามใช้ค่านี้ตรงๆ ในการคำนวณ** ให้เรียก currentVatRate() เสมอ
+   (ระบบที่มีหน้าตั้งค่าแต่ไม่เอาค่าไปใช้ อันตรายกว่าไม่มีหน้าตั้งค่าเลย เพราะคนเชื่อว่าตั้งแล้ว) */
+var VAT_RATE_FALLBACK = 0.07;
+var VAT_RATE = VAT_RATE_FALLBACK;   // ชื่อเดิม เก็บไว้ให้โค้ด/เทสต์เก่าที่อ้างถึงยังทำงาน
+
+/**
+ * อัตรา VAT ที่ใช้จริงในตอนนี้ (ทศนิยม เช่น 0.07) — อ่านจาก company_profile.vat_rate ซึ่งเก็บเป็นเปอร์เซ็นต์
+ * ★ ที่เดียวในระบบที่แปลงเปอร์เซ็นต์ → ทศนิยม ที่อื่นห้ามแปลงซ้ำ
+ * ยังไม่ได้ตั้งค่า (ว่าง) = ใช้ 7% ตามกฎหมายปัจจุบัน · ตั้ง 0 ได้จริงถ้าบริษัทไม่อยู่ในระบบ VAT
+ */
+function currentVatRate() {
+  try {
+    var pct = _vatRatePercent(typeof _companyRow === 'function' ? _companyRow() : null);
+    return Math.round((pct / 100) * 1e6) / 1e6;
+  } catch (e) { return VAT_RATE_FALLBACK; }
+}
+
+/** อัตราเป็นเปอร์เซ็นต์จากแถวบริษัท — ว่าง/ไม่ใช่ตัวเลข = 7 · ยอมรับ 0 (ไม่อยู่ในระบบ VAT) */
+function _vatRatePercent(row) {
+  var raw = row ? row.vat_rate : '';
+  if (raw === '' || raw === null || raw === undefined) return VAT_RATE_FALLBACK * 100;
+  var n = Number(raw);
+  return (isNaN(n) || n < 0 || n > 100) ? VAT_RATE_FALLBACK * 100 : n;
+}
+
+/** ราคาที่เก็บในระบบรวม VAT แล้วหรือยัง — ค่าตั้งต้นของบริษัท (ของเราคือ inclusive) */
+function currentVatType() {
+  try {
+    var r = typeof _companyRow === 'function' ? _companyRow() : null;
+    return String((r && r.default_vat_type) || 'inclusive').toLowerCase() === 'exclusive' ? 'exclusive' : 'inclusive';
+  } catch (e) { return 'inclusive'; }
+}
 function _round2(n) { return Math.round(n * 100) / 100; }
 
 /**
@@ -13,7 +44,7 @@ function _round2(n) { return Math.round(n * 100) / 100; }
  * จะได้ไม่มีวันปัดเศษไม่ตรงกันระหว่างกระดาษกับบัญชี
  */
 function splitVat(grossInclVat, rate) {
-  var r = rate === undefined || rate === null ? VAT_RATE : Number(rate);
+  var r = rate === undefined || rate === null ? currentVatRate() : Number(rate);
   var gross = _round2(Number(grossInclVat) || 0);
   var exVat = _round2(gross / (1 + r));
   return { rate: r, gross: gross, exVat: exVat, vat: _round2(gross - exVat) };
@@ -24,6 +55,15 @@ function splitVat(grossInclVat, rate) {
  * ค่าว่าง = คิด VAT ตามปกติ — สินค้าที่มีอยู่แล้วทั้งหมดจึงถูกต้องโดยไม่ต้องแก้ข้อมูล
  * ต้องตั้ง 'exempt' ให้สินค้าที่ยกเว้นเองที่หน้าทะเบียนสินค้า
  */
+/* ★ ตัวแปลง boolean ของ VAT โดยเฉพาะ — **ห้ามใช้ isNotOff/isFlagOn ของ is_active มาแทน**
+   หน้าตาเหมือนกันแต่ความหมายของค่าว่างคนละเรื่อง และวันที่มันไม่ตรงกันจะหาไม่เจอ
+   ค่าว่าง = คิด VAT (แถวเก่าที่มีก่อนฟีเจอร์นี้จะว่าง ถ้าตีความว่าไม่คิด ลูกค้าเก่าทั้งหมดจะหยุดคิด VAT พร้อมกัน) */
+function vatFlagOn(v) {
+  if (v === '' || v === null || v === undefined) return true;
+  var s = String(v).trim().toLowerCase();
+  return !(s === 'false' || s === '0' || s === 'no' || s === 'ไม่');
+}
+
 var TAX_VAT = 'vat', TAX_EXEMPT = 'exempt', TAX_ZERO = 'zero';
 var TAX_STATUS_LABELS = { vat: 'คิด VAT 7%', exempt: 'ยกเว้น VAT', zero: 'อัตราศูนย์' };
 function productTaxStatus(p) {
@@ -41,7 +81,8 @@ function productHasVat(p) { return productTaxStatus(p) === TAX_VAT; }
  *   (ลดทั้งก้อนจากฝั่งคิดภาษีอย่างเดียว = คิดภาษีน้อยไป · ลดจากฝั่งยกเว้น = คิดภาษีเกิน)
  * ทุกยอดคำนวณแบบ "ตัวสุดท้ายเป็นเศษที่เหลือ" เพื่อให้ exVat + vat = ยอดสุทธิ เป๊ะเสมอ
  */
-function saleVatBreakdown(lines, billDiscount, taxOf) {
+function saleVatBreakdown(lines, billDiscount, taxOf, rate) {
+  var r = rate === undefined || rate === null ? currentVatRate() : Number(rate);
   var grossVat = 0, grossExempt = 0;
   (lines || []).forEach(function(l) {
     var amt = Number(l.lineTotal) || 0;
@@ -58,8 +99,8 @@ function saleVatBreakdown(lines, billDiscount, taxOf) {
   if (netVat > total) netVat = total;
   var netExempt = _round2(total - netVat);          // ตัวที่เหลือ — บวกกลับได้เท่ายอดสุทธิเสมอ
 
-  var split = splitVat(netVat);
-  return { rate: VAT_RATE, total: total,
+  var split = splitVat(netVat, r);
+  return { rate: r, total: total,
     grossVat: grossVat, grossExempt: grossExempt,
     taxableExVat: split.exVat, vat: split.vat, exemptAmount: netExempt,
     exVat: _round2(split.exVat + netExempt),        // ฐานรายได้ทั้งบิล (ไม่รวมภาษี) — ตัวที่ลงบัญชี
@@ -74,11 +115,14 @@ function _orderVat(order) {
   var saved = Number(order.vat_amount);
   if (order.vat_amount !== '' && order.vat_amount !== null && order.vat_amount !== undefined && !isNaN(saved)) {
     var ex = Number(order.subtotal_ex_vat) || 0, exempt = Number(order.exempt_amount) || 0;
-    return { rate: Number(order.vat_rate) || VAT_RATE, exVat: ex, vat: saved,
+    var savedRate = Number(order.vat_rate);
+    return { rate: isNaN(savedRate) ? currentVatRate() : savedRate, exVat: ex, vat: saved,
+      applyVat: vatFlagOn(order.apply_vat), vatType: String(order.vat_type || 'inclusive'),
       exemptAmount: exempt, taxableExVat: _round2(ex - exempt), mixed: exempt > 0 && ex > exempt };
   }
   var s = splitVat(Number(order.total) || 0);
-  return { rate: s.rate, exVat: s.exVat, vat: s.vat, exemptAmount: 0, taxableExVat: s.exVat, mixed: false };
+  return { rate: s.rate, exVat: s.exVat, vat: s.vat, applyVat: true, vatType: 'inclusive',
+    exemptAmount: 0, taxableExVat: s.exVat, mixed: false };
 }
 
 // ชำระแบบเครดิต = ใช้ราคาเครดิต, อย่างอื่น (เงินสด/โอน/เช็ค) = ราคาเงินสด — รหัสตาม payment_types
@@ -109,6 +153,7 @@ function _pricingContextForList(list) {
     items: centralObjects('price_list_items').filter(function(it) { return String(it.price_list_id) === String(list.record_id); }),
     // สถานะภาษีรายสินค้า — เกณฑ์โปรท้ายบิลคิดจากยอด "ไม่รวม VAT" ของยกเว้นภาษีจึงห้ามถูกหาร 1.07
     taxOf: (function() { var m = {}; centralObjects('products').forEach(function(p) { m[String(p.record_id)] = productTaxStatus(p); }); return m; })(),
+    vatRate: currentVatRate(),
     billPromos: centralObjects('price_list_bill_promos').filter(function(b) { return String(b.price_list_id) === String(list.record_id); })
       .map(function(b) { return { minAmountExVat: Number(b.min_amount_ex_vat), percent: Number(b.percent) }; })
   };
@@ -182,9 +227,10 @@ function priceCart(ctx, cart, opts) {
 
   // ยอดไม่รวม VAT ของทั้งตะกร้า (ของยกเว้นภาษีนับเต็มจำนวน ไม่ต้องถอดอะไร) — ใช้เทียบเกณฑ์โปรท้ายบิล
   var taxOfFn = function(pid) { return (ctx.taxOf && ctx.taxOf[String(pid)]) || TAX_VAT; };
+  var rateNow = ctx.vatRate === undefined || ctx.vatRate === null ? currentVatRate() : Number(ctx.vatRate);
   var exVat = 0;
   lines.forEach(function(l) {
-    exVat += taxOfFn(l.productId) === TAX_VAT ? (l.lineTotal / (1 + VAT_RATE)) : l.lineTotal;
+    exVat += taxOfFn(l.productId) === TAX_VAT ? (l.lineTotal / (1 + rateNow)) : l.lineTotal;
   });
   var bill = null;
   (ctx.billPromos || []).forEach(function(b) { if (exVat >= b.minAmountExVat && (!bill || b.minAmountExVat > bill.minAmountExVat)) bill = b; });

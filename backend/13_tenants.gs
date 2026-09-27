@@ -12,10 +12,14 @@ var TENANT_SHEET_TABS = {
   // เพราะอัตราภาษีเปลี่ยนได้ และใบกำกับภาษีที่พิมพ์ไปแล้วต้องตรงกับตัวเลขในระบบตลอดไป
   sales_orders:        ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at',
     'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by',
-    'vat_rate','subtotal_ex_vat','vat_amount','exempt_amount'],   // exempt_amount = มูลค่าสินค้าที่ยกเว้นภาษีในบิลนี้
+    // ภาพนิ่งภาษี ณ วันที่ออกบิล — ห้ามคำนวณใหม่ตอนเปิดดู ไม่งั้นวันที่อัตราภาษีเปลี่ยน ใบเก่าทั้งหมดขยับตาม
+    // และงบที่ปิดไปแล้วจะเคลื่อน · apply_vat: ใบนี้คิด VAT ไหม · vat_type: inclusive/exclusive ณ ตอนออก
+    'apply_vat','vat_type','vat_rate','subtotal_ex_vat','vat_amount','exempt_amount'],
   // qty/price/line_total เป็น "หน่วยที่ขายจริง" (เช่น ลัง) ตรงกับที่ลูกค้าเห็นบนบิล
   // base_qty คือจำนวนแปลงเป็นหน่วยฐานแล้ว (qty × unit_factor) ใช้ตัดสต็อกและเช็คโปรโมชั่นเท่านั้น
-  order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free'],
+  // tax_status = สถานะภาษีของสินค้า "ณ ตอนขาย" — ถ่ายภาพเก็บไว้ ไม่อ่านจากทะเบียนสินค้าตอนแสดงผล
+  //   วันที่สินค้าเปลี่ยนสถานะภาษี ใบเก่าต้องไม่เปลี่ยนตาม (หลักเดียวกับราคาที่เก็บลงบรรทัด)
+  order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free','tax_status'],
   order_discounts:     ['record_id','order_id','rule_id','rule_name','type','value','free_product_id','free_qty'],
   van_stock:           ['line_user_id','product_id','qty'],
   stock_movements:     ['record_id','line_user_id','product_id','change_qty','type','ref_id','created_at'],

@@ -17,7 +17,8 @@ var GL_ACCT = {
   AP: '2100', GRNI: '2150', VAT_OUTPUT: '2200',
   SALES: '4100', COGS: '5100', OTHER_EXPENSE: '5900'
 };
-var AR_VAT_RATE = 0.07;
+// อัตราเดียวกับทั้งระบบ (ค่าตั้งของบริษัท) — ใบแจ้งหนี้ที่ออกจากบิลขายใช้อัตราที่บิลบันทึกไว้อยู่แล้ว
+function _arVatRate() { return typeof currentVatRate === 'function' ? currentVatRate() : 0.07; }
 
 /* ═══════════════ ผังบัญชี ═══════════════ */
 
@@ -286,9 +287,9 @@ function createApBillFromGr(session, payload) {
     if (!(goods > 0)) return { success: false, message: 'ใบรับของนี้ยอดเป็นศูนย์ ตั้งหนี้ไม่ได้' };
     var vatType = po ? (po.vat_type || 'excluded') : 'excluded';
     var subtotal, vat;
-    if (vatType === 'included') { subtotal = _money(goods / (1 + PO_VAT_RATE)); vat = _money(goods - subtotal); }
+    if (vatType === 'included') { subtotal = _money(goods / (1 + _poVatRate())); vat = _money(goods - subtotal); }
     else if (vatType === 'none') { subtotal = goods; vat = 0; }
-    else { subtotal = goods; vat = _money(goods * PO_VAT_RATE); }
+    else { subtotal = goods; vat = _money(goods * _poVatRate()); }
     var total = _money(subtotal + vat);
     var billDate = payload.billDate || _todayStr();
     if (!_validDate(billDate)) return { success: false, message: 'วันที่ใบแจ้งหนี้ต้องเป็น yyyy-mm-dd' };
@@ -323,7 +324,7 @@ function createApBillManual(session, payload) {
   var subtotal = _numOrNull(payload.subtotalExVat);
   if (!(subtotal > 0)) return { success: false, message: 'ยอดก่อนภาษีต้องมากกว่า 0' };
   var vat = _numOrNull(payload.vatAmount);
-  if (vat === null) vat = _money(subtotal * PO_VAT_RATE);
+  if (vat === null) vat = _money(subtotal * _poVatRate());
   if (!(vat >= 0)) return { success: false, message: 'ภาษีซื้อต้องไม่ติดลบ' };
   var billDate = payload.billDate || _todayStr();
   if (!_validDate(billDate)) return { success: false, message: 'วันที่ใบแจ้งหนี้ต้องเป็น yyyy-mm-dd' };
@@ -476,7 +477,7 @@ function createArInvoice(session, payload) {
       subtotal = _numOrNull(payload.subtotalExVat);
       if (!(subtotal > 0)) return { success: false, message: 'ยอดก่อนภาษีต้องมากกว่า 0' };
       vat = _numOrNull(payload.vatAmount);
-      if (vat === null) vat = _money(subtotal * AR_VAT_RATE);
+      if (vat === null) vat = _money(subtotal * _arVatRate());
       if (!(vat >= 0)) return { success: false, message: 'ภาษีขายต้องไม่ติดลบ' };
     }
     var customer = null;
