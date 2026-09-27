@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { Utilities: {}, Session: {}, console };
 vm.createContext(ctx);
-for (const f of ['28_units.gs', '17_pricing.gs', '18_pricing_engine.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
+for (const f of ['28_units.gs', '17_pricing.gs', '18_pricing_engine.gs', '10_master_data.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
 
 let failed = 0;
 const eq = (name, actual, expected) => {
@@ -203,6 +203,16 @@ console.log('\n-- ค่าว่างของ "คิด VAT ไหม" ต�
 eq('ว่าง/null/undefined = คิด VAT', [ctx.vatFlagOn(''), ctx.vatFlagOn(null), ctx.vatFlagOn(undefined)], [true, true, true]);
 eq('ปิดชัดเจนเท่านั้นถึงไม่คิด', [ctx.vatFlagOn('FALSE'), ctx.vatFlagOn(false), ctx.vatFlagOn(0), ctx.vatFlagOn('no')], [false, false, false, false]);
 eq('เปิดชัดเจน', [ctx.vatFlagOn('TRUE'), ctx.vatFlagOn(true), ctx.vatFlagOn(1)], [true, true, true]);
+
+console.log('\n-- ธงคุณสมบัติสินค้า (Express STMAS / Smartsales item) --');
+eq('no_discount: ค่าว่าง = ลดราคาได้ (ตรงข้ามกับธงอื่นโดยตั้งใจ)', [
+  ctx.isNoDiscountProduct({}), ctx.isNoDiscountProduct({ no_discount: '' }),
+  ctx.isNoDiscountProduct({ no_discount: 'FALSE' }), ctx.isNoDiscountProduct({ no_discount: 'TRUE' })
+], [false, false, false, true]);
+eq('ธงอื่น: ค่าว่าง = ใช่ (สินค้าเดิมขายได้/ซื้อได้/ตัดสต็อกเหมือนเดิม ไม่ต้อง migrate)', [
+  ctx.isSellableProduct({}), ctx.isPurchasableProduct({}), ctx.isStockProduct({}),
+  ctx.isStockProduct({ is_stock: 'FALSE' }), ctx.isSellableProduct({ is_sellable: 'FALSE' })
+], [true, true, true, false, false]);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

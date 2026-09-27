@@ -333,6 +333,12 @@
   .sod-print-list.open{ display:block; }
   .sod-print-list .btn{ display:flex; width:100%; justify-content:flex-start; text-align:left; height:auto; padding:8px 10px; }
   .sod-print-list .btn:hover{ background:var(--surface-2); }
+  /* tag เล็กในตาราง — ใช้กับคุณสมบัติสินค้า/สถานะภาษี (คนละตัวกับ .pill ที่ใช้กับสถานะเอกสาร) */
+  .tag{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:11.5px; font-weight:600; line-height:1.6;
+    background:var(--surface-2); color:var(--ink-soft); border:1px solid var(--border); white-space:nowrap; }
+  .tag-ok{ background:#EAF6EE; color:#1B7A43; border-color:#BFE3CC; }
+  .tag-warn{ background:#FDF3E2; color:#8A5A12; border-color:#F0DCB4; }
+  .tag-info{ background:#EAF1FD; color:#2B63D9; border-color:#C9DAF7; }
   .btn.is-busy{ position:relative; color:transparent !important; pointer-events:none; }
   .btn.is-busy::after{ content:''; position:absolute; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px;
     border:2px solid currentColor; border-top-color:transparent; border-radius:50%; color:var(--ink-soft);
@@ -2653,6 +2659,21 @@ async function sonSubmit(){
    ไม่ใช่ "ยกเว้นภาษี" และไม่มีโค้ดไหนอ่านเลย — ปล่อยไว้ในชีตเฉยๆ แต่ไม่ให้แก้จากหน้านี้อีก
    จะได้ไม่มีใครตั้งแล้วนึกว่าสินค้าตัวนั้นไม่เสียภาษี */
 const TAX_STATUS_LABEL = { '':'คิด VAT 7%', vat:'คิด VAT 7%', exempt:'ยกเว้น VAT', zero:'อัตราศูนย์' };
+const UNIT_LABEL_JS = { CT:'ลัง', PK:'แพ็ค', PC:'ชิ้น' };
+const unitLabelJs = c => UNIT_LABEL_JS[String(c||'').toUpperCase()] || c || '';
+/* ธงคุณสมบัติสินค้า — ค่าว่างแปลว่า "ใช่" ทุกตัว ยกเว้น no_discount ที่ค่าว่างแปลว่า "ลดได้"
+   (ตรงกับ productFlag/isNoDiscountProduct ฝั่ง backend — ห้ามตีความคนละแบบ) */
+const pFlagOn = v => { const s = String(v==null?'':v).trim().toLowerCase(); return !(s==='false'||s==='0'||s==='no'); };
+const pFlagSet = v => { const s = String(v==null?'':v).trim().toLowerCase(); return s==='true'||s==='1'||s==='yes'; };
+function productFlagTags(p){
+  const t = [];
+  if (!pFlagOn(p.is_stock)) t.push('<span class="tag tag-info">ไม่ตัดสต็อก</span>');
+  if (!pFlagOn(p.is_sellable)) t.push('<span class="tag tag-warn">ไม่ขาย</span>');
+  if (!pFlagOn(p.is_purchasable)) t.push('<span class="tag tag-warn">ไม่ซื้อ</span>');
+  if (pFlagSet(p.no_discount)) t.push('<span class="tag tag-warn">ห้ามลดราคา</span>');
+  if (p.packing_text) t.push('<span class="tag">บรรจุ '+esc(p.packing_text)+'</span>');
+  return t.join(' ') || '<span class="unit">-</span>';
+}
 const taxStatusOf = p => { const v = String(p.tax_status||'').toLowerCase(); return (v==='exempt'||v==='zero') ? v : ''; };
 // key = ชื่อ field ในฟอร์ม/payload (camelCase ตามที่ backend รับ), dataKey = ชื่อคอลัมน์จริงใน Sheet (snake_case)
 const PRODUCT_FIELDS = [
@@ -2668,7 +2689,27 @@ const PRODUCT_FIELDS = [
   { key:'taxStatus', dataKey:'tax_status', label:'สถานะภาษี', type:'select', default:'', options:[
     {value:'',label:'คิด VAT 7% (ปกติ)'}, {value:'exempt',label:'ยกเว้น VAT'}, {value:'zero',label:'อัตราศูนย์'}
   ], hint:'(ราคาที่กรอกเป็นราคารวมภาษีแล้วเสมอ — สินค้ายกเว้นภาษีจะไม่ถูกถอด 7% ออกตอนออกใบกำกับ)' },
+  // หน่วยตั้งต้นของแต่ละงาน — ขายเป็นลังแต่ซื้อเป็นตัน เป็นเรื่องปกติของธุรกิจนี้ (แนวคิด SQUCOD/PQUCOD ของ Express)
+  { key:'salesUnitCode', dataKey:'sales_unit_code', label:'หน่วยขาย (ตั้งต้น)', type:'select', default:'', options:[
+    {value:'',label:'— ใช้หน่วยฐาน —'}, {value:'CT',label:'ลัง (CT)'}, {value:'PK',label:'แพ็ค (PK)'}, {value:'PC',label:'ชิ้น (PC)'}
+  ], hint:'(หน่วยที่ขึ้นให้อัตโนมัติตอนเปิดบิลขาย)' },
+  { key:'purchaseUnitCode', dataKey:'purchase_unit_code', label:'หน่วยซื้อ (ตั้งต้น)', type:'select', default:'', options:[
+    {value:'',label:'— ใช้หน่วยฐาน —'}, {value:'CT',label:'ลัง (CT)'}, {value:'PK',label:'แพ็ค (PK)'}, {value:'PC',label:'ชิ้น (PC)'}
+  ], hint:'(หน่วยที่ขึ้นให้อัตโนมัติตอนเปิดใบสั่งซื้อ)' },
+  { key:'packingText', dataKey:'packing_text', label:'บรรจุ', type:'text', placeholder:'เช่น 1x12 หรือ 1x4x3', hint:'(ข้อความบรรจุที่พิมพ์บนใบราคา/เอกสาร)' },
+  { key:'weightKg', dataKey:'weight_kg', label:'น้ำหนัก/หน่วย (กก.)', type:'number', placeholder:'0.00', hint:'(ใช้กับใบปะหน้าพัสดุและค่าขนส่ง)' },
+  { key:'reorderPoint', dataKey:'reorder_point', label:'จุดสั่งซื้อ', type:'number', placeholder:'0', hint:'(เหลือต่ำกว่านี้ = เตือนของใกล้หมดในหน้าคลัง)' },
+  { key:'isStock', dataKey:'is_stock', label:'ตัดสต็อก', type:'select', default:'TRUE', options:[
+    {value:'TRUE',label:'ตัดสต็อก (สินค้าจริง)'}, {value:'FALSE',label:'ไม่ตัดสต็อก (ค่าบริการ/ค่าขนส่ง)'}
+  ] },
+  { key:'isSellable', dataKey:'is_sellable', label:'ขายได้', type:'select', default:'TRUE', options:[
+    {value:'TRUE',label:'ขายได้'}, {value:'FALSE',label:'ไม่ให้เลือกตอนเปิดบิล'} ] },
+  { key:'isPurchasable', dataKey:'is_purchasable', label:'ซื้อได้', type:'select', default:'TRUE', options:[
+    {value:'TRUE',label:'ซื้อได้'}, {value:'FALSE',label:'ไม่ให้เลือกตอนสั่งซื้อ'} ] },
+  { key:'noDiscount', dataKey:'no_discount', label:'ห้ามลดราคา', type:'select', default:'FALSE', options:[
+    {value:'FALSE',label:'ลดราคาได้ตามปกติ'}, {value:'TRUE',label:'ห้ามลด (ส่วนลดท้ายบิลไม่กินรายการนี้)'} ] },
   { key:'barcode', dataKey:'barcode', label:'บาร์โค้ด (ชุด)', type:'text', placeholder:'สแกน/พิมพ์บาร์โค้ด', hint:'(unique เฉพาะสินค้า+หน่วยนี้)' },
+  { key:'cartonBarcode', dataKey:'carton_barcode', label:'บาร์โค้ดลัง', type:'text', placeholder:'บาร์โค้ดบนกล่องลัง', hint:'(สแกนที่ปากคลัง คนละตัวกับบาร์โค้ดหน้าร้าน)' },
   { key:'groupBarcode', dataKey:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', type:'text', placeholder:'ไม่บังคับ', hint:'(ซ้ำกับสินค้าอื่นได้ ถ้าเป็นของชิ้นเดียวกันจริง)' }
 ];
 // คอลัมน์ตาราง (แยกจาก PRODUCT_FIELDS เพราะตารางมีคอลัมน์ที่ไม่ใช่ฟิลด์ฟอร์มตรงๆ เช่น "กลุ่ม" ที่โชว์ชื่อไม่ใช่ id)
@@ -2680,11 +2721,18 @@ const PRODUCT_TABLE_COLS = [
   { key:'base_price', label:'ราคาฐาน', numeric:true, sortVal:p=>parseFloat(p.base_price)||0, render:p=>'฿'+baht(p.base_price), cls:'mono-data' },
   { key:'cost_price', label:'ราคาทุน', numeric:true, sortVal:p=>(p.cost_price?parseFloat(p.cost_price):null), render:p=>(p.cost_price?'฿'+baht(p.cost_price):'-'), cls:'mono-data' },
   { key:'tax_status', label:'ภาษี', sortVal:p=>TAX_STATUS_LABEL[taxStatusOf(p)],
-    render:p=>{ const v = taxStatusOf(p); return v ? '<span class="pill wait">'+TAX_STATUS_LABEL[v]+'</span>' : '<span class="unit">VAT 7%</span>'; } },
+    render:p=>{ const v = taxStatusOf(p);
+      return '<span class="tag '+(v==='exempt'?'tag-warn':v==='zero'?'tag-info':'tag-ok')+'">'+TAX_STATUS_LABEL[v]+'</span>'; } },
   { key:'unit', label:'หน่วยฐาน (ไทย)', sortVal:p=>p.unit },
   { key:'unit_code', label:'รหัสหน่วย (Eng)', sortVal:p=>p.unit_code, cls:'mono-data' },
   { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
+  { key:'sales_unit_code', label:'หน่วยขาย', sortVal:p=>p.sales_unit_code||'',
+    render:p=>p.sales_unit_code ? '<span class="tag">'+esc(unitLabelJs(p.sales_unit_code))+'</span>' : '<span class="unit">'+esc(p.unit||'-')+'</span>' },
+  { key:'purchase_unit_code', label:'หน่วยซื้อ', sortVal:p=>p.purchase_unit_code||'',
+    render:p=>p.purchase_unit_code ? '<span class="tag">'+esc(unitLabelJs(p.purchase_unit_code))+'</span>' : '<span class="unit">'+esc(p.unit||'-')+'</span>' },
+  { key:'flags', label:'คุณสมบัติ', sortVal:p=>'', render:p=>productFlagTags(p) },
   { key:'barcode', label:'บาร์โค้ด (ชุด)', sortVal:p=>p.barcode, cls:'mono-data' },
+  { key:'carton_barcode', label:'บาร์โค้ดลัง', sortVal:p=>p.carton_barcode, cls:'mono-data' },
   { key:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', sortVal:p=>p.group_barcode, cls:'mono-data' },
   { key:'external_code', label:'รหัสอ้างอิง (Express)', sortVal:p=>p.external_code, cls:'mono-data' },
   { key:'image', label:'รูป', numeric:true, sortVal:p=>p.image_url?1:0 },
@@ -2859,7 +2907,10 @@ async function saveProductForm(){
 
   const fields = { product_code:payload.productCode, name:payload.name, base_price:payload.basePrice, cost_price:payload.costPrice,
     tax_status:payload.taxStatus, unit:payload.unit, unit_code:payload.unitCode, group_id:payload.groupId,
-    external_code:payload.externalCode, barcode:payload.barcode, group_barcode:payload.groupBarcode };
+    external_code:payload.externalCode, barcode:payload.barcode, group_barcode:payload.groupBarcode,
+    sales_unit_code:payload.salesUnitCode, purchase_unit_code:payload.purchaseUnitCode, carton_barcode:payload.cartonBarcode,
+    packing_text:payload.packingText, weight_kg:payload.weightKg, reorder_point:payload.reorderPoint,
+    is_stock:payload.isStock, is_sellable:payload.isSellable, is_purchasable:payload.isPurchasable, no_discount:payload.noDiscount };
   if (isEditing) {
     const p = productsCache.find(x => String(x.record_id) === String(productId));
     if (p) { Object.assign(p, fields); if (imageUrl) p.image_url = imageUrl; }

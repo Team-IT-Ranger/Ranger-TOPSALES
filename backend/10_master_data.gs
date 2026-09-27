@@ -117,6 +117,29 @@ function _productById(id) {
   return null;
 }
 
+/** ฟิลด์ชุดใหม่ที่รับได้ทั้งตอนเพิ่มและตอนแก้ — คีย์ payload (camelCase) → คอลัมน์ในชีต */
+var PRODUCT_EXTRA_FIELDS = {
+  nameEn: 'name_en', salesUnitCode: 'sales_unit_code', salesUnitFactor: 'sales_unit_factor',
+  purchaseUnitCode: 'purchase_unit_code', purchaseUnitFactor: 'purchase_unit_factor',
+  cartonBarcode: 'carton_barcode', packingText: 'packing_text', weightKg: 'weight_kg',
+  isStock: 'is_stock', isSellable: 'is_sellable', isPurchasable: 'is_purchasable',
+  noDiscount: 'no_discount', reorderPoint: 'reorder_point', note: 'note'
+};
+var PRODUCT_UNIT_FIELDS = { salesUnitCode: 1, purchaseUnitCode: 1 };
+var PRODUCT_BOOL_FIELDS = { isStock: 1, isSellable: 1, isPurchasable: 1, noDiscount: 1 };
+
+function _productExtraFields(payload, forCreate) {
+  var out = {};
+  Object.keys(PRODUCT_EXTRA_FIELDS).forEach(function(k) {
+    if (payload[k] === undefined) { if (forCreate) out[PRODUCT_EXTRA_FIELDS[k]] = ''; return; }
+    var v = payload[k];
+    if (PRODUCT_UNIT_FIELDS[k]) v = v === '' ? '' : normUnitCode(v, UNIT_PC);       // ทั้งระบบใช้ CT/PK/PC (28_units.gs)
+    else if (PRODUCT_BOOL_FIELDS[k]) v = productFlag(v) ? 'TRUE' : 'FALSE';
+    out[PRODUCT_EXTRA_FIELDS[k]] = v;
+  });
+  return out;
+}
+
 function addProduct(session, payload) {
   var err = _requirePermission(session, 'products', 'edit'); if (err) return err;
   var productCode = String(payload.productCode || '').trim();
@@ -125,14 +148,16 @@ function addProduct(session, payload) {
   if (clash) return { success: false, message: 'รหัสสินค้า "' + productCode + '" ถูกใช้แล้วโดย "' + clash.name + '"' };
 
   var recordId = centralNextId('products');
-  centralAppend('products', {
+  centralAppend('products', Object.assign({
     record_id: recordId, product_code: productCode, name: payload.name, base_price: payload.basePrice || 0,
     unit: payload.unit || UNIT_LABELS.PC, unit_code: normUnitCode(payload.unitCode, UNIT_PC), group_id: payload.groupId || 0, is_active: 'TRUE',
     external_code: payload.externalCode || '',
     barcode: payload.barcode || '', group_barcode: payload.groupBarcode || '',
     cost_price: payload.costPrice || 0, vat_type: payload.vatType || 'none', image_url: '',
-    tax_status: payload.taxStatus === 'exempt' || payload.taxStatus === 'zero' ? payload.taxStatus : ''
-  });
+    tax_status: payload.taxStatus === 'exempt' || payload.taxStatus === 'zero' ? payload.taxStatus : '',
+    last_purchase_price: '', last_purchase_date: '',
+    created_at: nowStr(), created_by: String(session.adminUserId || ''), updated_at: '', updated_by: ''
+  }, _productExtraFields(payload, true)));
   // ส่ง record_id ที่เพิ่งสร้างกลับไปด้วย — ฝั่ง frontend จะได้แพตช์ cache ในเครื่องได้เลย ไม่ต้องโหลดซ้ำ
   return { success: true, id: recordId };
 }
@@ -170,6 +195,9 @@ function updateProduct(session, payload) {
   // '' = คิด VAT ตามปกติ (ค่าตั้งต้น) — เก็บเฉพาะค่าที่รู้จัก กันพิมพ์อะไรแปลกๆ เข้ามาแล้วภาษีเพี้ยนทั้งระบบ
   if (payload.taxStatus !== undefined) fields.tax_status = (payload.taxStatus === 'exempt' || payload.taxStatus === 'zero') ? payload.taxStatus : '';
   if (payload.externalCode !== undefined) fields.external_code = payload.externalCode;
+  Object.assign(fields, _productExtraFields(payload, false));
+  fields.updated_at = nowStr();
+  fields.updated_by = String(session.adminUserId || '');
   if (payload.aliasCodes !== undefined) {
     var aliases = String(payload.aliasCodes || '').split(',').map(function(c) { return c.trim(); }).filter(Boolean);
     for (var ai = 0; ai < aliases.length; ai++) {

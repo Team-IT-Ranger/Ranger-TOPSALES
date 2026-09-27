@@ -73,6 +73,23 @@ function productTaxStatus(p) {
 /** ยกเว้นกับอัตราศูนย์ต่างกันทางภาษี แต่เหมือนกันตรงที่ "ไม่มีภาษีบวกในราคา" */
 function productHasVat(p) { return productTaxStatus(p) === TAX_VAT; }
 
+/* ค่าว่างของธงสินค้าแปลว่า "ใช่" — สินค้าเดิมทุกตัวขายได้/ซื้อได้/ตัดสต็อกได้เหมือนเดิมโดยไม่ต้องแก้ข้อมูล
+   (หลักเดียวกับ vatFlagOn ด้านบน — ห้ามใช้ตัวแปลงของ is_active ที่ความหมายค่าว่างคนละเรื่อง) */
+function productFlag(v) {
+  if (v === '' || v === null || v === undefined) return true;
+  var s = String(v).trim().toLowerCase();
+  return !(s === 'false' || s === '0' || s === 'no');
+}
+function isSellableProduct(p) { return productFlag(p && p.is_sellable); }
+function isPurchasableProduct(p) { return productFlag(p && p.is_purchasable); }
+function isStockProduct(p) { return productFlag(p && p.is_stock); }      // false = ค่าบริการ/ค่าขนส่ง ไม่มีของให้ตัด
+/* no_discount ตรงข้ามกับธงอื่น: ค่าว่าง = ลดราคาได้ (ปกติ) ต้องติ๊กชัดเจนถึงจะห้ามลด
+   จงใจไม่ใช้ productFlag() เพราะค่าว่างของตัวนี้ต้องแปลว่า "ไม่" ไม่ใช่ "ใช่" */
+function isNoDiscountProduct(p) {
+  var v = String((p && p.no_discount) || '').trim().toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes';
+}
+
 /**
  * แยกภาษีของทั้งบิลจากรายการจริง — รองรับบิลที่มีของคิด VAT และของยกเว้น VAT ปนกัน
  *   lines: [{ productId, lineTotal }] (lineTotal = ราคารวมภาษีแล้ว) · billDiscount: ส่วนลดท้ายบิล (รวมภาษี)
@@ -153,6 +170,8 @@ function _pricingContextForList(list) {
     items: centralObjects('price_list_items').filter(function(it) { return String(it.price_list_id) === String(list.record_id); }),
     // สถานะภาษีรายสินค้า — เกณฑ์โปรท้ายบิลคิดจากยอด "ไม่รวม VAT" ของยกเว้นภาษีจึงห้ามถูกหาร 1.07
     taxOf: (function() { var m = {}; centralObjects('products').forEach(function(p) { m[String(p.record_id)] = productTaxStatus(p); }); return m; })(),
+    // สินค้าที่ห้ามลดราคา (no_discount ของ Smartsales) — ส่วนลดท้ายบิลต้องไม่กินรายการพวกนี้
+    noDiscountOf: (function() { var m = {}; centralObjects('products').forEach(function(p) { if (isNoDiscountProduct(p)) m[String(p.record_id)] = 1; }); return m; })(),
     vatRate: currentVatRate(),
     billPromos: centralObjects('price_list_bill_promos').filter(function(b) { return String(b.price_list_id) === String(list.record_id); })
       .map(function(b) { return { minAmountExVat: Number(b.min_amount_ex_vat), percent: Number(b.percent) }; })
@@ -234,8 +253,15 @@ function priceCart(ctx, cart, opts) {
   });
   var bill = null;
   (ctx.billPromos || []).forEach(function(b) { if (exVat >= b.minAmountExVat && (!bill || b.minAmountExVat > bill.minAmountExVat)) bill = b; });
-  var billDiscount = bill ? _round2(subtotal * bill.percent / 100) : 0;
+  /* ★ ฐานที่ลดได้ ไม่รวมรายการที่ห้ามลดราคา — ไม่งั้นสินค้าคุมราคาจะถูกลดทางอ้อมผ่านส่วนลดท้ายบิล
+     (เกณฑ์ยอดขั้นต่ำยังนับทั้งบิลตามปกติ ลูกค้าซื้อของคุมราคาก็ยังช่วยให้ถึงขั้นได้) */
+  var noDiscOf = ctx.noDiscountOf || {};
+  var discountable = 0;
+  lines.forEach(function(l) { if (!noDiscOf[String(l.productId)]) discountable += l.lineTotal; });
+  discountable = _round2(discountable);
+  var billDiscount = bill ? _round2(discountable * bill.percent / 100) : 0;
   return { success: true, lines: lines, subtotal: subtotal, subtotalExVat: _round2(exVat),
+           discountableSubtotal: discountable,
            billPercent: bill ? bill.percent : 0, billMinExVat: bill ? bill.minAmountExVat : 0, billDiscount: billDiscount,
            total: _round2(subtotal - billDiscount), priceListId: ctx.list.record_id, priceListName: ctx.list.name };
 }

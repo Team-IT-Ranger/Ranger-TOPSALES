@@ -38,8 +38,24 @@ var CENTRAL_SHEETS = {
   //   ★ คนละคอลัมน์กับ vat_type ที่มีมาแต่เดิมโดยตั้งใจ — vat_type ค่า default คือ 'none' ซึ่งแปลว่า "ยังไม่ได้ตั้ง"
   //   ไม่ใช่ "ไม่มีภาษี" ถ้าเอามาใช้ตรงๆ สินค้าทุกตัวในระบบจะกลายเป็นยกเว้นภาษีทันที (ไม่มีโค้ดไหนอ่าน vat_type เลย)
   //   คอลัมน์ใหม่นี้ค่าว่าง = คิด VAT จึงไม่ต้อง migrate อะไร ของเดิมทำงานถูกตั้งแต่แถวแรก
+  /* ── ฟิลด์ชุดที่ถอดจากทะเบียนสินค้าของ Express (STMAS.DBF) และแอป Smartsales (ชีต item) 2026-09-27 ──
+     เอามาเฉพาะตัวที่ "มีโค้ดของเราใช้ได้ทันที" ไม่เอามาตั้งไว้เฉยๆ ให้กลายเป็นคอลัมน์ขยะ
+       sales_unit_* / purchase_unit_*  ← ISSAL+SQUCOD+SFACTOR / ISPUR+PQUCOD+PFACTOR
+          หน่วยตั้งต้นของแต่ละงาน: ขายเป็นลัง แต่ซื้อเป็นตัน เป็นเรื่องปกติของธุรกิจนี้
+       carton_barcode  ← BARCOD ของหน่วยลัง (สแกนที่ปากคลังคนละตัวกับสแกนที่หน้าร้าน)
+       packing_text    ← PACKING ("1x12", "1x4x3") ข้อความบรรจุที่พิมพ์บนใบราคา/เอกสาร
+       weight_kg       ← NUM1 ใช้กับใบปะหน้าพัสดุและค่าขนส่ง
+       is_stock        ← ISINV  สินค้านี้ตัดสต็อกไหม (ค่าบริการ/ค่าขนส่งขายได้แต่ไม่มีของ)
+       is_sellable / is_purchasable ← ISSAL / ISPUR  โผล่ในหน้าเปิดบิล / หน้าสั่งซื้อไหม
+       no_discount     ← NoDisc ของ Smartsales  ห้ามลดราคา (ส่วนลดท้ายบิลไม่กินรายการนี้)
+       reorder_point   ← TOTREO  จุดสั่งซื้อ ใช้เตือนของใกล้หมดในหน้าคลัง
+       last_purchase_* ← LPURPR/LPURDAT  ราคาซื้อครั้งล่าสุด (ระบบเติมให้เองตอนรับของ) ใช้ตอนเปิดใบสั่งซื้อ
+     ค่าว่างของทุก is_* แปลว่า "ใช่" — สินค้าเดิมทุกตัวจึงทำงานเหมือนเดิมโดยไม่ต้อง migrate */
   products: ['record_id','product_code','name','base_price','unit','unit_code','group_id','is_active','external_code',
-    'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions','alias_codes','tax_status'],
+    'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions','alias_codes','tax_status',
+    'name_en','sales_unit_code','sales_unit_factor','purchase_unit_code','purchase_unit_factor','carton_barcode',
+    'packing_text','weight_kg','is_stock','is_sellable','is_purchasable','no_discount','reorder_point',
+    'last_purchase_price','last_purchase_date','note','created_at','created_by','updated_at','updated_by'],
   product_groups: ['record_id','name','description'],
   // ── ชุดราคา/ส่วนลดตามกลุ่มลูกค้า (ใบรายการขายรายไตรมาส) — ดู 17_pricing.gs ──
   //  price_lists: 1 ชุด = 1 กลุ่มลูกค้า × 1 ช่วงเวลา, status: draft | active | archived (valid_from/to เป็นข้อความ yyyy-MM-dd)

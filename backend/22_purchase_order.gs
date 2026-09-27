@@ -338,6 +338,12 @@ function _applyStockIn(scope, warehouseId, productId, baseQty, unitCost, moveTyp
   centralAppend('stock_ledger', { record_id: centralNextId('stock_ledger'), tenant_id: scope || '', warehouse_id: warehouseId, product_id: productId,
     change_qty: baseQty, balance_after: newQty, unit_cost: unitCost, move_type: moveType, ref_type: refType, ref_id: refId,
     note: refNo || '', created_by: userId, created_at: nowStr() });
+  // ราคาซื้อครั้งล่าสุด (แนวคิด LPURPR/LPURDAT ของ Express) — ระบบเติมเอง ไม่ต้องให้คนกรอก
+  // ใช้ตอนเปิดใบสั่งซื้อครั้งถัดไป จะได้รู้ว่าคราวก่อนซื้อมาเท่าไหร่ · เฉพาะของเข้าเท่านั้น (ของออกไม่ใช่การซื้อ)
+  if (baseQty > 0 && moveType === 'receipt') {
+    try { centralUpdate('products', productId, { last_purchase_price: _money(unitCost), last_purchase_date: _todayStr() }); }
+    catch (e) { Logger.log('อัปเดตราคาซื้อล่าสุดไม่สำเร็จ: ' + e); }
+  }
   return { qty: newQty, avgCost: newCost };
 }
 

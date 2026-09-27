@@ -124,9 +124,10 @@ function recordSale(user, payload) {
     allStock.filter(function(s) { return String(s.line_user_id) === String(user.lineUserId); })
       .forEach(function(s) { myStock[String(s.product_id)] = parseInt(s.qty) || 0; });
 
+    // สินค้าที่ไม่ตัดสต็อก (is_stock = FALSE เช่น ค่าบริการ/ค่าขนส่ง) ข้ามไปเลย ไม่ต้องเช็คว่ามีของพอไหม
     var need = {};
-    items.forEach(function(it) { need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
-    freeGoods.forEach(function(f) { need[String(f.productId)] = (need[String(f.productId)] || 0) + f.qty; });
+    items.forEach(function(it) { if (isStockProduct(productMap[String(it.productId)])) need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
+    freeGoods.forEach(function(f) { if (isStockProduct(productMap[String(f.productId)])) need[String(f.productId)] = (need[String(f.productId)] || 0) + f.qty; });
 
     var pids = Object.keys(need);
     for (var ci = 0; ci < pids.length; ci++) {
