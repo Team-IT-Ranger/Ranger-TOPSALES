@@ -107,7 +107,10 @@ var CENTRAL_SHEETS = {
   distribution_channels: ['record_id','name','description','is_active'],
   payment_types: ['record_id','code','name','is_active'],
 
-  discount_rules: ['record_id','name','scope','product_group_id','product_id','trigger_group_ids','customer_group_id','min_qty','min_amount','type','value','free_product_id','free_qty','priority','stackable','date_start','date_end','is_active'],
+  // trigger_product_ids: รายการ product_id คั่นด้วย , — ใบอนุมัติโปรจริงคิดเป็น "ตระกูลสินค้า" (เช่น Ranger 12hrs
+  //   ซึ่งมี 6 SKU) ซึ่งละเอียดกว่า product_group_id (กลุ่ม 7 = ยาจุดทั้งหมด รวม Extreme ที่คนละโปร)
+  //   และกว้างกว่า product_id เดี่ยว — ถ้าไม่มีช่องนี้ต้องสร้างกฎซ้ำทีละ SKU แล้วแก้ตกหล่นแน่นอน
+  discount_rules: ['record_id','name','scope','product_group_id','product_id','trigger_group_ids','trigger_product_ids','customer_group_id','min_qty','min_amount','type','value','free_product_id','free_qty','priority','stackable','date_start','date_end','is_active'],
 
   // ═══ การจ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (38_package_distribution.gs) ═══
   // 1 แถว = ชุดนี้จ่ายให้ตัวแทนรายนี้ · ไม่มีแถว = ไม่มีตัวแทนรายไหนได้ใช้ (ไม่ใช่ "ทุกคน" — กติกาเจ้าของระบบ

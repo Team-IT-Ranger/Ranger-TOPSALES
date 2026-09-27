@@ -259,5 +259,32 @@ console.log('\n-- โปรโมชั่นซ้อนบนชุดรา�
      [ctx.priceCart(capped, cart50, cash).promoDiscount, ctx.priceCart(capped, cart50, cash).total >= 0], [58500, true]);
 }
 
+/* ใบอนุมัติโปรจริงคิดเป็น "ตระกูลสินค้า" เช่น Ranger 12hrs ซึ่งมีหลาย SKU — กลุ่มสินค้ากว้างไป
+   (กลุ่ม 7 = ยาจุดทั้งหมด รวม Extreme ที่คนละโปร) ส่วน product_id เดี่ยวแคบไป */
+console.log('\n-- โปรระบุรายการสินค้าหลายตัว --');
+{
+  const base = { id: 1, name: 'ตระกูล 12hrs', productGroupId: 0, productId: 0, triggerGroupIds: [],
+    customerGroupId: 0, minQty: 0, minAmount: 0, type: 'percent', value: 10,
+    freeProductId: 0, freeQty: 0, priority: 10, stackable: true };
+  const items = [{ productId: 101, qty: 2, price: 100, groupId: 7 },
+                 { productId: 102, qty: 2, price: 100, groupId: 7 },
+                 { productId: 201, qty: 2, price: 100, groupId: 9 }];
+
+  const fam = ctx.computePromoDiscount(items, [Object.assign({}, base, { triggerProductIds: [101, 102] })], true);
+  eq('ระบุสองตัวในตระกูล → ลดเฉพาะสองตัวนั้น (2×100×2 = 400 ลด 10% = 40)', fam.discount, 40);
+
+  const grp = ctx.computePromoDiscount(items, [Object.assign({}, base, { triggerProductIds: [], productGroupId: 7 })], true);
+  eq('  ถ้าใช้กลุ่มแทน จะกินทั้งกลุ่ม (ยังได้ 40 เพราะกลุ่ม 7 มีสองตัวพอดี)', grp.discount, 40);
+
+  const one = ctx.computePromoDiscount(items, [Object.assign({}, base, { triggerProductIds: [101] })], true);
+  eq('  ระบุตัวเดียว ลดตัวเดียว', one.discount, 20);
+
+  const none = ctx.computePromoDiscount(items, [Object.assign({}, base, { triggerProductIds: [999] })], true);
+  eq('  ไม่มีสินค้าในตะกร้าตรงกับที่ระบุ → ไม่ลด', none.discount, 0);
+
+  const both = ctx.computePromoDiscount(items, [Object.assign({}, base, { triggerProductIds: [201], productGroupId: 7 })], true);
+  eq('★ ระบุรายการสินค้าไว้ ต้องชนะกลุ่ม (แคบกว่าชนะ ไม่งั้นตั้งเจาะจงแล้วไม่มีผล)', both.discount, 20);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

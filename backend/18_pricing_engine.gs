@@ -312,12 +312,23 @@ function priceCart(ctx, cart, opts) {
            priceListId: ctx.list.record_id, priceListName: ctx.list.name };
 }
 
-// แอดมินทดลองคิดราคา — payload: { priceListId | customerGroupId+date?, paymentType, isVan, items:[{productId|productCode, unitCode, qty}] }
-// ส่ง priceListId = ลองชุดนั้นตรงๆ (รวมชุดร่าง) ไม่ส่ง = ใช้ชุดที่ "ใช้งาน" ของกลุ่มลูกค้า ณ วันที่ เหมือนตอนขายจริง
+/**
+ * แอดมินทดลองคิดราคา — payload: { customerId | priceListId | customerGroupId+date?, paymentType, isVan,
+ *                                 items:[{productId|productCode, unitCode, qty}] }
+ *  - `customerId`  ★ คิดในนาม "ร้านจริง" — ผ่านการจ่ายชุดให้ตัวแทน กฎสิทธิ์ และโปรโมชั่นครบเหมือนตอนขายจริง
+ *                  ใช้ตรวจว่าโปรที่เพิ่งตั้งจะลดจริงเท่าไรก่อนเปิดใช้ · ทางอื่นด้านล่างไม่ผูกร้าน จึงไม่มีโปร
+ *  - `priceListId` ลองชุดนั้นตรงๆ (รวมชุดร่าง ที่ยังไม่เปิดใช้งาน)
+ *  - `customerGroupId` ชุดที่ "ใช้งาน" ของกลุ่มลูกค้า ณ วันที่ระบุ
+ */
 function previewPricing(session, payload) {
   var err = _requirePermission(session, 'pricing', 'view'); if (err) return err;
   var ctx;
-  if (payload.priceListId) {
+  if (payload.customerId) {
+    var cust = plrCustomerRow(payload.customerId);
+    if (!cust) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
+    ctx = getPricingContextForCustomer(payload.customerId, payload.date);
+    if (!ctx) return { success: false, message: 'ร้านนี้ยังไม่เข้าเงื่อนไขชุดราคาไหนเลย — ตรวจด้วย "ตรวจสิทธิ์ของร้าน" ว่าติดที่การจ่ายชุดให้ตัวแทน หรือกฎสิทธิ์' };
+  } else if (payload.priceListId) {
     var picked = null;
     centralObjects('price_lists').forEach(function(l) { if (String(l.record_id) === String(payload.priceListId)) picked = l; });
     ctx = _pricingContextForList(picked);
@@ -338,5 +349,11 @@ function previewPricing(session, payload) {
     }
     cart.push({ productId: pid, unitCode: it.unitCode, qty: it.qty });
   }
-  return priceCart(ctx, cart, { isCredit: isCreditPayment(payload.paymentType), isVan: !!payload.isVan });
+  var res = priceCart(ctx, cart, { isCredit: isCreditPayment(payload.paymentType), isVan: !!payload.isVan });
+  if (res.success) {
+    res.priceListName = ctx.list.name;
+    // บอกด้วยว่าคิดโปรไปกี่ตัว — ทางที่ไม่ผูกร้านจะเป็น null เพื่อไม่ให้เข้าใจผิดว่า "ไม่มีโปร"
+    res.promoCount = payload.customerId ? (ctx.promoRules || []).length : null;
+  }
+  return res;
 }

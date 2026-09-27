@@ -30,6 +30,7 @@ function _activeRules() {
       productGroupId: parseInt(r.product_group_id) || 0,
       productId: parseInt(r.product_id) || 0,
       triggerGroupIds: String(r.trigger_group_ids || '').split(',').map(function(s) { return parseInt(s.trim()); }).filter(function(n) { return n > 0; }),
+      triggerProductIds: String(r.trigger_product_ids || '').split(',').map(function(s) { return parseInt(s.trim()); }).filter(function(n) { return n > 0; }),
       customerGroupId: parseInt(r.customer_group_id) || 0,
       minQty: parseFloat(r.min_qty) || 0,
       minAmount: parseFloat(r.min_amount) || 0,
@@ -96,7 +97,10 @@ function computePromoDiscount(items, rules, skipFreeGoods) {
     // เลือกรายการที่เข้าเงื่อนไข trigger: ถ้ามี triggerGroupIds ให้คละหลายกลุ่มได้,
     // ไม่งั้น fallback ไป productId/productGroupId เดี่ยว
     var matched = items.filter(function(it) {
-      if (r.triggerGroupIds.length) return r.triggerGroupIds.indexOf(it.groupId) !== -1;
+      // เรียงจากแคบไปกว้าง: รายการสินค้าที่ระบุ → กลุ่มที่ระบุหลายกลุ่ม → สินค้าเดี่ยว → กลุ่มเดียว
+      var pids = r.triggerProductIds || [], gids = r.triggerGroupIds || [];
+      if (pids.length) return pids.indexOf(Number(it.productId)) !== -1;
+      if (gids.length) return gids.indexOf(it.groupId) !== -1;
       if (r.productId) return it.productId === r.productId;
       if (r.productGroupId) return it.groupId === r.productGroupId;
       return false; // กันโปรที่ไม่ระบุเงื่อนไขอะไรเลยโดนใช้มั่ว
@@ -151,20 +155,22 @@ function listPromotions(session) {
 
 function addPromotion(session, payload) {
   var err = _requirePermission(session, 'promotions', 'edit'); if (err) return err;
+  var id = centralNextId('discount_rules');
   centralAppend('discount_rules', {
-    record_id: centralNextId('discount_rules'),
+    record_id: id,
     name: payload.name, scope: payload.scope || '',
     product_group_id: payload.productGroupId || 0, product_id: payload.productId || 0,
     trigger_group_ids: (payload.triggerGroupIds || []).join(','),
+    trigger_product_ids: (payload.triggerProductIds || []).join(','),
     customer_group_id: payload.customerGroupId || 0,
     min_qty: payload.minQty || 0, min_amount: payload.minAmount || 0,
     type: payload.type, value: payload.value || 0,
     free_product_id: payload.freeProductId || 0, free_qty: payload.freeQty || 0,
     priority: payload.priority || 100, stackable: !!payload.stackable,
     date_start: payload.dateStart || '', date_end: payload.dateEnd || '',
-    is_active: 'TRUE'
+    is_active: payload.isActive === false ? 'FALSE' : 'TRUE'
   });
-  return { success: true };
+  return { success: true, promotionId: id };
 }
 
 function updatePromotion(session, payload) {
