@@ -203,7 +203,28 @@
   .activity-row:first-of-type{ border-top:none; }
   .activity-row .amt{ font-family:'IBM Plex Mono'; font-weight:600; }
 
-  .table-wrap{ overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+  /* ★ หัว/ท้ายตารางตรึงขอบ แถวข้อมูลเลื่อนอยู่ข้างใน (ผู้ใช้สั่ง 27 ก.ย. 2026)
+     ตารางยาว ๆ อย่างรายชื่อลูกค้า 2,000 ร้าน พอเลื่อนลงไปก็ไม่รู้แล้วว่าคอลัมน์ไหนคืออะไร
+     ทำที่ .table-wrap ที่เดียว ตารางทุกหน้าจึงได้ผลพร้อมกัน รวมถึงตารางที่เพิ่มทีหลัง
+     --tbl-max ปรับต่อที่ได้ (ในโมดัลพื้นที่น้อยกว่าหน้าเต็ม) */
+  .table-wrap{ --tbl-max:calc(100vh - 250px);
+    overflow:auto; max-height:var(--tbl-max);
+    background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+  .table-wrap > table{ border-collapse:separate; border-spacing:0; }   /* sticky ใช้กับ collapse ไม่ได้ เส้นขอบจะหาย */
+  /* หัวตารางต้องทึบแสงเสมอ ไม่งั้นแถวข้อมูลจะเลื่อนทะลุขึ้นมาเห็นซ้อนกัน · ใช้สีเดียวกับท้ายตาราง
+     ให้อ่านออกว่าทั้งสองเป็น "กรอบ" ของตาราง ไม่ใช่แถวข้อมูล */
+  .table-wrap thead th{ position:sticky; top:0; z-index:3; background:var(--surface-2);
+    box-shadow:inset 0 -1px 0 var(--border); }                          /* เส้นใต้หัวตาราง — border ธรรมดาเลื่อนหลุดตอน sticky */
+  .table-wrap tfoot td, .table-wrap tfoot th{ position:sticky; bottom:0; z-index:3;
+    background:var(--surface-2); color:var(--ink-soft); font-size:11.5px; padding:7px 12px;
+    box-shadow:inset 0 1px 0 var(--border); border-top:none; }
+  .table-wrap tfoot .tf-note{ float:right; color:var(--ink-faint); }
+  #pl-modal .table-wrap{ --tbl-max:52vh; }
+  body.density-compact .table-wrap{ --tbl-max:calc(100vh - 210px); }
+  /* จอเตี้ยๆ ให้เหลือพื้นที่ตารางพอใช้งาน ไม่งั้นเห็นทีละสองแถว */
+  @media (max-height:700px){ .table-wrap{ --tbl-max:60vh; } }
+  @media print{ .table-wrap{ max-height:none; overflow:visible; }
+    .table-wrap thead th, .table-wrap tfoot td{ position:static; } }
   table{ width:100%; border-collapse:collapse; font-size:13px; }
   th{ text-align:left; background:var(--surface-2); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); padding:9px 12px; white-space:nowrap; }
   th.th-sortable{ cursor:pointer; user-select:none; transition:color .12s,background .12s; }
@@ -5443,6 +5464,35 @@ async function deleteRoleUI(code){
 /* ── ตัวเลขเงินชิดขวาอัตโนมัติ ──
    ทุกช่องตารางที่ขึ้นต้นด้วย ฿ จะถูกใส่คลาส .num ให้เอง และหัวคอลัมน์ตรงกันก็ชิดขวาตาม
    (ทำเป็น observer แทนการไล่แก้ทุก renderer — ตารางใหม่ที่เพิ่มทีหลังได้ผลเหมือนกันโดยไม่ต้องจำ) */
+/* ★ ท้ายตารางบอกจำนวนรายการ — ตารางที่เลื่อนอยู่ข้างในทำให้ไม่เห็นแล้วว่ามีทั้งหมดกี่แถว
+   เติมให้อัตโนมัติเหมือน initMoneyAlign() ตารางใหม่จึงได้เองโดยไม่ต้องแก้ renderer
+   ★ ต้องไม่เขียนทับเมื่อข้อความเดิมตรงอยู่แล้ว ไม่งั้น MutationObserver จะปลุกตัวเองวนไม่รู้จบ */
+(function initTableFooters(){
+  const fill = () => {
+    // ทุกตารางที่อยู่ในกรอบเลื่อน รวมตารางในโมดัลด้วย — ยกเว้นเอกสารสำหรับพิมพ์ ซึ่งมีท้ายกระดาษของตัวเอง
+    document.querySelectorAll('.table-wrap > table').forEach(t => {
+      if (t.closest('.docsheet')) return;
+      const head = t.tHead && t.tHead.rows[0];
+      if (!head) return;
+      const body = t.tBodies[0];
+      if (!body) return;
+      const rows = [...body.rows].filter(r => !r.classList.contains('empty-row'));
+      const cols = [...head.cells].reduce((n, c) => n + (c.colSpan || 1), 0);
+      let foot = t.tFoot;
+      if (!foot) { foot = t.createTFoot(); foot.insertRow().insertCell(); }
+      const cell = foot.rows[0] && foot.rows[0].cells[0];
+      if (!cell) return;
+      if (Number(cell.colSpan) !== cols) cell.colSpan = cols;
+      const text = rows.length ? 'ทั้งหมด ' + rows.length.toLocaleString('en-US') + ' รายการ' : '—';
+      if (cell.textContent !== text) cell.textContent = text;
+    });
+  };
+  let timer;
+  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(fill, 40); })
+    .observe(document.body, { childList: true, subtree: true });
+  fill();
+})();
+
 (function initMoneyAlign(){
   const isMoney = el => /^\s*[-]?฿/.test(el.textContent);
   const tag = () => {
