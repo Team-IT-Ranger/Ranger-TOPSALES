@@ -354,6 +354,37 @@
   .view input:focus,.view select:focus,.view textarea:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
   .field input,.field select,.field textarea,.inp{ border-radius:var(--r-ctl); padding:9px 12px; font-size:14px; }
   .field input:focus,.field select:focus,.field textarea:focus,.plm-row input:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
+
+  /* ── ช่องกรอกต้องมองออกว่าเป็นช่องกรอก ──
+     เดิมช่องกรอกเป็นสีขาวเท่ากับการ์ดที่มันวางอยู่ เหลือแค่เส้นขอบบางๆ บอกขอบเขต มองผ่านๆ ไม่เห็นว่าตรงไหนพิมพ์ได้
+     ให้พื้นช่องเป็นสีเทาอ่อนตัดกับการ์ดขาว แล้วพอโฟกัสค่อยเปลี่ยนเป็นขาว = "ช่องนี้กำลังพิมพ์อยู่" ชัดในตัว */
+  /* ต้องมี :not() ครบชุดเหมือนกฎกลางด้านบน ไม่งั้นกฎกลาง (เฉพาะเจาะจงกว่า) ทับสีพื้นกลับไปเป็นขาว */
+  .view .field input:not([type=checkbox]):not([type=radio]):not([type=file]):not([readonly]),
+  .view .field select, .view .field textarea,
+  .modal-box .field input:not([type=checkbox]):not([type=radio]):not([type=file]):not([readonly]),
+  .modal-box .field select, .modal-box .field textarea{
+    background:var(--surface-2); }
+  .view .field input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,
+  .view .field select:focus, .view .field textarea:focus,
+  .modal-box .field input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,
+  .modal-box .field select:focus, .modal-box .field textarea:focus{
+    background:var(--surface); }
+  .view .field input:not([type=checkbox]):not([type=radio]):not([type=file])[readonly],
+  .modal-box .field input:not([type=checkbox]):not([type=radio]):not([type=file])[readonly]{
+    background:repeating-linear-gradient(135deg,#F3F5F9 0 6px,#EDF1F6 6px 12px);
+    color:var(--ink-faint); cursor:not-allowed; }
+
+  /* ── ช่องกรอกในแถวเดียวกันต้องอยู่ระดับเดียวกัน ──
+     ป้ายกำกับบางช่องมีคำอธิบายต่อท้ายจนตกบรรทัดที่สอง ช่องกรอกของช่องนั้นเลยต่ำกว่าเพื่อนทั้งแถว
+     ทำ .field เป็นคอลัมน์ยืดเต็มความสูงของแถว แล้วให้ป้ายกินที่ว่างที่เหลือ ช่องกรอกจึงถูกดันไปชิดล่างเสมอ
+     (grid ให้ลูกทุกตัวในแถวสูงเท่ากันอยู่แล้ว จึงได้เส้นฐานเดียวกันทั้งแถว) */
+  .form-grid > .field{ display:flex; flex-direction:column; margin-bottom:0; }
+  .form-grid > .field > label{ flex:1 0 auto; }
+  .form-grid{ align-items:stretch; }
+  /* <select> กับ <input> สูงไม่เท่ากันเองโดยธรรมชาติ (เบราว์เซอร์คิด line-height คนละแบบ) ต่างกัน 2-3px
+     พอเอามาเรียงข้างกันจะเห็นว่าเหลื่อม — บังคับความสูงให้เท่ากันทุกตัวไปเลย */
+  .form-grid > .field > input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  .form-grid > .field > select{ height:40px; box-sizing:border-box; }
   .field label{ font-size:12px; }
   .form-actions{ margin-top:18px; padding-top:16px; }
   .modal-box{ border-radius:16px; box-shadow:var(--shadow-md); padding:22px 24px; }
@@ -2720,17 +2751,17 @@ const PRODUCT_TABLE_COLS = [
   { key:'name', label:'ชื่อ', sortVal:p=>p.name },
   { key:'base_price', label:'ราคาฐาน', numeric:true, sortVal:p=>parseFloat(p.base_price)||0, render:p=>'฿'+baht(p.base_price), cls:'mono-data' },
   { key:'cost_price', label:'ราคาทุน', numeric:true, sortVal:p=>(p.cost_price?parseFloat(p.cost_price):null), render:p=>(p.cost_price?'฿'+baht(p.cost_price):'-'), cls:'mono-data' },
-  { key:'tax_status', label:'ภาษี', sortVal:p=>TAX_STATUS_LABEL[taxStatusOf(p)],
+  { key:'tax_status', html:true, label:'ภาษี', sortVal:p=>TAX_STATUS_LABEL[taxStatusOf(p)],
     render:p=>{ const v = taxStatusOf(p);
       return '<span class="tag '+(v==='exempt'?'tag-warn':v==='zero'?'tag-info':'tag-ok')+'">'+TAX_STATUS_LABEL[v]+'</span>'; } },
   { key:'unit', label:'หน่วยฐาน (ไทย)', sortVal:p=>p.unit },
   { key:'unit_code', label:'รหัสหน่วย (Eng)', sortVal:p=>p.unit_code, cls:'mono-data' },
   { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
-  { key:'sales_unit_code', label:'หน่วยขาย', sortVal:p=>p.sales_unit_code||'',
+  { key:'sales_unit_code', html:true, label:'หน่วยขาย', sortVal:p=>p.sales_unit_code||'',
     render:p=>p.sales_unit_code ? '<span class="tag">'+esc(unitLabelJs(p.sales_unit_code))+'</span>' : '<span class="unit">'+esc(p.unit||'-')+'</span>' },
-  { key:'purchase_unit_code', label:'หน่วยซื้อ', sortVal:p=>p.purchase_unit_code||'',
+  { key:'purchase_unit_code', html:true, label:'หน่วยซื้อ', sortVal:p=>p.purchase_unit_code||'',
     render:p=>p.purchase_unit_code ? '<span class="tag">'+esc(unitLabelJs(p.purchase_unit_code))+'</span>' : '<span class="unit">'+esc(p.unit||'-')+'</span>' },
-  { key:'flags', label:'คุณสมบัติ', sortVal:p=>'', render:p=>productFlagTags(p) },
+  { key:'flags', html:true, label:'คุณสมบัติ', sortVal:p=>'', render:p=>productFlagTags(p) },
   { key:'barcode', label:'บาร์โค้ด (ชุด)', sortVal:p=>p.barcode, cls:'mono-data' },
   { key:'carton_barcode', label:'บาร์โค้ดลัง', sortVal:p=>p.carton_barcode, cls:'mono-data' },
   { key:'group_barcode', label:'บาร์โค้ด (กลุ่ม)', sortVal:p=>p.group_barcode, cls:'mono-data' },
@@ -2782,7 +2813,9 @@ function renderProductsTable(){
       if (col.key === 'status') return '<td><span class="pill '+(isOn(p.is_active)?'ok':'off')+'">'+(isOn(p.is_active)?'ใช้งาน':'ปิด')+'</span></td>';
       if (col.key === 'image') return '<td>'+(p.image_url ? '<span class="pill ok">มีรูป</span>' : '<span style="color:var(--ink-faint)">—</span>')+'</td>';
       const val = col.render ? col.render(p) : (col.sortVal(p) || '-');
-      return '<td'+(col.cls?' class="'+col.cls+'"':'')+'>'+esc(val)+'</td>';
+      // col.html = true → render คืน HTML มาแล้ว (และ esc ส่วนที่เป็นข้อมูลไว้เองข้างในแล้ว) ห้าม esc ซ้ำ
+      // ไม่งั้นได้ <span class="tag"> โผล่เป็นตัวหนังสือในตาราง
+      return '<td'+(col.cls?' class="'+col.cls+'"':'')+'>'+(col.html ? val : esc(val))+'</td>';
     }).join('');
     const actionCell = '<td onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td>';
     return '<tr class="clickable-row" onclick="openProductForm(\''+esc(p.record_id)+'\')">'+cells+actionCell+'</tr>';
@@ -2816,7 +2849,7 @@ function _pfFieldHtml(f, val, locked){
     return '<div class="'+cls+'">'+lbl+'<select data-key="'+f.key+'">'+opts+'</select></div>';
   }
   // readonly ไม่ใช่ disabled — ต้องยังอ่านค่าจาก .value ได้ตอนบันทึก (แค่ห้ามแก้)
-  const ro = locked ? ' readonly style="background:var(--surface-2);color:var(--ink-faint);cursor:not-allowed"' : '';
+  const ro = locked ? ' readonly' : '';   // หน้าตาช่องที่ล็อกอยู่ใน CSS (.field input[readonly]) แล้ว
   return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'"'+ro+' placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'"></div>';
 }
 function renderProductFormFields(row){
