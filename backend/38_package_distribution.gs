@@ -74,13 +74,22 @@ function packageTenantsOf(type, id) {
 
 /* ═══════════════ หน้าจอ: จ่ายชุดให้ตัวแทน (บริษัทกลางเท่านั้น) ═══════════════ */
 
-/** ตัวแทนทั้งหมดที่จ่ายชุดให้ได้ (รวมตัวแทนบ้าน = ขายตรงในนามบริษัท) */
+/**
+ * ผู้รับชุดทั้งหมดที่จ่ายให้ได้ = ตัวแทนที่ยังใช้งาน + **บริษัทเจ้าของสินค้าเอง (ขายตรง) เสมอ**
+ *
+ * ★ ตัวแทนบ้าน (`is_house`) ไม่ใช่ตัวแทนจำหน่าย แต่เป็นสมุดขายตรงของบริษัท — ถูกซ่อนจากหน้าเลือกบริษัท
+ *   และเจ้าของระบบอาจปิด `is_active` ไว้เพื่อไม่ให้โผล่เป็นตัวเลือกตัวแทน (27 ก.ย. 2026)
+ *   แต่ต้องยังจ่ายชุดราคาให้มันได้ ไม่งั้นบิลขายตรงจะหาชุดราคาไม่เจอ
+ *   และที่อันตรายกว่า: ถ้ามันหายไปจากลิสต์นี้ `savePackageTenants` จะถือว่าเป็นตัวแทนที่ไม่รู้จัก
+ *   แล้ว**ตัดออกเงียบๆ ทุกครั้งที่มีคนกดบันทึกการจ่ายชุดของชุดใดก็ตาม** — ขายตรงพังโดยไม่มีใครสั่ง
+ */
 function _pkgAssignableTenants() {
   return centralObjects('tenants')
-    .filter(function(t) { return isNotOff(t.is_active); })
+    .filter(function(t) { return isNotOff(t.is_active) || isFlagOn(t.is_house); })
     .map(function(t) {
+      var house = isFlagOn(t.is_house);
       return { tenantId: String(t.tenant_id), name: String(t.name || t.tenant_id),
-        isHouse: isFlagOn(t.is_house) };
+        isHouse: house, isActive: isNotOff(t.is_active) };
     })
     .sort(function(a, b) { return (b.isHouse ? 1 : 0) - (a.isHouse ? 1 : 0) || a.tenantId.localeCompare(b.tenantId); });
 }
@@ -141,7 +150,9 @@ function savePackageTenants(session, payload) {
  */
 function migratePackageAssignments(session) {
   if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
-  var tenants = _pkgAssignableTenants().map(function(t) { return t.tenantId; });
+  var tenants = _pkgAssignableTenants()
+    .filter(function(t) { return t.isActive || t.isHouse; })   // ตัวแทนที่ปิดไปแล้วไม่ต้องจ่ายย้อนหลังให้
+    .map(function(t) { return t.tenantId; });
   if (!tenants.length) return { success: false, message: 'ยังไม่มีตัวแทนในระบบ' };
 
   ensureSchemaCurrent();          // ชีตอาจยังไม่เกิดถ้ายังไม่มีใครล็อกอินหลัง deploy

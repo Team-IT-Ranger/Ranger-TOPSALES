@@ -117,6 +117,21 @@ console.log('\n-- จ่ายชุดให้ตัวแทน --');
   eq('ตัวแทนที่ไม่มีจริง/ปิดใช้งานแล้ว/ซ้ำ ถูกตัดทิ้ง', assigned('price_list', 10), ['BDC']);
 }
 
+console.log('\n-- บริษัทขายตรง (HOUSE) ต้องจ่ายชุดให้ได้เสมอ แม้ปิดไม่ให้เป็นตัวเลือกตัวแทน --');
+{
+  const house = sheets.tenants.find(t => t.tenant_id === 'HOUSE');
+  house.is_active = 'FALSE';
+  const offered = () => ctx.listPackageTenants(OWNER, { packageType: 'price_list', packageId: 10 }).tenants.map(t => t.tenantId);
+  eq('★ ปิด HOUSE แล้วยังอยู่ในรายชื่อผู้รับชุด (ถ้าหายไป การบันทึกครั้งหน้าจะตัดมันออกเงียบๆ)',
+    offered().indexOf('HOUSE') !== -1, true);
+  eq('  ตัวแทนธรรมดาที่ปิดแล้ว ยังหายจากรายชื่อเหมือนเดิม', offered().indexOf('OLD'), -1);
+  ctx.savePackageTenants(OWNER, { packageType: 'price_list', packageId: 10, tenantIds: ['BDC', 'HOUSE'] });
+  eq('  จ่ายชุดให้ขายตรงได้ตามปกติ', assigned('price_list', 10), ['BDC', 'HOUSE']);
+  eq('  บิลขายตรงจึงยังหาชุดราคาเจอ', ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'price_list', 10, ''), true);
+  house.is_active = 'TRUE';
+  ctx.savePackageTenants(OWNER, { packageType: 'price_list', packageId: 10, tenantIds: ['BDC'] });
+}
+
 console.log('\n-- ตัวแทนแก้ไม่ได้ (ราคาคุมจากส่วนกลาง) --');
 fails('★ ตัวแทนกำหนดเองว่าจะใช้ชุดไหนไม่ได้',
   ctx.savePackageTenants(AGENT, { packageType: 'price_list', packageId: 11, tenantIds: ['BDC'] }),
