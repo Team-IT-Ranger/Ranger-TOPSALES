@@ -872,6 +872,7 @@
             <div><h1>ชุดราคาและส่วนลด</h1><p>ใบรายการขายตามกลุ่มลูกค้าและช่วงเวลา (ราคาตั้งรายปี ส่วนลดรายไตรมาส) — ลูกค้า 1 ร้านใช้ได้ชุดเดียวตามกลุ่มของร้าน คลิกแถวเพื่อดูรายละเอียด</p></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
               <button class="btn btn-primary" onclick="openClonePriceList()">คัดลอกเป็นงวดใหม่</button>
+              <button class="btn" onclick="openExplainPricing()">ตรวจสิทธิ์ของร้าน</button>
               <button class="btn" onclick="openCreatePriceList()">+ สร้างชุดราคาใหม่</button>
               <button class="btn" onclick="openPriceListImport()">+ นำเข้าจากไฟล์ Excel</button>
             </div>
@@ -897,6 +898,13 @@
             <thead><tr><th>สินค้า</th><th>บรรจุ</th><th>ราคาตั้ง (ไม่รวม VAT)</th><th>ช่วงจำนวน</th><th>เงินสด (รวม VAT)</th><th>ลด %</th><th>เครดิต (รวม VAT)</th><th>ลด %</th></tr></thead>
             <tbody id="pld-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
           </table></div>
+          <div class="form-card" id="pld-rules-card">
+            <h3>สิทธิ์เข้าถึง — ใครได้ราคาชุดนี้</h3>
+            <p class="form-hint">ตั้งได้จากคุณลักษณะใดของร้านก็ได้ ไม่จำกัดแค่กลุ่มลูกค้า · หนึ่งชุดมีได้หลายกฎ
+              (คนละกลุ่มเป้าหมาย) · ร้านเข้าหลายชุดพร้อมกัน ให้ <b>ลำดับความสำคัญสูงสุดชนะ</b></p>
+            <div id="pld-rules"></div>
+            <div class="form-actions"><button class="btn btn-primary btn-sm" onclick="openRuleModal(null)">+ เพิ่มกฎสิทธิ์</button></div>
+          </div>
           <div class="form-card" id="pld-promos-card" style="display:none">
             <h3>โปรระดับบิล</h3>
             <p class="form-hint">ยอดซื้อรวมทั้งบิล (ไม่รวม VAT) ครบตามขั้น ลดเพิ่มตาม % — ใช้ขั้นสูงสุดที่ถึงเงื่อนไขเพียงขั้นเดียว</p>
@@ -3101,6 +3109,7 @@ function renderPriceListDetail(d){
     const packs = ln.packs.map(pk => '<tr style="background:var(--blue-pale)"><td>แพ็ค ×'+esc(pk.unitFactor)+' <span class="unit">ขายเฉพาะหน่วยรถ · เงินสด</span></td><td class="mono-data">'+(pk.cashInclVat!=null?'฿'+baht(pk.cashInclVat):'—')+'</td><td class="mono-data">'+plPct(pk.cashInclVat, pk.listExVat)+'</td><td>—</td><td>—</td></tr>');
     return rows.concat(packs).join('');
   }).join('');
+  loadPriceListRules();
   const pc = document.getElementById('pld-promos-card');
   pc.style.display = (d.billPromos.length || editing) ? '' : 'none';
   pltInit(d);
@@ -3275,6 +3284,149 @@ function submitClonePriceList(){ return plBusy(async () => {
   openPriceListDetail(r.id, { edit: true });      // รายการที่ก๊อปมาต้องโหลดจาก backend ครั้งเดียว
   toast('คัดลอกแล้ว '+r.list.lineCount+' รายการ — แก้เฉพาะตัวที่เปลี่ยนได้เลย');
 }); }
+
+/* ══════════════ สิทธิ์เข้าถึงชุดราคา (36_price_rules.gs) ══════════════
+   กฎ = กลุ่มเป้าหมายหนึ่งของชุดราคา · เงื่อนไขอ้างคุณลักษณะของร้าน · ลำดับสูงสุดชนะเมื่อเข้าหลายชุด */
+let PLR_META = null, PLR_RULES = [];
+async function ensureRuleMeta(){
+  if (PLR_META) return PLR_META;
+  const r = await callApi('listPriceListRules', { priceListId: currentPriceListId });
+  if (r.success) { PLR_META = { fields: r.fields, ops: r.ops }; PLR_RULES = r.data; }
+  return PLR_META;
+}
+async function loadPriceListRules(){
+  const box = document.getElementById('pld-rules');
+  if (!box) return;
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listPriceListRules', { priceListId: currentPriceListId });
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  PLR_META = { fields: r.fields, ops: r.ops }; PLR_RULES = r.data;
+  renderPriceListRules();
+}
+function plrFieldLabel(f){
+  if (String(f).indexOf('attr:') === 0) return 'ข้อมูลเพิ่มเติม: ' + String(f).substring(5);
+  return (PLR_META && PLR_META.fields[f] && PLR_META.fields[f].label) || f;
+}
+function plrCondText(c){
+  const op = (PLR_META && PLR_META.ops[c.op]) || c.op;
+  return plrFieldLabel(c.field) + ' <span class="unit">' + esc(op) + '</span> ' +
+    (['empty','notempty'].includes(c.op) ? '' : '<b>' + esc(c.value) + '</b>');
+}
+function renderPriceListRules(){
+  const box = document.getElementById('pld-rules');
+  const d = PLD_CACHE[currentPriceListId];
+  const legacy = d && d.list && d.list.customerGroupId ? d.list.customerGroupName || ('กลุ่ม ' + d.list.customerGroupId) : '';
+  if (!PLR_RULES.length) {
+    box.innerHTML = legacy
+      ? '<div class="activity-row"><span>ยังไม่ได้ตั้งกฎ — ใช้แบบเดิมคือ <b>กลุ่มลูกค้า: '+esc(legacy)+'</b> <span class="unit">(ลำดับ 0)</span></span></div>' +
+        '<p class="form-hint">ตั้งกฎเพิ่มได้โดยไม่ต้องลบของเดิม กฎที่ลำดับมากกว่า 0 จะชนะกฎเดิมนี้</p>'
+      : '<p class="form-hint">ยังไม่มีกฎ และชุดนี้ไม่ได้ผูกกลุ่มลูกค้าไว้ — <b>ตอนนี้จึงยังไม่มีร้านไหนได้ราคาชุดนี้</b></p>';
+    return;
+  }
+  box.innerHTML = PLR_RULES.map(r =>
+    '<div class="activity-row" style="align-items:flex-start">' +
+      '<span><b>'+esc(r.name || '(ไม่ได้ตั้งชื่อ)')+'</b> ' +
+        '<span class="tag '+(r.isActive?'tag-ok':'tag-warn')+'">'+(r.isActive?'ใช้งาน':'ปิดอยู่')+'</span> ' +
+        '<span class="tag">ลำดับ '+r.priority+'</span>' +
+        '<div class="unit" style="margin-top:4px">'+(r.matchType==='any'?'ผ่านข้อใดข้อหนึ่ง':'ต้องผ่านทุกข้อ')+'</div>' +
+        '<div style="margin-top:4px">'+r.conditions.map(c => '• ' + plrCondText(c)).join('<br>')+'</div>' +
+      '</span>' +
+      '<span class="amt"><button class="btn btn-sm" onclick="openRuleModal('+r.id+')">แก้ไข</button> ' +
+      '<button class="btn btn-sm btn-ghost" onclick="deleteRuleUI('+r.id+')">ลบ</button></span>' +
+    '</div>').join('');
+}
+function plrCondRow(c){
+  const f = (PLR_META && PLR_META.fields) || {};
+  const opts = Object.keys(f).map(k => '<option value="'+esc(k)+'"'+(c && c.field===k?' selected':'')+'>'+esc(f[k].label)+'</option>').join('') +
+    (c && String(c.field).indexOf('attr:')===0 ? '<option value="'+esc(c.field)+'" selected>'+esc(plrFieldLabel(c.field))+'</option>' : '');
+  const ops = Object.keys((PLR_META && PLR_META.ops) || {}).map(k =>
+    '<option value="'+esc(k)+'"'+(c && c.op===k?' selected':'')+'>'+esc(PLR_META.ops[k])+'</option>').join('');
+  return '<div class="plr-cond" style="display:flex;gap:8px;margin-bottom:6px;align-items:center;flex-wrap:wrap">' +
+    '<select class="plr-f" style="flex:1;min-width:170px">'+opts+'</select>' +
+    '<select class="plr-o" style="width:190px">'+ops+'</select>' +
+    '<input class="plr-v" style="flex:1;min-width:120px" placeholder="ค่าที่จะเทียบ" value="'+esc(c?c.value:'')+'">' +
+    '<button class="btn btn-sm" onclick="this.parentNode.remove()">✕</button></div>';
+}
+async function openRuleModal(id){
+  await ensureRuleMeta();
+  const r = id ? PLR_RULES.find(x => String(x.id) === String(id)) : null;
+  const conds = r && r.conditions.length ? r.conditions : [null];
+  plModal('<h3>'+(r?'แก้ไขกฎสิทธิ์':'เพิ่มกฎสิทธิ์')+'</h3>' +
+    '<p class="form-hint">กฎหนึ่งข้อ = กลุ่มเป้าหมายหนึ่งกลุ่ม · อยากได้หลายกลุ่มที่นิยามคนละแบบ ให้สร้างหลายกฎ</p>' +
+    '<div class="form-grid g2">' +
+      plField('ชื่อกฎ', '<input id="plr-name" value="'+esc(r?r.name:'')+'" placeholder="เช่น ช่องทางค้าส่งภาคตะวันออก">') +
+      plField('ลำดับความสำคัญ <span class="unit">(สูงสุดชนะเมื่อร้านเข้าหลายชุด)</span>',
+        '<input id="plr-pri" type="number" value="'+(r?r.priority:10)+'">') +
+      plField('เงื่อนไขประกอบกันแบบ', '<select id="plr-match"><option value="all"'+(!r||r.matchType!=='any'?' selected':'')+'>ต้องผ่านทุกข้อ (และ)</option>' +
+        '<option value="any"'+(r&&r.matchType==='any'?' selected':'')+'>ผ่านข้อใดข้อหนึ่ง (หรือ)</option></select>') +
+      plField('สถานะ', '<select id="plr-active"><option value="1"'+(!r||r.isActive?' selected':'')+'>ใช้งาน</option>' +
+        '<option value="0"'+(r&&!r.isActive?' selected':'')+'>ปิดไว้ก่อน</option></select>') +
+    '</div>' +
+    '<div class="field"><label>เงื่อนไข</label><div id="plr-conds">'+conds.map(plrCondRow).join('')+'</div>' +
+      '<button class="btn btn-sm" onclick="document.getElementById(\'plr-conds\').insertAdjacentHTML(\'beforeend\', plrCondRow(null))">+ เพิ่มเงื่อนไข</button></div>' +
+    '<div id="plr-preview" class="form-hint" style="margin-top:10px"></div>' +
+    '<div class="err" id="plm-err" style="margin:12px 0 0"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button>' +
+    '<button class="btn" onclick="tryRuleAudience()">ทดลองดูว่าโดนกี่ร้าน</button>' +
+    '<button class="btn btn-primary" id="plm-save" onclick="saveRuleUI('+(r?r.id:'null')+')">บันทึกกฎ</button></div>');
+}
+function readRuleConds(){
+  return [...document.querySelectorAll('#plr-conds .plr-cond')].map(el => ({
+    field: el.querySelector('.plr-f').value, op: el.querySelector('.plr-o').value, value: el.querySelector('.plr-v').value.trim() }));
+}
+/* ★ ดูก่อนกดใช้จริงเสมอ — กฎที่กว้างเกินไปจะไปทับราคาร้านที่ไม่ได้ตั้งใจ
+   แล้วกว่าจะรู้ก็ตอนออกบิลผิดราคาไปแล้ว */
+async function tryRuleAudience(){
+  const box = document.getElementById('plr-preview');
+  box.innerHTML = 'กำลังตรวจ...';
+  const r = await callApi('previewPriceListAudience', { matchType: document.getElementById('plr-match').value, conditions: readRuleConds() });
+  if (!r.success) { box.innerHTML = '<span style="color:var(--red)">'+esc(r.message)+'</span>'; return; }
+  box.innerHTML = '<b>'+esc(r.message)+'</b>' +
+    (r.sample.length ? '<div style="margin-top:6px">ตัวอย่าง: ' + r.sample.slice(0,8).map(c => esc((c.code?c.code+' ':'')+c.name)).join(' · ') +
+      (r.matched > 8 ? ' … และอีก ' + (r.matched - 8) + ' ร้าน' : '') + '</div>' : '');
+}
+function saveRuleUI(id){ return plBusy(async () => {
+  const conds = readRuleConds();
+  if (!conds.length) return plModalErr('ต้องมีเงื่อนไขอย่างน้อยหนึ่งข้อ');
+  const r = await callApi('savePriceListRule', { id: id || undefined, priceListId: currentPriceListId,
+    name: document.getElementById('plr-name').value.trim(), matchType: document.getElementById('plr-match').value,
+    priority: parseInt(document.getElementById('plr-pri').value) || 0,
+    isActive: document.getElementById('plr-active').value === '1', conditions: conds });
+  if (!r.success) return plModalErr(r.message);
+  PLR_RULES = r.data; plModalClose(); renderPriceListRules(); toast(r.message);
+}); }
+async function deleteRuleUI(id){
+  if (!confirm('ลบกฎนี้? ร้านที่เคยเข้าเงื่อนไขผ่านกฎนี้จะไม่ได้ราคาชุดนี้อีก')) return;
+  const r = await callApi('deletePriceListRule', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  PLR_RULES = r.data; renderPriceListRules(); toast(r.message);
+}
+
+/* ★ ตอบคำถาม "ทำไมร้านนี้ได้ราคานี้" ในหน้าจอเดียว แทนที่จะต้องไล่เดาเอง */
+async function openExplainPricing(){
+  await ensureCustomers();
+  plModal('<h3>ตรวจสิทธิ์ของร้าน</h3><p class="form-hint">เลือกร้านเพื่อดูว่าได้ชุดราคาไหน เพราะกฎข้อไหน และมีชุดไหนแข่งอยู่</p>' +
+    plField('ร้านค้า', '<select id="plx-cust">'+customersCache.map(c => '<option value="'+esc(c.record_id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
+    plField('ณ วันที่', '<input type="date" id="plx-date" value="'+new Date().toISOString().slice(0,10)+'">') +
+    '<div id="plx-result" style="margin-top:12px"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
+    '<button class="btn btn-primary" onclick="runExplainPricing()">ตรวจ</button></div>');
+}
+async function runExplainPricing(){
+  const box = document.getElementById('plx-result');
+  box.innerHTML = 'กำลังตรวจ...';
+  const r = await callApi('explainCustomerPricing', { customerId: document.getElementById('plx-cust').value, date: document.getElementById('plx-date').value });
+  if (!r.success) { box.innerHTML = '<span style="color:var(--red)">'+esc(r.message)+'</span>'; return; }
+  box.innerHTML = '<div class="activity-row"><span><b>'+esc(r.message)+'</b></span></div>' +
+    '<div class="unit" style="margin:6px 0">คุณลักษณะของร้าน: กลุ่ม '+esc(r.customer.groupId)+' · ช่องทาง '+esc(r.customer.channelId||'-')+
+      ' · เขต '+esc(r.customer.areaCode||'-')+' · '+esc(r.customer.paymentType||'-')+'</div>' +
+    (r.candidates.length ? '<div class="table-wrap"><table><thead><tr><th>ชุดราคา</th><th>ลำดับ</th><th>เข้าเงื่อนไขเพราะ</th><th>ใช้ได้ไหม</th></tr></thead><tbody>' +
+      r.candidates.map(c => '<tr'+(r.winner && String(c.priceListId)===String(r.winner.priceListId)?' style="background:var(--blue-pale)"':'')+'>' +
+        '<td>'+esc(c.name)+'</td><td>'+c.priority+'</td><td class="wrap">'+esc(c.reason)+'</td>' +
+        '<td>'+(c.usable ? '<span class="tag tag-ok">ใช้ได้</span>' : '<span class="tag tag-warn">'+esc(c.blockedBy)+'</span>')+'</td></tr>').join('') +
+      '</tbody></table></div>'
+      : '<p class="form-hint">ไม่เข้าเงื่อนไขชุดราคาไหนเลย</p>');
+}
 
 function togglePriceListEdit(){ PLD_EDIT = !PLD_EDIT; const d = PLD_CACHE[currentPriceListId]; if (d) renderPriceListDetail(d); }
 
