@@ -21,7 +21,7 @@
 var PLR_MATCH_ALL = 'all', PLR_MATCH_ANY = 'any';
 
 /* กฎสิทธิ์ใช้ได้กับสองอย่าง: ชุดราคา และโปรโมชั่น — แถวเดิมที่ยังไม่มี target_type ถือเป็นชุดราคา */
-var PLR_TARGET_PRICE_LIST = 'price_list', PLR_TARGET_PROMO = 'promo';
+var PLR_TARGET_PRICE_LIST = 'price_list', PLR_TARGET_PROMO = 'promo', PLR_TARGET_FREE_GOODS = 'free_goods';
 function plrTargetOf(r) { return String(r.target_type || PLR_TARGET_PRICE_LIST); }
 
 /**
@@ -267,13 +267,14 @@ function savePriceListRule(session, payload) {
   var err = _requirePermission(session, 'pricing', 'edit'); if (err) return err;
   payload = payload || {};
   var target = String(payload.targetType || PLR_TARGET_PRICE_LIST);
-  if ([PLR_TARGET_PRICE_LIST, PLR_TARGET_PROMO].indexOf(target) === -1) return { success: false, message: 'ชนิดเป้าหมายไม่ถูกต้อง' };
+  if ([PLR_TARGET_PRICE_LIST, PLR_TARGET_PROMO, PLR_TARGET_FREE_GOODS].indexOf(target) === -1) return { success: false, message: 'ชนิดเป้าหมายไม่ถูกต้อง' };
   var listId = String(payload.priceListId || '').trim();
-  var what = target === PLR_TARGET_PROMO ? 'โปรโมชั่น' : 'ชุดราคา';
+  var what = target === PLR_TARGET_PROMO ? 'โปรโมชั่น' : target === PLR_TARGET_FREE_GOODS ? 'ชุดแถม' : 'ชุดราคา';
   if (!listId) return { success: false, message: 'ไม่ได้ระบุ' + what };
   var list = null;
-  centralObjects(target === PLR_TARGET_PROMO ? 'discount_rules' : 'price_lists')
-    .forEach(function(l) { if (String(l.record_id) === listId) list = l; });
+  var targetSheet = target === PLR_TARGET_PROMO ? 'discount_rules'
+                  : target === PLR_TARGET_FREE_GOODS ? 'free_goods_sets' : 'price_lists';
+  centralObjects(targetSheet).forEach(function(l) { if (String(l.record_id) === listId) list = l; });
   if (!list) return { success: false, message: 'ไม่พบ' + what + 'นี้' };
 
   var conds = (payload.conditions || []).map(function(c) {

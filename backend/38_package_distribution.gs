@@ -22,6 +22,7 @@ var PKG_PROMO = 'promo';
 var PKG_TYPES = {};
 PKG_TYPES[PKG_PRICE_LIST] = { label: 'ชุดราคา', sheet: 'price_lists', nameCol: 'name' };
 PKG_TYPES[PKG_PROMO] = { label: 'โปรโมชั่น', sheet: 'discount_rules', nameCol: 'name' };
+PKG_TYPES['free_goods'] = { label: 'ชุดแถม', sheet: 'free_goods_sets', nameCol: 'name' };
 
 function _pkgKey(type, id) { return String(type) + '|' + String(id); }
 

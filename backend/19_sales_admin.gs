@@ -180,7 +180,8 @@ function recordSaleAdmin(session, payload) {
       .forEach(function(s) { myStock[String(s.product_id)] = parseInt(s.qty) || 0; });
 
     items.forEach(function(it) { need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
-    freeGoods.forEach(function(f) { need[String(f.productId)] = (need[String(f.productId)] || 0) + f.qty; });
+    // หน่วยฐานเสมอ (ดูเหตุผลใน 07_sales.gs) — ของแถมเป็น "ลัง" แล้วตัดเป็นชิ้นคือตัดน้อยไปเป็นร้อยเท่า
+    freeGoods.forEach(function(f) { need[String(f.productId)] = (need[String(f.productId)] || 0) + (Number(f.baseQty) || Number(f.qty) || 0); });
 
     var pids = Object.keys(need);
     for (var ci = 0; ci < pids.length; ci++) {
@@ -225,9 +226,10 @@ function recordSaleAdmin(session, payload) {
     });
   });
   freeGoods.forEach(function(f) {
+    var fBase = Number(f.baseQty) || Number(f.qty) || 0, fQty = Number(f.qty) || 0;
     tenantAppend(tenantId, 'order_items', {
       record_id: tenantNextId(tenantId, 'order_items'), order_id: orderId, product_id: f.productId,
-      unit_code: '', unit_factor: 1, qty: f.qty, base_qty: f.qty,
+      unit_code: f.unitCode || UNIT_PC, unit_factor: fQty ? (fBase / fQty) : 1, qty: fQty, base_qty: fBase,
       price: 0, line_total: 0, is_free: 1
     });
   });

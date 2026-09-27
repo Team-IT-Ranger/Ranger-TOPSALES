@@ -116,7 +116,10 @@ function computePromoDiscount(items, rules, skipFreeGoods) {
       if (skipFreeGoods) return;
       var times = r.minQty > 0 ? Math.floor(matchedQty / r.minQty) : 1;
       if (times > 0 && r.freeProductId > 0) {
-        freeGoods.push({ ruleId: r.id, ruleName: r.name, productId: r.freeProductId, qty: times * r.freeQty, applied: true });
+        // qty ของเส้นทางเดิมเป็น "หน่วยฐาน" อยู่แล้ว — เติม unitCode/baseQty ให้รูปร่างตรงกับของแถมจากชุดแถม
+        // ปลายทาง (ตัดสต็อก/เขียนบรรทัดบิล) จะได้อ่านฟิลด์ชุดเดียวไม่ต้องแยกกรณี
+        freeGoods.push({ ruleId: r.id, ruleName: r.name, productId: r.freeProductId,
+          qty: times * r.freeQty, unitCode: UNIT_PC, baseQty: times * r.freeQty, applied: true });
       }
       return;
     }

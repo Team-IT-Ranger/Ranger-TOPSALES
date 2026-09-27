@@ -174,6 +174,8 @@ function getPricingContextForCustomer(customerId, dateStr) {
        โปรโมชั่นคือ "ส่วนลดเพิ่ม" · ก่อนหน้านี้ร้านที่มีชุดราคาไม่ได้โปรเลย ซึ่งแปลว่าพอจัดกลุ่มลูกค้าครบ
        โปรโมชั่นทั้งระบบก็เงียบไปเองโดยไม่มีใครรู้ */
     ctx.promoRules = promosForCustomer(cust);
+    ctx.freeGoodsSets = freeGoodsSetsForCustomer(cust, dateStr);
+    ctx.unitBase = _fgUnitBaseFn();
     ctx.customerId = cust.record_id;
   }
   return ctx;
@@ -302,8 +304,17 @@ function priceCart(ctx, cart, opts) {
   var billBase = _round2(Math.max(0, discountable - promoDiscount));
   var billDiscount = bill ? _round2(billBase * bill.percent / 100) : 0;
 
+  /* ★ ของแถมไม่กระทบยอดเงิน — คิดหลังได้ราคาแล้ว และไม่เข้าฐานส่วนลดใดๆ
+     ใบอนุมัติโปรทั้งไตรมาสเป็นของแถมล้วน ถ้าไม่คืนตรงนี้ เส้นทางชุดราคาจะเงียบไปทั้งใบ */
+  var freeGoods = [];
+  if ((ctx.freeGoodsSets || []).length && typeof computeFreeGoods === 'function') {
+    freeGoods = computeFreeGoods(lines.map(function(l) {
+      return { productId: l.productId, groupId: groupOf[String(l.productId)] || 0, qty: l.qty, unitCode: l.unitCode };
+    }), ctx.freeGoodsSets, ctx.unitBase);
+  }
+
   return { success: true, lines: lines, subtotal: subtotal, subtotalExVat: _round2(exVat),
-           discountableSubtotal: discountable,
+           discountableSubtotal: discountable, freeGoods: freeGoods,
            promoDiscount: promoDiscount, promoRules: promo.appliedRules || [],
            billPercent: bill ? bill.percent : 0, billMinExVat: bill ? bill.minAmountExVat : 0,
            billBase: billBase, billDiscount: billDiscount,

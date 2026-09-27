@@ -96,6 +96,13 @@ var ADMIN_ACTION_MAP = {
   deletePriceListRule:    deletePriceListRule,
   previewPriceListAudience: previewPriceListAudience,
   explainCustomerPricing: explainCustomerPricing,
+  listFreeGoodsSets:      listFreeGoodsSets,         // ชุดแถม (39_free_goods.gs)
+  getFreeGoodsSet:        getFreeGoodsSet,
+  saveFreeGoodsSet:       saveFreeGoodsSet,
+  setFreeGoodsSetStatus:  setFreeGoodsSetStatus,
+  saveFreeGoodsItem:      saveFreeGoodsItem,
+  deleteFreeGoodsItem:    deleteFreeGoodsItem,
+  previewFreeGoods:       previewFreeGoods,
   listPackageTenants:     listPackageTenants,        // จ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (38_package_distribution.gs)
   savePackageTenants:     savePackageTenants,
   listMyPackages:         listMyPackages,

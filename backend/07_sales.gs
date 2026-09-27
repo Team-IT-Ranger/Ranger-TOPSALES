@@ -73,7 +73,12 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
     priceListUsed = pricingCtx.list;
     /* ★ discount ที่บันทึกลงบิลต้องเป็นส่วนลด "รวมทุกชั้น" ให้ subtotal - discount = total เสมอ
        priced.total หักทั้งโปรโมชั่นและส่วนลดท้ายบิลไปแล้ว ถ้าบันทึกแค่ billDiscount ตัวเลขบนบิลจะไม่ลงกัน */
-    calc = { subtotal: priced.subtotal, discount: priced.discount, total: priced.total, freeGoods: [],
+    calc = { subtotal: priced.subtotal, discount: priced.discount, total: priced.total,
+             // ★ ของแถมของเส้นทางชุดราคา มาจาก "ชุดแถม" (39_free_goods.gs) ไม่ใช่ discount_rules
+             freeGoods: (priced.freeGoods || []).map(function(f) {
+               return { ruleId: 'FG' + f.setId + '-' + f.tierGroup, ruleName: f.setName + ' — ' + f.reason,
+                 productId: f.productId, qty: f.qty, unitCode: f.unitCode, baseQty: f.baseQty, applied: true };
+             }),
              appliedRules: (priced.promoRules || []).concat(
                priced.billPercent ? [{ ruleId: 'BILL', ruleName: 'ส่วนลดท้ายบิล ' + priced.billPercent + '% (ยอดรวมครบ ' + priced.billMinExVat + ' บาท ไม่รวม VAT)', type: 'percent', value: priced.billDiscount }] : []) };
   } else {
@@ -130,7 +135,8 @@ function recordSale(user, payload) {
     // สินค้าที่ไม่ตัดสต็อก (is_stock = FALSE เช่น ค่าบริการ/ค่าขนส่ง) ข้ามไปเลย ไม่ต้องเช็คว่ามีของพอไหม
     var need = {};
     items.forEach(function(it) { if (isStockProduct(productMap[String(it.productId)])) need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
-    freeGoods.forEach(function(f) { if (isStockProduct(productMap[String(f.productId)])) need[String(f.productId)] = (need[String(f.productId)] || 0) + f.qty; });
+    // ของแถมตัดสต็อกด้วยหน่วยฐานเสมอ — f.qty อาจเป็น "ลัง" ถ้าใช้ f.qty ตรงๆ จะตัดสต็อกน้อยไปเป็นร้อยเท่า
+    freeGoods.forEach(function(f) { if (isStockProduct(productMap[String(f.productId)])) need[String(f.productId)] = (need[String(f.productId)] || 0) + (Number(f.baseQty) || Number(f.qty) || 0); });
 
     var pids = Object.keys(need);
     for (var ci = 0; ci < pids.length; ci++) {
@@ -171,9 +177,10 @@ function recordSale(user, payload) {
     });
   });
   freeGoods.forEach(function(f) {
+    var baseQty = Number(f.baseQty) || Number(f.qty) || 0, qty = Number(f.qty) || 0;
     tenantAppend(user.tenantId, 'order_items', {
       record_id: tenantNextId(user.tenantId, 'order_items'), order_id: orderId, product_id: f.productId,
-      unit_code: '', unit_factor: 1, qty: f.qty, base_qty: f.qty,
+      unit_code: f.unitCode || UNIT_PC, unit_factor: qty ? (baseQty / qty) : 1, qty: qty, base_qty: baseQty,
       price: 0, line_total: 0, is_free: 1
     });
   });

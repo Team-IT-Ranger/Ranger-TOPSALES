@@ -987,6 +987,17 @@
           </div>
         </section>
 
+        <!-- ═══ ชุดแถม (ของแถม) ═══ -->
+        <section class="view" id="view-freegoods">
+          <div class="view-head">
+            <div><h1>ชุดแถม</h1><p>ซื้อครบเท่านี้ แถมอะไร — แยกจากชุดราคาเพราะช่วงเวลาไม่ตรงกันและถูกยกเลิก/ต่ออายุระหว่างงวดเป็นปกติ ·
+              ของแถมไม่กระทบยอดเงิน แต่ตัดสต็อกจริงและขึ้นบนใบส่งของ</p></div>
+            <button class="btn btn-primary" onclick="openFgSetModal(null)">+ สร้างชุดแถม</button>
+          </div>
+          <div id="fg-list"></div>
+          <div id="fg-detail" style="display:none"></div>
+        </section>
+
         <!-- ═══ PROMOTIONS ═══ -->
         <section class="view" id="view-promotions">
           <div class="view-head"><div><h1>โปรโมชั่น</h1><p>ควบคุมจากส่วนกลาง — เลือกได้ว่าโปรไหนจ่ายให้ตัวแทนรายใด และภายในตัวแทนนั้นร้านแบบไหนได้ใช้ ·
@@ -1387,7 +1398,8 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'createArInvoice','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
-  'savePackageTenants','migratePackageAssignments']);
+  'savePackageTenants','migratePackageAssignments',
+  'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin']);
@@ -1808,7 +1820,9 @@ const NAV = {
   owner: { groups: [
     { n:'1', icon:'tag', label:'สินค้าและโปรโมชั่น', subs:[
       { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', mod:'products', ready:true} ] },
-      { n:'1.2', label:'โปรโมชั่น', items:[ {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', mod:'promotions', ready:true} ] }
+      { n:'1.2', label:'โปรโมชั่น', items:[
+        {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', mod:'promotions', ready:true},
+        {n:'1.2.2', label:'ชุดแถม (ของแถม)', view:'freegoods', mod:'promotions', ready:true} ] }
     ]},
     { n:'2', icon:'receipt', label:'งานขาย', subs:[
       { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', mod:'sales', ready:true} ] },
@@ -1993,7 +2007,7 @@ function findMeta(view){
   return null;
 }
 const LOADERS = {
-  dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum,
+  dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
   companyprofile: loadCompanyProfile, adminusers: () => { loadAdminUsers(); loadPendingAdminUsers(); }, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
@@ -3363,12 +3377,16 @@ function plrCondText(c){
 function renderPriceListRules(){
   const box = document.getElementById('pld-rules');
   const isPromo = PLR_TARGET === 'promo';
-  const d = isPromo ? null : PLD_CACHE[currentPriceListId];
+  const isFg = PLR_TARGET === 'free_goods';
+  const d = (isPromo || isFg) ? null : PLD_CACHE[currentPriceListId];
   const legacy = d && d.list && d.list.customerGroupId ? d.list.customerGroupName || ('กลุ่ม ' + d.list.customerGroupId) : '';
   if (!PLR_RULES.length) {
     /* โปรโมชั่นมี "กลุ่มลูกค้า" ในตัวมันเองอยู่แล้ว (customer_group_id) การไม่ตั้งกฎจึงไม่ได้แปลว่าไม่มีใครได้
        — คนละความหมายกับชุดราคา ข้อความจึงต้องแยกกัน ไม่งั้นจะไปหลอกให้คนตั้งกฎทั้งที่ไม่จำเป็น */
-    box.innerHTML = isPromo
+    box.innerHTML = isFg
+      ? '<p class="form-hint">ยังไม่ได้ตั้งกฎ — <b>ทุกร้านของตัวแทนที่ได้รับชุดแถมนี้</b> ได้ของแถมตามขั้นที่ตั้งไว้ · ' +
+        'ตั้งกฎเมื่อไหร่ จะจำกัดเฉพาะร้านที่เข้าเงื่อนไข</p>'
+      : isPromo
       ? '<p class="form-hint">ยังไม่ได้ตั้งกฎ — โปรนี้ใช้ <b>กลุ่มลูกค้าที่ตั้งไว้ในตัวโปร</b> ตามเดิม ' +
         '(ตั้งเป็น "ทุกกลุ่ม" ไว้ก็คือทุกร้านของตัวแทนที่ได้รับโปรนี้) · ตั้งกฎเมื่อไหร่ กฎจะมีผลแทน</p>'
       : legacy
@@ -3509,6 +3527,193 @@ async function deleteRuleUI(id){
   const r = await callApi('deletePriceListRule', { id });
   if (!r.success) { toast(r.message, true); return; }
   PLR_RULES = r.data; renderPriceListRules(); toast(r.message);
+}
+
+/* ══════════════ ชุดแถม (39_free_goods.gs) ══════════════
+   ★ หนึ่ง "กลไก" มีได้หลายขั้น และได้ขั้นสูงสุดที่ถึง **ขั้นเดียว** — หน้าจอต้องทำให้เห็นว่าบรรทัดไหน
+     อยู่กลไกเดียวกัน ไม่งั้นคนตั้งจะนึกว่าได้ทุกขั้นรวมกัน แล้วแจกของฟรีเกินที่อนุมัติ */
+let FG_SETS = [], FG_CUR = null;
+const FG_STATUS = { draft:['ร่าง','warn'], active:['ใช้งาน','ok'], archived:['เก็บถาวร','off'] };
+const FG_UNITS = [['CT','ลัง'],['PK','แพ็ค'],['PC','ชิ้น']];
+
+async function loadFreeGoods(){
+  const box = document.getElementById('fg-list');
+  document.getElementById('fg-detail').style.display = 'none';
+  box.style.display = '';
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listFreeGoodsSets', {});
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  FG_SETS = r.data || [];
+  renderFgList();
+}
+function renderFgList(){
+  const box = document.getElementById('fg-list');
+  if (!FG_SETS.length) { box.innerHTML = '<p class="form-hint">ยังไม่มีชุดแถม — กด "สร้างชุดแถม" เพื่อเริ่ม</p>'; return; }
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>ชื่อชุด</th><th>ช่วงเวลา</th><th>ขั้นการแถม</th>' +
+    '<th>จ่ายให้ตัวแทน</th><th>สถานะ</th><th></th></tr></thead><tbody>' +
+    FG_SETS.map(s => {
+      const st = FG_STATUS[s.status] || FG_STATUS.draft;
+      return '<tr><td class="wrap">'+esc(s.name)+'</td>' +
+        '<td class="mono-data">'+esc(s.validFrom||'…')+' – '+esc(s.validTo||'…')+'</td>' +
+        '<td>'+s.tierCount+'</td>' +
+        '<td>'+(s.tenants.length ? esc(s.tenants.join(', ')) : '<span class="tag tag-warn">ยังไม่ได้จ่าย</span>')+'</td>' +
+        '<td><span class="pill '+st[1]+'">'+st[0]+'</span></td>' +
+        '<td><button class="btn btn-sm" onclick="openFgDetail('+s.id+')">เปิด</button></td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function fgProductOptions(sel){
+  return (productsCache || []).map(p =>
+    '<option value="'+esc(p.record_id)+'"'+(String(sel)===String(p.record_id)?' selected':'')+'>'+
+    esc((p.product_code?p.product_code+' ':'')+p.name).slice(0,60)+'</option>').join('');
+}
+function fgUnitOptions(sel){
+  return FG_UNITS.map(u => '<option value="'+u[0]+'"'+(sel===u[0]?' selected':'')+'>'+u[1]+'</option>').join('');
+}
+
+async function openFgSetModal(id){
+  const s = id ? (FG_SETS.find(x => String(x.id)===String(id)) || {}) : {};
+  await ensureCustomerGroups();
+  plModal('<h3>'+(id?'แก้ไขชุดแถม':'สร้างชุดแถม')+'</h3>' +
+    '<div class="form-grid g2">' +
+      plField('ชื่อชุด', '<input id="fg-name" value="'+esc(s.name||'')+'" placeholder="เช่น Sales out Ranger 12hrs (1-31 ก.ค. 69)">') +
+      plField('สถานะ', '<select id="fg-status">'+Object.keys(FG_STATUS).map(k =>
+        '<option value="'+k+'"'+((s.status||'draft')===k?' selected':'')+'>'+FG_STATUS[k][0]+'</option>').join('')+'</select>') +
+      plField('เริ่ม', '<input type="date" id="fg-from" value="'+esc(s.validFrom||'')+'">') +
+      plField('ถึง', '<input type="date" id="fg-to" value="'+esc(s.validTo||'')+'">') +
+    '</div>' +
+    plField('หมายเหตุ', '<input id="fg-note" value="'+esc(s.note||'')+'" placeholder="อ้างอิงใบอนุมัติ / เงื่อนไขที่ตกลงไว้">') +
+    '<div class="err" id="plm-err" style="margin:12px 0 0"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button>' +
+    '<button class="btn btn-primary" onclick="saveFgSetUI('+(id||'null')+')">บันทึก</button></div>');
+}
+function saveFgSetUI(id){ return plBusy(async () => {
+  const r = await callApi('saveFreeGoodsSet', { id: id || undefined,
+    name: document.getElementById('fg-name').value.trim(), status: document.getElementById('fg-status').value,
+    validFrom: document.getElementById('fg-from').value, validTo: document.getElementById('fg-to').value,
+    note: document.getElementById('fg-note').value.trim() });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast(r.message);
+  await loadFreeGoods();
+  openFgDetail(r.id);
+}); }
+
+async function openFgDetail(id){
+  await ensureProductsForSale();
+  const r = await callApi('getFreeGoodsSet', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  FG_CUR = r;
+  document.getElementById('fg-list').style.display = 'none';
+  const box = document.getElementById('fg-detail');
+  box.style.display = '';
+  const st = FG_STATUS[r.set.status] || FG_STATUS.draft;
+  // จัดบรรทัดตามกลไก เพื่อให้เห็นว่าอันไหน "ขั้นของกันและกัน"
+  const groups = {};
+  r.items.forEach(it => { (groups[it.tierGroup || ('#'+it.id)] = groups[it.tierGroup || ('#'+it.id)] || []).push(it); });
+  const pname = {}; (productsCache||[]).forEach(p => pname[String(p.record_id)] = p.name);
+  const unitLabel = c => (FG_UNITS.find(u => u[0]===c)||[c,c])[1];
+
+  box.innerHTML =
+    '<div class="view-head"><div><h1>'+esc(r.set.name)+' <span class="pill '+st[1]+'">'+st[0]+'</span></h1>' +
+      '<p>'+esc(r.set.validFrom||'…')+' – '+esc(r.set.validTo||'…')+(r.set.note?' · '+esc(r.set.note):'')+'</p></div>' +
+      '<div style="display:flex;gap:8px"><button class="btn" onclick="loadFreeGoods()">← กลับ</button>' +
+      '<button class="btn" onclick="openFgSetModal('+r.set.id+')">แก้ไขชุด</button></div></div>' +
+    '<div class="form-card"><h3>ขั้นการแถม</h3>' +
+      '<p class="form-hint">บรรทัดที่อยู่ <b>กลไกเดียวกัน</b> = ขั้นของกันและกัน ลูกค้าได้ <b>ขั้นสูงสุดที่ถึงเพียงขั้นเดียว</b> ' +
+      '(ซื้อ 12 ลัง ได้ 1 ลัง ไม่ใช่ได้ทั้ง 1 ลัง + 6 แพ็ค + 1 แพ็ค) · คนละกลไกได้พร้อมกัน</p>' +
+      (Object.keys(groups).length ? Object.keys(groups).map(g =>
+        '<div class="activity-row" style="align-items:flex-start"><span><b>กลไก: '+esc(g)+'</b>' +
+          groups[g].sort((a,b)=>b.minQty-a.minQty).map(it =>
+            '<div style="margin-top:4px">• ซื้อ <b>'+it.minQty+' '+esc(unitLabel(it.minUnitCode))+'</b> ' +
+            '<span class="unit">('+esc(it.triggerProductIds.map(p=>pname[String(p)]||('#'+p)).join(', ').slice(0,60)||('กลุ่ม '+it.triggerGroupIds.join(',')))+')</span>' +
+            ' → แถม <b>'+it.freeQty+' '+esc(unitLabel(it.freeUnitCode))+'</b> '+esc(pname[String(it.freeProductId)]||('#'+it.freeProductId)) +
+            (it.isActive?'':' <span class="tag tag-warn">ปิดอยู่</span>') +
+            ' <button class="btn btn-sm" onclick="openFgItemModal('+it.id+')">แก้</button>' +
+            ' <button class="btn btn-sm btn-ghost" onclick="deleteFgItemUI('+it.id+')">ลบ</button></div>').join('') +
+        '</span></div>').join('')
+        : '<p class="form-hint">ยังไม่มีขั้นการแถม — ชุดนี้จะยังไม่แถมอะไรให้ใคร</p>') +
+      '<div class="form-actions"><button class="btn btn-primary btn-sm" onclick="openFgItemModal(null)">+ เพิ่มขั้น</button>' +
+      '<button class="btn btn-sm" onclick="openFgPreview()">ทดลองดูว่าร้านนี้ได้แถมอะไร</button></div></div>' +
+    '<div class="form-card"><h3>จ่ายให้ตัวแทน — ใครได้ใช้ชุดแถมนี้</h3>' +
+      '<p class="form-hint">ชั้นแรก: บริษัทมอบชุดนี้ให้ตัวแทนรายไหน · ตัวแทนแก้เองไม่ได้</p>' +
+      '<div id="fg-dist"></div></div>' +
+    '<div class="form-card"><h3>สิทธิ์ของลูกค้า — ร้านแบบไหนได้</h3>' +
+      '<p class="form-hint">ชั้นสอง: ภายในตัวแทนนั้น จำกัดเฉพาะร้านแบบไหน · ไม่ตั้งกฎ = ทุกร้านของตัวแทนที่ได้รับชุดนี้</p>' +
+      '<div id="pld-rules"></div>' +
+      '<div class="form-actions"><button class="btn btn-primary btn-sm" onclick="openRuleModal(null)">+ เพิ่มกฎสิทธิ์</button></div></div>';
+
+  loadPackageTenants('free_goods', r.set.id, 'fg-dist');
+  PLR_TARGET = 'free_goods'; currentPriceListId = r.set.id; PLR_META = null;
+  const rr = await callApi('listPriceListRules', { priceListId: r.set.id, targetType: 'free_goods' });
+  if (rr.success) { PLR_META = plrMetaOf(rr); PLR_RULES = rr.data; renderPriceListRules(); }
+}
+
+function openFgItemModal(id){
+  const it = id ? (FG_CUR.items.find(x => String(x.id)===String(id)) || {}) : {};
+  plModal('<h3>'+(id?'แก้ไขขั้นการแถม':'เพิ่มขั้นการแถม')+'</h3>' +
+    plField('ชื่อกลไก <span class="unit">(ขั้นที่อยู่กลไกเดียวกัน ลูกค้าได้ขั้นเดียว)</span>',
+      '<input id="fgi-group" value="'+esc(it.tierGroup||'')+'" placeholder="เช่น 12hrs-FOC">') +
+    '<div class="form-grid g2">' +
+      plField('ต้องซื้อสินค้า <span class="unit">(กด Ctrl เลือกหลายตัว = ทั้งตระกูล)</span>',
+        '<select id="fgi-trig" multiple size="6">'+ (productsCache||[]).map(p =>
+          '<option value="'+esc(p.record_id)+'"'+((it.triggerProductIds||[]).indexOf(Number(p.record_id))!==-1?' selected':'')+'>'+
+          esc((p.product_code?p.product_code+' ':'')+p.name).slice(0,52)+'</option>').join('') +'</select>') +
+      plField('แถมสินค้า', '<select id="fgi-free">'+fgProductOptions(it.freeProductId)+'</select>') +
+      plField('ซื้อครบ', '<div style="display:flex;gap:8px"><input type="number" id="fgi-min" value="'+(it.minQty||'')+'" style="flex:1">' +
+        '<select id="fgi-minu" style="width:110px">'+fgUnitOptions(it.minUnitCode||'CT')+'</select></div>') +
+      plField('แถมจำนวน', '<div style="display:flex;gap:8px"><input type="number" id="fgi-fq" value="'+(it.freeQty||'')+'" style="flex:1">' +
+        '<select id="fgi-fu" style="width:110px">'+fgUnitOptions(it.freeUnitCode||'PK')+'</select></div>') +
+    '</div>' +
+    plField('หมายเหตุ', '<input id="fgi-note" value="'+esc(it.note||'')+'" placeholder="ข้อความตามใบอนุมัติ เช่น ซื้อ 12 ลัง FOC 1 ลัง">') +
+    '<div class="err" id="plm-err" style="margin:12px 0 0"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button>' +
+    '<button class="btn btn-primary" onclick="saveFgItemUI('+(id||'null')+')">บันทึกขั้น</button></div>');
+}
+function saveFgItemUI(id){ return plBusy(async () => {
+  const trig = [...document.getElementById('fgi-trig').selectedOptions].map(o => Number(o.value));
+  const r = await callApi('saveFreeGoodsItem', { id: id || undefined, setId: FG_CUR.set.id,
+    tierGroup: document.getElementById('fgi-group').value.trim(), triggerProductIds: trig,
+    minQty: Number(document.getElementById('fgi-min').value), minUnitCode: document.getElementById('fgi-minu').value,
+    freeProductId: document.getElementById('fgi-free').value,
+    freeQty: Number(document.getElementById('fgi-fq').value), freeUnitCode: document.getElementById('fgi-fu').value,
+    note: document.getElementById('fgi-note').value.trim() });
+  if (!r.success) return plModalErr(r.message);
+  plModalClose(); toast('บันทึกขั้นการแถมแล้ว');
+  openFgDetail(FG_CUR.set.id);
+}); }
+async function deleteFgItemUI(id){
+  if (!confirm('ลบขั้นนี้?')) return;
+  const r = await callApi('deleteFreeGoodsItem', { id });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('ลบแล้ว'); openFgDetail(FG_CUR.set.id);
+}
+
+/* ★ ดูก่อนเปิดใช้เสมอ — ของแถมที่ตั้งผิดคือของที่บริษัทเสียไปจริงโดยไม่มีใครทักท้วง */
+async function openFgPreview(){
+  await ensureCustomers();
+  plModal('<h3>ทดลองดูว่าร้านนี้จะได้แถมอะไร</h3>' +
+    plField('ร้านค้า', '<select id="fgp-cust">'+customersCache.map(c => '<option value="'+esc(c.record_id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
+    plField('ณ วันที่', '<input type="date" id="fgp-date" value="'+new Date().toISOString().slice(0,10)+'">') +
+    '<div class="form-grid g2">' +
+      plField('สินค้าที่สั่ง', '<select id="fgp-prod">'+fgProductOptions(null)+'</select>') +
+      plField('จำนวน', '<div style="display:flex;gap:8px"><input type="number" id="fgp-qty" value="12" style="flex:1">' +
+        '<select id="fgp-unit" style="width:110px">'+fgUnitOptions('CT')+'</select></div>') +
+    '</div>' +
+    '<div id="fgp-result" style="margin-top:12px"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
+    '<button class="btn btn-primary" onclick="runFgPreview()">ตรวจ</button></div>');
+}
+async function runFgPreview(){
+  const box = document.getElementById('fgp-result');
+  box.innerHTML = 'กำลังตรวจ...';
+  const r = await callApi('previewFreeGoods', { customerId: document.getElementById('fgp-cust').value,
+    date: document.getElementById('fgp-date').value,
+    items: [{ productId: document.getElementById('fgp-prod').value,
+      qty: Number(document.getElementById('fgp-qty').value), unitCode: document.getElementById('fgp-unit').value }] });
+  if (!r.success) { box.innerHTML = '<span style="color:var(--red)">'+esc(r.message)+'</span>'; return; }
+  box.innerHTML = '<div class="activity-row"><span><b>'+esc(r.message)+'</b></span></div>' +
+    r.freeGoods.map(f => '<div class="activity-row"><span>แถม <b>'+f.qty+' '+esc(f.unitLabel)+'</b> '+esc(f.name) +
+      '<div class="unit">'+esc(f.reason)+' · ตัดสต็อก '+f.baseQty+' หน่วยฐาน</div></span></div>').join('');
 }
 
 /* ══════════════ จ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (38_package_distribution.gs) ══════════════

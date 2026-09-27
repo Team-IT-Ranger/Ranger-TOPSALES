@@ -118,6 +118,15 @@ var CENTRAL_SHEETS = {
   // migratePackageAssignments() ให้ครบทุกตัวแทน ของที่ขายอยู่จะได้ไม่สะดุด
   package_tenants: ['record_id','package_type','package_id','tenant_id','assigned_at','assigned_by'],
 
+  // ═══ ชุดแถม (39_free_goods.gs) ═══
+  // แยกจากชุดราคาโดยตั้งใจ: ช่วงเวลาไม่ตรงกัน (ใบอนุมัติจริงมี FOC 1-31 ก.ค. ในงวดราคา ก.ค.-ก.ย.)
+  // และของแถมถูกยกเลิก/ต่ออายุระหว่างงวดเป็นปกติ — ฝังในชุดราคาจะต้องคัดลอกชุดราคาใหม่ทุกครั้ง
+  free_goods_sets: ['record_id','name','status','valid_from','valid_to','customer_group_id','note','created_at','created_by'],
+  // tier_group: บรรทัดที่อยู่กลุ่มเดียวกัน = กลไกเดียวกันหลายขั้น → ได้ขั้นสูงสุดที่ถึง "ขั้นเดียว"
+  //   ("ซื้อ 12 ลัง FOC 1 ลัง · ซื้อ 6 ลัง FOC 6 แพ็ค" คือกลไกเดียว ไม่ใช่สองโปรที่ได้พร้อมกัน)
+  free_goods_items: ['record_id','set_id','tier_group','trigger_product_ids','trigger_group_ids',
+    'min_qty','min_unit_code','free_product_id','free_qty','free_unit_code','note','is_active'],
+
   // ═══════════ งานซื้อ (PR → PO → รับของเข้าคลัง) — ดู 20_purchasing_master.gs, 21_purchase_requisition.gs, 22_purchase_order.gs ═══════════
   // ทั้งหมดเป็นข้อมูล "ฝั่งบริษัทเจ้าของสินค้า" จึงอยู่ Central Sheet (ตัวแทนไม่ได้ซื้อของเอง)
   // tenant_id ในกลุ่มตารางงานซื้อ/คลัง: ว่าง = ของบริษัทเจ้าของสินค้า · มีค่า = ของตัวแทนรายนั้น (ข้อมูลไม่ปนกัน)
