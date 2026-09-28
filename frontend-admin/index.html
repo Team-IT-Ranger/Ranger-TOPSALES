@@ -538,6 +538,21 @@
   border-radius:999px;cursor:pointer;background:var(--card,#fff);font-size:.94em;user-select:none}
 .pkg-chip input{margin:0;width:15px;height:15px;flex:none}
 .pkg-chip.is-on{border-color:#2B63D9;background:#EEF3FE;color:#1B4BB0}
+/* เมนูที่เห็นแต่กดไม่ได้ — ต้องอ่านออกว่า "มีอยู่ แต่ไม่ใช่ของเรา" ไม่ใช่ดูเหมือนปุ่มเสีย */
+  .sb-action.is-locked{ opacity:.45; cursor:not-allowed; }
+  .sb-action.is-locked:hover{ background:none; }
+  .sb-action .lock-dot{ margin-left:auto; font-size:9px; opacity:.7; }
+  .sb-action .fav-star{ margin-left:auto; opacity:0; font-size:13px; padding:0 2px; cursor:pointer; }
+  .sb-action:hover .fav-star{ opacity:.55; }
+  .sb-action .fav-star:hover{ opacity:1; color:var(--blue); }
+  /* ดาวที่ติดแล้วต้องเห็นตลอด ไม่ใช่เห็นตอน hover — ไม่งั้นไม่รู้ว่าอันไหนติดดาวไว้ */
+  .sb-action .fav-star:not(:empty){ }
+  .ql-list{ margin:0 8px 4px; border-left:2px solid var(--border); padding-left:6px; }
+  .ql-list.sg-closed{ display:none; }
+  .ql-empty{ font-size:11px; color:var(--ink-faint); padding:6px 8px; }
+  .ql-chev{ margin-left:auto; font-size:10px; opacity:.6; transition:transform .15s; }
+  .sb-item-standalone.is-open .ql-chev{ transform:rotate(180deg); }
+  .ql-gap{ height:10px; }
 </style>
 </head>
 <body>
@@ -613,6 +628,15 @@
         <button class="sb-item-standalone active" data-view="dashboard" onclick="gotoView('dashboard')">
           <span class="si"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.2 8 2.8l5.5 4.4"/><path d="M4.3 6.6V13h7.4V6.6"/><path d="M6.8 13V9.6h2.4V13"/></svg></span><span class="si-lbl">ภาพรวม</span>
         </button>
+        <button class="sb-item-standalone" id="ql-fav-btn" onclick="toggleQuick('fav')">
+          <span class="si">★</span><span class="si-lbl">รายการโปรด</span><span class="ql-chev">▾</span>
+        </button>
+        <div class="ql-list sg-closed" id="ql-fav"></div>
+        <button class="sb-item-standalone" id="ql-recent-btn" onclick="toggleQuick('recent')">
+          <span class="si">↺</span><span class="si-lbl">ใช้ล่าสุด</span><span class="ql-chev">▾</span>
+        </button>
+        <div class="ql-list sg-closed" id="ql-recent"></div>
+        <div class="ql-gap"></div>
         <div id="nav-groups"></div>
       </nav>
     </aside>
@@ -1846,105 +1870,113 @@ const ICONS = {
 const navIcon = name => '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
 
 /* ══════════════ เมนู — เลข group.subgroup.action ตามโครง Hippo Village ══════════════ */
-const NAV = {
-  tenant: { groups: [
-    { n:'1', icon:'building', label:'ข้อมูลตัวแทน', subs:[
-      { n:'1.1', label:'ข้อมูลบริษัท', items:[ {n:'1.1.1', label:'ข้อมูลบริษัท', view:'companyprofile', mod:'settings', ready:true} ] }
+/* ═══════════ เมนูชุดเดียวใช้ทั้งสองฝั่ง (เจ้าของระบบสั่ง 28 ก.ย. 2026) ═══════════
+   เดิมแยกเป็นสองต้นไม้ (owner / tenant) เลขกลุ่มจึงไม่ตรงกัน — "งานซื้อ" เป็น 5 ฝั่งตัวแทน
+   แต่เป็น 7 ฝั่งบริษัท คุยกันทีต้องถามก่อนว่าใครเห็นเลขอะไร · ตอนนี้เลขเดียวทั้งระบบ
+   ต่างกันแค่ "เห็นหรือไม่เห็น / กดได้หรือกดไม่ได้"
+
+   scope : 'both' | 'owner' | 'tenant'  — ฝั่งที่ใช้งานเมนูนี้ได้จริง
+   grey  : ฝั่งที่ให้ "เห็นแต่กดไม่ได้" แทนการซ่อน — ใช้กับเรื่องที่บริษัทคุมไว้ (ราคา/ส่วนลด/สินค้า)
+           เจ้าของระบบเลือกให้โชว์เทา ตัวแทนจะได้รู้ว่ามีอยู่และใครเป็นคนคุม
+   ★ กติกาที่เหลือเป็นอัตโนมัติ: ไม่มีสิทธิ์ในโมดูล = โชว์เทาพร้อมบอกให้ไปขอสิทธิ์ ·
+     ready:false = โชว์เทาพร้อมป้าย "เร็วๆ นี้" · ทั้งกลุ่มไม่มีอะไรให้เห็นเลย = ซ่อนทั้งกลุ่ม */
+const NAV_GROUPS = [
+  { n:'1', icon:'receipt', label:'งานขาย', subs:[
+    { n:'1.1', label:'เอกสารการขาย', items:[
+      {n:'1.1.1', label:'ใบสั่งขาย', view:'salesorders', mod:'sales', ready:true, scope:'both'},
+      {n:'1.1.2', label:'ใบลดหนี้ / เพิ่มหนี้', view:'v-cn', mod:'sales', ready:false, scope:'both',
+        soon:'ใบลดหนี้ / เพิ่มหนี้ (Credit/Debit Note)', desc:'แก้ยอดบิลที่ออกไปแล้ว กระทบทั้งลูกหนี้และสต็อก'},
+      {n:'1.1.3', label:'ใบเสนอราคา', view:'v-quote', mod:'sales', ready:false, scope:'both',
+        soon:'ใบเสนอราคา', desc:'เสนอราคาก่อนเปิดบิลจริง แปลงเป็นใบสั่งขายได้'}
     ]},
-    { n:'2', icon:'receipt', label:'งานขาย', subs:[
-      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', mod:'sales', ready:true} ] }
+    { n:'1.2', label:'ราคาขาย / ส่วนลด', items:[
+      {n:'1.2.1', label:'กำหนดชุดตารางราคาขาย', view:'pricelists', mod:'pricing', ready:true, scope:'owner', grey:'tenant'},
+      {n:'1.2.2', label:'กำหนดชุดส่วนลดการขาย', view:'promotions', mod:'promotions', ready:true, scope:'owner', grey:'tenant'}
     ]},
-    { n:'3', icon:'users', label:'บุคลากรและเขตขาย', subs:[
-      { n:'3.1', label:'พนักงานขาย', items:[ {n:'3.1.1', label:'รายชื่อพนักงาน', view:'staff', mod:'staff', ready:true} ] },
-      { n:'3.2', label:'เขตการขาย', items:[ {n:'3.2.1', label:'ผังเขตการขาย', view:'v-zone', mod:'zones', ready:false, soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'} ] }
+    { n:'1.3', label:'ส่งเสริมการขาย', items:[
+      {n:'1.3.1', label:'ชุดแถม (ของแถม)', view:'freegoods', mod:'promotions', ready:true, scope:'owner', grey:'tenant'}
     ]},
-    { n:'4', icon:'store', label:'ลูกค้าและเอกสาร', subs:[
-      { n:'4.1', label:'ลูกค้า', items:[ {n:'4.1.1', label:'รายชื่อลูกค้า', view:'customers', mod:'customers', ready:true},
-        {n:'4.1.2', label:'รายชื่อร้านค้า (สำหรับกฎ/โปร)', view:'custlists', mod:'customers', ready:true} ] },
-      { n:'4.2', label:'เลขที่เอกสาร', items:[ {n:'4.2.1', label:'ตั้งค่ารูปแบบเลขที่', view:'docnum', mod:'docnum', ready:true} ] }
+    { n:'1.4', label:'ข้อมูลลูกค้า', items:[
+      {n:'1.4.1', label:'ทะเบียนรายชื่อลูกค้า', view:'customers', mod:'customers', ready:true, scope:'both'},
+      {n:'1.4.2', label:'รายชื่อร้านค้า (สำหรับกฎ/โปร)', view:'custlists', mod:'customers', ready:true, scope:'both'},
+      {n:'1.4.3', label:'กลุ่มลูกค้า', view:'custgroups', mod:'settings', ready:true, scope:'owner', grey:'tenant'},
+      {n:'1.4.4', label:'ช่องทางการจัดจำหน่าย', view:'distchannels', mod:'settings', ready:true, scope:'owner', grey:'tenant'},
+      {n:'1.4.5', label:'ประเภทการชำระเงิน', view:'paytypes', mod:'settings', ready:true, scope:'owner', grey:'tenant'}
     ]},
-    { n:'5', icon:'cart', label:'งานซื้อ', subs:[
-      { n:'5.1', label:'ใบขอซื้อ', items:[ {n:'5.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', mod:'purchasing', ready:true} ] },
-      { n:'5.2', label:'ใบสั่งซื้อ', items:[ {n:'5.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', mod:'purchasing', ready:true} ] },
-      { n:'5.3', label:'ข้อมูลตั้งต้น', items:[
-        {n:'5.3.1', label:'ผู้ขาย/ผู้จัดจำหน่าย', view:'vendors', mod:'vendors', ready:true},
-        {n:'5.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true}
-      ]}
+    { n:'1.5', label:'พนักงานและเขตขาย', items:[
+      {n:'1.5.1', label:'รายชื่อพนักงานขาย', view:'staff', mod:'staff', ready:true, scope:'both'},
+      {n:'1.5.2', label:'เขตการขายของพนักงาน', view:'v-zone', mod:'zones', ready:false, scope:'both',
+        soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'}
     ]},
-    { n:'6', icon:'box', label:'คลังสินค้า', subs:[
-      { n:'6.1', label:'รับของ', items:[ {n:'6.1.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', mod:'inventory', ready:true} ] },
-      { n:'6.2', label:'ยอดคงเหลือ', items:[ {n:'6.2.1', label:'สต็อกคลัง', view:'warehousestock', mod:'inventory', ready:true} ] },
-      { n:'6.3', label:'เคลื่อนไหวสินค้า', items:[
-        {n:'6.3.1', label:'รับสินค้าเข้าคลัง (จากบริษัท)', view:'v-recv', mod:'stock_receive', ready:false, soon:'รับสินค้าเข้าคลังจากบริษัท', desc:'ใบรับสินค้าที่บริษัทส่งมาให้ตัวแทน (คนละทางกับการซื้อจากผู้ขายเองในเมนูงานซื้อ)'},
-        {n:'6.3.2', label:'โอนย้ายคลัง', view:'v-transfer', mod:'stock_transfer', ready:false, soon:'โอนย้ายคลัง', desc:'โอนสต็อกระหว่างคลังของตัวแทน พร้อมเลขเอกสารอ้างอิง'}
-      ]},
-      { n:'6.4', label:'เบิกจ่าย', items:[ {n:'6.4.1', label:'เบิกจ่ายให้ Cash Van', view:'v-van', mod:'van_issue', ready:false, soon:'เบิกจ่ายให้ Cash Van (แบบทางการ)', desc:'ใบเบิกจากคลังขึ้นรถแบบมีเลขเอกสาร (ตอนนี้มีแบบง่ายใน mobile app แล้ว)'} ] }
+    { n:'1.6', label:'การจัดส่ง', items:[
+      {n:'1.6.1', label:'สถานะการจัดส่ง', view:'v-ship', mod:'shipping', ready:false, scope:'tenant',
+        soon:'การจัดส่ง', desc:'ติดตามบิลที่รอสำนักงานจัดส่งให้ลูกค้า'}
     ]},
-    { n:'7', icon:'users', label:'ผู้ใช้งานและสิทธิ์', subs:[
-      { n:'7.1', label:'ผู้ใช้งาน', items:[ {n:'7.1.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true} ] },
-      { n:'7.2', label:'สิทธิ์การใช้งาน', items:[ {n:'7.2.1', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true} ] }
-    ]},
-    { n:'8', icon:'truck', label:'การจัดส่งและรายงาน', subs:[
-      { n:'8.1', label:'การจัดส่ง', items:[ {n:'8.1.1', label:'สถานะการจัดส่ง', view:'v-ship', mod:'shipping', ready:false, soon:'การจัดส่ง', desc:'ติดตาม SO ที่รอสำนักงานจัดส่งให้ลูกค้า'} ] },
-      { n:'8.2', label:'รายงาน', items:[ {n:'8.2.1', label:'รายงานการขาย', view:'v-report1', mod:'sales_report', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายตามช่วงเวลา/พนักงาน/สินค้า ส่งออกเป็นไฟล์ได้'} ] }
+    { n:'1.8', label:'รายงานขาย', items:[
+      {n:'1.8.1', label:'รายงานการขายแยกพนักงาน', view:'v-rep-staff', mod:'sales_report', ready:false, scope:'both',
+        soon:'รายงานการขายแยกพนักงาน', desc:'ยอดขายรายคน เทียบช่วงเวลา'},
+      {n:'1.8.2', label:'รายงานการขายแยกลูกค้า', view:'v-rep-cust', mod:'sales_report', ready:false, scope:'both',
+        soon:'รายงานการขายแยกลูกค้า', desc:'ยอดซื้อรายร้าน จัดอันดับ ร้านที่หายไป'},
+      {n:'1.8.3', label:'รายงานการขายแยกสินค้า', view:'v-rep-prod', mod:'sales_report', ready:false, scope:'both',
+        soon:'รายงานการขายแยกสินค้า', desc:'ยอดขายรายสินค้า/กลุ่มสินค้า'}
     ]}
   ]},
-  owner: { groups: [
-    { n:'1', icon:'tag', label:'สินค้าและโปรโมชั่น', subs:[
-      { n:'1.1', label:'สินค้า', items:[ {n:'1.1.1', label:'รายการสินค้า', view:'products', mod:'products', ready:true} ] },
-      { n:'1.2', label:'โปรโมชั่น', items:[
-        {n:'1.2.1', label:'รายการโปรโมชั่น', view:'promotions', mod:'promotions', ready:true},
-        {n:'1.2.2', label:'ชุดแถม (ของแถม)', view:'freegoods', mod:'promotions', ready:true} ] }
-    ]},
-    { n:'2', icon:'receipt', label:'งานขาย', subs:[
-      { n:'2.1', label:'บิลขาย', items:[ {n:'2.1.1', label:'รายการบิลขาย', view:'salesorders', mod:'sales', ready:true} ] },
-      { n:'2.2', label:'ลูกค้าและพนักงาน', items:[
-        {n:'2.2.1', label:'รายชื่อลูกค้า', view:'customers', mod:'customers', ready:true},
-        {n:'2.2.4', label:'รายชื่อร้านค้า (สำหรับกฎ/โปร)', view:'custlists', mod:'customers', ready:true},
-        {n:'2.2.2', label:'พนักงานขาย', view:'staff', mod:'staff', ready:true}
-      ]}
-    ]},
-    { n:'3', icon:'coin', label:'ราคาและส่วนลด', subs:[
-      { n:'3.1', label:'ชุดราคา', items:[ {n:'3.1.1', label:'ชุดราคาและส่วนลด', view:'pricelists', mod:'pricing', ready:true} ] }
-    ]},
-    { n:'4', icon:'gear', label:'ข้อมูลกลาง', subs:[
-      { n:'4.1', label:'กลุ่มลูกค้า', items:[ {n:'4.1.1', label:'รายการกลุ่มลูกค้า', view:'custgroups', mod:'settings', ready:true} ] },
-      { n:'4.2', label:'ช่องทางการจัดจำหน่าย', items:[ {n:'4.2.1', label:'รายการช่องทาง', view:'distchannels', mod:'settings', ready:true} ] },
-      { n:'4.3', label:'ประเภทการชำระเงิน', items:[ {n:'4.3.1', label:'รายการประเภทชำระเงิน', view:'paytypes', mod:'settings', ready:true} ] }
-    ]},
-    { n:'5', icon:'building', label:'เครือข่ายตัวแทน', subs:[
-      { n:'5.1', label:'ตัวแทนจำหน่าย', items:[ {n:'5.1.1', label:'รายชื่อตัวแทน', view:'tenants', mod:'tenants', ready:true} ] }
-    ]},
-    { n:'6', icon:'users', label:'ผู้ใช้งานและสิทธิ์', subs:[
-      { n:'6.1', label:'ผู้ใช้งาน', items:[ {n:'6.1.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true} ] },
-      { n:'6.2', label:'สิทธิ์การใช้งาน', items:[ {n:'6.2.1', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true} ] }
-    ]},
-    { n:'7', icon:'cart', label:'งานซื้อ', subs:[
-      { n:'7.1', label:'ใบขอซื้อ', items:[ {n:'7.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', mod:'purchasing', ready:true} ] },
-      { n:'7.2', label:'ใบสั่งซื้อ', items:[ {n:'7.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', mod:'purchasing', ready:true} ] },
-      { n:'7.3', label:'ข้อมูลตั้งต้น', items:[
-        {n:'7.3.1', label:'ผู้ขาย/ผู้จัดจำหน่าย', view:'vendors', mod:'vendors', ready:true},
-        {n:'7.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true}
-      ]}
-    ]},
-    { n:'8', icon:'box', label:'คลังสินค้ากลาง', subs:[
-      { n:'8.1', label:'รับของ', items:[ {n:'8.1.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', mod:'inventory', ready:true} ] },
-      { n:'8.2', label:'ยอดคงเหลือ', items:[ {n:'8.2.1', label:'สต็อกคลังกลาง', view:'warehousestock', mod:'inventory', ready:true} ] }
-    ]},
-    { n:'9', icon:'book', label:'บัญชี', subs:[
-      { n:'9.1', label:'เจ้าหนี้', items:[ {n:'9.1.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true} ] },
-      { n:'9.2', label:'ลูกหนี้', items:[ {n:'9.2.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true} ] },
-      { n:'9.3', label:'บัญชีทั่วไป', items:[ {n:'9.3.1', label:'สมุดรายวัน/งบทดลอง', view:'glbooks', mod:'accounting', ready:true} ] }
-    ]},
-    { n:'10', icon:'gear', label:'ตั้งค่าระบบ', subs:[
-      { n:'10.1', label:'บริษัท', items:[ {n:'10.1.1', label:'ข้อมูลบริษัท', view:'companysettings', mod:'settings', ready:true} ] }
-    ]},
-    { n:'11', icon:'chart', label:'รายงาน', subs:[
-      { n:'11.1', label:'ยอดขาย', items:[ {n:'11.1.1', label:'สรุปยอดขายรวม', view:'v-report2', mod:'sales_report', ready:false, soon:'รายงานการขาย', desc:'สรุปยอดขายรวมทุกตัวแทน เทียบเป้า/โปรโมชั่น'} ] }
+  { n:'2', icon:'cart', label:'งานซื้อ', subs:[
+    { n:'2.1', label:'ใบขอซื้อ', items:[
+      {n:'2.1.1', label:'รายการใบขอซื้อ (PR)', view:'purchasereqs', mod:'purchasing', ready:true, scope:'both'} ]},
+    { n:'2.2', label:'ใบสั่งซื้อ', items:[
+      {n:'2.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', mod:'purchasing', ready:true, scope:'both'} ]},
+    { n:'2.3', label:'ข้อมูลผู้ขาย', items:[
+      {n:'2.3.1', label:'ผู้ขาย', view:'vendors', mod:'vendors', ready:true, scope:'both'},
+      {n:'2.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true, scope:'both'} ]}
+  ]},
+  { n:'3', icon:'tag', label:'ข้อมูลสินค้า', subs:[
+    { n:'3.1', label:'สินค้า', items:[
+      {n:'3.1.1', label:'รายการสินค้า', view:'products', mod:'products', ready:true, scope:'owner', grey:'tenant'},
+      {n:'3.1.2', label:'กำหนดกลุ่มสินค้า', view:'productgroups', mod:'products', ready:true, scope:'owner', grey:'tenant'},
+      {n:'3.1.3', label:'หน่วยขายเพิ่มเติม', view:'productunits', mod:'products', ready:true, scope:'owner', grey:'tenant'}
     ]}
+  ]},
+  { n:'4', icon:'box', label:'คลังสินค้า', subs:[
+    { n:'4.1', label:'สินค้าคงเหลือ', items:[
+      {n:'4.1.1', label:'ยอดสินค้าคงเหลือ', view:'warehousestock', mod:'inventory', ready:true, scope:'both'} ]},
+    { n:'4.2', label:'รับ / จ่ายสินค้า', items:[
+      {n:'4.2.1', label:'ใบรับของเข้าคลัง', view:'goodsreceipts', mod:'inventory', ready:true, scope:'both'},
+      {n:'4.2.2', label:'ใบเบิกจ่ายสินค้าออก', view:'v-issue', mod:'inventory', ready:false, scope:'both',
+        soon:'ใบเบิกจ่ายสินค้าออก', desc:'เบิกของออกจากคลังแบบมีเลขเอกสาร (รวมเบิกขึ้นรถ Cash Van และโอนย้ายคลัง)'}
+    ]},
+    { n:'4.8', label:'รายงานเคลื่อนไหวสินค้า', items:[
+      {n:'4.8.1', label:'รายงานเคลื่อนไหวสินค้า', view:'v-stockledger', mod:'inventory', ready:false, scope:'both',
+        soon:'รายงานเคลื่อนไหวสินค้า', desc:'เข้า-ออก-คงเหลือรายสินค้า อ้างเอกสารต้นทาง (ข้อมูลมีอยู่แล้วใน stock_ledger)'}
+    ]}
+  ]},
+  { n:'5', icon:'book', label:'บัญชี', subs:[
+    { n:'5.1', label:'บัญชีทั่วไป', items:[
+      {n:'5.1.1', label:'สมุดรายวัน / งบทดลอง', view:'glbooks', mod:'accounting', ready:true, scope:'owner'} ]},
+    { n:'5.2', label:'เจ้าหนี้', items:[
+      {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'owner'} ]},
+    { n:'5.3', label:'ลูกหนี้', items:[
+      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'owner'} ]}
+  ]},
+  /* กลุ่ม 6 สำรองไว้ตามที่เจ้าของระบบสั่ง — อย่าเอาไปใช้โดยไม่ถาม */
+  { n:'7', icon:'users', label:'ผู้ใช้งานและสิทธิ์', subs:[
+    { n:'7.1', label:'ผู้ใช้งาน', items:[
+      {n:'7.1.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true, scope:'both'} ]},
+    { n:'7.2', label:'สิทธิ์', items:[
+      {n:'7.2.1', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true, scope:'both'} ]}
+  ]},
+  { n:'8', icon:'building', label:'เครือข่ายตัวแทน', subs:[
+    { n:'8.1', label:'ตัวแทนจำหน่าย', items:[
+      {n:'8.1.1', label:'รายชื่อตัวแทน', view:'tenants', mod:'tenants', ready:true, scope:'owner'} ]}
+  ]},
+  { n:'9', icon:'gear', label:'ตั้งค่าระบบ', subs:[
+    { n:'9.1', label:'ข้อมูลบริษัท', items:[
+      /* หน้าจอคนละตัวตามฝั่ง แต่เป็นเมนูเดียวกัน — gotoView แปลงให้ตอนกด */
+      {n:'9.1.1', label:'ข้อมูลบริษัท', view:'companyinfo', mod:'settings', ready:true, scope:'both'} ]},
+    { n:'9.2', label:'เลขที่เอกสาร', items:[
+      {n:'9.2.1', label:'ตั้งค่ารูปแบบเลขที่เอกสาร', view:'docnum', mod:'docnum', ready:true, scope:'both'} ]}
   ]}
-};
-
+];
 
 let sbPinned = false, sbCollapsed = true, closeTimer = null, openTimer = null;
 // หน่วง 1 วินาทีก่อนยืด/หุบ left pane เอง (แยกจาก transition ของกลุ่มเมนูที่ยาวกว่านั้นอีก) กันสไลด์วูบวาบตอนเมาส์กวาดผ่าน
@@ -2045,18 +2077,45 @@ let MY_PERMS = { isSuper: false, permissions: {} };
 const canView = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].view);
 const canEdit = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].edit);
 
+/**
+ * สถานะของเมนูหนึ่งรายการสำหรับผู้ใช้คนนี้
+ *   'ok'     ใช้งานได้
+ *   'locked' เห็นแต่กดไม่ได้ (พร้อมเหตุผล) — ของที่บริษัทคุม หรือยังไม่ได้รับสิทธิ์ หรือยังไม่ได้ทำ
+ *   'hidden' ไม่ใช่งานของฝั่งนี้เลย ไม่ต้องโชว์ให้รก
+ */
+function navState(it){
+  const mine = !it.scope || it.scope === 'both' || it.scope === SCOPE;
+  if (!mine) {
+    return it.grey === SCOPE
+      ? { s:'locked', why:'บริษัทเจ้าของสินค้าเป็นผู้ดูแลเมนูนี้' }
+      : { s:'hidden' };
+  }
+  if (!canView(it.mod)) return { s:'locked', why:'ยังไม่ได้รับสิทธิ์ — ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์' };
+  if (!it.ready) return { s:'locked', why:'เร็วๆ นี้ — ยังไม่เปิดใช้งาน', soon:true };
+  return { s:'ok' };
+}
+
 function renderNav(){
-  const html = NAV[SCOPE].groups.map((g, gi) => {
+  const html = NAV_GROUPS.map((g, gi) => {
     const gid = 'g' + gi;
-    const visibleSubs = g.subs.filter(sg => sg.items.some(it => canView(it.mod)));
-    if (!visibleSubs.length) return '';        // ทั้งกลุ่มไม่มีเมนูที่ดูได้ → ไม่ต้องโชว์หัวกลุ่ม
+    const shown = sg => sg.items.some(it => navState(it).s !== 'hidden');
+    const visibleSubs = g.subs.filter(shown);
+    if (!visibleSubs.length) return '';        // ทั้งกลุ่มไม่มีเมนูที่เห็นได้ → ไม่ต้องโชว์หัวกลุ่ม
     const subsHtml = visibleSubs.map((sg, si) => {
       const flyId = gid + '-s' + si;
-      const itemsHtml = sg.items.filter(it => canView(it.mod)).map(it =>
-        '<button class="sb-action" onclick="gotoView(\''+it.view+'\')" data-view="'+it.view+'">' +
+      const itemsHtml = sg.items.map(it => {
+        const st = navState(it);
+        if (st.s === 'hidden') return '';
+        if (st.s === 'locked')
+          return '<button class="sb-action is-locked" disabled title="'+esc(st.why)+'">' +
+            '<span class="sb-action-num">'+it.n+'</span><span>'+esc(it.label)+'</span>' +
+            (st.soon ? '<span class="soon-dot"></span>' : '<span class="lock-dot">🔒</span>') + '</button>';
+        return '<button class="sb-action" onclick="gotoView(\''+it.view+'\')" data-view="'+it.view+'">' +
           '<span class="sb-action-num">'+it.n+'</span><span>'+esc(it.label)+'</span>' +
-          (it.ready ? '' : '<span class="soon-dot"></span>') + '</button>'
-      ).join('');
+          '<span class="fav-star" title="เพิ่ม/เอาออกจากรายการโปรด" ' +
+            'onclick="event.stopPropagation();toggleFav(\''+it.view+'\')">'+(isFav(it.view)?'★':'☆')+'</span>' +
+          '</button>';
+      }).join('');
       return '<div class="sb-subgroup">' +
         '<div class="sb-subgroup-hd" onmouseenter="toggleSubgroup(\''+flyId+'\', this)" onclick="toggleSubgroup(\''+flyId+'\', this)">' +
           '<span class="sb-subgroup-num">'+sg.n+'</span><span class="sb-subgroup-lbl">'+esc(sg.label)+'</span><span class="sb-subgroup-chev">◂</span>' +
@@ -2073,11 +2132,54 @@ function renderNav(){
     '</div>';
   }).join('');
   document.getElementById('nav-groups').innerHTML = html;
+  renderQuickLists();
 }
 
 function findMeta(view){
-  for (const g of NAV[SCOPE].groups) for (const sg of g.subs) for (const it of sg.items) if (it.view === view) return it;
+  for (const g of NAV_GROUPS) for (const sg of g.subs) for (const it of sg.items) if (it.view === view) return it;
   return null;
+}
+
+/* ═══════════ รายการโปรด / ใช้ล่าสุด ═══════════
+   เก็บต่อผู้ใช้ใน localStorage — เมนูมี 9 กลุ่ม กว่าจะไล่หาเมนูที่ใช้ทุกวันก็หลายคลิก
+   ★ เก็บแค่ "ชื่อ view" ไม่เก็บ label — label เปลี่ยนเมื่อไหร่รายการเก่าจะได้ไม่ค้างชื่อผิด */
+const QL_MAX = 10;
+const qlKey = k => 'topshop_' + APP_ENV + '_' + k + '_' + ((SESSION && SESSION.adminUserId) || 'anon');
+function qlLoad(k){ try { return JSON.parse(localStorage.getItem(qlKey(k)) || '[]'); } catch (e) { return []; } }
+function qlSave(k, v){ try { localStorage.setItem(qlKey(k), JSON.stringify(v.slice(0, QL_MAX))); } catch (e) {} }
+function isFav(view){ return qlLoad('fav').indexOf(view) !== -1; }
+function toggleFav(view){
+  const cur = qlLoad('fav');
+  const i = cur.indexOf(view);
+  if (i === -1) cur.unshift(view); else cur.splice(i, 1);
+  qlSave('fav', cur);
+  renderNav();
+}
+function pushRecent(view){
+  const meta = findMeta(view);
+  if (!meta) return;                            // หน้าจอที่ไม่ได้อยู่ในเมนู (รายละเอียดเอกสาร) ไม่ต้องจำ
+  const cur = qlLoad('recent').filter(v => v !== view);
+  cur.unshift(view);
+  qlSave('recent', cur);
+}
+function toggleQuick(k){
+  const box = document.getElementById('ql-' + k);
+  if (!box) return;
+  box.classList.toggle('sg-closed');
+  const btn = document.getElementById('ql-' + k + '-btn');
+  if (btn) btn.classList.toggle('is-open', !box.classList.contains('sg-closed'));
+}
+function renderQuickLists(){
+  [['fav', 'ql-fav', 'ยังไม่มีรายการโปรด — กดดาว ☆ ที่เมนูเพื่อเพิ่ม'],
+   ['recent', 'ql-recent', 'ยังไม่มีเมนูที่เปิดล่าสุด']].forEach(([k, id, empty]) => {
+    const box = document.getElementById(id);
+    if (!box) return;
+    const items = qlLoad(k).map(findMeta).filter(it => it && navState(it).s === 'ok');
+    box.innerHTML = items.length
+      ? items.map(it => '<button class="sb-action" onclick="gotoView(\''+it.view+'\')" data-view="'+it.view+'">' +
+          '<span class="sb-action-num">'+it.n+'</span><span>'+esc(it.label)+'</span></button>').join('')
+      : '<div class="ql-empty">'+esc(empty)+'</div>';
+  });
 }
 const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
@@ -2091,7 +2193,15 @@ const LOADERS = {
   companysettings: loadCompanySettings, roles: loadRoles
 };
 function gotoView(view){
-  let elId = 'soon', label = view, meta = findMeta(view);
+  /* ★ หาเมนูจาก id ที่ "กดมา" ก่อนแปลง — เมนูเดียวสองหน้าจอ (ข้อมูลบริษัท: ฝั่งบริษัทดูของกลาง
+     ฝั่งตัวแทนดูของตัวเอง) ถ้าแปลงก่อนแล้วค่อยหา จะหาไม่เจอเพราะเมนูเก็บชื่อกลางไว้
+     แล้วจะเด้งไปหน้า "เร็วๆ นี้" ทั้งที่หน้าจอมีอยู่จริง */
+  let meta = findMeta(view);
+  const menuId = meta ? meta.view : view;             // ชื่อที่ใช้จำใน "ใช้ล่าสุด" และไฮไลต์เมนู
+  if (view === 'companyinfo') view = SCOPE === 'owner' ? 'companysettings' : 'companyprofile';
+  if (!meta) meta = findMeta(view);                   // เผื่อถูกเรียกด้วยชื่อหน้าจอจริงจากที่อื่น
+  pushRecent(menuId);
+  let elId = 'soon', label = view;
   if (view === 'dashboard'){ elId = 'dashboard'; label = 'ภาพรวม'; }
   else if (view === 'changepassword'){ elId = 'changepassword'; label = 'เปลี่ยนรหัสผ่าน'; }
   else if (meta && meta.ready){ elId = view; label = meta.label; }
@@ -2100,8 +2210,8 @@ function gotoView(view){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   const target = document.getElementById('view-' + elId); if (target) target.classList.add('active');
   document.getElementById('crumb-current').textContent = label;
-  document.querySelectorAll('.sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-  document.querySelectorAll('.sb-action').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === menuId));
+  document.querySelectorAll('.sb-action').forEach(b => b.classList.toggle('active', b.dataset.view === menuId));
 
   if (LOADERS[view]) LOADERS[view]();
 }
