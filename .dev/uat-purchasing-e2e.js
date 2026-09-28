@@ -88,12 +88,12 @@ const stamp = Date.now().toString().slice(-6);
     check('รายงานอายุหนี้เจ้าหนี้เรียกได้', aging.success, aging);
 
     // ── บัญชี: ลูกหนี้ ──
-    const customers = (await api('listCustomersAdmin')).data || [];
+    const customers = (await api('listCustomersAdmin')).customers || [];
     if (customers.length) {
-      r = await api('createArInvoice', { customerId: customers[0].record_id, invoiceDate: today, dueDays: 30, subtotalExVat: 1000, note: 'E2E ' + stamp });
+      r = await api('createArInvoice', { customerId: customers[0].id, invoiceDate: today, dueDays: 30, subtotalExVat: 1000, note: 'E2E ' + stamp });
       check('ออกใบแจ้งหนี้ลูกค้า (1,000 + VAT = 1,070)', r.success && r.total === 1070, r);
       const invId = r.invoiceId;
-      r = await api('receiveArPayment', { customerId: customers[0].record_id, receiptDate: today, method: 'transfer', allocations: [{ invoiceId: invId, amount: 500 }] });
+      r = await api('receiveArPayment', { customerId: customers[0].id, receiptDate: today, method: 'transfer', allocations: [{ invoiceId: invId, amount: 500 }] });
       check('รับชำระบางส่วน 500', r.success && r.amount === 500, r);
       const inv = (await api('listArInvoices', {})).data.find(x => x.id === invId);
       check('  ใบแจ้งหนี้เป็น partial ค้าง 570', inv && inv.status === 'partial' && inv.outstanding === 570, inv);

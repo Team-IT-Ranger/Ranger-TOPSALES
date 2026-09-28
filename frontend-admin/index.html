@@ -1812,6 +1812,40 @@ function snapSave(data){
     localStorage.setItem(LS_SNAP, JSON.stringify(all));
   } catch (e) { /* โควตาเต็ม/โหมดส่วนตัว — แค่ไม่มีของเก่าให้วาดก่อน */ }
 }
+
+/* ══════════ จำ "รายการ" ข้ามการเปิดแอป (28 ก.ย. 2026) ══════════
+   กติกาข้อ 2 (วาดจาก snapshot ก่อนเสมอ) เคยใช้แค่หน้าแรก — หน้ารายการทุกหน้ายังเริ่มจากศูนย์
+   ทุกครั้งที่ผู้ใช้ปิดแล้วเปิดแอปใหม่ แล้วนั่งรอ 2 วินาทีต่อหน้า ทั้งที่ข้อมูลชุดเดิมเคยอยู่ในมือแล้ว
+   ใช้: ต้นฟังก์ชันโหลด เรียก listSnapLoad('<ชื่อ>') มาใส่ cache ถ้ายังว่าง · ได้ข้อมูลสดแล้วเรียก listSnapSave()
+   ★ กันของเก่าค้าง: หมดอายุ 24 ชม. · ★ กันโควตาเต็ม: ก้อนไหนใหญ่เกิน 500 KB ไม่เก็บ (และลบของเก่าของคีย์นั้นทิ้ง
+     ไม่งั้นจะเหลือรายการที่ไม่มีวันอัปเดตค้างอยู่ถาวร) · เขียนไม่ได้ = ทิ้งทั้งก้อนแล้วเริ่มใหม่รอบหน้า
+   ★ คีย์ผูกกับ snapKey() (ผู้ใช้ + ตัวแทนที่สวมอยู่) สลับบริษัทแล้วจะไม่เห็นข้อมูลของอีกที่ */
+const LS_LISTS = 'topshop_' + APP_ENV + '_lists';
+const LIST_SNAP_TTL = 24 * 60 * 60 * 1000;
+const LIST_SNAP_MAX = 500 * 1024;
+function _listsAll(){ try { return JSON.parse(localStorage.getItem(LS_LISTS) || '{}'); } catch (e) { return {}; } }
+function listSnapLoad(name){
+  const e = _listsAll()[snapKey() + '|' + name];
+  if (!e || !Array.isArray(e.rows) || (Date.now() - e.ts) > LIST_SNAP_TTL) return null;
+  return e.rows;
+}
+/* ทิ้ง snapshot ทิ้งหลังแก้ข้อมูลเป็นชุด — ไม่งั้นโหลดรอบถัดไปจะเอาของก่อนแก้มาโชว์ 2 วินาที
+   ผู้ใช้เพิ่งกดเปลี่ยนแล้วเห็นของเดิม = นึกว่าไม่ติด แล้วกดซ้ำ */
+function listSnapDrop(name){
+  try { const all = _listsAll(); delete all[snapKey() + '|' + name]; localStorage.setItem(LS_LISTS, JSON.stringify(all)); }
+  catch (e) { /* ไม่มีที่เก็บอยู่แล้ว */ }
+}
+function listSnapSave(name, rows){
+  const key = snapKey() + '|' + name;
+  try {
+    const all = _listsAll();
+    if (JSON.stringify(rows || []).length > LIST_SNAP_MAX) delete all[key];
+    else all[key] = { ts: Date.now(), rows: rows };
+    localStorage.setItem(LS_LISTS, JSON.stringify(all));
+  } catch (e) {
+    try { localStorage.removeItem(LS_LISTS); } catch (e2) { /* ไม่มีที่เก็บ — แอปยังทำงานได้ แค่ไม่จำ */ }
+  }
+}
 /* เอาผลจาก getAdminBootstrap (หรือ snapshot) ไปใส่สถานะแอปแล้ววาดใหม่
    fromSnapshot = true → เป็นข้อมูลของเมื่อครู่ ให้ขึ้นป้าย "กำลังอัปเดต…" ไว้ */
 function applyBootstrap(b, fromSnapshot){
@@ -2316,9 +2350,18 @@ async function toggleStaffStatus(lineUserId, currentStatus){
 
 /* ══════════════ CUSTOMERS ══════════════
    ทะเบียนลูกค้าโครงสร้างใหม่ (2026-09-26) — backend ส่ง r.customers (camelCase, มีชื่อเต็มคำนวณมาแล้ว)
-   ของเก่า r.data ยังส่งมาด้วยเผื่อ deployment ที่ยังไม่ได้อัปเดต จึงรองรับทั้งสองแบบ
+   ★ 28 ก.ย. 2026 เลิกรองรับ r.data (แถวดิบ) แล้ว — backend เคยส่งข้อมูลชุดเดียวกันมาสองรูป
+   payload จึงใหญ่เป็นสองเท่า ทุกหน้าอ่าน r.customers ทางเดียว (ต้อง deploy backend คู่กัน)
    บันทึกแล้วแก้ custMasterCache แล้ววาดใหม่ ไม่โหลดทั้งลิสต์ซ้ำ (กติกาข้อ 4 ใน CLAUDE.md) */
 let custMasterCache = [];
+/* ★ ลูกค้าเป็นรายการเดียวที่ใหญ่พอจะล้น localStorage (2,039 ร้าน เต็มรูป ≈ 1 MB)
+   จึงเก็บข้ามเซสชันแค่ช่องที่ "ตาราง + ช่องค้นหา" ใช้ ส่วนที่เหลือ (ที่อยู่ ภาษี พิกัด ฯลฯ) ไม่เก็บ
+   ★ แถวที่ย่อแล้วห้ามหลุดเข้าฟอร์มแก้ไขเด็ดขาด — เปิดฟอร์มจากแถวที่ไม่มีที่อยู่แล้วกดบันทึก
+     = ลบที่อยู่ลูกค้าทิ้งโดยไม่มีใครรู้ · `custCachePartial` จึงกั้นไว้ที่ openCustomerModal */
+let custCachePartial = false;
+const CUST_SNAP_FIELDS = ['id','code','name','fullName','groupId','channelId','salesMode','areaCode',
+  'phone','taxId','paymentType','paymentTermsDays','lastSaleAt','status','isActive'];
+const custSnapRow = c => { const o = {}; CUST_SNAP_FIELDS.forEach(k => { o[k] = c[k]; }); return o; };
 const CUST_STATUS = { active: ['ใช้งาน','ok'], blocked: ['ระงับเครดิต','wait'], inactive: ['ปิด','off'] };
 const CUST_MODES = { van: 'รถเร่', preorder: 'พรีออเดอร์' };
 function custStatusOf(c){ return c.status || (c.isActive ? 'active' : 'inactive'); }
@@ -2356,16 +2399,20 @@ function renderCustomers(){
 }
 async function loadCustomers(){
   const body = document.getElementById('customers-body');
+  if (!custMasterCache.length) {
+    const cached = listSnapLoad('customers');
+    if (cached && cached.length) { custMasterCache = cached; custCachePartial = true; renderCustomers(); }
+  }
   tblLoading(body, 8);
   const [, , r] = await Promise.all([ensureCustomerGroups(), ensureDistChannels(), callApi('listCustomersAdmin', {})]);
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
-  custMasterCache = r.customers || (r.data || []).map(c => ({
-    id: c.record_id, code: c.customer_code || '', name: c.name, fullName: ((c.name_prefix?c.name_prefix+' ':'')+c.name).trim(),
-    groupId: c.group_id, channelId: c.channel_id || '', salesMode: c.sales_mode || '', areaCode: c.area_code || '',
-    phone: c.phone || '', taxId: c.tax_id || '', paymentType: c.payment_type || 'cash',
-    paymentTermsDays: c.payment_terms_days || 0, lastSaleAt: c.last_sale_at || '',
-    status: c.status || '', isActive: String(c.is_active) === 'TRUE'
-  }));
+  if (!r.success) {
+    if (!custMasterCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>';
+    else toast(r.message, true);            // มีของเก่าให้ดูอยู่ — อย่าล้างทิ้งเพราะเน็ตสะดุดครั้งเดียว
+    return;
+  }
+  custMasterCache = r.customers || [];
+  custCachePartial = false;
+  listSnapSave('customers', custMasterCache.map(custSnapRow));
   renderCustomers();
 }
 let distChannelsCache = [];
@@ -2375,7 +2422,9 @@ async function ensureDistChannels(){
   if (r.success) distChannelsCache = r.data.filter(x => String(x.is_active) !== 'FALSE');
 }
 /* ฟอร์มลูกค้าเต็มรูปแบบ — ใช้โมดัลตัวเดียวกับหน้าชุดราคา (plModal/plModalErr/plBusy) */
-function openCustomerModal(id){
+async function openCustomerModal(id){
+  // แถวที่กู้มาจาก localStorage ย่อไว้ — ต้องได้ของเต็มก่อนถึงเปิดฟอร์มได้ (ดูหมายเหตุที่ custCachePartial)
+  if (id && custCachePartial) { toast('กำลังโหลดข้อมูลลูกค้า…'); await loadCustomers(); }
   const c = id ? custMasterCache.find(x => String(x.id) === String(id)) : null;
   const v = (k, d) => esc(c && c[k] !== undefined && c[k] !== null ? c[k] : (d === undefined ? '' : d));
   const sel = (list, cur, blank) => (blank ? '<option value="">'+blank+'</option>' : '') +
@@ -2532,7 +2581,7 @@ async function saveDocSeriesUI(){
    โหมด "บริษัทเจ้าของสินค้า" (owner, ไม่ได้สวมสิทธิ์ตัวแทนไหน) → ไม่ต้องเลือกอะไร เซิร์ฟเวอร์จะใช้ "ตัวแทนบ้าน" ของบริษัท
    เองโดยอัตโนมัติ (_salesTenantId ใน 14_permissions.gs) เพราะบริษัทเองก็มีพนักงานขายตรง ยอดเข้าบริษัทเอง */
 /* ป้ายชื่อลูกค้าที่ใช้ในดรอปดาวน์ทุกหน้า: รหัส · คำนำหน้า+ชื่อ (ทะเบียนลูกค้าใหม่ 2026-09-26) */
-const custLabel = c => ((c.customer_code ? c.customer_code + ' · ' : '') + (c.name_prefix ? c.name_prefix + ' ' : '') + (c.name || '')).trim();
+const custLabel = c => ((c.code ? c.code + ' · ' : '') + (c.fullName || c.name || '')).trim();
 let salesOrdersCache = [], customersCache = [], paymentTypesCache = [], currentSaleOrderId = null, sonPreviewData = null;
 const PRODUCT_UNITS_CACHE = {};
 // ป้ายสถานะอยู่ที่ SO_LABELS/PAY_LABELS ด้านล่าง (ตรงกับ 34_sales_status.gs) — อย่าตั้งชุดที่สองขึ้นมาอีก
@@ -2604,11 +2653,13 @@ function exportSalesOrderList(){
 }
 async function loadSalesOrders(){
   const body = document.getElementById('salesorders-body');
+  if (!salesOrdersCache.length) salesOrdersCache = listSnapLoad('salesorders') || [];
   if (salesOrdersCache.length) renderSalesOrdersTable();
   else tblLoading(body, 7);
   const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', {})]);
   if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   salesOrdersCache = r.data;
+  listSnapSave('salesorders', salesOrdersCache);
   renderSalesOrdersTable();
 }
 
@@ -2886,8 +2937,8 @@ async function openSaleOrderNew(){
   const custSel = document.getElementById('son-customer');
   custSel.innerHTML = '<option value="">กำลังโหลด...</option>';
   const [custR] = await Promise.all([callApi('listCustomersAdmin', {}), ensureStaffCache(), ensureProductsForSale(), ensurePaymentTypesCache()]);
-  customersCache = custR.success ? custR.data.filter(c => isOn(c.is_active)) : [];
-  custSel.innerHTML = '<option value="">— เลือกลูกค้า —</option>' + customersCache.map(c => '<option value="'+c.record_id+'">'+esc(custLabel(c))+'</option>').join('');
+  customersCache = custR.success ? (custR.customers || []).filter(c => c.isActive) : [];
+  custSel.innerHTML = '<option value="">— เลือกลูกค้า —</option>' + customersCache.map(c => '<option value="'+c.id+'">'+esc(custLabel(c))+'</option>').join('');
 
   const paySel = document.getElementById('son-pay');
   paySel.innerHTML = paymentTypesCache.map(p => '<option value="'+esc(p.code)+'">'+esc(p.name)+'</option>').join('');
@@ -2949,7 +3000,7 @@ async function sonSubmit(){
   if (!r.success) { toast(r.message, true); return; }
   toast('เปิดบิลขายสำเร็จ ('+r.orderCode+')');
   // แพตช์ cache ในเครื่องแทนการโหลดรายการทั้งหมดซ้ำ
-  const cust = customersCache.find(c => String(c.record_id) === String(sonPreviewData.customerId));
+  const cust = customersCache.find(c => String(c.id) === String(sonPreviewData.customerId));
   salesOrdersCache.unshift({
     id: r.orderId, code: r.orderCode, customerId: sonPreviewData.customerId, customer: cust ? cust.name : '',
     subtotal: (r.total||0) + (r.discount||0), discount: r.discount, total: r.total, paymentMethod: sonPreviewData.paymentType,
@@ -3104,12 +3155,14 @@ function renderProductsTable(){
 async function loadProducts(){
   const body = document.getElementById('products-body');
   // เคยโหลดแล้ว → วาดจาก cache ทันที (หน้าไม่ว่าง ไม่ต้องรอ backend 2-4 วิ) แล้วค่อยอัปเดตเบื้องหลัง
+  if (!productsCache.length) productsCache = listSnapLoad('products') || [];   // เปิดแอปใหม่ก็ยังเห็นของเมื่อวาน
   if (productsCache.length) renderProductsTable();
   else tblLoading(body, 12);
   // ยิงคู่ขนาน — เดิมรอกลุ่มสินค้าให้เสร็จก่อนค่อยโหลดสินค้า เสียเวลาเป็นสองเท่าโดยไม่จำเป็น
   const [, r] = await Promise.all([ensureProductGroups(), callApi('listProductsAdmin', {})]);
   if (!r.success) { if (!productsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
   productsCache = r.data;
+  listSnapSave('products', productsCache);
   renderProductsTable();
 }
 
@@ -3319,11 +3372,13 @@ function renderPriceListsTable(){
 }
 async function loadPriceLists(){
   const body = document.getElementById('pricelists-body');
+  if (!pricelistsCache.length) pricelistsCache = listSnapLoad('pricelists') || [];
   if (pricelistsCache.length) renderPriceListsTable();
   else tblLoading(body, 5);
   const r = await callApi('listPriceLists', {});
   if (!r.success) { if (!pricelistsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
   pricelistsCache = r.data;
+  listSnapSave('pricelists', pricelistsCache);
   renderPriceListsTable();
 }
 
@@ -3999,7 +4054,7 @@ async function deleteFgItemUI(id){
 async function openFgPreview(){
   await ensureCustomers();
   plModal('<h3>ทดลองดูว่าร้านนี้จะได้แถมอะไร</h3>' +
-    plField('ร้านค้า', '<select id="fgp-cust">'+customersCache.map(c => '<option value="'+esc(c.record_id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
+    plField('ร้านค้า', '<select id="fgp-cust">'+customersCache.map(c => '<option value="'+esc(c.id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
     plField('ณ วันที่', '<input type="date" id="fgp-date" value="'+new Date().toISOString().slice(0,10)+'">') +
     '<div class="form-grid g2">' +
       plField('สินค้าที่สั่ง', '<select id="fgp-prod">'+fgProductOptions(null)+'</select>') +
@@ -4175,14 +4230,14 @@ function cbApply(){ return plBusy(async () => {
     conditions: cbReadConds(), set, confirmCount: cbLastCount });
   if (!r.success) return plModalErr(r.message);
   plModalClose(); toast(r.message);
-  custMasterCache = []; loadCustomers();
+  custMasterCache = []; listSnapDrop('customers'); loadCustomers();
 }); }
 
 /* ★ ตอบคำถาม "ทำไมร้านนี้ได้ราคานี้" ในหน้าจอเดียว แทนที่จะต้องไล่เดาเอง */
 async function openExplainPricing(){
   await ensureCustomers();
   plModal('<h3>ตรวจสิทธิ์ของร้าน</h3><p class="form-hint">เลือกร้านเพื่อดูว่าได้ชุดราคาไหน เพราะกฎข้อไหน และมีชุดไหนแข่งอยู่</p>' +
-    plField('ร้านค้า', '<select id="plx-cust">'+customersCache.map(c => '<option value="'+esc(c.record_id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
+    plField('ร้านค้า', '<select id="plx-cust">'+customersCache.map(c => '<option value="'+esc(c.id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
     plField('ณ วันที่', '<input type="date" id="plx-date" value="'+new Date().toISOString().slice(0,10)+'">') +
     '<div id="plx-result" style="margin-top:12px"></div>' +
     '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
@@ -5360,7 +5415,7 @@ async function openArInvoiceForm(){
     plField('บิลขาย', '<select id="arf-order" onchange="arToggleManual()"><option value="">— กรอกเอง —</option>' +
       orders.map(o => '<option value="'+esc(o.id)+'" data-cust="'+esc(o.customerId)+'">'+esc(o.orderCode)+' · '+esc(o.customerName)+' · ฿'+bahtPlain(o.total)+'</option>').join('') + '</select>') +
     '<div id="arf-manual">' +
-      plField('ลูกค้า', '<select id="arf-cust">'+customersCache.map(c => '<option value="'+esc(c.record_id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
+      plField('ลูกค้า', '<select id="arf-cust">'+customersCache.map(c => '<option value="'+esc(c.id)+'">'+esc(custLabel(c))+'</option>').join('')+'</select>') +
       '<div class="form-grid g2">' + plField('ยอดก่อน VAT', '<input id="arf-sub" type="number" min="0" step="0.01">') +
         plField('VAT (เว้นว่าง = 7%)', '<input id="arf-vat" type="number" min="0" step="0.01">') + '</div>' +
     '</div>' +
@@ -5370,7 +5425,7 @@ async function openArInvoiceForm(){
     plModalActions('submitArInvoice()', 'ออกใบแจ้งหนี้'));
 }
 function arToggleManual(){ document.getElementById('arf-manual').style.display = document.getElementById('arf-order').value ? 'none' : ''; }
-async function ensureCustomers(){ if (!customersCache.length) { const r = await callApi('listCustomersAdmin', {}); if (r.success) customersCache = r.data.filter(c => isOn(c.is_active)); } return customersCache; }
+async function ensureCustomers(){ if (!customersCache.length) { const r = await callApi('listCustomersAdmin', {}); if (r.success) customersCache = (r.customers || []).filter(c => c.isActive); } return customersCache; }
 function submitArInvoice(){ return plBusy(async () => {
   const orderId = document.getElementById('arf-order').value;
   const payload = { invoiceDate: document.getElementById('arf-date').value, dueDays: Number(document.getElementById('arf-days').value) || 30,

@@ -23,8 +23,10 @@ function listCustomersAdmin(session, payload) {
   var rows = centralObjects('customers');
   var effTenantId = _salesTenantId(session, payload || {});
   if (effTenantId) rows = rows.filter(function(c) { return String(c.tenant_id) === String(effTenantId); });
-  // ส่งทั้งแถวดิบ (โค้ดเดิมบางหน้าอ่านชื่อคอลัมน์ตรงๆ) และรูป camelCase ที่คำนวณชื่อเต็ม/ป้ายสาขาให้แล้ว
-  return { success: true, data: rows, customers: rows.map(customerToApi) };
+  // ★ ส่งรูป camelCase ชุดเดียว (28 ก.ย. 2026) — เดิมส่ง `data` (แถวดิบ) ควบมาด้วยอีกชุด
+  // เป็นข้อมูลชุดเดียวกันเป๊ะ payload จึงโตเป็นสองเท่าฟรีๆ (2,039 ร้าน = เกือบ 1 MB ที่ไม่มีใครอ่าน)
+  // และเป็นสองรูปให้หน้าเว็บสับสนว่าจะอ่านอันไหน — ตัดออกแล้ว ทุกหน้าอ่าน `customers` ทางเดียว
+  return { success: true, customers: rows.map(customerToApi) };
 }
 
 function addCustomerAdmin(session, payload) {

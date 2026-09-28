@@ -139,8 +139,8 @@ eq('ข้อมูลเสีย → คืน {} ไม่ล้ม', ctx.cus
 fails('ส่ง JSON พังมา → ปฏิเสธตั้งแต่ต้นทาง', ctx.addCustomerAdmin(T1, { name: 'z', attributes: '{พัง' }), /JSON/);
 
 console.log('\n── การมองเห็นข้ามตัวแทน ──');
-eq('ตัวแทนเห็นเฉพาะลูกค้าของตัวเอง', ctx.listCustomersAdmin(T2, {}).data.every(c => c.tenant_id === 'T2'), true);
-eq('บริษัทที่ไม่ได้สวมสิทธิ์ตัวแทนไหน เห็นทั้งหมด', ctx.listCustomersAdmin(OWNER, {}).data.length, sheets.customers.length);
+eq('ตัวแทนเห็นเฉพาะลูกค้าของตัวเอง', ctx.listCustomersAdmin(T2, {}).customers.every(c => c.tenantId === 'T2'), true);
+eq('บริษัทที่ไม่ได้สวมสิทธิ์ตัวแทนไหน เห็นทั้งหมด', ctx.listCustomersAdmin(OWNER, {}).customers.length, sheets.customers.length);
 eq('  ส่งรูป camelCase พร้อมชื่อเต็มให้หน้าเว็บด้วย', (() => {
   const one = ctx.listCustomersAdmin(T1, {}).customers.find(c => String(c.id) === String(C1));
   return [one.code, one.fullName, one.status];

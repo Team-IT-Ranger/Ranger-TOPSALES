@@ -33,9 +33,9 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   const tid = 'UATP' + String(Date.now()).slice(-6);
   console.log('createTenant', tid, JSON.stringify(await admin('createTenant', { tenantId: tid, name: 'ตัวแทนทดสอบราคา', region: 'UAT' })).slice(0, 120));
   await admin('addCustomerAdmin', { tenantId: tid, name: 'ร้านทดสอบ กทม.', groupId: bkkGroup.record_id, phone: '0800000000' });
-  const custs = (await admin('listCustomersAdmin', { tenantId: tid })).data;
+  const custs = (await admin('listCustomersAdmin', { tenantId: tid })).customers;
   const cust = custs[custs.length - 1];
-  check('ลูกค้าอยู่กลุ่ม กทม.', String(cust.group_id) === String(bkkGroup.record_id), cust);
+  check('ลูกค้าอยู่กลุ่ม กทม.', String(cust.groupId) === String(bkkGroup.record_id), cust);
 
   const uid = 'U_UATTEST_' + tid;
   await post({ action: 'registerUser', payload: { lineUid: uid, name: 'พนักงานทดสอบ', schema: tid } });
@@ -45,22 +45,22 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   console.log('restock', JSON.stringify(await mobile('restockVan', { items: [{ productId: ext.record_id, qty: 3000 }, { productId: lav.record_id, qty: 3000 }] })));
 
   // 3) บิลจริง — เงินสด 1 + 1 หีบ (นับรวม 2 หีบ)
-  const beforeQuote = await mobile('quoteSale', { customerId: cust.record_id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }, { productId: lav.record_id, unitCode: 'CT', qty: 1 }] });
+  const beforeQuote = await mobile('quoteSale', { customerId: cust.id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }, { productId: lav.record_id, unitCode: 'CT', qty: 1 }] });
   check('quoteSale ตรงกับเครื่องยนต์ (2,400)', beforeQuote.success && beforeQuote.total === 2400 && beforeQuote.priceList && beforeQuote.priceList.id === bkkList.id, beforeQuote);
 
-  let sale = await mobile('recordSale', { customerId: cust.record_id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }, { productId: lav.record_id, unitCode: 'CT', qty: 1 }] });
+  let sale = await mobile('recordSale', { customerId: cust.id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }, { productId: lav.record_id, unitCode: 'CT', qty: 1 }] });
   check('recordSale เงินสด 2 หีบรวม = 2,400', sale.success && sale.total === 2400, sale);
 
-  sale = await mobile('recordSale', { customerId: cust.record_id, paymentType: 'credit_term', fulfillmentType: 'office_delivery', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }] });
+  sale = await mobile('recordSale', { customerId: cust.id, paymentType: 'credit_term', fulfillmentType: 'office_delivery', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }] });
   check('recordSale เครดิต 1 หีบ = 1,225', sale.success && sale.total === 1225, sale);
 
-  sale = await mobile('recordSale', { customerId: cust.record_id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'PK', qty: 2 }] });
+  sale = await mobile('recordSale', { customerId: cust.id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'PK', qty: 2 }] });
   check('recordSale แพ็ค Cash Van เงินสด 2 แพ็ค = 202', sale.success && sale.total === 202, sale);
 
-  sale = await mobile('recordSale', { customerId: cust.record_id, paymentType: 'credit_term', fulfillmentType: 'office_delivery', items: [{ productId: ext.record_id, unitCode: 'PK', qty: 1 }] });
+  sale = await mobile('recordSale', { customerId: cust.id, paymentType: 'credit_term', fulfillmentType: 'office_delivery', items: [{ productId: ext.record_id, unitCode: 'PK', qty: 1 }] });
   check('recordSale แพ็คแบบเครดิต ถูกปฏิเสธ', !sale.success && sale.code === 'PACK_CASH_ONLY', sale);
 
-  sale = await mobile('recordSale', { customerId: cust.record_id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 0 }] });
+  sale = await mobile('recordSale', { customerId: cust.id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 0 }] });
   check('recordSale จำนวน 0 ถูกปฏิเสธ', !sale.success, sale);
 
   const prod = (await admin('listProductsAdmin')).data.find(p => p.record_id === ext.record_id);
@@ -70,20 +70,20 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   console.log('recent sales sample:', JSON.stringify(recent).slice(0, 400));
 
   // 4) เปิดบิลขายจากแอดมินเอง (19_sales_admin.gs)
-  r = await admin('previewSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'cash', fulfillmentType: 'office_delivery',
+  r = await admin('previewSaleAdmin', { tenantId: tid, customerId: cust.id, paymentType: 'cash', fulfillmentType: 'office_delivery',
     items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }, { productId: lav.record_id, unitCode: 'CT', qty: 1 }] });
   check('previewSaleAdmin ตรงกับเครื่องยนต์ (2,400)', r.success && r.total === 2400, r);
 
-  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'credit_term', fulfillmentType: 'office_delivery',
+  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.id, paymentType: 'credit_term', fulfillmentType: 'office_delivery',
     items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }] });
   check('recordSaleAdmin (office_delivery, เครดิต 1 หีบ) = 1,225', sale.success && sale.total === 1225, sale);
   const officeOrderId = sale.orderId;
 
-  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'cash', fulfillmentType: 'immediate',
+  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.id, paymentType: 'cash', fulfillmentType: 'immediate',
     items: [{ productId: ext.record_id, unitCode: 'PK', qty: 2 }] });
   check('recordSaleAdmin ตัดสต็อกทันทีแต่ไม่ระบุพนักงาน ถูกปฏิเสธ', !sale.success, sale);
 
-  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.record_id, paymentType: 'cash', fulfillmentType: 'immediate', soldByLineUserId: uid,
+  sale = await admin('recordSaleAdmin', { tenantId: tid, customerId: cust.id, paymentType: 'cash', fulfillmentType: 'immediate', soldByLineUserId: uid,
     items: [{ productId: ext.record_id, unitCode: 'PK', qty: 2 }] });
   check('recordSaleAdmin (immediate ตัดสต็อกพนักงาน, แพ็คเงินสด 2 แพ็ค) = 202', sale.success && sale.total === 202, sale);
   const immediateOrderId = sale.orderId;
