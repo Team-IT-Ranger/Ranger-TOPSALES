@@ -251,7 +251,7 @@
   /* แถวค้นหาในตาราง — ตรึงอยู่กับหัวตาราง จึงเห็นตลอดแม้เลื่อนไปแถวที่พันกว่า */
   tr.tbl-search-row th{ padding:6px 10px; background:var(--surface-2); text-transform:none; letter-spacing:0; }
   tr.tbl-search-row .tbl-search-box{ display:flex; align-items:center; gap:8px; }
-  tr.tbl-search-row input{ flex:1; max-width:340px; height:30px; font-size:12px; }
+  tr.tbl-search-row input{ flex:1; max-width:340px; height:30px; font-size:12px; font-weight:400; }
   tr.tbl-search-row .tbl-hits{ color:var(--ink-soft); font-size:11px; font-weight:400; }
   th.th-sortable:hover{ color:var(--blue); background:var(--blue-pale); }
   th.is-sorted{ color:var(--blue); }
@@ -5545,11 +5545,22 @@ async function deleteRoleUI(code){
      และของเดิมค้นจาก "ข้อมูลทั้งชุด" ซึ่งครอบคลุมกว่าค้นจากสิ่งที่วาดอยู่บนจอ */
 (function initTableSearch(){
   const norm = v => String(v == null ? '' : v).trim().toLowerCase();
-  const hasOwnSearch = t => {
+  /* ช่องค้นหาที่ renderer ทำไว้เองในหน้านั้น (นอกตาราง)
+     ★ ถ้าเป็นช่องค้นหาเดี่ยวๆ ให้ "ย้ายตัวจริง" เข้ามาอยู่ในแถบหัวตาราง — ไม่ใช่สร้างช่องที่สองซ้อน
+       ย้ายทั้ง element จึงยังมี id, oninput และพฤติกรรมเดิมทุกอย่าง (ของหน้าลูกค้ากรองจากข้อมูลทั้งชุด
+       ซึ่งครอบคลุมกว่ากรองจากแถวที่วาดอยู่) แค่ได้ตำแหน่งที่ตรึงและหน้าตาเหมือนตารางอื่น
+     ★ ถ้าช่องนั้นอยู่รวมกับตัวกรองอื่น (หน้าบิลขายมี select สถานะ + ปุ่มพิมพ์/ส่งออก) ห้ามย้าย —
+       ดึงออกมาตัวเดียวจะทำให้แถบตัวกรองพังและคนหาไม่เจอว่าช่องค้นหาหายไปไหน */
+  const ownSearch = t => {
     const view = t.closest('.view') || t.closest('.modal-box');
-    if (!view) return false;
-    return [...view.querySelectorAll('input')].some(i =>
-      i.closest('table') !== t && /ค้นหา/.test(i.getAttribute('placeholder') || ''));
+    if (!view) return null;
+    return [...view.querySelectorAll('input')].find(i =>
+      i.closest('table') !== t && /ค้นหา/.test(i.getAttribute('placeholder') || '')) || null;
+  };
+  const adoptable = inp => {
+    const box = inp.parentElement;
+    if (!box) return false;
+    return [...box.querySelectorAll('input,select,button,textarea')].length === 1;
   };
   const usable = t => {
     if (t.closest('.docsheet')) return false;
@@ -5560,6 +5571,8 @@ async function deleteRoleUI(code){
   };
 
   const filter = t => {
+    // ช่องที่ย้ายมาจากหน้า renderer กรองให้เองอยู่แล้ว (วาด tbody ใหม่) อย่าไปซ่อนแถวซ้อนอีกชั้น
+    if (t.querySelector('.tbl-search-own')) return;
     const inp = t.querySelector('.tbl-search');
     if (!inp) return;
     const q = norm(inp.value);
@@ -5596,10 +5609,20 @@ async function deleteRoleUI(code){
       row = head.insertRow(0);
       row.className = 'tbl-search-row';
       const th = document.createElement('th');
-      th.innerHTML = '<span class="tbl-search-box"><input class="tbl-search" type="search" placeholder="ค้นหาในตาราง…">' +
-        '<span class="tbl-hits"></span></span>';
+      th.innerHTML = '<span class="tbl-search-box"></span>';
       row.appendChild(th);
-      th.querySelector('input').addEventListener('input', () => filter(t));
+      const box = th.querySelector('.tbl-search-box');
+      const own = ownSearch(t);
+      if (own && adoptable(own)) {
+        const holder = own.parentElement;
+        box.appendChild(own);                       // ย้ายตัวจริง — id/oninput/ตัวกรองเดิมยังทำงานเหมือนเดิม
+        own.classList.add('tbl-search-own');
+        if (!holder.querySelector('input,select,button,textarea')) holder.remove();   // กล่องเปล่าที่เหลือ ทิ้งไป
+      } else {
+        box.insertAdjacentHTML('beforeend', '<input class="tbl-search" type="search" placeholder="ค้นหาในตาราง…">');
+        box.querySelector('input').addEventListener('input', () => filter(t));
+      }
+      box.insertAdjacentHTML('beforeend', '<span class="tbl-hits"></span>');
     }
     const th = row.cells[0];
     if (Number(th.colSpan) !== cols) th.colSpan = cols;
@@ -5611,7 +5634,9 @@ async function deleteRoleUI(code){
   };
 
   const all = () => document.querySelectorAll('.table-wrap > table').forEach(t => {
-    if (!usable(t) || hasOwnSearch(t)) return;
+    if (!usable(t)) return;
+    const own = ownSearch(t);
+    if (own && !adoptable(own)) return;            // ช่องค้นหาอยู่รวมกับตัวกรองอื่น — ปล่อยไว้ที่เดิม
     ensure(t);
   });
   let timer;
