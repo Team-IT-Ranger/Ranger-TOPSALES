@@ -124,6 +124,12 @@
   .si{ font-size:16px; width:18px; text-align:center; flex-shrink:0; }
   body.sb-collapsed .sb-item-standalone{ justify-content:center; padding:9px 0; margin:1px 0; width:100%; border-radius:0; }
   body.sb-collapsed .si-lbl{ display:none; }
+  /* ★ ลูกศร ▾ ของ รายการโปรด/ใช้ล่าสุด มี margin-left:auto ซึ่ง "ชนะ" justify-content:center
+     เมนูหุบแล้วลูกศรจึงถูกดันไปขวาสุดและดันไอคอนไปซ้าย = สองปุ่มนี้ไม่ตรงกลางเหมือนปุ่มอื่น
+     ต้องซ่อนเหมือน .si-lbl (ซ่อนแค่ label ไม่พอ) · รายการที่กางค้างไว้ก็ต้องหุบตามด้วย
+     ไม่งั้นข้อความเต็มความกว้างโผล่อยู่ในเมนูแคบ (หลักเดียวกับ .sb-group-body) */
+  body.sb-collapsed .ql-chev{ display:none; }
+  body.sb-collapsed .ql-list{ display:none; }
 
   .sb-group{ margin-top:3px; }
   .sb-group-hd{ display:flex; align-items:center; gap:8px; padding:6px 12px; cursor:pointer; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.5); transition:color .15s; user-select:none; white-space:nowrap; }
