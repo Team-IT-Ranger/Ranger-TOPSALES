@@ -107,73 +107,6 @@ function applySaleWarehouseStock(tenantId, order, dir, reason, userId) {
   return { success: true, moved: pids.length };
 }
 
-/* ═══════════ ยอดจอง (reserved) — guide ข้อ 1.3 ═══════════
- * บิล office_delivery ยังไม่ตัดสต็อกจริงจนกว่าจะเข้า "กำลังจัดส่ง" (จุดตัดจริง ดูหัวข้อด้านบน) แต่ระหว่างที่ยังไม่ถึงจุดนั้น
- * ต้อง "กันของไว้" ไม่งั้นสองบิลยืนยันของชิ้นเดียวกันพร้อมกันได้ แล้วไปเจอตอนจะตัดว่าของไม่พอ (ตอนนั้นสัญญากับลูกค้าไปแล้วทั้งสองราย)
- *   on-hand   = warehouse_stock.qty (ของที่อยู่ในคลังจริง)
- *   reserved  = ผลรวม stock_reservations ที่ status='active' ของสินค้านั้น
- *   available = on-hand − reserved  ← ตัวที่ใช้ตัดสินว่าขายได้ไหม (ไม่ใช่ on-hand ตรงๆ)
- * เก็บเป็นแถวแยกต่อ (บิล, สินค้า) ไม่ใช่ตัวเลขรวม — รู้ว่าใครจอง จองให้ใบไหน และปลดทีละใบได้ (guide บอกไว้ชัดว่าอย่ายุบรวม)
- * ปลดจองพร้อมกับตอนตัดของจริงเสมอ (updateSalesOrderStatus) ไม่งั้นของถูกนับสองทาง (หายจาก on-hand แล้วยังกันยอดจองไว้อีก)
- */
-function _reservedQty(scope, warehouseId, productId) {
-  var sum = 0;
-  _scoped('stock_reservations', scope).forEach(function(r) {
-    if (r.status === 'active' && String(r.warehouse_id) === String(warehouseId) && String(r.product_id) === String(productId)) sum += Number(r.qty) || 0;
-  });
-  return sum;
-}
-function getAvailableQty(scope, warehouseId, productId) {
-  var onHand = 0;
-  _scoped('warehouse_stock', scope).forEach(function(r) { if (String(r.warehouse_id) === String(warehouseId) && String(r.product_id) === String(productId)) onHand = Number(r.qty) || 0; });
-  return onHand - _reservedQty(scope, warehouseId, productId);
-}
-
-/** เช็คของพอขายไหม (อ่านอย่างเดียว) — เรียกก่อนสร้างบิล office_delivery เหมือนที่ฝั่งรถเช็ค van_stock ก่อนสร้างบิล
- *  need: { productId: จำนวนหน่วยฐานที่ต้องใช้ }  ของไม่พอสักตัวเดียว = ปฏิเสธทั้งใบ ไม่ใช่ตัดครึ่งๆ กลางๆ */
-function checkOfficeDeliveryStock(tenantId, need) {
-  var scope = _saleStockScope(tenantId);
-  var warehouseId = _ensureScopeWarehouse(scope);
-  var pids = Object.keys(need);
-  if (!pids.length) return { success: true, warehouseId: warehouseId };
-
-  var names = {};
-  centralObjects('products').forEach(function(pr) { names[String(pr.record_id)] = pr.name; });
-  var short = [];
-  pids.forEach(function(pid) {
-    var avail = getAvailableQty(scope, warehouseId, pid);
-    if (avail < need[pid]) short.push((names[pid] || ('สินค้า ' + pid)) + ' (ขายได้จริง ' + avail + ' หลังหักที่จองไว้แล้ว ต้องใช้ ' + need[pid] + ')');
-  });
-  if (short.length) return { success: false, message: 'ของในคลังไม่พอขาย: ' + short.join(' · ') };
-  return { success: true, warehouseId: warehouseId };
-}
-
-/** จองของให้บิล office_delivery ใบหนึ่ง (เขียนแถว 'active' ทีละสินค้า) — เรียกหลังสร้างบิลแล้ว (ต้องมี orderId)
- *  เหมือน _cutVanStock ของฝั่งรถ: เช็คผ่านจาก checkOfficeDeliveryStock() มาก่อนแล้ว ตรงนี้แค่เขียน ไม่เช็คซ้ำ */
-function reserveStockForSale(tenantId, warehouseId, need, orderId) {
-  var scope = _saleStockScope(tenantId);
-  Object.keys(need).forEach(function(pid) {
-    if (!need[pid]) return;
-    centralAppend('stock_reservations', { record_id: centralNextId('stock_reservations'), tenant_id: scope, warehouse_id: warehouseId,
-      product_id: pid, qty: need[pid], order_id: orderId, status: 'active', created_at: nowStr(), released_at: '' });
-  });
-}
-
-/** ปลดจองของบิลใบหนึ่งทั้งหมด (ไม่แตะ warehouse_stock — ของยังอยู่ในคลังเดิมเป๊ะ แค่เลิกกันไว้ให้บิลนี้)
- *  เรียกตอน: (1) บิลเข้าจุดตัดสต็อกจริงแล้ว — การจองหมดหน้าที่ กลายเป็นของที่ถูกตัดจริงแทน (2) ยกเลิกบิลก่อนถึงจุดตัด */
-function releaseStockReservation(tenantId, orderId) {
-  var scope = _saleStockScope(tenantId);
-  var sh = centralSheet('stock_reservations');
-  var data = sh.getDataRange().getValues();
-  var hdr = data[0], idCol = hdr.indexOf('order_id'), tCol = hdr.indexOf('tenant_id'), statusCol = hdr.indexOf('status'), relCol = hdr.indexOf('released_at');
-  for (var i = 1; i < data.length; i++) {
-    if (String(data[i][idCol]) === String(orderId) && String(data[i][tCol] || '') === String(scope) && data[i][statusCol] === 'active') {
-      sh.getRange(i + 1, statusCol + 1).setValue('released');
-      sh.getRange(i + 1, relCol + 1).setValue(nowStr());
-    }
-  }
-}
-
 var PAY_UNPAID = 'unpaid', PAY_PARTIAL = 'partial', PAY_PAID = 'paid';
 var SO_PAYMENT_LABELS = { unpaid: 'ยังไม่ชำระ', partial: 'ชำระบางส่วน', paid: 'ชำระแล้ว' };
 
@@ -281,16 +214,6 @@ function updateSalesOrderStatus(session, payload) {
             'บิล ' + order.order_code + ' -> ' + SO_STATUS_LABELS[toStatus], session.adminUserId);
           if (!mv.success) return mv;
           changes.push(willTake ? 'ตัดสต็อกออกจากคลังแล้ว' : 'คืนของเข้าคลังแล้ว');
-          // ยอดจอง (guide ข้อ 1.3) เดินสวนทางกับสต็อกเสมอ: ตัดของจริงแล้ว = ปลดจอง (ไม่งั้นถูกนับซ้ำสองทาง)
-          // ถอยกลับมาไม่ถึงจุดตัด = ยังเป็นคำมั่นกับลูกค้าอยู่ ต้องจองกันของไว้ใหม่เหมือนตอนเปิดบิล (มีของพอเสมอ เพิ่งคืนเข้าคลังไปหมาดๆ)
-          if (willTake) {
-            releaseStockReservation(tenantId, order.record_id);
-          } else {
-            var need2 = {};
-            tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
-              .forEach(function(it) { need2[String(it.product_id)] = (need2[String(it.product_id)] || 0) + (parseFloat(it.base_qty) || 0); });
-            if (Object.keys(need2).length) reserveStockForSale(tenantId, _ensureScopeWarehouse(_saleStockScope(tenantId)), need2, order.record_id);
-          }
         }
         fields.status = toStatus;
         if (toStatus === SO_COMPLETED) fields.delivered_at = nowStr();

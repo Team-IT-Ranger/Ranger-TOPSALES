@@ -2513,12 +2513,17 @@ async function ensureCustomerGroups(){
 /* ══════════════ ข้อมูลกลาง: กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน ══════════════ */
 async function loadCustomerGroupsView(){
   const body = document.getElementById('custgroups-body');
-  tblLoading(body, 2);
+  if (!customerGroupsCache.length) customerGroupsCache = listSnapLoad('custgroups') || [];
+  if (customerGroupsCache.length) renderCustomerGroups(); else tblLoading(body, 2);
   const r = await callApi('listCustomerGroups', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="2">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!customerGroupsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="2">'+esc(r.message)+'</td></tr>'; return; }
   customerGroupsCache = r.data;
-  body.innerHTML = r.data.length
-    ? r.data.map(g => '<tr><td>'+esc(g.name)+'</td><td>'+esc(g.description||'-')+'</td></tr>').join('')
+  listSnapSave('custgroups', customerGroupsCache);
+  renderCustomerGroups();
+}
+function renderCustomerGroups(){
+  document.getElementById('custgroups-body').innerHTML = customerGroupsCache.length
+    ? customerGroupsCache.map(g => '<tr><td>'+esc(g.name)+'</td><td>'+esc(g.description||'-')+'</td></tr>').join('')
     : '<tr class="empty-row"><td colspan="2">ยังไม่มีกลุ่มลูกค้า</td></tr>';
 }
 async function addCustomerGroupUI(){
@@ -4620,16 +4625,20 @@ async function deactivatePromotionUI(id){
 let tenantsCache = [];
 async function loadTenants(){
   const body = document.getElementById('tenants-body');
-  tblLoading(body, 5);
+  if (!tenantsCache.length) tenantsCache = listSnapLoad('tenants') || [];
+  if (tenantsCache.length) renderTenants(); else tblLoading(body, 5);
   const r = await callApi('listTenants', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!tenantsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
   tenantsCache = r.data;
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีตัวแทน</td></tr>'; return; }
-  body.innerHTML = r.data.map(t =>
+  listSnapSave('tenants', tenantsCache);
+  renderTenants();
+}
+function renderTenants(){
+  document.getElementById('tenants-body').innerHTML = rowsOrEmpty(tenantsCache.map(t =>
     '<tr><td class="mono-data">'+esc(t.tenantId)+'</td><td>'+esc(t.name)+'</td><td>'+esc(t.region||'-')+'</td>' +
-    '<td><span class="pill '+(String(t.isActive)==='TRUE'?'ok':'off')+'">'+(String(t.isActive)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td>' +
-    '<td><a href="'+t.sheetUrl+'" target="_blank" rel="noopener">เปิด Sheet ↗</a></td></tr>'
-  ).join('');
+    '<td>'+(isOn(t.isActive)?'<span class="pill ok">ใช้งาน</span>':'<span class="pill off">ปิด</span>')+'</td>' +
+    '<td><a href="'+t.sheetUrl+'" target="_blank" rel="noopener">เปิด Sheet ↗</a></td></tr>').join(''),
+    5, 'ยังไม่มีตัวแทน');
 }
 async function createTenantUI(){
   const tenantId = document.getElementById('t-id').value.trim();
@@ -5297,11 +5306,16 @@ async function billFromGr(grId){
 /* ── คลังกลาง ── */
 async function loadGoodsReceipts(){
   const body = document.getElementById('grs-body');
-  tblLoading(body, 7);
+  if (!grsCache.length) grsCache = listSnapLoad('goodsreceipts') || [];
+  if (grsCache.length) renderGrs(); else tblLoading(body, 7);
   const r = await callApi('listGoodsReceipts', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!grsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   grsCache = r.data;
-  body.innerHTML = rowsOrEmpty(grsCache.map(g =>
+  listSnapSave('goodsreceipts', grsCache);
+  renderGrs();
+}
+function renderGrs(){
+  document.getElementById('grs-body').innerHTML = rowsOrEmpty(grsCache.map(g =>
     '<tr><td class="mono-data">'+esc(g.grNo)+'</td><td class="mono-data">'+esc(g.receiveDate)+'</td>' +
     '<td class="clickable-row" onclick="openPoDetail('+g.poId+')">'+dash(g.poNo)+'</td><td>'+dash(g.vendorName)+'</td>' +
     '<td>'+g.itemCount+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
@@ -5343,11 +5357,16 @@ async function showLedger(productId, name){
 /* ── เจ้าหนี้ ── */
 async function loadApBills(){
   const body = document.getElementById('ap-body');
-  tblLoading(body, 9);
+  if (!apCache.length) apCache = listSnapLoad('apbills') || [];
+  if (apCache.length) renderApBills(); else tblLoading(body, 9);
   const r = await callApi('listApBills', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!apCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
   apCache = r.data;
-  body.innerHTML = rowsOrEmpty(apCache.map(b =>
+  listSnapSave('apbills', apCache);
+  renderApBills();
+}
+function renderApBills(){
+  document.getElementById('ap-body').innerHTML = rowsOrEmpty(apCache.map(b =>
     '<tr><td class="mono-data">'+esc(b.billNo)+'</td><td>'+esc(b.vendorName)+'</td>' +
     '<td class="mono-data">'+dash(b.vendorInvoiceNo || b.grNo || b.poNo)+'</td><td class="mono-data">'+esc(b.billDate)+'</td>' +
     '<td class="mono-data">'+dash(b.dueDate)+'</td><td class="mono-data">฿'+bahtPlain(b.total)+'</td>' +
@@ -5431,11 +5450,16 @@ function agingTable(rows, partyLabel){
 /* ── ลูกหนี้ ── */
 async function loadArInvoices(){
   const body = document.getElementById('ar-body');
-  tblLoading(body, 9);
+  if (!arCache.length) arCache = listSnapLoad('arinvoices') || [];
+  if (arCache.length) renderArInvoices(); else tblLoading(body, 9);
   const r = await callApi('listArInvoices', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!arCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
   arCache = r.data;
-  body.innerHTML = rowsOrEmpty(arCache.map(iv =>
+  listSnapSave('arinvoices', arCache);
+  renderArInvoices();
+}
+function renderArInvoices(){
+  document.getElementById('ar-body').innerHTML = rowsOrEmpty(arCache.map(iv =>
     '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td>'+esc(iv.customerName)+'</td><td class="mono-data">'+dash(iv.salesOrderId)+'</td>' +
     '<td class="mono-data">'+esc(iv.invoiceDate)+'</td><td class="mono-data">'+dash(iv.dueDate)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(iv.total)+'</td><td class="mono-data">฿'+bahtPlain(iv.receivedAmount)+'</td>' +
@@ -5524,11 +5548,16 @@ async function openArAging(){
 /* ── บัญชีแยกประเภท ── */
 async function loadGlBooks(){
   const body = document.getElementById('gl-body');
-  tblLoading(body, 6);
+  if (!glCache.length) glCache = listSnapLoad('glbooks') || [];
+  if (glCache.length) renderGlBooks(); else tblLoading(body, 6);
   const r = await callApi('listJournals', { limit: 100 });
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!glCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   glCache = r.data;
-  body.innerHTML = rowsOrEmpty(glCache.map(j =>
+  listSnapSave('glbooks', glCache);
+  renderGlBooks();
+}
+function renderGlBooks(){
+  document.getElementById('gl-body').innerHTML = rowsOrEmpty(glCache.map(j =>
     '<tr class="clickable-row" onclick="openJournal('+j.id+')"><td class="mono-data">'+esc(j.journalNo)+'</td><td class="mono-data">'+esc(j.journalDate)+'</td>' +
     '<td>'+esc(j.source)+'</td><td class="wrap">'+esc(j.memo)+'</td><td class="mono-data">฿'+bahtPlain(j.totalDebit)+'</td>' +
     '<td>'+pill2(DOC_ST, j.status)+'</td></tr>').join(''), 6, 'ยังไม่มีใบสำคัญ');
