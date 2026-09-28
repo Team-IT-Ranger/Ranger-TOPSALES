@@ -1208,6 +1208,64 @@
         </section>
 
         <!-- ═══ TENANTS ═══ -->
+        <section class="view" id="view-v-rep-staff">
+          <div class="view-head"><div><h1>รายงานการขายแยกพนักงาน</h1><p>ยอดขายรายคน เทียบช่วงเวลา · ไม่นับบิลที่ยกเลิกแล้ว</p></div></div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rs-from"></div>
+              <div class="field"><label>ถึงวันที่</label><input type="date" id="rs-to"></div>
+              <div class="field"><label>เทียบกับ ตั้งแต่</label><input type="date" id="rs-cfrom"></div>
+              <div class="field"><label>เทียบกับ ถึง</label><input type="date" id="rs-cto"></div>
+              <button class="btn btn-primary" onclick="loadRepStaff()">ดูรายงาน</button>
+            </div>
+          <p class="form-hint">กรอกช่วง "เทียบกับ" ทั้งสองช่องเพื่อเทียบสองช่วงเวลา เว้นว่างไว้ = ดูช่วงเดียว</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>พนักงาน</th><th>จำนวนบิล</th><th>ยอดขาย</th><th>บิล (ช่วงเทียบ)</th><th>ยอดขาย (ช่วงเทียบ)</th><th>เปลี่ยนแปลง</th></tr></thead>
+            <tbody id="rs-body"><tr class="empty-row"><td colspan="6">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <section class="view" id="view-v-rep-cust">
+          <div class="view-head"><div><h1>รายงานการขายแยกลูกค้า</h1><p>ยอดซื้อรายร้าน จัดอันดับ และร้านที่หายไป</p></div></div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rc-from"></div>
+              <div class="field"><label>ถึงวันที่</label><input type="date" id="rc-to"></div>
+              <div class="field"><label>ไม่ซื้อเกินกี่วัน = ร้านหาย</label><input type="number" id="rc-lost" value="60" min="1"></div>
+              <button class="btn btn-primary" onclick="loadRepCust()">ดูรายงาน</button>
+            </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>อันดับ</th><th>รหัสร้าน</th><th>ชื่อร้าน</th><th>จำนวนบิล</th><th>ยอดซื้อ</th></tr></thead>
+            <tbody id="rc-body"><tr class="empty-row"><td colspan="5">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>ร้านที่หายไป <span id="rc-lost-count" class="muted"></span></h3>
+            <p class="form-hint">ร้านที่ยังไม่ปิดกิจการ แต่ไม่ได้ซื้อนานเกินจำนวนวันที่ตั้งไว้ — เป็นภาพ ณ วันนี้เสมอ ไม่ขึ้นกับช่วงวันที่ด้านบน</p>
+            <div class="table-wrap"><table>
+              <thead><tr><th>รหัสร้าน</th><th>ชื่อร้าน</th><th>ซื้อครั้งสุดท้าย</th><th>หายไปกี่วัน</th></tr></thead>
+              <tbody id="rc-lost-body"><tr class="empty-row"><td colspan="4">—</td></tr></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-v-rep-prod">
+          <div class="view-head"><div><h1>รายงานการขายแยกสินค้า</h1><p>ยอดขายรายสินค้าและรายกลุ่มสินค้า · จำนวนนับเป็นหน่วยฐาน</p></div></div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rp-from"></div>
+              <div class="field"><label>ถึงวันที่</label><input type="date" id="rp-to"></div>
+              <button class="btn btn-primary" onclick="loadRepProd()">ดูรายงาน</button>
+            </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>กลุ่ม</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>จำนวนบิล</th><th>ยอดขาย</th></tr></thead>
+            <tbody id="rp-body"><tr class="empty-row"><td colspan="7">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>สรุปรายกลุ่มสินค้า</h3>
+            <div class="table-wrap"><table>
+              <thead><tr><th>กลุ่มสินค้า</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>ยอดขาย</th></tr></thead>
+              <tbody id="rp-group-body"><tr class="empty-row"><td colspan="4">—</td></tr></tbody>
+            </table></div>
+          </div>
+        </section>
+
         <section class="view" id="view-tenants">
           <div class="view-head"><div><h1>ตัวแทนจำหน่าย</h1><p>สร้าง Tenant Sheet ใหม่ให้ตัวแทนแต่ละราย — ฝั่งบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
           <div class="table-wrap"><table>
@@ -1987,11 +2045,11 @@ const NAV_GROUPS = [
         soon:'การจัดส่ง', desc:'ติดตามบิลที่รอสำนักงานจัดส่งให้ลูกค้า'}
     ]},
     { n:'1.8', label:'รายงานขาย', items:[
-      {n:'1.8.1', label:'รายงานการขายแยกพนักงาน', view:'v-rep-staff', mod:'sales_report', ready:false, scope:'both',
+      {n:'1.8.1', label:'รายงานการขายแยกพนักงาน', view:'v-rep-staff', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกพนักงาน', desc:'ยอดขายรายคน เทียบช่วงเวลา'},
-      {n:'1.8.2', label:'รายงานการขายแยกลูกค้า', view:'v-rep-cust', mod:'sales_report', ready:false, scope:'both',
+      {n:'1.8.2', label:'รายงานการขายแยกลูกค้า', view:'v-rep-cust', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกลูกค้า', desc:'ยอดซื้อรายร้าน จัดอันดับ ร้านที่หายไป'},
-      {n:'1.8.3', label:'รายงานการขายแยกสินค้า', view:'v-rep-prod', mod:'sales_report', ready:false, scope:'both',
+      {n:'1.8.3', label:'รายงานการขายแยกสินค้า', view:'v-rep-prod', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกสินค้า', desc:'ยอดขายรายสินค้า/กลุ่มสินค้า'}
     ]}
   ]},
@@ -2255,6 +2313,86 @@ function renderQuickLists(){
       : '<div class="ql-empty">'+esc(empty)+'</div>';
   });
 }
+/* ══════════════ รายงานการขาย 1.8.1 / 1.8.2 / 1.8.3 ══════════════
+   backend อยู่ที่ 41_sales_reports.gs (ทีม 2) — ทุกตัวอ่านไฟล์ของตัวแทนรายเดียว ไม่วนเปิดทุกตัวแทน
+   ★ ไม่เก็บ snapshot ข้ามเซสชันให้สามหน้านี้โดยตั้งใจ: ผลผูกกับช่วงวันที่ที่ผู้ใช้เลือก
+     เก็บด้วยชื่อเดียวจะเอาผลของช่วงวันที่เก่ามาโชว์ทับช่วงที่เพิ่งเลือก ซึ่งอ่านไม่ออกว่าเป็นของช่วงไหน */
+const repToday = () => new Date().toISOString().slice(0, 10);
+const repMonthStart = () => repToday().slice(0, 8) + '01';
+const repQty = n => (Number(n) || 0).toLocaleString('th-TH');
+/* เติมค่าตั้งต้น "เดือนนี้" ครั้งแรกที่เปิดหน้า แล้วไม่ทับของที่ผู้ใช้เลือกไว้เองในรอบถัดไป */
+function repInitDates(prefix){
+  const f = document.getElementById(prefix + '-from'), t = document.getElementById(prefix + '-to');
+  if (f && !f.value) f.value = repMonthStart();
+  if (t && !t.value) t.value = repToday();
+  return { dateFrom: f ? f.value : '', dateTo: t ? t.value : '' };
+}
+
+async function loadRepStaff(){
+  const body = document.getElementById('rs-body');
+  const q = repInitDates('rs');
+  const cf = document.getElementById('rs-cfrom').value, ct = document.getElementById('rs-cto').value;
+  // ส่งช่วงเทียบไปต่อเมื่อกรอกครบทั้งคู่ — ส่งไปครึ่งเดียว backend จะถือว่าไม่เทียบ แต่หน้าเว็บจะดูเหมือนกรอกแล้วไม่ทำงาน
+  if ((cf && !ct) || (!cf && ct)) { toast('ช่วงเทียบต้องกรอกทั้งวันเริ่มและวันสิ้นสุด', true); return; }
+  tblLoading(body, 6);
+  const r = await callApi('salesReportByStaff', Object.assign({}, q, cf && ct ? { compareDateFrom: cf, compareDateTo: ct } : {}));
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  const cmp = !!(r.compareDateFrom && r.compareDateTo);
+  body.innerHTML = rowsOrEmpty(r.data.map(x =>
+    '<tr><td>'+esc(x.label)+'</td><td class="mono-data">'+repQty(x.bills)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(x.revenue)+'</td>' +
+    '<td class="mono-data">'+(cmp ? repQty(x.compareBills) : '—')+'</td>' +
+    '<td class="mono-data">'+(cmp ? '฿'+bahtPlain(x.compareRevenue) : '—')+'</td>' +
+    '<td class="mono-data">'+repDelta(x.revenueChangePct)+'</td></tr>').join(''),
+    6, 'ไม่มีการขายในช่วงที่เลือก') +
+    (r.data.length ? '<tr><td><b>รวม</b></td><td class="mono-data"><b>'+repQty(r.totalBills)+'</b></td>' +
+      '<td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td><td colspan="3"></td></tr>' : '');
+}
+/* เปอร์เซ็นต์เปลี่ยนแปลง — backend ส่ง null มาเมื่อไม่ได้เทียบ หรือช่วงก่อนหน้ายอดเป็นศูนย์
+   (หารด้วยศูนย์ไม่ได้ ไม่ใช่ "โต 0%") จึงต้องแยกจากกรณีเปลี่ยนแปลงจริงๆ 0% */
+function repDelta(pct){
+  if (pct === null || pct === undefined) return '—';
+  const v = Number(pct);
+  return '<span class="pill '+(v > 0 ? 'ok' : (v < 0 ? 'off' : 'wait'))+'">'+(v > 0 ? '+' : '')+v.toFixed(1)+'%</span>';
+}
+
+async function loadRepCust(){
+  const body = document.getElementById('rc-body'), lostBody = document.getElementById('rc-lost-body');
+  const q = repInitDates('rc');
+  tblLoading(body, 5);
+  const r = await callApi('salesReportByCustomer', Object.assign({}, q, { lostDays: Number(document.getElementById('rc-lost').value) || 60 }));
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  body.innerHTML = rowsOrEmpty(r.data.map((x, i) =>
+    '<tr><td class="mono-data">'+(i + 1)+'</td><td class="mono-data">'+dash(x.customerCode)+'</td><td>'+esc(x.customerName)+'</td>' +
+    '<td class="mono-data">'+repQty(x.bills)+'</td><td class="mono-data">฿'+bahtPlain(x.revenue)+'</td></tr>').join(''),
+    5, 'ไม่มีการขายในช่วงที่เลือก') +
+    (r.data.length ? '<tr><td colspan="4"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td></tr>' : '');
+  document.getElementById('rc-lost-count').textContent = r.lostCustomerCount ? '(' + r.lostCustomerCount + ' ร้าน)' : '';
+  lostBody.innerHTML = rowsOrEmpty(r.lostCustomers.map(x =>
+    '<tr><td class="mono-data">'+dash(x.customerCode)+'</td><td>'+esc(x.customerName)+'</td>' +
+    '<td class="mono-data">'+(x.lastSaleAt || 'ไม่เคยซื้อ')+'</td>' +
+    '<td class="mono-data">'+(x.daysSinceLastSale === null ? '—' : repQty(x.daysSinceLastSale))+'</td></tr>').join(''),
+    4, 'ไม่มีร้านที่หายไปตามเกณฑ์นี้');
+}
+
+async function loadRepProd(){
+  const body = document.getElementById('rp-body'), gBody = document.getElementById('rp-group-body');
+  const q = repInitDates('rp');
+  tblLoading(body, 7);
+  const r = await callApi('salesReportByProduct', q);
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  body.innerHTML = rowsOrEmpty(r.products.map(x =>
+    '<tr><td class="mono-data">'+dash(x.productCode)+'</td><td>'+esc(x.productName)+'</td><td>'+esc(x.groupName)+'</td>' +
+    '<td class="mono-data">'+repQty(x.qty)+'</td><td class="mono-data">'+(x.freeQty ? repQty(x.freeQty) : '—')+'</td>' +
+    '<td class="mono-data">'+repQty(x.bills)+'</td><td class="mono-data">฿'+bahtPlain(x.revenue)+'</td></tr>').join(''),
+    7, 'ไม่มีการขายในช่วงที่เลือก') +
+    (r.products.length ? '<tr><td colspan="6"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td></tr>' : '');
+  gBody.innerHTML = rowsOrEmpty(r.groups.map(g =>
+    '<tr><td>'+esc(g.groupName)+'</td><td class="mono-data">'+repQty(g.qty)+'</td>' +
+    '<td class="mono-data">'+(g.freeQty ? repQty(g.freeQty) : '—')+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(g.revenue)+'</td></tr>').join(''), 4, '—');
+}
+
 const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
@@ -2264,7 +2402,8 @@ const LOADERS = {
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks,
-  companysettings: loadCompanySettings, roles: loadRoles
+  companysettings: loadCompanySettings, roles: loadRoles,
+  'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd
 };
 function gotoView(view){
   /* ★ หาเมนูจาก id ที่ "กดมา" ก่อนแปลง — เมนูเดียวสองหน้าจอ (ข้อมูลบริษัท: ฝั่งบริษัทดูของกลาง
