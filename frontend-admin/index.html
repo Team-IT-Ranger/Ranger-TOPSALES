@@ -769,7 +769,7 @@
               <option value="partial">ชำระบางส่วน</option>
               <option value="paid">ชำระแล้ว</option>
             </select>
-            <input id="so-filter-search" placeholder="ค้นหาชื่อร้าน/เลขที่บิล" oninput="renderSalesOrdersTable()" style="flex:1;min-width:200px">
+            <input id="so-filter-search" data-table-search placeholder="ค้นหาชื่อร้าน/เลขที่บิล" oninput="renderSalesOrdersTable()" style="flex:1;min-width:200px">
             <button class="btn btn-sm" onclick="printSalesOrderList()">พิมพ์รายงาน</button>
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
@@ -5577,7 +5577,13 @@ async function deleteRoleUI(code){
     return [...view.querySelectorAll('input')].find(i =>
       i.closest('table') !== t && /ค้นหา/.test(i.getAttribute('placeholder') || '')) || null;
   };
+  /* ย้ายเข้าแถบหัวตารางได้เมื่อ
+       - เป็นช่องค้นหาเดี่ยวๆ ในกล่องของมันเอง (เช่นหน้าลูกค้า) หรือ
+       - ติดป้าย data-table-search ไว้ชัดเจน — ใช้กับช่องที่อยู่รวมกับตัวกรองอื่นแต่เจ้าของระบบสั่งให้ย้าย
+         (หน้าบิลขาย: ย้ายช่องค้นหาเข้าตาราง ปล่อย select สถานะกับปุ่มพิมพ์/ส่งออกไว้ในแถบเดิม)
+     ใช้ป้ายแทนการเดา เพราะช่องค้นหาบางตัวอยู่ในโมดัลที่มีตารางของตัวเอง (เลือกสินค้า) ย้ายแล้วจะพัง */
   const adoptable = inp => {
+    if (inp.hasAttribute('data-table-search')) return true;
     const box = inp.parentElement;
     if (!box) return false;
     return [...box.querySelectorAll('input,select,button,textarea')].length === 1;
