@@ -47,6 +47,14 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
       unitCode = UNIT_PC;                 // หน่วยฐานของทั้งระบบ = ชิ้น
     }
 
+    // ★ แพ็คขายได้เฉพาะ Cash Van + เงินสด — ต้องเช็คตรงนี้ (ไม่ใช่แค่ใน priceCart) เพราะลูกค้าที่ยังไม่มีชุดราคา
+    // ที่ใช้งานอยู่ (เช่น ตัวแทนที่เพิ่งเปิดใหม่ ยังไม่ได้จ่ายชุดราคาให้) จะข้าม priceCart() ไปใช้ discount_rules
+    // แบบเดิมทั้งหมด ซึ่งไม่มีการเช็คกติกานี้เลย — เจอจริงตอนสร้างตัวแทนทดสอบใหม่แล้วขายแพ็คด้วยเครดิตผ่านฉลุย 2026-09-28
+    if (isPackUnit(unitCode)) {
+      if (!isVan) return { success: false, code: 'PACK_VAN_ONLY', productId: raw.productId, message: 'แพ็คขายได้เฉพาะ Cash Van เท่านั้น' };
+      if (isCreditPayment(paymentType)) return { success: false, code: 'PACK_CASH_ONLY', productId: raw.productId, message: 'แพ็คขายได้เฉพาะเงินสด (ขายเครดิตต้องสั่งเป็นลัง)' };
+    }
+
     items.push({
       productId: String(raw.productId), groupId: parseInt(p.group_id) || 0,
       unitCode: unitCode, unitFactor: unitFactor, qty: qty, price: unitPrice,

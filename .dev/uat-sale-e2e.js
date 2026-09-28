@@ -32,6 +32,14 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   // 2) ตัวแทน + ลูกค้า + พนักงานขาย (ของทดสอบบน UAT)
   const tid = 'UATP' + String(Date.now()).slice(-6);
   console.log('createTenant', tid, JSON.stringify(await admin('createTenant', { tenantId: tid, name: 'ตัวแทนทดสอบราคา', region: 'UAT' })).slice(0, 120));
+
+  // ★ ตั้งแต่ 2026-09-27 ชุดราคาไม่ได้แจกให้ทุกตัวแทนอัตโนมัติแล้ว (package_tenants — "ไม่ระบุ = ไม่มีใครได้")
+  // ตัวแทนใหม่ที่เพิ่งสร้างจึงต้องจ่ายชุดให้เองก่อน ไม่งั้นราคาจะตกไปใช้ discount_rules แบบเดิม (เตี้ยกว่าที่คาด)
+  // อ่านรายชื่อที่จ่ายอยู่แล้วมาต่อท้าย (ไม่ใช้ set ตรงๆ) กัน savePackageTenants เขียนทับของตัวแทนจริงที่ใช้ชุดนี้อยู่
+  const curAssigned = (await admin('listPackageTenants', { packageType: 'price_list', packageId: bkkList.id })).assigned || [];
+  console.log('assign price list', bkkList.id, 'to', tid, JSON.stringify(await admin('savePackageTenants',
+    { packageType: 'price_list', packageId: bkkList.id, tenantIds: curAssigned.concat([tid]) })));
+
   await admin('addCustomerAdmin', { tenantId: tid, name: 'ร้านทดสอบ กทม.', groupId: bkkGroup.record_id, phone: '0800000000' });
   const custs = (await admin('listCustomersAdmin', { tenantId: tid })).customers;
   const cust = custs[custs.length - 1];
