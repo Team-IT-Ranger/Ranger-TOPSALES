@@ -393,6 +393,75 @@ function getGoodsReceipt(session, payload) {
     }) } };
 }
 
+/**
+ * ยกเลิกใบรับของ (payload: { id, tenantId?, reason? }) — "แก้ไข" ใบรับของทำผ่านทางนี้เสมอ: ยกเลิกใบเดิมแล้วรับใหม่
+ * ให้ถูก (receiveGoods เรียกซ้ำกับ PO เดิมได้ทันทีหลังยกเลิก เพราะยอดค้างของ PO ถูกคืนให้แล้ว) — ไม่มีการแก้ตัวเลขในใบเดิม
+ * ตรงๆ เพราะใบนี้ลงบัญชี/ตัดยอด PO ไปแล้ว หลักเดียวกับเอกสารบัญชีอื่นทั้งระบบ: "ยกเลิก = กลับรายการ ไม่ลบของเดิม"
+ *
+ * กันพลาดสามชั้น (เรียงตามที่เช็ค): มีใบตั้งหนี้ (ap_bills) อ้างอิงอยู่แล้ว → ปฏิเสธ (ต้องยกเลิกใบตั้งหนี้ก่อน —
+ * ระบบยังไม่มีฟังก์ชันนั้น ตอนนี้จึงบล็อกไว้ก่อนดีกว่าให้ตั้งหนี้ลอยค้างอ้างอิงของที่ไม่มีอยู่แล้ว) ·
+ * ของบางส่วนถูกใช้ไปแล้ว (ขาย/โอนออก) จนคืนไม่ได้ครบ → ปฏิเสธทั้งใบ ไม่คืนครึ่งๆ กลางๆ ·
+ * เดินสถานะ PO ผิดจากที่ควรจะเป็นไม่ได้ (ใช้สูตรเดียวกับตอนรับของ คำนวณจากยอดคงเหลือจริงหลังคืน)
+ */
+function cancelGoodsReceipt(session, payload) {
+  var err = _requirePermission(session, 'inventory', 'edit'); if (err) return err;
+  var scope = _purchaseScope(session, payload);
+  return _withDocLock(function() {
+    var gr = _findScoped('goods_receipts', payload.id, scope);
+    if (!gr) return { success: false, message: 'ไม่พบใบรับของนี้' };
+    if (gr.status === 'cancelled') return { success: false, message: 'ใบนี้ถูกยกเลิกไปแล้ว' };
+
+    var dupBill = centralObjects('ap_bills').filter(function(b) { return String(b.gr_id) === String(gr.record_id) && b.status !== 'void'; })[0];
+    if (dupBill) return { success: false, message: 'ใบรับของนี้ตั้งหนี้ไปแล้ว (' + dupBill.bill_no + ') ต้องยกเลิกใบตั้งหนี้ก่อนจึงจะยกเลิกใบรับของนี้ได้' };
+
+    var items = _childrenOf('gr_items', 'gr_id', gr.record_id);
+    var byProduct = {};   // รวมจำนวนต่อสินค้า เผื่อใบเดียวกันมีสินค้าซ้ำหลายบรรทัด (คนละ po_item_id)
+    items.forEach(function(it) { if (it.product_id) byProduct[String(it.product_id)] = (byProduct[String(it.product_id)] || 0) + (Number(it.base_qty) || 0); });
+
+    var stock = {};
+    _scoped('warehouse_stock', scope).forEach(function(r) { if (String(r.warehouse_id) === String(gr.warehouse_id)) stock[String(r.product_id)] = r; });
+    var names = {};
+    centralObjects('products').forEach(function(p) { names[String(p.record_id)] = p.name; });
+    var short = [];
+    Object.keys(byProduct).forEach(function(pid) {
+      var have = stock[pid] ? (Number(stock[pid].qty) || 0) : 0;
+      if (have < byProduct[pid]) short.push((names[pid] || ('สินค้า ' + pid)) + ' (เหลือในคลัง ' + have + ' แต่ใบนี้รับเข้ามา ' + byProduct[pid] + ')');
+    });
+    if (short.length) return { success: false, message: 'คืนสต็อกไม่ได้ เพราะของบางส่วนถูกใช้ไปแล้ว (ขาย/โอน/นับปรับ): ' + short.join(' · ') };
+
+    // คืนสต็อก (ไม่แตะต้นทุนเฉลี่ยเดิม — ของที่เหลืออยู่ยังมีต้นทุนเฉลี่ยเท่าเดิม ลบจำนวนออกไม่กระทบตัวหาร)
+    Object.keys(byProduct).forEach(function(pid) {
+      var cost = stock[pid] ? (Number(stock[pid].avg_cost) || 0) : 0;
+      _applyStockIn(scope, gr.warehouse_id, pid, -byProduct[pid], cost, 'gr_cancel', 'GR', gr.record_id, 'ยกเลิก ' + gr.gr_no, session.adminUserId);
+    });
+
+    // กลับรายการใบสำคัญ (ถ้ามี — ของตัวแทนไม่ลงบัญชีตั้งแต่แรกอยู่แล้ว journal_id จะว่าง)
+    if (gr.journal_id) {
+      var rev = _reverseJournalCore(session, gr.journal_id, 'ยกเลิกใบรับของ ' + gr.gr_no + (payload.reason ? ' — ' + payload.reason : ''), _todayStr());
+      if (!rev.success) return rev;
+    }
+
+    // คืนยอดค้างให้ใบสั่งซื้อ แล้วเดินสถานะใหม่ตามยอดคงเหลือจริง (สูตรเดียวกับตอนรับของ กลับทิศ)
+    var po = gr.po_id ? _findById('purchase_orders', gr.po_id) : null;
+    if (po) {
+      items.forEach(function(it) {
+        if (!it.po_item_id) return;
+        var poItem = _findById('po_items', it.po_item_id); if (!poItem) return;
+        centralUpdate('po_items', poItem.record_id, { received_qty: _money(Math.max(0, (Number(poItem.received_qty) || 0) - (Number(it.qty) || 0))) });
+      });
+      var after = _childrenOf('po_items', 'po_id', po.record_id);
+      var done = after.length > 0 && after.every(function(it) { return (Number(it.received_qty) || 0) >= (Number(it.qty) || 0) - 1e-9; });
+      var some = after.some(function(it) { return (Number(it.received_qty) || 0) > 0; });
+      centralUpdate('purchase_orders', po.record_id, { status: done ? 'received' : (some ? 'partial' : 'sent'), closed_at: done ? nowStr() : '' });
+    }
+
+    centralUpdate('goods_receipts', gr.record_id, { status: 'cancelled',
+      note: String(gr.note || '') + (payload.reason ? ('\nยกเลิก: ' + payload.reason) : '') });
+
+    return _withPoResult(session, gr.po_id, 'ยกเลิกใบรับของ ' + gr.gr_no + ' แล้ว (คืนสต็อก' + (gr.journal_id ? ' + กลับรายการบัญชี' : '') + ')', scope);
+  });
+}
+
 /* ═══════════════ ยอดคงเหลือคลังกลาง ═══════════════ */
 
 function listWarehouseStock(session, payload) {

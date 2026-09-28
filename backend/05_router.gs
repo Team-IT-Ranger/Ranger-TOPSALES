@@ -181,6 +181,7 @@ var ADMIN_ACTION_MAP = {
   receiveGoods:           receiveGoods,
   listGoodsReceipts:      listGoodsReceipts,
   getGoodsReceipt:        getGoodsReceipt,
+  cancelGoodsReceipt:     cancelGoodsReceipt,
   listWarehouseStock:     listWarehouseStock,
   listStockLedger:        listStockLedger,
 

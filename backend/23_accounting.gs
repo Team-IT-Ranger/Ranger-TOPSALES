@@ -114,22 +114,27 @@ function postManualJournal(session, payload) {
   });
 }
 
+/* กลับรายการใบสำคัญจริง (ไม่ตรวจสิทธิ์ — ผู้เรียกต้องเช็คสิทธิ์ของตัวเองมาก่อนแล้ว) ใช้ร่วมกันทั้ง voidJournal (กดตรงๆ)
+ * และเอกสารอื่นที่ต้อง "กลับรายการใบสำคัญของตัวเอง" ไปด้วยตอนยกเลิก เช่น cancelGoodsReceipt (22_purchase_order.gs)
+ * — คนละสิทธิ์กับเอกสารต้นทาง (inventory ≠ accounting) จะได้ไม่ต้องมีทั้งสองสิทธิ์แค่จะยกเลิกใบรับของใบเดียว */
+function _reverseJournalCore(session, journalId, reason, date) {
+  var j = _findById('gl_journals', journalId);
+  if (!j) return { success: false, message: 'ไม่พบใบสำคัญนี้' };
+  if (j.status !== 'posted') return { success: false, message: 'ใบสำคัญนี้ถูกกลับรายการไปแล้ว' };
+  var lines = _childrenOf('gl_journal_lines', 'journal_id', j.record_id);
+  var r = _postJournal({ date: date || _todayStr(), source: j.source, refType: 'VOID', refId: j.record_id,
+    memo: 'กลับรายการใบสำคัญ ' + j.journal_no + (reason ? ' — ' + reason : ''), createdBy: session.adminUserId,
+    lines: lines.map(function(l) { return { accountCode: l.account_code, description: 'กลับรายการ: ' + (l.description || ''),
+      debit: Number(l.credit) || 0, credit: Number(l.debit) || 0, partyType: l.party_type, partyId: l.party_id }; }) });
+  if (!r.success) return r;
+  centralUpdate('gl_journals', j.record_id, { status: 'voided', voided_at: nowStr() });
+  return { success: true, journalId: r.journalId, journalNo: r.journalNo, message: 'กลับรายการด้วยใบสำคัญ ' + r.journalNo };
+}
+
 // กลับรายการใบสำคัญ (ไม่ลบของเดิม) — เอกสารที่ผูกอยู่ต้องจัดการสถานะเองตามบริบท
 function voidJournal(session, payload) {
   var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
-  return _withDocLock(function() {
-    var j = _findById('gl_journals', payload.id);
-    if (!j) return { success: false, message: 'ไม่พบใบสำคัญนี้' };
-    if (j.status !== 'posted') return { success: false, message: 'ใบสำคัญนี้ถูกกลับรายการไปแล้ว' };
-    var lines = _childrenOf('gl_journal_lines', 'journal_id', j.record_id);
-    var r = _postJournal({ date: payload.date || _todayStr(), source: j.source, refType: 'VOID', refId: j.record_id,
-      memo: 'กลับรายการใบสำคัญ ' + j.journal_no + (payload.reason ? ' — ' + payload.reason : ''), createdBy: session.adminUserId,
-      lines: lines.map(function(l) { return { accountCode: l.account_code, description: 'กลับรายการ: ' + (l.description || ''),
-        debit: Number(l.credit) || 0, credit: Number(l.debit) || 0, partyType: l.party_type, partyId: l.party_id }; }) });
-    if (!r.success) return r;
-    centralUpdate('gl_journals', j.record_id, { status: 'voided', voided_at: nowStr() });
-    return { success: true, journalId: r.journalId, journalNo: r.journalNo, message: 'กลับรายการด้วยใบสำคัญ ' + r.journalNo };
-  });
+  return _withDocLock(function() { return _reverseJournalCore(session, payload.id, payload.reason, payload.date); });
 }
 
 function listJournals(session, payload) {

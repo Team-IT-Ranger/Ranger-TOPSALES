@@ -223,6 +223,52 @@ const GR2 = r.grId;
 fails('รับครบแล้ว รับอีกไม่ได้', ctx.receiveGoods(MGR, { poId: PO1, items: [{ poItemId: itemBox.id, qty: 1 }] }), /เหลือให้รับได้ 0/);
 fails('ยกเลิก PO ที่รับของแล้วไม่ได้', ctx.cancelPurchaseOrder(MGR, { id: PO1 }), /รับของเข้าคลังไปแล้ว/);
 
+console.log('\n── ยกเลิกใบรับของ (แก้ไข/ยกเลิกหลังลงบัญชีแล้ว) ──');
+// สินค้าใหม่ (20) กันชนตัวเลขรวมของสินค้า 10/11/12 ที่เช็คไว้แล้วด้านบนและจะถูกเช็คต่อด้านล่าง (ต้นทุนเฉลี่ย/งบทดลอง)
+append(sheets.products, { record_id: 20, product_code: 'P-400', name: 'ถุงพลาสติก', unit: 'ห่อ', base_price: 0, is_active: true });
+r = ctx.savePurchaseOrder(MGR, { vendorId: VENDOR, orderDate: '2026-09-27', vatType: 'excluded',
+  items: [{ productId: 20, qty: 40, unitCode: 'กล่อง', unitFactor: 5, unitPrice: 100 }] });
+const PO5 = r.po.id;
+ctx.issuePurchaseOrder(MGR, { id: PO5 });
+const po5 = ctx.getPurchaseOrder(MGR, { id: PO5 }).po;
+r = ctx.receiveGoods(MGR, { poId: PO5, receiveDate: '2026-09-27', items: [{ poItemId: po5.items[0].id, qty: 40 }] });
+ok('รับของก่อนทดสอบยกเลิก (40 กล่อง × 5 = 200 ห่อ ต้นทุน/ห่อ = 100/5 = 20)', r);
+eq('  เข้าสต็อกและลงบัญชีถูกต้อง', [ctx.listWarehouseStock(MGR, {}).data.find(s => String(s.productId) === '20'), r.po.status],
+   [{ warehouseId: 1, warehouseName: 'คลังกลาง', productId: '20', productCode: 'P-400', productName: 'ถุงพลาสติก', unit: 'ห่อ',
+      qty: 200, reserved: 0, available: 200, avgCost: 20, value: 4000, updatedAt: '2026-09-23 10:00:00' }, 'received']);
+const GR5 = r.grId, JV5 = r.journalId;
+
+fails('ยังไม่ใช่แอดมินฝ่ายคลัง (ไม่มีสิทธิ์แก้ไข) ยกเลิกไม่ได้', ctx.cancelGoodsReceipt(NOPERM, { id: GR5 }), /ไม่มีสิทธิ์/);
+
+console.log('  -- ของถูกใช้ไปบางส่วนแล้ว (เช่น ขายออกแล้ว) ยกเลิกไม่ได้ --');
+ctx._applyStockIn('', 1, '20', -150, 20, 'test_consume', 'TEST', 0, 'จำลองของถูกใช้ไปก่อนเทสต์ยกเลิก', 'tester');
+fails('เหลือในคลังแค่ 50 แต่ใบรับของนี้รับมา 200 → ปฏิเสธ', ctx.cancelGoodsReceipt(MGR, { id: GR5 }),
+  /เหลือในคลัง 50 แต่ใบนี้รับเข้ามา 200/);
+eq('  ★ ปฏิเสธทั้งใบ ไม่คืนครึ่งๆ กลางๆ — สต็อก/สถานะ/บัญชีไม่ถูกแตะเลย', [
+  ctx.listWarehouseStock(MGR, {}).data.find(s => String(s.productId) === '20').qty,
+  ctx.getGoodsReceipt(MGR, { id: GR5 }).gr.status, ctx.getJournal(MGR, { id: JV5 }).journal.status
+], [50, 'posted', 'posted']);
+ctx._applyStockIn('', 1, '20', 150, 20, 'test_consume_undo', 'TEST', 0, 'คืนของกลับก่อนเทสต์ต่อ', 'tester');   // คืนให้เทสต์ถัดไปเริ่มสะอาด
+
+console.log('  -- ทางปกติ: ของยังอยู่ครบ ยกเลิกได้ --');
+r = ctx.cancelGoodsReceipt(MGR, { id: GR5, reason: 'นับสต็อกแล้วพบว่ารับผิดรุ่น' });
+ok('ยกเลิกใบรับของสำเร็จ', r);
+eq('  สต็อกกลับเป็น 0 (คืนครบ)', (ctx.listWarehouseStock(MGR, {}).data.find(s => String(s.productId) === '20') || { qty: 0 }).qty, 0);
+eq('  ใบรับของเปลี่ยนเป็น cancelled พร้อมเหตุผล', (() => { const g = ctx.getGoodsReceipt(MGR, { id: GR5 }).gr; return [g.status, /นับสต็อกแล้วพบว่ารับผิดรุ่น/.test(g.note)]; })(),
+   ['cancelled', true]);
+eq('  ★ ใบสำคัญเดิมกลับรายการ (ไม่ลบ) + มีใบสำคัญกลับรายการใหม่ที่เดบิต/เครดิตสลับกัน', (() => {
+  const orig = ctx.getJournal(MGR, { id: JV5 }).journal;
+  const revJournals = ctx.listJournals(MGR, { source: 'INV' }).data.filter(x => String(x.refId) === String(JV5) && x.refType === 'VOID');
+  const rev = ctx.getJournal(MGR, { id: revJournals[0].id }).journal;
+  return [orig.status, orig.lines.map(l => [l.accountCode, l.debit, l.credit]), rev.lines.map(l => [l.accountCode, l.debit, l.credit])];
+})(), ['voided', [['1300', 4000, 0], ['2150', 0, 4000]], [['1300', 0, 4000], ['2150', 4000, 0]]]);
+eq('  ยอดค้างคืนให้ PO แล้ว เดินสถานะกลับเป็น "sent" (ยังไม่ได้รับของเลยสักหีบ)', ctx.getPurchaseOrder(MGR, { id: PO5 }).po.status, 'sent');
+r = ctx.receiveGoods(MGR, { poId: PO5, receiveDate: '2026-09-27', items: [{ poItemId: po5.items[0].id, qty: 40 }] });
+ok('  รับของใหม่ให้ถูกได้ทันที (นี่คือ "แก้ไข" ใบรับของในระบบนี้ — ยกเลิกใบเดิมแล้วรับใหม่ ไม่ใช่แก้ตัวเลขในใบเดิม)', r);
+fails('ยกเลิกซ้ำ (กดสองครั้ง) ไม่เกิดผลซ้ำ', ctx.cancelGoodsReceipt(MGR, { id: GR5 }), /ถูกยกเลิกไปแล้ว/);
+ok('  ล้างของที่รับใหม่ทิ้งด้วย (กันผลกระทบข้ามไปงบทดลองท้ายไฟล์ — เทสต์ส่วนนี้ตั้งใจให้หักล้างกันหมด สุทธิเป็นศูนย์)',
+  ctx.cancelGoodsReceipt(MGR, { id: r.grId, reason: 'เคลียร์ท้ายเทสต์' }));
+
 console.log('\n── ต้นทุนเฉลี่ยถ่วงน้ำหนัก ──');
 let po2 = ctx.savePurchaseOrder(MGR, { vendorId: VENDOR2, orderDate: '2026-09-26', vatType: 'none',
   items: [{ productId: 11, qty: 100, unitCode: 'ม้วน', unitFactor: 1, unitPrice: 35 }] }).po;
@@ -259,6 +305,7 @@ j = ctx.getJournal(FIN, { id: ctx.listApBills(FIN, {}).data.find(b => b.id === B
 eq('  ลงบัญชี Dr GR-NI 7,200 + Dr ภาษีซื้อ 504 / Cr เจ้าหนี้ 7,704', j.lines.map(l => [l.accountCode, l.debit, l.credit]),
    [['2150', 7200, 0], ['1400', 504, 0], ['2100', 0, 7704]]);
 fails('ตั้งหนี้จากใบรับของเดิมซ้ำ → ปฏิเสธ', ctx.createApBillFromGr(FIN, { grId: GR1 }), /ตั้งหนี้ไปแล้ว/);
+fails('ใบรับของที่ตั้งหนี้ไปแล้ว ยกเลิกไม่ได้ (ต้องยกเลิกใบตั้งหนี้ก่อน)', ctx.cancelGoodsReceipt(MGR, { id: GR1 }), /ตั้งหนี้ไปแล้ว.*ต้องยกเลิกใบตั้งหนี้ก่อน/);
 r = ctx.createApBillFromGr(FIN, { grId: GR2, billDate: '2026-09-25' });
 const BILL2 = r.billId;
 eq('ตั้งหนี้ใบที่ 2 (กล่อง 20 ลัง 4,800 + เทป 2,500 = 7,300 + VAT = 7,811)', r.total, 7811);
