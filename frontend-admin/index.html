@@ -228,6 +228,10 @@
   table{ width:100%; border-collapse:collapse; font-size:13px; }
   th{ text-align:left; background:var(--surface-2); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); padding:9px 12px; white-space:nowrap; }
   th.th-sortable{ cursor:pointer; user-select:none; transition:color .12s,background .12s; }
+  th.th-sortable::after{ content:'\2195'; opacity:.25; margin-left:5px; font-size:10px; }   /* บอกว่ากดเรียงได้ */
+  th.th-sortable:hover::after{ opacity:.6; }
+  th.is-sorted::after{ content:none; }                       /* เรียงอยู่แล้วใช้ลูกศรจริงแทน */
+  th .sort-arrow{ margin-left:5px; font-size:10px; }
   th.th-sortable:hover{ color:var(--blue); background:var(--blue-pale); }
   th.is-sorted{ color:var(--blue); }
   tr.clickable-row{ cursor:pointer; }
@@ -5464,6 +5468,93 @@ async function deleteRoleUI(code){
 /* ── ตัวเลขเงินชิดขวาอัตโนมัติ ──
    ทุกช่องตารางที่ขึ้นต้นด้วย ฿ จะถูกใส่คลาส .num ให้เอง และหัวคอลัมน์ตรงกันก็ชิดขวาตาม
    (ทำเป็น observer แทนการไล่แก้ทุก renderer — ตารางใหม่ที่เพิ่มทีหลังได้ผลเหมือนกันโดยไม่ต้องจำ) */
+/* ══════════════ กดชื่อคอลัมน์เพื่อเรียงข้อมูล ══════════════
+   ทำเป็นตัวกลางเหมือน initMoneyAlign()/initTableFooters() ตารางทุกหน้าจึงเรียงได้โดยไม่ต้องแก้ renderer
+   (ก่อนหน้านี้มีแค่ตารางสินค้าที่เรียงได้ และเขียนไว้ใน renderer ของมันเอง)
+
+   ★ จำการเรียงไว้ต่อตาราง แล้วเรียงซ้ำให้หลังหน้าจอวาดใหม่ — ไม่งั้นพอกดปุ่มอะไรสักอย่างในหน้านั้น
+     (เปลี่ยนสถานะ/ค้นหา) renderer เขียน tbody ทับ การเรียงที่ผู้ใช้ตั้งไว้ก็หายเงียบๆ
+
+   ★ ข้ามตารางที่เรียงแล้วความหมายเพี้ยน: ตารางที่มีเซลล์ผสาน (หน้าชุดราคาใช้ rowspan รวมหลาย SKU
+     ไว้ในบรรทัดเดียว สลับแถวแล้วราคาจะไปอยู่ผิดสินค้า) และตารางที่ renderer ทำปุ่มเรียงเองอยู่แล้ว */
+(function initTableSort(){
+  const STATE = {};                                    // คีย์ตาราง → { col, dir }
+  const keyOf = t => (t.tBodies[0] && t.tBodies[0].id) || (t.closest('.view') && t.closest('.view').id) ||
+                     (t.closest('[id]') && t.closest('[id]').id) || '';
+  const dataRows = t => [...(t.tBodies[0] ? t.tBodies[0].rows : [])]
+    .filter(r => !r.classList.contains('empty-row') && ![...r.cells].some(c => c.colSpan > 1));
+
+  const sortable = t => {
+    if (t.closest('.docsheet')) return false;
+    const head = t.tHead && t.tHead.rows[0];
+    if (!head) return false;
+    if ([...head.cells].some(c => c.getAttribute('onclick'))) return false;   // renderer มีตัวเรียงของตัวเอง
+    if (!t.tBodies[0]) return false;
+    if ([...t.tBodies[0].rows].some(r => [...r.cells].some(c => c.rowSpan > 1))) return false;
+    return dataRows(t).length > 1;
+  };
+
+  /* ตัวเลขกับวันที่ต้องเรียงแบบตัวเลข/วันที่ ไม่ใช่แบบข้อความ — "฿1,000" ต้องมากกว่า "฿900"
+     ส่วนข้อความไทยใช้ localeCompare('th') ไม่งั้น "แ" มาก่อน "ก" ตามรหัสอักขระ */
+  const valOf = td => {
+    const raw = (td.innerText || '').trim();
+    const num = raw.replace(/[฿,\s%]/g, '').replace(/[\u0E00-\u0E7F]/g, '');
+    if (num !== '' && /^-?\d+(\.\d+)?$/.test(num)) return { n: parseFloat(num), s: raw };
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return { n: null, s: raw };        // yyyy-mm-dd เรียงแบบข้อความได้อยู่แล้ว
+    return { n: null, s: raw };
+  };
+  const blank = v => v.s === '' || v.s === '-';
+  const cmp = (a, b, i, dir) => {
+    const x = valOf(a.cells[i]), y = valOf(b.cells[i]);
+    /* ★ ช่องว่างลงท้ายเสมอ ไม่ว่าเรียงขึ้นหรือลง — ต้องตัดสินนอกการกลับทิศ
+       ถ้าเอาไปรวมแล้วค่อยกลับทิศ พอเรียงจากมากไปน้อยช่องว่างจะเด้งขึ้นมาอยู่หัวตาราง */
+    if (blank(x) !== blank(y)) return blank(x) ? 1 : -1;
+    if (blank(x)) return 0;
+    let r;
+    if (x.n !== null && y.n !== null) r = x.n - y.n;
+    // numeric:true ให้ "เชื่อ 7 วัน" มาก่อน "เชื่อ 30 วัน" และ "C2" มาก่อน "C10" ตามที่คนคาด
+    else r = x.s.localeCompare(y.s, 'th', { numeric: true });
+    return dir === 'desc' ? -r : r;
+  };
+
+  const apply = t => {
+    const st = STATE[keyOf(t)];
+    const head = t.tHead && t.tHead.rows[0];
+    if (!head) return;
+    [...head.cells].forEach((th, i) => {
+      const can = sortable(t) && (th.innerText || '').trim() !== '';
+      th.classList.toggle('th-sortable', can);
+      const on = can && st && st.col === i;
+      th.classList.toggle('is-sorted', !!on);
+      const old = th.querySelector('.sort-arrow');
+      if (old) old.remove();
+      if (on) th.insertAdjacentHTML('beforeend', '<span class="sort-arrow">' + (st.dir === 'asc' ? '\u25B2' : '\u25BC') + '</span>');
+    });
+    if (!st || !sortable(t)) return;
+    const body = t.tBodies[0], rows = dataRows(t);
+    if (!rows.length || st.col >= rows[0].cells.length) return;
+    const idx = new Map(rows.map((r, i) => [r, i]));     // ตัวตัดสินเมื่อค่าเท่ากัน ให้ลำดับเดิมคงที่ ไม่สลับไปมา
+    rows.slice().sort((a, b) => cmp(a, b, st.col, st.dir) || (idx.get(a) - idx.get(b)))
+      .forEach(r => body.appendChild(r));
+  };
+
+  document.addEventListener('click', e => {
+    const th = e.target.closest && e.target.closest('.table-wrap thead th');
+    if (!th) return;
+    const t = th.closest('table');
+    if (!t || !sortable(t) || (th.innerText || '').trim() === '') return;
+    const k = keyOf(t), i = th.cellIndex, cur = STATE[k];
+    STATE[k] = (cur && cur.col === i) ? { col: i, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { col: i, dir: 'asc' };
+    apply(t);
+  });
+
+  const all = () => document.querySelectorAll('.table-wrap > table').forEach(apply);
+  let timer;
+  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(all, 50); })
+    .observe(document.body, { childList: true, subtree: true });
+  all();
+})();
+
 /* ★ ท้ายตารางบอกจำนวนรายการ — ตารางที่เลื่อนอยู่ข้างในทำให้ไม่เห็นแล้วว่ามีทั้งหมดกี่แถว
    เติมให้อัตโนมัติเหมือน initMoneyAlign() ตารางใหม่จึงได้เองโดยไม่ต้องแก้ renderer
    ★ ต้องไม่เขียนทับเมื่อข้อความเดิมตรงอยู่แล้ว ไม่งั้น MutationObserver จะปลุกตัวเองวนไม่รู้จบ */
