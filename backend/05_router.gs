@@ -185,6 +185,11 @@ var ADMIN_ACTION_MAP = {
   listWarehouseStock:     listWarehouseStock,
   listStockLedger:        listStockLedger,
 
+  // ── รายงานการขาย (41): 1.8.1 แยกพนักงาน / 1.8.2 แยกลูกค้า / 1.8.3 แยกสินค้า ──
+  salesReportByStaff:     salesReportByStaff,
+  salesReportByCustomer:  salesReportByCustomer,
+  salesReportByProduct:   salesReportByProduct,
+
   // ── บัญชี (23): แยกประเภท / เจ้าหนี้ / ลูกหนี้ ──
   listGlAccounts:         listGlAccounts,
   saveGlAccount:          saveGlAccount,

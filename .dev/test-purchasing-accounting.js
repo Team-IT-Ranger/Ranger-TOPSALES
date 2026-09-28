@@ -24,7 +24,8 @@ class FakeSheet {
 const sheets = {}, tenantSheets = {};
 Object.keys(CENTRAL_SHEETS).forEach(n => { sheets[n] = new FakeSheet(CENTRAL_SHEETS[n]); });
 const TENANT_COLS = {
-  sales_orders: ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at']
+  sales_orders: ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at'],
+  order_items: ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free','tax_status']
 };
 Object.keys(TENANT_COLS).forEach(n => { tenantSheets[n] = new FakeSheet(TENANT_COLS[n]); });
 
@@ -71,7 +72,8 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', '02_helper
 Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // 34_sales_status.gs โหลดมาเพื่อ _reservedQty()/getAvailableQty() ที่ listWarehouseStock (22_purchase_order.gs) เรียกใช้
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
-['00_setup_sheets.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs']
+// 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
+['00_setup_sheets.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -428,6 +430,65 @@ fails('  ตั้งหนี้เจ้าหนี้จากใบรั�
 fails('  ตัวแทนยกเลิกใบสั่งซื้อของบริษัทไม่ได้', ctx.cancelPurchaseOrder(TADMIN, { id: PO1 }), /ไม่พบใบสั่งซื้อ/);
 
 eq('lock ถูกปล่อยทุกครั้ง', lockHeld, false);
+
+console.log('\n── รายงานการขาย (1.8.1 แยกพนักงาน / 1.8.2 แยกลูกค้า / 1.8.3 แยกสินค้า) ──');
+// ข้อมูลของตัวเอง ไม่ยุ่งกับ sheets.products/customers ที่ใช้ไปแล้วด้านบน (report อ่านอย่างเดียว ไม่แตะอะไร แต่กันสับสนไว้ก่อน)
+append(sheets.liff_users, { line_user_id: 'U_STAFF1', display_name: 'พนักงาน เอ', role: 'van_sales', tenant_id: 'T1', status: 'Yes' });
+// last_sale_at ของ 500 ตั้งเองเลียนแบบสิ่งที่ touchCustomerLastSale (33_customers.gs) จะทำให้จริงตอนบันทึกบิล
+// (ฮาร์เนสนี้ seed ตรงลง sales_orders ไม่ได้เดินผ่าน recordSale จริง จึงต้องตั้งมือให้ตรงกับบิลที่ seed ไว้ด้านล่าง)
+// ★ ลูกค้า 500 มีอยู่แล้วจากตอนต้นไฟล์ (ร้านค้าเครดิต) — แก้ด้วย centralUpdate ไม่ใช่ append ซ้ำ ไม่งั้น record_id ชนกัน
+ctx.centralUpdate('customers', 500, { status: 'active', last_sale_at: '2026-09-15' });
+append(sheets.customers, { record_id: 501, customer_code: 'C-501', name: 'ร้านทดสอบสอง', tenant_id: 'T1', is_active: true, status: 'active', last_sale_at: '2026-09-10' });
+append(sheets.customers, { record_id: 502, customer_code: 'C-502', name: 'ร้านที่หายไป', tenant_id: 'T1', is_active: true, status: 'active', last_sale_at: '2026-01-01' });
+append(sheets.product_groups, { record_id: 900, name: 'วัสดุสิ้นเปลือง', description: '' });
+append(sheets.products, { record_id: 22, product_code: 'P-500', name: 'ฟิล์มพันสินค้า', unit: 'ม้วน', group_id: 900, base_price: 0, is_active: true });
+
+[
+  { record_id: 9001, order_code: 'SO-9001', customer_id: 500, total: 1000, status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-09-01 10:00:00' },
+  { record_id: 9002, order_code: 'SO-9002', customer_id: 500, total: 500, status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-09-15 10:00:00' },
+  { record_id: 9003, order_code: 'SO-9003', customer_id: 501, total: 2000, status: 'completed', sale_by: 'admin:u1', created_at: '2026-09-10 10:00:00' },
+  { record_id: 9004, order_code: 'SO-9004', customer_id: 500, total: 9999, status: 'cancelled', sale_by: 'U_STAFF1', created_at: '2026-09-05 10:00:00' },
+  { record_id: 9005, order_code: 'SO-9005', customer_id: 500, total: 300, status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-08-01 10:00:00' }   // นอกช่วงวันที่ที่จะดู
+].forEach(o => append(tenantSheets.sales_orders, o));
+[
+  { record_id: 1, order_id: 9001, product_id: 10, base_qty: 20, line_total: 1000, is_free: 0 },
+  { record_id: 2, order_id: 9002, product_id: 10, base_qty: 10, line_total: 500, is_free: 0 },
+  { record_id: 3, order_id: 9002, product_id: 22, base_qty: 5, line_total: 0, is_free: 1 },
+  { record_id: 4, order_id: 9003, product_id: 22, base_qty: 40, line_total: 2000, is_free: 0 },
+  { record_id: 5, order_id: 9004, product_id: 10, base_qty: 999, line_total: 9999, is_free: 0 }   // อยู่ในบิลที่ยกเลิกแล้ว ต้องไม่ถูกนับ
+].forEach(it => append(tenantSheets.order_items, it));
+
+console.log('\n  -- 1.8.1 แยกพนักงาน --');
+r = ctx.salesReportByStaff(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16' });
+eq('รวมยอดของ U_STAFF1 สองบิล (1,000+500=1,500) ไม่รวมบิลที่ยกเลิก/นอกช่วง', r.data.find(x => x.saleBy === 'U_STAFF1'),
+  { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500, compareBills: null, compareRevenue: null, revenueChangePct: null });
+eq('  ป้ายฝั่งแอดมินดึงชื่อจาก admin_users มาแสดง', r.data.find(x => x.saleBy === 'admin:u1').label, '[แอดมิน] ผู้จัดการฝ่ายจัดซื้อ');
+eq('  เรียงจากยอดมากไปน้อย + ยอดรวมถูกต้อง', [r.data.map(x => x.saleBy), r.totalRevenue, r.totalBills], [['admin:u1', 'U_STAFF1'], 3500, 3]);
+r = ctx.salesReportByStaff(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16', compareDateFrom: '2026-09-01', compareDateTo: '2026-09-09' });
+eq('เทียบช่วงเวลาได้ (ช่วงก่อน U_STAFF1 มีแค่บิลแรก 1,000)', r.data.find(x => x.saleBy === 'U_STAFF1'),
+  { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500, compareBills: 1, compareRevenue: 1000, revenueChangePct: 50 });
+fails('ไม่ระบุช่วงวันที่ → ปฏิเสธ', ctx.salesReportByStaff(MGR, {}), /ระบุช่วงวันที่/);
+fails('วันที่กลับด้าน → ปฏิเสธ', ctx.salesReportByStaff(MGR, { dateFrom: '2026-09-30', dateTo: '2026-09-01' }), /ไม่มากกว่า/);
+
+console.log('\n  -- 1.8.2 แยกลูกค้า + ร้านที่หายไป --');
+r = ctx.salesReportByCustomer(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16' });
+eq('จัดอันดับร้าน 500 มาก่อน 501 (1,500 > 2,000? ไม่ — 501 มากกว่า จึงมาก่อน)', r.data.map(x => [x.customerId, x.revenue]), [['501', 2000], ['500', 1500]]);
+const todayStr = new Date().toISOString().slice(0, 10);
+r = ctx.salesReportByCustomer(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16', lostDays: 60 });
+eq('เฉพาะร้าน 502 (ซื้อครั้งสุดท้าย 2026-01-01) ติดร้านที่หายไป — 500/501 เพิ่งซื้อไม่เกิน 60 วัน ไม่ติด', r.lostCustomers.map(x => x.customerId), ['502']);
+eq('  คำนวณจำนวนวันถูกต้อง', r.lostCustomers[0].daysSinceLastSale, ctx._daysBetween('2026-01-01', todayStr));
+r = ctx.salesReportByCustomer(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16', lostDays: 999999 });
+eq('lostDays สูงมาก → ไม่มีใครติดร้านที่หายไปเลย', r.lostCustomerCount, 0);
+
+console.log('\n  -- 1.8.3 แยกสินค้า/กลุ่มสินค้า --');
+r = ctx.salesReportByProduct(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16' });
+eq('สินค้า 10 ขายรวม 20+10=30 หน่วยฐาน ยอด 1,500 (ไม่รวมบิลที่ยกเลิก)', r.products.find(x => x.productId === '10'),
+  { productId: '10', productCode: 'P-100', productName: 'กล่องกระดาษ', groupId: '', groupName: '(ไม่มีกลุ่ม)', qty: 30, freeQty: 0, revenue: 1500, bills: 2 });
+eq('สินค้า 22 มีทั้งขายจริง (40, 2,000) และของแถม (5 หน่วย ไม่รวมยอด) พร้อมกลุ่มสินค้า — นับ 2 บิลเพราะแถมอยู่คนละบิลกับที่ขายจริง',
+  r.products.find(x => x.productId === '22'),
+  { productId: '22', productCode: 'P-500', productName: 'ฟิล์มพันสินค้า', groupId: '900', groupName: 'วัสดุสิ้นเปลือง', qty: 40, freeQty: 5, revenue: 2000, bills: 2 });
+eq('สรุปตามกลุ่มสินค้า: วัสดุสิ้นเปลือง 2,000 / ไม่มีกลุ่ม 1,500', r.groups.map(g => [g.groupName, g.revenue]), [['วัสดุสิ้นเปลือง', 2000], ['(ไม่มีกลุ่ม)', 1500]]);
+eq('ยอดรวมทั้งรายงาน = 3,500 (เท่ากับ 1.8.1)', r.totalRevenue, 3500);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
