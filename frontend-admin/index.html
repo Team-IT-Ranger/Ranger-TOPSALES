@@ -1211,8 +1211,8 @@
         <section class="view" id="view-tenants">
           <div class="view-head"><div><h1>ตัวแทนจำหน่าย</h1><p>สร้าง Tenant Sheet ใหม่ให้ตัวแทนแต่ละราย — ฝั่งบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ภาค</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="tenants-body"><tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>ชื่อ</th><th>Customer account (D365)</th><th>ภาค</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+            <tbody id="tenants-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>สร้างตัวแทนใหม่</h3>
@@ -4628,17 +4628,76 @@ async function loadTenants(){
   if (!tenantsCache.length) tenantsCache = listSnapLoad('tenants') || [];
   if (tenantsCache.length) renderTenants(); else tblLoading(body, 5);
   const r = await callApi('listTenants', {});
-  if (!r.success) { if (!tenantsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!tenantsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   tenantsCache = r.data;
   listSnapSave('tenants', tenantsCache);
   renderTenants();
 }
 function renderTenants(){
-  document.getElementById('tenants-body').innerHTML = rowsOrEmpty(tenantsCache.map(t =>
-    '<tr><td class="mono-data">'+esc(t.tenantId)+'</td><td>'+esc(t.name)+'</td><td>'+esc(t.region||'-')+'</td>' +
-    '<td>'+(isOn(t.isActive)?'<span class="pill ok">ใช้งาน</span>':'<span class="pill off">ปิด</span>')+'</td>' +
-    '<td><a href="'+t.sheetUrl+'" target="_blank" rel="noopener">เปิด Sheet ↗</a></td></tr>').join(''),
-    5, 'ยังไม่มีตัวแทน');
+  document.getElementById('tenants-body').innerHTML = rowsOrEmpty(tenantsCache.map(t => {
+    const on = isOn(t.isActive);
+    // ★ ตัวแทนบ้าน (HOUSE) ปิดไม่ได้ — เป็นสมุดยอดขายตรงของบริษัทเอง ปิดแล้วเปิดบิลขายตรงไม่ได้ทั้งระบบ
+    //   ซ่อนปุ่มไปเลยแทนที่จะให้กดแล้วค่อยเด้ง error จะได้ไม่มีใครเผลอ
+    const toggle = t.isHouse ? '<span class="muted">ของบริษัท</span>'
+      : '<button class="btn btn-sm" onclick="toggleTenantStatus(\''+esc(t.tenantId)+'\','+(on?'false':'true')+')">'+(on?'ปิดใช้งาน':'เปิดใช้งาน')+'</button>';
+    return '<tr><td class="mono-data">'+esc(t.tenantId)+'</td><td>'+esc(t.name)+'</td>' +
+      '<td class="mono-data">'+dash(t.customerAccount)+'</td><td>'+esc(t.region||'-')+'</td>' +
+      '<td>'+(on?'<span class="pill ok">ใช้งาน</span>':'<span class="pill off">ปิด</span>')+'</td>' +
+      '<td><button class="btn btn-sm" onclick="openTenantEdit(\''+esc(t.tenantId)+'\')">แก้ไข</button> ' + toggle +
+      ' <a href="'+t.sheetUrl+'" target="_blank" rel="noopener">Sheet ↗</a></td></tr>';
+  }).join(''), 6, 'ยังไม่มีตัวแทน');
+}
+
+/* ── แก้ไขข้อมูลตัวแทน ──
+   ใช้ updateTenantProfile ตัวเดียวกับที่ตัวแทนแก้ข้อมูลบริษัทตัวเอง ต่างกันแค่ฝั่งบริษัทส่ง tenantId มาด้วย
+   ไม่ใส่ข้อมูลบัญชีธนาคารในฟอร์มนี้ — เป็นของที่ตัวแทนดูแลเองที่หน้า "ข้อมูลบริษัท" ของเขา */
+function openTenantEdit(tenantId){
+  const t = tenantsCache.find(x => String(x.tenantId) === String(tenantId));
+  if (!t) return;
+  const v = k => esc(t[k] || '');
+  plModal('<h3>แก้ไขตัวแทน ' + esc(t.tenantId) + '</h3>' +
+    '<div class="form-grid g2">' +
+    plField('ชื่อตัวแทน', '<input id="te-name" value="'+v('name')+'">') +
+    plField('ภาค', '<input id="te-region" value="'+v('region')+'">') +
+    plField('Customer account (D365)', '<input id="te-custacc" value="'+v('customerAccount')+'" placeholder="รหัสลูกค้าของตัวแทนรายนี้ในระบบ D365">', 'span2') +
+    plField('โทรศัพท์', '<input id="te-phone" value="'+v('phone')+'">') +
+    plField('อีเมล', '<input id="te-email" value="'+v('email')+'">') +
+    plField('เลขผู้เสียภาษี', '<input id="te-taxid" value="'+v('taxId')+'">') +
+    plField('รหัสสาขา', '<input id="te-branch" value="'+v('branchCode')+'" placeholder="00000 = สำนักงานใหญ่">') +
+    plField('ที่อยู่', '<textarea id="te-address" rows="2">'+v('address')+'</textarea>', 'span2') +
+    '</div>' +
+    '<p class="form-hint">Customer account เก็บไว้เพื่อเชื่อมข้อมูลกับ D365 ในอนาคต ยังไม่มีส่วนไหนของระบบเอาไปคำนวณ</p>' +
+    '<div class="err" id="te-err"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button>' +
+    '<button class="btn btn-primary" onclick="saveTenantEdit(\''+esc(t.tenantId)+'\')">บันทึก</button></div>');
+}
+
+async function saveTenantEdit(tenantId){
+  const g = id => document.getElementById(id).value.trim();
+  const patch = { tenantId, name: g('te-name'), region: g('te-region'), customerAccount: g('te-custacc'),
+    phone: g('te-phone'), email: g('te-email'), taxId: g('te-taxid'), branchCode: g('te-branch'), address: g('te-address') };
+  if (!patch.name) return plModalErr('กรุณากรอกชื่อตัวแทน');
+  const r = await callApi('updateTenantProfile', patch);
+  if (!r.success) return plModalErr(r.message);
+  plModalClose();
+  // แก้ cache ในเครื่องแล้ววาดใหม่ ไม่โหลดรายการทั้งหมดซ้ำ (กติกาข้อ 4 ใน CLAUDE.md)
+  const t = tenantsCache.find(x => String(x.tenantId) === String(tenantId));
+  if (t) Object.assign(t, { name: patch.name, region: patch.region, customerAccount: patch.customerAccount,
+    phone: patch.phone, email: patch.email, taxId: patch.taxId, branchCode: patch.branchCode, address: patch.address });
+  listSnapSave('tenants', tenantsCache);
+  renderTenants();
+  toast('บันทึกข้อมูลตัวแทนแล้ว');
+}
+
+async function toggleTenantStatus(tenantId, makeActive){
+  if (!makeActive && !confirm('ปิดใช้งานตัวแทน ' + tenantId + ' — พนักงานของตัวแทนรายนี้จะเปิดบิลขายไม่ได้ ยืนยันหรือไม่?')) return;
+  const r = await callApi('updateTenantStatus', { tenantId, isActive: !!makeActive });
+  if (!r.success) { toast(r.message, true); return; }
+  const t = tenantsCache.find(x => String(x.tenantId) === String(tenantId));
+  if (t) t.isActive = !!makeActive;
+  listSnapSave('tenants', tenantsCache);
+  renderTenants();
+  toast(r.message);
 }
 async function createTenantUI(){
   const tenantId = document.getElementById('t-id').value.trim();
