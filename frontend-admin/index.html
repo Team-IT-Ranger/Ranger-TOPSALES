@@ -69,7 +69,9 @@
 
   /* ── app shell (โครง Hippo Village) ── */
   #app-screen{display:none}
-  .app-shell{display:flex;min-height:100vh}
+  /* ★ กรอบแอปสูงเท่าจอพอดี ไม่ให้เอกสารทั้งหน้าเลื่อน (ผู้ใช้สั่ง 28 ก.ย. 2026)
+     หัวแอปกับหัวหน้างานจึงอยู่กับที่ เลื่อนได้เฉพาะเนื้อข้อมูลข้างใน */
+  .app-shell{display:flex;height:100vh;overflow:hidden}
   .sidebar{
     width:var(--sb-w); flex-shrink:0;
     background:linear-gradient(175deg,#1B2C33 0%,#16242A 55%,#121B20 100%);
@@ -83,7 +85,8 @@
      ทั้งหน้าจึงเลื่อนไป-มา 188px ตาลายมาก โดยเฉพาะตอนกำลังกรอกฟอร์ม
      ตอนนี้จองที่ไว้เท่าเมนูตอนกางเสมอ เมนูหุบก็แค่เหลือแถบว่าง — **หน้างานไม่ขยับเลยสักพิกเซล**
      (เมนูเป็น position:fixed อยู่แล้ว การยืด/หุบจึงไม่ดันอะไรทั้งนั้น มีแต่ margin ตัวนี้ที่เคยดัน) */
-  .main-area{ margin-left:var(--sb-w); flex:1; min-width:0; }
+  .main-area{ margin-left:var(--sb-w); flex:1; min-width:0;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden; }
   body.sb-collapsed .sidebar{ width:var(--sb-cw); overflow:visible; }
   /* จอแคบ จองที่ 264px ไม่ไหว — ย่อที่จองเหลือเท่าเมนูหุบ แล้วให้เมนูกางทับหน้างานไปเลย
      (ยังไม่ขยับเหมือนกัน เพราะที่จองคงที่ ไม่ได้วิ่งตามเมนู) */
@@ -175,9 +178,17 @@
   .top-right{ display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--ink-soft); }
   .avatar{ width:28px; height:28px; border-radius:50%; background:var(--green); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:700; }
 
-  main.content{ padding:24px 28px 60px; max-width:1080px; }
+  main.content{ padding:24px 28px 60px; max-width:1080px;
+    flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+
   .view{ display:none; }
-  .view.active{ display:block; }
+  /* หัวหน้างาน (ชื่อ + ปุ่ม + ช่องค้นหาที่ renderer วางไว้เอง) ไม่เลื่อน · เนื้อข้อมูลเลื่อนข้างใน
+     .view-body ใส่ให้อัตโนมัติด้วย initViewFrames() — ไม่ต้องแก้ markup ของทุกหน้า
+     ★ ต้องเป็น flex ไม่ใช่ block ไม่งั้น .view-body ไม่ถูกจำกัดความสูง แล้วเนื้อส่วนล่างจะถูก
+       main.content{overflow:hidden} ตัดหายไปเลย โดยไม่มีแถบเลื่อนให้เลื่อนลงไปดู */
+  .view.active{ display:flex; flex-direction:column; min-height:0; flex:1; }
+  .view-head{ flex:none; }
+  .view-body{ flex:1; min-height:0; overflow:auto; padding-bottom:8px; }
   .view-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; gap:16px; }
   .view-head h1{ font-size:19px; margin:0 0 3px; }
   .view-head p{ margin:0; color:var(--ink-soft); font-size:12.5px; }
@@ -232,6 +243,11 @@
   th.th-sortable:hover::after{ opacity:.6; }
   th.is-sorted::after{ content:none; }                       /* เรียงอยู่แล้วใช้ลูกศรจริงแทน */
   th .sort-arrow{ margin-left:5px; font-size:10px; }
+  /* แถวค้นหาในตาราง — ตรึงอยู่กับหัวตาราง จึงเห็นตลอดแม้เลื่อนไปแถวที่พันกว่า */
+  tr.tbl-search-row th{ padding:6px 10px; background:var(--surface-2); text-transform:none; letter-spacing:0; }
+  tr.tbl-search-row .tbl-search-box{ display:flex; align-items:center; gap:8px; }
+  tr.tbl-search-row input{ flex:1; max-width:340px; height:30px; font-size:12px; }
+  tr.tbl-search-row .tbl-hits{ color:var(--ink-soft); font-size:11px; font-weight:400; }
   th.th-sortable:hover{ color:var(--blue); background:var(--blue-pale); }
   th.is-sorted{ color:var(--blue); }
   tr.clickable-row{ cursor:pointer; }
@@ -315,7 +331,7 @@
   /* จอแคบ: ซ่อนชื่อ/บทบาทผู้ใช้ (ดูได้จากรูปโปรไฟล์อยู่แล้ว) เหลือปุ่มที่ต้องกดจริง */
   @media (max-width:1180px){ .top-right #who-name,.top-right #who-role,.top-right #who-tenant{ display:none; } }
   .avatar{ width:30px; height:30px; background:var(--blue); font-size:12px; }
-  main.content{ padding:26px 32px 72px; max-width:1280px; margin:0 auto; }
+  main.content{ padding:26px 32px 24px; max-width:1280px; margin:0 auto; width:100%; }
   .view-head{ margin-bottom:20px; }
   .view-head h1{ font-size:20px; letter-spacing:-.01em; }
   .view-head p{ font-size:13px; }
@@ -460,8 +476,17 @@
   body.density-compact header.topbar{ height:52px; }
 
   /* modal กรอก/แก้ชุดราคา */
-  .modal-bg{ position:fixed; inset:0; background:rgba(22,28,31,.45); display:none; align-items:flex-start; justify-content:center; z-index:60; overflow-y:auto; padding:40px 16px; }
-  .modal-box{ background:var(--surface); border-radius:12px; width:100%; max-width:720px; padding:20px 22px; box-shadow:0 20px 50px -12px rgba(0,0,0,.35); }
+  .modal-bg{ position:fixed; inset:0; background:rgba(22,28,31,.45); display:none; align-items:center; justify-content:center; z-index:60; padding:32px 16px; }
+  /* ★ หน้าต่างแก้ไขข้อมูล: หัวเรื่องกับแถวปุ่มอยู่กับที่ เลื่อนเฉพาะช่องกรอกตรงกลาง
+     ฟอร์มยาวๆ (สินค้า/ชุดแถม) เดิมต้องเลื่อนทั้งกล่องลงไปหาปุ่มบันทึก พอเลื่อนแล้วก็ไม่เห็นว่ากำลังแก้อะไรอยู่ */
+  .modal-box{ background:var(--surface); border-radius:12px; width:100%; max-width:720px; padding:20px 22px;
+    box-shadow:0 20px 50px -12px rgba(0,0,0,.35);
+    display:flex; flex-direction:column; max-height:calc(100vh - 64px); }
+  .modal-box > h3{ flex:none; }
+  .modal-body{ flex:1; min-height:0; overflow:auto; margin:0 -22px; padding:0 22px; }
+  .modal-box > .form-actions, .modal-box > .err{ flex:none; }
+  .modal-box > .form-actions{ margin-top:14px; background:var(--surface); }
+  body.density-compact .modal-body{ margin:0 -18px; padding:0 18px; }
   .modal-box h3{ margin:0 0 4px; font-size:15px; }
   .modal-box h4{ margin:16px 0 8px; font-size:12.5px; color:var(--blue); }
   .plm-row{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) 34px; gap:8px; margin-bottom:6px; align-items:center; }
@@ -3296,7 +3321,25 @@ let PLD_EDIT = false;
    บิลเก่าไม่กระทบเพราะเก็บราคาที่ขายจริงไว้ในบรรทัดของตัวเอง — แต่การแก้ชุดที่ใช้งานอยู่ถูกบันทึกประวัติไว้ */
 const plEditable = l => l.status !== 'archived';
 const plLiveEdit = l => l.status === 'active';
-function plModal(html){ const m = document.getElementById('pl-modal'); m.querySelector('.modal-box').innerHTML = html; m.style.display = 'flex'; const f = m.querySelector('input:not([type=checkbox]),select'); if (f) f.focus(); }
+/* ★ ห่อเนื้อโมดัลให้อัตโนมัติ: หัวเรื่อง (h3 ตัวแรก) กับแถวปุ่ม/ข้อความ error อยู่กับที่ ที่เหลือเลื่อน
+   ทำที่นี่ที่เดียว โมดัลทุกตัวในแอปจึงได้เหมือนกันโดยไม่ต้องแก้ทีละที่ */
+function plModal(html){
+  const m = document.getElementById('pl-modal'), box = m.querySelector('.modal-box');
+  box.innerHTML = html;
+  const kids = [...box.children];
+  const head = kids.length && kids[0].tagName === 'H3' ? kids[0] : null;
+  const foot = kids.filter(el => el.classList.contains('form-actions') || el.classList.contains('err'));
+  const mid = kids.filter(el => el !== head && foot.indexOf(el) === -1);
+  if (mid.length) {
+    const body = document.createElement('div');
+    body.className = 'modal-body';
+    box.insertBefore(body, mid[0]);
+    mid.forEach(el => body.appendChild(el));
+    foot.forEach(el => box.appendChild(el));       // ปุ่มต้องอยู่ล่างสุดเสมอ แม้ html จะสลับลำดับมา
+  }
+  m.style.display = 'flex';
+  const f = m.querySelector('input:not([type=checkbox]),select'); if (f) f.focus();
+}
 function plModalClose(){ document.getElementById('pl-modal').style.display = 'none'; }
 function plModalErr(msg){ const e = document.getElementById('plm-err'); if (e) { e.textContent = msg; e.style.display = msg ? 'block' : 'none'; } }
 const plModalActions = (fn, label) => '<div class="err" id="plm-err" style="margin:12px 0 0"></div><div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button><button class="btn btn-primary" id="plm-save" onclick="'+fn+'">'+label+'</button></div>';
@@ -5468,6 +5511,104 @@ async function deleteRoleUI(code){
 /* ── ตัวเลขเงินชิดขวาอัตโนมัติ ──
    ทุกช่องตารางที่ขึ้นต้นด้วย ฿ จะถูกใส่คลาส .num ให้เอง และหัวคอลัมน์ตรงกันก็ชิดขวาตาม
    (ทำเป็น observer แทนการไล่แก้ทุก renderer — ตารางใหม่ที่เพิ่มทีหลังได้ผลเหมือนกันโดยไม่ต้องจำ) */
+/* ══════════════ กรอบหน้างาน: หัวไม่ขยับ เนื้อเลื่อน ══════════════
+   ห่อทุกอย่างที่อยู่ใต้ .view-head ไว้ใน .view-body ให้อัตโนมัติ — ไม่ต้องไปแก้ markup ของทุกหน้า
+   และหน้าใหม่ได้เองด้วย · renderer เขียนทับ innerHTML ของลูกข้างในได้ตามปกติ ตัวห่อไม่กระทบ
+   ★ ต้องกันการห่อซ้ำ: ถ้ามี .view-body อยู่แล้วให้ข้าม ไม่งั้น MutationObserver จะห่อซ้อนกันไม่รู้จบ */
+(function initViewFrames(){
+  const wrap = () => {
+    document.querySelectorAll('#content > .view').forEach(v => {
+      if (v.querySelector(':scope > .view-body')) return;
+      const kids = [...v.children].filter(el => !el.classList.contains('view-head'));
+      if (!kids.length) return;
+      const body = document.createElement('div');
+      body.className = 'view-body';
+      v.insertBefore(body, kids[0]);
+      kids.forEach(el => body.appendChild(el));
+    });
+  };
+  let timer;
+  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(wrap, 60); })
+    .observe(document.getElementById('content') || document.body, { childList: true, subtree: false });
+  wrap();
+})();
+
+/* ══════════════ ค้นหาในตาราง ══════════════
+   ช่องค้นหาอยู่ใน <thead> เอง จึงถูกตรึงไปกับหัวตาราง — เลื่อนไปแถวที่พันกว่าก็ยังพิมพ์ค้นได้
+   (ถ้าวางเป็น div เหนือตาราง มันจะเลื่อนหายไปพร้อมเนื้อหน้า)
+   ★ หน้าที่ renderer ทำช่องค้นหาไว้เองแล้ว (เช่นหน้าลูกค้า) ถูกข้าม — สองช่องในหน้าเดียวคนจะงงว่าอันไหนทำอะไร
+     และของเดิมค้นจาก "ข้อมูลทั้งชุด" ซึ่งครอบคลุมกว่าค้นจากสิ่งที่วาดอยู่บนจอ */
+(function initTableSearch(){
+  const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+  const hasOwnSearch = t => {
+    const view = t.closest('.view') || t.closest('.modal-box');
+    if (!view) return false;
+    return [...view.querySelectorAll('input')].some(i =>
+      i.closest('table') !== t && /ค้นหา/.test(i.getAttribute('placeholder') || ''));
+  };
+  const usable = t => {
+    if (t.closest('.docsheet')) return false;
+    const head = t.tHead && t.tHead.rows[0];
+    if (!head || !t.tBodies[0]) return false;
+    if ([...t.tBodies[0].rows].some(r => [...r.cells].some(c => c.rowSpan > 1))) return false;  // เซลล์ผสาน ซ่อนแถวแล้วเพี้ยน
+    return true;
+  };
+
+  const filter = t => {
+    const inp = t.querySelector('.tbl-search');
+    if (!inp) return;
+    const q = norm(inp.value);
+    const rows = [...t.tBodies[0].rows].filter(r => !r.classList.contains('empty-row'));
+    let hit = 0;
+    rows.forEach(r => {
+      const show = !q || norm(r.innerText).indexOf(q) !== -1;
+      r.style.display = show ? '' : 'none';
+      if (show) hit++;
+    });
+    const tag = t.querySelector('.tbl-hits');
+    if (tag) tag.textContent = q ? ('พบ ' + hit + ' จาก ' + rows.length + ' รายการ') : '';
+    // ท้ายตารางบอกจำนวนที่แสดงอยู่จริง ไม่ใช่จำนวนทั้งหมด ตอนกำลังกรอง
+    const foot = t.tFoot && t.tFoot.rows[0] && t.tFoot.rows[0].cells[0];
+    if (foot) {
+      const text = q ? ('แสดง ' + hit + ' จาก ' + rows.length + ' รายการ')
+                     : (rows.length ? 'ทั้งหมด ' + rows.length.toLocaleString('en-US') + ' รายการ' : '\u2014');
+      if (foot.textContent !== text) foot.textContent = text;
+    }
+  };
+
+  const ensure = t => {
+    const head = t.tHead;
+    const cols = [...head.rows[0].cells].reduce((n, c) => n + (c.colSpan || 1), 0);
+    let row = head.querySelector('.tbl-search-row');
+    if (!row) {
+      row = head.insertRow(0);
+      row.className = 'tbl-search-row';
+      const th = document.createElement('th');
+      th.innerHTML = '<span class="tbl-search-box"><input class="tbl-search" type="search" placeholder="ค้นหาในตาราง…">' +
+        '<span class="tbl-hits"></span></span>';
+      row.appendChild(th);
+      th.querySelector('input').addEventListener('input', () => filter(t));
+    }
+    const th = row.cells[0];
+    if (Number(th.colSpan) !== cols) th.colSpan = cols;
+    // แถวค้นหาอยู่บนสุด (top:0) หัวคอลัมน์ต้องเลื่อนลงมาเท่าความสูงของแถวค้นหา ไม่งั้นทับกัน
+    const h = row.getBoundingClientRect().height;
+    const cells = head.rows[1] ? [...head.rows[1].cells] : [];
+    cells.forEach(c => { const v = h ? h + 'px' : '0'; if (c.style.top !== v) c.style.top = v; });
+    filter(t);
+  };
+
+  const all = () => document.querySelectorAll('.table-wrap > table').forEach(t => {
+    if (!usable(t) || hasOwnSearch(t)) return;
+    ensure(t);
+  });
+  let timer;
+  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(all, 60); })
+    .observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('resize', () => { clearTimeout(timer); timer = setTimeout(all, 120); });
+  all();
+})();
+
 /* ══════════════ กดชื่อคอลัมน์เพื่อเรียงข้อมูล ══════════════
    ทำเป็นตัวกลางเหมือน initMoneyAlign()/initTableFooters() ตารางทุกหน้าจึงเรียงได้โดยไม่ต้องแก้ renderer
    (ก่อนหน้านี้มีแค่ตารางสินค้าที่เรียงได้ และเขียนไว้ใน renderer ของมันเอง)
@@ -5479,6 +5620,7 @@ async function deleteRoleUI(code){
      ไว้ในบรรทัดเดียว สลับแถวแล้วราคาจะไปอยู่ผิดสินค้า) และตารางที่ renderer ทำปุ่มเรียงเองอยู่แล้ว */
 (function initTableSort(){
   const STATE = {};                                    // คีย์ตาราง → { col, dir }
+  const headRow = t => (t.tHead && [...t.tHead.rows].find(r => !r.classList.contains('tbl-search-row'))) || null;
   const keyOf = t => (t.tBodies[0] && t.tBodies[0].id) || (t.closest('.view') && t.closest('.view').id) ||
                      (t.closest('[id]') && t.closest('[id]').id) || '';
   const dataRows = t => [...(t.tBodies[0] ? t.tBodies[0].rows : [])]
@@ -5486,7 +5628,7 @@ async function deleteRoleUI(code){
 
   const sortable = t => {
     if (t.closest('.docsheet')) return false;
-    const head = t.tHead && t.tHead.rows[0];
+    const head = headRow(t);
     if (!head) return false;
     if ([...head.cells].some(c => c.getAttribute('onclick'))) return false;   // renderer มีตัวเรียงของตัวเอง
     if (!t.tBodies[0]) return false;
@@ -5519,7 +5661,7 @@ async function deleteRoleUI(code){
 
   const apply = t => {
     const st = STATE[keyOf(t)];
-    const head = t.tHead && t.tHead.rows[0];
+    const head = headRow(t);
     if (!head) return;
     [...head.cells].forEach((th, i) => {
       const can = sortable(t) && (th.innerText || '').trim() !== '';
@@ -5540,7 +5682,7 @@ async function deleteRoleUI(code){
 
   document.addEventListener('click', e => {
     const th = e.target.closest && e.target.closest('.table-wrap thead th');
-    if (!th) return;
+    if (!th || th.closest('.tbl-search-row')) return;
     const t = th.closest('table');
     if (!t || !sortable(t) || (th.innerText || '').trim() === '') return;
     const k = keyOf(t), i = th.cellIndex, cur = STATE[k];
@@ -5563,10 +5705,11 @@ async function deleteRoleUI(code){
     // ทุกตารางที่อยู่ในกรอบเลื่อน รวมตารางในโมดัลด้วย — ยกเว้นเอกสารสำหรับพิมพ์ ซึ่งมีท้ายกระดาษของตัวเอง
     document.querySelectorAll('.table-wrap > table').forEach(t => {
       if (t.closest('.docsheet')) return;
-      const head = t.tHead && t.tHead.rows[0];
+      const head = [...(t.tHead ? t.tHead.rows : [])].find(r => !r.classList.contains('tbl-search-row'));
       if (!head) return;
       const body = t.tBodies[0];
       if (!body) return;
+      if (t.querySelector('.tbl-search') && String(t.querySelector('.tbl-search').value).trim()) return;  // กำลังกรองอยู่ ให้ตัวกรองเป็นคนเขียนท้ายตาราง
       const rows = [...body.rows].filter(r => !r.classList.contains('empty-row'));
       const cols = [...head.cells].reduce((n, c) => n + (c.colSpan || 1), 0);
       let foot = t.tFoot;
