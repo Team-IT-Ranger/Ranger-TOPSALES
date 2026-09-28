@@ -169,7 +169,7 @@ function listTenants(session) {
       tenantId: t.tenant_id, name: t.name, region: t.region, isActive: isFlagOn(t.is_active), isHouse: isFlagOn(t.is_house),
       sheetUrl: 'https://docs.google.com/spreadsheets/d/' + t.sheet_file_id,
       address: t.address || '', taxId: t.tax_id || '', branchCode: t.branch_code || '',
-      phone: t.phone || '', email: t.email || '', logoUrl: t.logo_url || ''
+      phone: t.phone || '', email: t.email || '', logoUrl: t.logo_url || '', customerAccount: t.customer_account || ''
     };
   }) };
 }
@@ -192,7 +192,8 @@ function getTenantProfile(session, payload) {
         tenantId: t.tenant_id, name: t.name, region: t.region,
         address: t.address || '', taxId: t.tax_id || '', branchCode: t.branch_code || '',
         phone: t.phone || '', email: t.email || '', logoUrl: t.logo_url || '',
-        bankName: t.bank_name || '', bankAccountNo: t.bank_account_no || '', bankAccountName: t.bank_account_name || ''
+        bankName: t.bank_name || '', bankAccountNo: t.bank_account_no || '', bankAccountName: t.bank_account_name || '',
+        customerAccount: t.customer_account || ''
       } };
     }
   }
@@ -213,7 +214,8 @@ function updateTenantProfile(session, payload) {
       var fields = {
         name: payload.name, region: payload.region, address: payload.address, tax_id: payload.taxId,
         branch_code: payload.branchCode, phone: payload.phone, email: payload.email,
-        bank_name: payload.bankName, bank_account_no: payload.bankAccountNo, bank_account_name: payload.bankAccountName
+        bank_name: payload.bankName, bank_account_no: payload.bankAccountNo, bank_account_name: payload.bankAccountName,
+        customer_account: payload.customerAccount
       };
       Object.keys(fields).forEach(function(key) {
         if (fields[key] === undefined) return;

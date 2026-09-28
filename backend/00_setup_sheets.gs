@@ -19,7 +19,8 @@ var CENTRAL_SHEETS = {
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at','line_user_id'],
   tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at',
     'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name',
-    'is_house'],  // TRUE บนแถวเดียว = "ตัวแทนบ้าน" ของบริษัทเจ้าของสินค้าเอง ใช้เก็บยอดขายตรงที่ไม่ผ่านตัวแทนจำหน่าย (ดู _ensureHouseTenant ใน 13_tenants.gs)
+    'is_house',   // TRUE บนแถวเดียว = "ตัวแทนบ้าน" ของบริษัทเจ้าของสินค้าเอง ใช้เก็บยอดขายตรงที่ไม่ผ่านตัวแทนจำหน่าย (ดู _ensureHouseTenant ใน 13_tenants.gs)
+    'customer_account'],  // รหัสลูกค้าของตัวแทนรายนี้ในระบบ D365 (Customer account) — เก็บไว้เผื่อเชื่อมข้อมูลกับ D365 ในอนาคต ไม่มีโค้ดฝั่งเราอ่านค่านี้ไปคำนวณอะไรเลย
 
   // product_code: รหัสประจำตัวสินค้า (เหมือนเลขบัตรประชาชนของสินค้า) — unique บังคับ, สำคัญอันดับ 1
   //   ผู้ใช้ตั้งเอง/แก้เองได้ ไม่ใช่ FK ไปหาอะไร คนละความหมายกับ external_code (รหัสจากไฟล์นำเข้า Express
