@@ -205,6 +205,11 @@ function isFlagOff(v) {
 }
 function isNotOff(v) { return !isFlagOff(v); }
 
+// ป้ายตำแหน่งของพนักงานแอปมือถือ — ใช้บันทึกลง log ประวัติ (guide ข้อ 1.6) เท่านั้น ไม่ใช่แหล่งความจริงของสิทธิ์
+// (สิทธิ์จริงยังคุมด้วย liff_users.role ตรงๆ ที่จุดใช้งาน) รหัสที่ยังไม่มีป้ายไว้ให้ คืนรหัสดิบกลับไปแทน
+var MOBILE_ROLE_LABELS = { van_sales: 'หน่วยรถ (Cash Van)', credit_sales: 'เครดิตเซลส์' };
+function _mobileRoleLabel(role) { return MOBILE_ROLE_LABELS[role] || String(role || ''); }
+
 /**
  * แก้บางคอลัมน์ของ "หลายแถวพร้อมกัน" ด้วย setValues คอลัมน์ละครั้ง
  * ทำไมต้องมี: centralUpdate แก้ทีละแถว = 1 การเขียนต่อแถว · จัดกลุ่มลูกค้า 2,000 ร้านจะชน

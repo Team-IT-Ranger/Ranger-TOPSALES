@@ -19,6 +19,13 @@ function _roleByCode(code) {
   for (var i = 0; i < rows.length; i++) if (String(rows[i].role_code) === String(code)) return rows[i];
   return null;
 }
+// ป้ายตำแหน่งของแอดมินที่กำลังเรียก ณ ตอนนี้ — ใช้บันทึกลง log ประวัติ (guide ข้อ 1.6) ไม่ใช่แค่เก็บ role_code ดิบ
+// เพราะบทบาทแก้ป้ายได้ทีหลัง (เปลี่ยนชื่อบทบาท) แถวประวัติเก่าจึงต้องมีป้ายที่เห็น ณ ตอนนั้นติดไปด้วย
+function _adminRoleLabel(session) {
+  if (!session) return '';
+  var role = _roleByCode(session.role_code);
+  return role ? (role.role_label || session.role_code) : (session.role_code || '');
+}
 function _moduleCodes() { return MODULE_REGISTRY.map(function(m) { return m.code; }); }
 
 // สิทธิ์ของ "ผู้ที่กำลังเรียก" ในรูป { module: {view, edit} } — super_admin ได้ทุกโมดูล

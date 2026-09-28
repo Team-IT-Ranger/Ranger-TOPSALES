@@ -128,13 +128,15 @@ function _soStatusOf(order) {
   return SO_STATUS_LABELS[s] ? s : SO_PENDING;
 }
 
-/** เขียนประวัติหนึ่งบรรทัด — เรียกทุกครั้งที่สถานะขยับ (รวมตอนเปิดบิลและตอนยกเลิก) */
-function logOrderStatus(tenantId, orderId, from, to, fromPay, toPay, note, by) {
+/** เขียนประวัติหนึ่งบรรทัด — เรียกทุกครั้งที่สถานะขยับ (รวมตอนเปิดบิลและตอนยกเลิก)
+ *  by/byRole = ชื่อและตำแหน่งของคนลงมือ ณ เวลานั้น (guide ข้อ 1.6) — ผู้เรียกต้องส่งมาให้ครบ
+ *  ไม่ไปเปิดหาเองที่นี่ เพราะ "ตำแหน่ง" มาจากคนละที่กันระหว่างฝั่งมือถือ (liff_users.role) กับฝั่งแอดมิน (roles.role_label) */
+function logOrderStatus(tenantId, orderId, from, to, fromPay, toPay, note, by, byRole) {
   try {
     tenantAppend(tenantId, 'order_status_log', {
       record_id: tenantNextId(tenantId, 'order_status_log'), order_id: orderId,
       from_status: from || '', to_status: to || '', from_payment: fromPay || '', to_payment: toPay || '',
-      note: String(note || ''), changed_by: String(by || ''), changed_at: nowStr()
+      note: String(note || ''), changed_by: String(by || ''), changed_by_role: String(byRole || ''), changed_at: nowStr()
     });
   } catch (e) {
     Logger.log('logOrderStatus: ' + e);   // ประวัติเขียนไม่ได้ ไม่ควรทำให้การเปลี่ยนสถานะล้มทั้งรายการ
@@ -152,7 +154,7 @@ function orderStatusLog(tenantId, orderId) {
       fromLabel: SO_STATUS_LABELS[r.from_status] || r.from_status || '',
       toLabel: SO_STATUS_LABELS[r.to_status] || r.to_status || '',
       fromPaymentLabel: SO_PAYMENT_LABELS[r.from_payment] || '', toPaymentLabel: SO_PAYMENT_LABELS[r.to_payment] || '',
-      note: r.note || '', by: r.changed_by || '', at: safeDateStr(r.changed_at)
+      note: r.note || '', by: r.changed_by || '', byRole: r.changed_by_role || '', at: safeDateStr(r.changed_at)
     }; });
 }
 
@@ -247,7 +249,7 @@ function updateSalesOrderStatus(session, payload) {
     if (!_updateOrderRow(tenantId, order.record_id, fields)) return { success: false, message: 'บันทึกไม่สำเร็จ (ไม่พบแถวในชีต)' };
 
     logOrderStatus(tenantId, order.record_id, fromStatus, toStatus, fromPay, toPay, payload.note,
-      session.displayName || session.username);
+      session.displayName || session.username, _adminRoleLabel(session));
 
     return { success: true, status: toStatus, statusLabel: SO_STATUS_LABELS[toStatus],
       paymentStatus: toPay, paymentLabel: SO_PAYMENT_LABELS[toPay],

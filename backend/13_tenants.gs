@@ -28,7 +28,9 @@ var TENANT_SHEET_TABS = {
   visit_notes:         ['record_id','visit_id','note','created_at'],
   competitor_logs:     ['record_id','visit_id','customer_id','brand','product','price','created_at'],
   // ประวัติการเปลี่ยนสถานะบิลขาย — ไม่ลบ ไม่ทับ (หลักเดียวกับ pr_approvals ของงานซื้อ) ใช้สอบกลับว่าใครเปลี่ยนอะไรเมื่อไหร่
-  order_status_log:    ['record_id','order_id','from_status','to_status','from_payment','to_payment','note','changed_by','changed_at'],
+  // changed_by/changed_by_role เก็บ "ชื่อและตำแหน่ง ณ เวลานั้น" ตรงๆ ในแถว (guide ข้อ 1.6) ไม่ใช่แค่รหัสอ้างอิง
+  // เพราะคนเปลี่ยนชื่อได้ ย้ายแผนกได้ ลาออกได้ — หลักฐานประวัติต้องคงสภาพเดิมแม้ข้อมูลปัจจุบันของคนนั้นเปลี่ยนไปแล้ว
+  order_status_log:    ['record_id','order_id','from_status','to_status','from_payment','to_payment','note','changed_by','changed_by_role','changed_at'],
   doc_number_series:   ['record_id','doc_type','prefix','date_format','running_digits','reset_cycle','separator','is_active'],
   doc_number_counters: ['doc_type','period_key','last_number']
 };

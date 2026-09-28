@@ -63,6 +63,8 @@ const ctx = {
   },
   _requirePermission: () => null,
   _salesTenantId: (session, payload) => session.tenant_id || (payload && payload.tenantId) || null,
+  // จำลอง 26_roles.gs::_adminRoleLabel (ไม่โหลดทั้งไฟล์ — ไฟล์นี้ต้องมีแค่ _withDocLock กับ 34_sales_status.gs เอง)
+  _adminRoleLabel: session => 'แอดมิน (' + (session && session.role_code || '') + ')',
   centralObjects: name => (name === 'products'
     ? [{ record_id: 101, name: 'น้ำยาล้างจาน' }, { record_id: 102, name: 'ผงซักฟอก' }] : [])
 };
@@ -100,8 +102,9 @@ eq('บิลเก่าที่ไม่มีคอลัมน์ payment_s
 console.log('\n── เดินสถานะการส่งของตามลำดับงานจริง ──');
 let r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'delivering' });
 eq('รอจัดส่ง → กำลังจัดส่ง', [r.success, row(1).status], [true, 'delivering']);
-eq('  บันทึกประวัติไว้ 1 บรรทัด พร้อมชื่อคนเปลี่ยน', (() => { const l = logs(1); return [l.length, l[0].from_status, l[0].to_status, l[0].changed_by]; })(),
-  [1, 'pending_delivery', 'delivering', 'แอดมินบริษัท']);
+eq('  บันทึกประวัติไว้ 1 บรรทัด พร้อมชื่อและตำแหน่งคนเปลี่ยน (guide 1.6)', (() => { const l = logs(1);
+  return [l.length, l[0].from_status, l[0].to_status, l[0].changed_by, l[0].changed_by_role]; })(),
+  [1, 'pending_delivery', 'delivering', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
 r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'completed' });
 eq('กำลังจัดส่ง → ส่งของแล้ว และประทับเวลาส่ง', [r.success, row(1).status, row(1).delivered_at], [true, 'completed', '2026-09-26 12:00:00']);
 eq('  ข้อความที่ตอบกลับบอกสิ่งที่เปลี่ยนจริง', r.message, 'กำลังจัดส่ง → ส่งของแล้ว');
@@ -137,8 +140,8 @@ eq('ส่งของแล้ว + ยังไม่ชำระ', [row(1).st
 eq('  ประวัติบรรทัดเดียวเก็บทั้งสองแกน พร้อมหมายเหตุ', (() => { const l = logs(1).slice(-1)[0];
   return [logs(1).length - before, l.to_status, l.to_payment, l.note]; })(),
   [1, 'completed', 'unpaid', 'ส่งของแล้วแต่ยังไม่ได้เก็บเงิน']);
-eq('ประวัติที่ส่งให้หน้าเว็บมีป้ายภาษาไทยมาแล้ว', (() => { const h = ctx.orderStatusLog('T1', 1).slice(-1)[0];
-  return [h.toLabel, h.toPaymentLabel, h.by]; })(), ['ส่งของแล้ว', 'ยังไม่ชำระ', 'แอดมินบริษัท']);
+eq('ประวัติที่ส่งให้หน้าเว็บมีป้ายภาษาไทยมาแล้ว พร้อมตำแหน่งคนเปลี่ยน', (() => { const h = ctx.orderStatusLog('T1', 1).slice(-1)[0];
+  return [h.toLabel, h.toPaymentLabel, h.by, h.byRole]; })(), ['ส่งของแล้ว', 'ยังไม่ชำระ', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
 
 console.log('\n── ป้ายและเส้นทางที่ส่งให้หน้าเว็บ ──');
 console.log('\n== จุดตัดสต็อก: office_delivery ตัดตอน "กำลังจัดส่ง" ==');

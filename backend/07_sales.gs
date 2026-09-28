@@ -164,7 +164,8 @@ function recordSale(user, payload) {
     map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt
   });
   logOrderStatus(user.tenantId, orderId, '', fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
-    '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอปมือถือ', user.displayName || user.lineUserId);
+    '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอปมือถือ',
+    user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
 
   bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
   touchCustomerLastSale(payload.customerId, createdAt);                       // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)

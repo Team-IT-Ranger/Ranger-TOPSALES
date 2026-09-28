@@ -213,7 +213,8 @@ function recordSaleAdmin(session, payload) {
     sale_by: saleBy, lat: '', lng: '', map: '', note: noteParts.join(' · '), created_at: createdAt
   });
   logOrderStatus(tenantId, orderId, '', fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
-    '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอดมิน', session.displayName || session.username);
+    '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอดมิน',
+    session.displayName || session.username, _adminRoleLabel(session));
 
   bumpSalesDaily(tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
   touchCustomerLastSale(payload.customerId, createdAt);                  // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
@@ -301,6 +302,6 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
   }
   bumpSalesDaily(tenantId, _dOnly(order.created_at), -1, -(parseFloat(order.total) || 0));   // หักออกจากยอดสรุปรายวัน
   logOrderStatus(tenantId, order.record_id, String(order.status || ''), 'cancelled', orderPaymentStatus(order), orderPaymentStatus(order),
-    String(payload.note || 'ยกเลิกบิล'), session.displayName || session.username);
+    String(payload.note || 'ยกเลิกบิล'), session.displayName || session.username, _adminRoleLabel(session));
   return { success: true };
 }
