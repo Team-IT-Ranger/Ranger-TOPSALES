@@ -5583,7 +5583,14 @@ async function deleteRoleUI(code){
 
   const ensure = t => {
     const head = t.tHead;
-    const cols = [...head.rows[0].cells].reduce((n, c) => n + (c.colSpan || 1), 0);
+    /* ★ ต้องนับคอลัมน์จาก "แถวหัวคอลัมน์จริง" ไม่ใช่ head.rows[0] — พอแทรกแถวค้นหาไปแล้ว
+       rows[0] กลายเป็นแถวค้นหาเอง นับได้ 1 ช่องแล้วตั้ง colspan = 1 ช่องค้นหาจึงกว้างแค่คอลัมน์เดียว
+       ที่เหลือโปร่ง แถวข้อมูลเลื่อนทะลุขึ้นมาเห็นซ้อนหัวตาราง (อาการที่เจอบน /admin-uat/ 28 ก.ย. 2026) */
+    const colRow = [...head.rows].find(r => !r.classList.contains('tbl-search-row'));
+    const cols = colRow ? [...colRow.cells].reduce((n, c) => n + (c.colSpan || 1), 0) : 0;
+    /* ★ หัวคอลัมน์ยังว่างอยู่ (renderer ยังไม่ได้เติม) = ยังไม่รู้ว่ากี่คอลัมน์ — อย่าเพิ่งตั้ง
+       ตั้งตอนนี้จะได้ colspan 0 ซึ่งเบราว์เซอร์ปัดเป็น 1 แล้วค้างผิดอยู่อย่างนั้น */
+    if (!cols) return;
     let row = head.querySelector('.tbl-search-row');
     if (!row) {
       row = head.insertRow(0);
@@ -5717,6 +5724,7 @@ async function deleteRoleUI(code){
       if (t.querySelector('.tbl-search') && String(t.querySelector('.tbl-search').value).trim()) return;  // กำลังกรองอยู่ ให้ตัวกรองเป็นคนเขียนท้ายตาราง
       const rows = [...body.rows].filter(r => !r.classList.contains('empty-row'));
       const cols = [...head.cells].reduce((n, c) => n + (c.colSpan || 1), 0);
+      if (!cols) return;                         // หัวคอลัมน์ยังไม่ถูกเติม — colspan 0 จะค้างเป็น 1
       let foot = t.tFoot;
       if (!foot) { foot = t.createTFoot(); foot.insertRow().insertCell(); }
       const cell = foot.rows[0] && foot.rows[0].cells[0];
