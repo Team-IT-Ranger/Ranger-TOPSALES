@@ -1437,11 +1437,13 @@
 
         <section class="view" id="view-warehousestock">
           <div class="view-head">
-            <div><h1>ยอดคงเหลือในคลัง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p></div>
+            <div><h1>ยอดคงเหลือในคลัง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p>
+              <p class="form-hint"><b>คงเหลือ</b> = ของที่มีอยู่จริงในคลัง · <b>จองแล้ว</b> = ถูกบิลที่ยังไม่ถึงคิวตัดสต็อกกันไว้
+                · <b>ขายได้</b> = คงเหลือ − จองแล้ว คือตัวที่ใช้ตัดสินว่ารับออร์เดอร์เพิ่มได้อีกเท่าไร</p></div>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>สินค้า</th><th>คลัง</th><th>คงเหลือ</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
-            <tbody id="ws-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>คลัง</th><th>คงเหลือ</th><th>จองแล้ว</th><th>ขายได้</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
+            <tbody id="ws-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card" id="ws-ledger-card" style="display:none"><h3 id="ws-ledger-title">ความเคลื่อนไหว</h3><div id="ws-ledger"></div></div>
         </section>
@@ -5527,18 +5529,40 @@ async function billFromGrList(grId){
   if (!r.success) { toast(r.message, true); return; }
   apCache = []; toast(r.message); loadGoodsReceipts();
 }
+let wsCache = [];
 async function loadWarehouseStock(){
   const body = document.getElementById('ws-body');
-  tblLoading(body, 8);
+  if (!wsCache.length) wsCache = listSnapLoad('warehousestock') || [];
+  if (wsCache.length) renderWarehouseStock(); else tblLoading(body, 10);
   const r = await callApi('listWarehouseStock', { nonZeroOnly: false });
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
-  document.getElementById('ws-summary').innerHTML = 'มูลค่าสินค้าคงเหลือรวม <b>฿'+bahtPlain(r.totalValue)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก) — ตรงกับบัญชีสินค้าคงเหลือ 1300';
-  body.innerHTML = rowsOrEmpty(r.data.map(s =>
-    '<tr><td class="mono-data">'+dash(s.productCode)+'</td><td>'+esc(s.productName)+'</td><td>'+esc(s.warehouseName)+'</td>' +
-    '<td class="mono-data">'+s.qty+'</td><td>'+esc(s.unit)+'</td><td class="mono-data">฿'+bahtPlain(s.avgCost)+'</td>' +
-    '<td class="mono-data">฿'+bahtPlain(s.value)+'</td>' +
-    '<td><button class="btn btn-sm" onclick="showLedger('+s.productId+',\''+esc(s.productName)+'\')">ความเคลื่อนไหว</button></td></tr>').join(''),
-    8, 'ยังไม่มีสินค้าในคลัง — รับของจากใบสั่งซื้อก่อน');
+  if (!r.success) { if (!wsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
+  wsCache = r.data;
+  listSnapSave('warehousestock', wsCache);
+  renderWarehouseStock();
+}
+/* ★ ยอดรวมคิดจากแถวเอง ไม่ได้เก็บ totalValue ที่ backend ส่งมา — เป็นการบวกชุดเดียวกันเป๊ะ
+   (backend ก็บวก r.value ของทุกแถว) แต่ทำแบบนี้แล้วหน้าที่กู้จาก snapshot ได้ยอดรวมถูกด้วย
+   ถ้าเก็บเลขที่ส่งมาแทน พอเปิดแอปใหม่จะมีตารางแต่ยอดรวมหาย */
+function renderWarehouseStock(){
+  const total = wsCache.reduce((s, x) => s + (Number(x.value) || 0), 0);
+  document.getElementById('ws-summary').innerHTML = 'มูลค่าสินค้าคงเหลือรวม <b>฿'+bahtPlain(total)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก) — ตรงกับบัญชีสินค้าคงเหลือ 1300';
+  document.getElementById('ws-body').innerHTML = rowsOrEmpty(wsCache.map(s => {
+    const qty = Number(s.qty) || 0, rsv = Number(s.reserved) || 0;
+    // available มาจาก backend ไม่ได้คิดเองซ้ำ — คิดสองที่แล้ววันหนึ่งนิยามขยับ จะได้เลขคนละตัวโดยไม่มีใครรู้
+    const avail = Number(s.available) || 0;
+    /* ★ ของที่ถูกจองไว้คือต้นเหตุคลาสสิกของการขายเกิน: ตาราง "คงเหลือ 100" แต่รับเพิ่มได้จริงแค่ 20
+       จึงทำให้ตาเห็นความต่าง — จองแล้วเป็นตัวหนา และขายได้เปลี่ยนสีเมื่อไม่เท่าคงเหลือ
+       ขายได้ติดลบ = จองเกินของที่มี (ของถูกตัดไปทางอื่นหลังจองแล้ว) ต้องเห็นชัดที่สุด */
+    const availCell = avail < 0 ? '<span class="pill off">'+avail+'</span>'
+      : (rsv > 0 ? '<span class="pill wait">'+avail+'</span>' : String(avail));
+    return '<tr><td class="mono-data">'+dash(s.productCode)+'</td><td>'+esc(s.productName)+'</td><td>'+esc(s.warehouseName)+'</td>' +
+      '<td class="mono-data">'+qty+'</td>' +
+      '<td class="mono-data">'+(rsv ? '<b>'+rsv+'</b>' : '—')+'</td>' +
+      '<td class="mono-data">'+availCell+'</td>' +
+      '<td>'+esc(s.unit)+'</td><td class="mono-data">฿'+bahtPlain(s.avgCost)+'</td>' +
+      '<td class="mono-data">฿'+bahtPlain(s.value)+'</td>' +
+      '<td><button class="btn btn-sm" onclick="showLedger('+s.productId+',\''+esc(s.productName)+'\')">ความเคลื่อนไหว</button></td></tr>';
+  }).join(''), 10, 'ยังไม่มีสินค้าในคลัง — รับของจากใบสั่งซื้อก่อน');
 }
 async function showLedger(productId, name){
   const card = document.getElementById('ws-ledger-card');
