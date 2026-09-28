@@ -133,24 +133,28 @@ function recordSale(user, payload) {
   (payload.freeGoods || []).forEach(function(f) { if (f.applied === false) requestedFreeOff[String(f.ruleId) + '_' + String(f.productId)] = true; });
   var freeGoods = calc.freeGoods.filter(function(f) { return !requestedFreeOff[String(f.ruleId) + '_' + String(f.productId)]; });
 
-  // เช็คสต็อกรถพอไหม (เฉพาะกรณีตัดสต็อกทันที)
+  // สินค้าที่ไม่ตัดสต็อก (is_stock = FALSE เช่น ค่าบริการ/ค่าขนส่ง) ข้ามไปเลย ไม่ต้องกันของ/เช็คว่ามีพอไหม
+  var need = {};
+  items.forEach(function(it) { if (isStockProduct(productMap[String(it.productId)])) need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
+  // ของแถมตัดสต็อกด้วยหน่วยฐานเสมอ — f.qty อาจเป็น "ลัง" ถ้าใช้ f.qty ตรงๆ จะตัดสต็อกน้อยไปเป็นร้อยเท่า
+  freeGoods.forEach(function(f) { if (isStockProduct(productMap[String(f.productId)])) need[String(f.productId)] = (need[String(f.productId)] || 0) + (Number(f.baseQty) || Number(f.qty) || 0); });
+
+  var stockCheck = { success: true };
   if (fulfillmentType === 'immediate') {
     var allStock = tenantObjects(user.tenantId, 'van_stock');
     var myStock = {};
     allStock.filter(function(s) { return String(s.line_user_id) === String(user.lineUserId); })
       .forEach(function(s) { myStock[String(s.product_id)] = parseInt(s.qty) || 0; });
 
-    // สินค้าที่ไม่ตัดสต็อก (is_stock = FALSE เช่น ค่าบริการ/ค่าขนส่ง) ข้ามไปเลย ไม่ต้องเช็คว่ามีของพอไหม
-    var need = {};
-    items.forEach(function(it) { if (isStockProduct(productMap[String(it.productId)])) need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
-    // ของแถมตัดสต็อกด้วยหน่วยฐานเสมอ — f.qty อาจเป็น "ลัง" ถ้าใช้ f.qty ตรงๆ จะตัดสต็อกน้อยไปเป็นร้อยเท่า
-    freeGoods.forEach(function(f) { if (isStockProduct(productMap[String(f.productId)])) need[String(f.productId)] = (need[String(f.productId)] || 0) + (Number(f.baseQty) || Number(f.qty) || 0); });
-
     var pids = Object.keys(need);
     for (var ci = 0; ci < pids.length; ci++) {
       var have = myStock[pids[ci]] || 0;
       if (have < need[pids[ci]]) return { success: false, message: 'สต็อกรถไม่พอ (สินค้า ' + pids[ci] + ' มี ' + have + ')' };
     }
+  } else {
+    // office_delivery: กันของไว้ตั้งแต่เปิดบิล (ยอดจอง — guide ข้อ 1.3) เหตุผลเดียวกับ recordSaleAdmin (19_sales_admin.gs)
+    stockCheck = checkOfficeDeliveryStock(user.tenantId, need);
+    if (!stockCheck.success) return stockCheck;
   }
 
   var orderCode = getNextDocNumber(user.tenantId, 'SO');
@@ -199,6 +203,8 @@ function recordSale(user, payload) {
 
   if (fulfillmentType === 'immediate') {
     _cutVanStock(user.tenantId, user.lineUserId, need, orderId);
+  } else {
+    reserveStockForSale(user.tenantId, stockCheck.warehouseId, need, orderId);
   }
 
   // ล็อก product_code ของสินค้าที่เพิ่งขายจริง กัน admin เปลี่ยนรหัสย้อนหลังจนเอกสาร/รายงานเก่าอ้างรหัสผิดของ

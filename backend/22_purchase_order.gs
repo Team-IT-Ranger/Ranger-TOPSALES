@@ -402,14 +402,18 @@ function listWarehouseStock(session, payload) {
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
   var warehouses = {};
   centralObjects('warehouses').forEach(function(w) { warehouses[String(w.record_id)] = w.name; });
-  var rows = _scoped('warehouse_stock', _purchaseScope(session, payload));
+  var scope = _purchaseScope(session, payload);
+  var rows = _scoped('warehouse_stock', scope);
   if (payload.warehouseId) rows = rows.filter(function(r) { return String(r.warehouse_id) === String(payload.warehouseId); });
   var out = rows.map(function(r) {
     var p = products[String(r.product_id)];
     var qty = Number(r.qty) || 0, cost = Number(r.avg_cost) || 0;
+    // reserved/available = ยอดจอง (guide ข้อ 1.3, 34_sales_status.gs) — บิล office_delivery ที่ยังไม่ถึงจุดตัดสต็อกจริง
+    // กันของไว้แล้ว "ขายได้จริง" จึงน้อยกว่า qty (on-hand) ถ้ามีใครจองไว้ก่อน
+    var reserved = _reservedQty(scope, r.warehouse_id, r.product_id);
     return { warehouseId: r.warehouse_id, warehouseName: warehouses[String(r.warehouse_id)] || '', productId: r.product_id,
       productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)', unit: p ? (p.unit || 'ชิ้น') : '',
-      qty: qty, avgCost: cost, value: _money(qty * cost), updatedAt: safeDateStr(r.updated_at) };
+      qty: qty, reserved: reserved, available: qty - reserved, avgCost: cost, value: _money(qty * cost), updatedAt: safeDateStr(r.updated_at) };
   });
   if (payload.nonZeroOnly) out = out.filter(function(r) { return r.qty !== 0; });
   out.sort(function(a, b) { return String(a.productCode).localeCompare(String(b.productCode)); });
