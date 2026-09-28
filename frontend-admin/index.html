@@ -1843,13 +1843,27 @@ function listSnapDrop(name){
 }
 function listSnapSave(name, rows){
   const key = snapKey() + '|' + name;
+  let all;
   try {
-    const all = _listsAll();
+    all = _listsAll();
     if (JSON.stringify(rows || []).length > LIST_SNAP_MAX) delete all[key];
     else all[key] = { ts: Date.now(), rows: rows };
-    localStorage.setItem(LS_LISTS, JSON.stringify(all));
-  } catch (e) {
-    try { localStorage.removeItem(LS_LISTS); } catch (e2) { /* ไม่มีที่เก็บ — แอปยังทำงานได้ แค่ไม่จำ */ }
+  } catch (e) { return; }
+  /* โควตาเต็ม = ทิ้งรายการที่เก่าที่สุดทีละตัวแล้วลองใหม่ ไม่ใช่ล้างทั้งก้อน
+     (ล้างทั้งก้อน = หน้าที่เล็กและไม่เคยเป็นปัญหาโดนลบไปด้วย รอบหน้าเริ่มจากศูนย์พร้อมกันหมด)
+     ★ ต้องเขียน "ก้อนที่มีของใหม่อยู่แล้ว" ซ้ำทุกรอบ — เคยเขียนผิดเป็นอ่านก้อนเดิมมาใหม่ในทาง catch
+       ผลคือกู้ที่ว่างได้จริงแต่เขียนกลับเป็นก้อนเก่า ของที่เพิ่งโหลดมาหายเงียบ (เทสต์ในเบราว์เซอร์จับได้) */
+  const others = Object.keys(all).filter(k => k !== key)
+    .sort((a, b) => (all[a].ts || 0) - (all[b].ts || 0));
+  for (;;) {
+    try { localStorage.setItem(LS_LISTS, JSON.stringify(all)); return; }
+    catch (e) {
+      if (!others.length) {   // ทิ้งหมดแล้วยังไม่พอ — ยอมแพ้ แอปทำงานได้ แค่ไม่จำ
+        try { localStorage.removeItem(LS_LISTS); } catch (e2) {}
+        return;
+      }
+      delete all[others.shift()];
+    }
   }
 }
 /* เอาผลจาก getAdminBootstrap (หรือ snapshot) ไปใส่สถานะแอปแล้ววาดใหม่
@@ -2337,10 +2351,12 @@ function renderStaffTable(){
 }
 async function loadStaff(){
   const body = document.getElementById('staff-body');
-  tblLoading(body, 5);
+  if (!staffCache.length) staffCache = listSnapLoad('staff') || [];
+  if (staffCache.length) renderStaffTable(); else tblLoading(body, 5);
   const r = await callApi('listStaffAdmin', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!staffCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
   staffCache = r.data;
+  listSnapSave('staff', staffCache);
   renderStaffTable();
 }
 async function toggleStaffStatus(lineUserId, currentStatus){
@@ -3819,10 +3835,12 @@ let CL_LISTS = [], CL_CUR = null;
 async function loadCustLists(){
   const box = document.getElementById('cl-list');
   document.getElementById('cl-members').innerHTML = '';
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  if (!CL_LISTS.length) CL_LISTS = listSnapLoad('custlists') || [];
+  if (CL_LISTS.length) renderClLists(); else box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
   const r = await callApi('listCustomerLists', {});
-  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  if (!r.success) { if (!CL_LISTS.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   CL_LISTS = r.data || [];
+  listSnapSave('custlists', CL_LISTS);
   renderClLists();
 }
 function renderClLists(){
@@ -3908,10 +3926,12 @@ async function loadFreeGoods(){
   const box = document.getElementById('fg-list');
   document.getElementById('fg-detail').style.display = 'none';
   box.style.display = '';
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  if (!FG_SETS.length) FG_SETS = listSnapLoad('freegoods') || [];
+  if (FG_SETS.length) renderFgList(); else box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
   const r = await callApi('listFreeGoodsSets', {});
-  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  if (!r.success) { if (!FG_SETS.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   FG_SETS = r.data || [];
+  listSnapSave('freegoods', FG_SETS);
   renderFgList();
 }
 function renderFgList(){
@@ -4547,11 +4567,13 @@ function renderPromotionsTable(){
 }
 async function loadPromotions(){
   const body = document.getElementById('promotions-body');
+  if (!promotionsCache.length) promotionsCache = listSnapLoad('promotions') || [];
   if (promotionsCache.length) renderPromotionsTable();
   else tblLoading(body, 6);
   const [, , r] = await Promise.all([ensureProductGroups(), ensureCustomerGroups(), callApi('listPromotions', {})]);
   if (!r.success) { if (!promotionsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   promotionsCache = r.data;
+  listSnapSave('promotions', promotionsCache);
   renderPromotionsTable();
 }
 async function addPromotionUI(){
@@ -4806,16 +4828,20 @@ async function rejectPending(id){
 
 async function loadAdminUsers(){
   const body = document.getElementById('adminusers-body');
-  tblLoading(body, 6);
+  if (!adminUsersCache.length) adminUsersCache = listSnapLoad('adminusers') || [];
+  if (adminUsersCache.length) renderAdminUsersTable(); else tblLoading(body, 6);
   // ฝั่งตัวแทน (หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทนอยู่) สร้างได้แค่ tenant_admin ของตัวเอง — ซ่อนช่องเลือกตัวแทนและตัวเลือกสิทธิ์
   const roleWrap = document.getElementById('au-role-wrap');
   roleWrap.style.display = '';
-  await ensureRolesForDropdown();
-  onAdminRoleChange();
-
-  const r = await callApi('listAdminUsers', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  // ★ เดิมรอ ensureRolesForDropdown() ให้เสร็จก่อนค่อยยิงรายชื่อ = จ่ายค่าคงที่ของ Apps Script สองรอบ (~4 วิ)
+  // ยิงขนานกัน แต่ onAdminRoleChange() ยังต้องรอบทบาทมาก่อน จึงผูกไว้ท้ายสายของมันเอง
+  const [, r] = await Promise.all([
+    ensureRolesForDropdown().then(() => onAdminRoleChange()),
+    callApi('listAdminUsers', {})
+  ]);
+  if (!r.success) { if (!adminUsersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   adminUsersCache = r.data;
+  listSnapSave('adminusers', adminUsersCache);
   renderAdminUsersTable();
 }
 async function createAdminUserUI(){
@@ -4883,10 +4909,11 @@ const optsOf = (arr, idF, labF, sel) => arr.map(x => '<option value="'+esc(x[idF
 /* ── ผู้ขาย ── */
 async function loadVendors(){
   const body = document.getElementById('vendors-body');
+  if (!vendorsCache.length) vendorsCache = listSnapLoad('vendors') || [];
   if (vendorsCache.length) renderVendors(); else tblLoading(body, 6);
   const r = await callApi('listVendors', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
-  vendorsCache = r.data; renderVendors();
+  if (!r.success) { if (!vendorsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  vendorsCache = r.data; listSnapSave('vendors', vendorsCache); renderVendors();
 }
 function renderVendors(){
   document.getElementById('vendors-body').innerHTML = rowsOrEmpty(vendorsCache.map(v =>
@@ -4922,9 +4949,11 @@ function submitVendor(id){ return plBusy(async () => {
 /* ── สายอนุมัติ ── */
 async function loadApprovalFlows(){
   const box = document.getElementById('flows-list');
+  if (!flowsCache.length) flowsCache = listSnapLoad('approvalflows') || [];
+  if (flowsCache.length) renderFlows();
   const r = await callApi('listApprovalFlows', { docType: 'PR' });
-  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
-  flowsCache = r.data; renderFlows();
+  if (!r.success) { if (!flowsCache.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  flowsCache = r.data; listSnapSave('approvalflows', flowsCache); renderFlows();
 }
 function renderFlows(){
   const box = document.getElementById('flows-list');
@@ -5111,10 +5140,11 @@ async function cancelPr(){
 /* ── ใบสั่งซื้อ ── */
 async function loadPurchaseOrders(){
   const body = document.getElementById('pos-body');
+  if (!posCache.length) posCache = listSnapLoad('purchaseorders') || [];
   if (posCache.length) renderPos(); else tblLoading(body, 7);
   const r = await callApi('listPurchaseOrders', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
-  posCache = r.data; renderPos();
+  if (!r.success) { if (!posCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  posCache = r.data; listSnapSave('purchaseorders', posCache); renderPos();
 }
 function renderPos(){
   document.getElementById('pos-body').innerHTML = rowsOrEmpty(posCache.map(p =>

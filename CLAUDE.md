@@ -9,7 +9,7 @@ it fills the gaps around them.
 
 1. **All work lands on git branch `UAT`. Never commit to `main` directly.** `main` only moves via
    `git merge UAT --ff-only`, and only after the user explicitly approves what's on UAT.
-   Since 2026-09-28 two people develop in parallel, so work starts on a short-lived `uat/<topic>`
+   Since 2026-09-28 two people develop in parallel, so work starts on a short-lived `feature/<topic>`
    branch and merges into `UAT` as soon as the piece is done — see "ทำงานสองคน" below.
    Production is being set up (2026-09-24) but does not answer yet — `/admin/` stays closed and `main`
    must not move until the prod backend answers a real login.
@@ -48,7 +48,11 @@ Google Drive ไม่ merge ไฟล์ที่ถูกเขียนพร
 - `clasp login` เป็นของแต่ละเครื่อง (`~/.clasprc.json`) — เครื่องใหม่ต้องล็อกอินด้วยบัญชีที่มีสิทธิ์ Editor เอง
 
 **แตกกิ่งจาก UAT · merge กลับเร็ว**
-`uat/<เรื่องที่ทำ>` → merge เข้า `UAT` ทันทีที่ชิ้นงานจบ · **ห้ามปล่อยกิ่งค้างข้ามวัน** เพราะไฟล์ที่ชนกัน
+`feature/<เรื่องที่ทำ>` → merge เข้า `UAT` ทันทีที่ชิ้นงานจบ
+· **★ ห้ามใช้ `uat/<ชื่อ>`** (กติกาเดิมเขียนไว้แบบนั้น ใช้ไม่ได้จริง — เจอ 28 ก.ย. 2026) เพราะ git เก็บ ref
+  เป็นไฟล์ และ Windows ไม่แยกตัวพิมพ์เล็ก-ใหญ่ `refs/heads/uat/<ชื่อ>` จึงต้องสร้างโฟลเดอร์ `uat`
+  ทับไฟล์ `UAT` ที่มีอยู่ = สร้างกิ่งไม่ได้เลย
+· **ห้ามปล่อยกิ่งค้างข้ามวัน** เพราะไฟล์ที่ชนกัน
 ในโปรเจกต์นี้ใหญ่มาก (ดูตารางล่าง) กิ่งยิ่งอยู่นาน ยิ่งเสียเวลา merge มากกว่าเวลาที่ใช้ทำงานจริง
 · `main` เหมือนเดิมทุกอย่าง (กติกาข้อ 1)
 
