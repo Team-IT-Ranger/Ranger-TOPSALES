@@ -553,6 +553,12 @@
   .ql-chev{ margin-left:auto; font-size:10px; opacity:.6; transition:transform .15s; }
   .sb-item-standalone.is-open .ql-chev{ transform:rotate(180deg); }
   .ql-gap{ height:10px; }
+/* ป้ายบอกว่ากำลังดึงข้อมูล — อยู่ที่แถบบน เห็นได้ทุกหน้า */
+  .busy-chip{ display:inline-flex; align-items:center; gap:6px; margin-left:10px; padding:2px 9px;
+    border-radius:999px; background:var(--blue-pale); color:var(--blue); font-size:11px; font-weight:600; }
+  .busy-chip[hidden]{ display:none; }
+  .busy-dot{ width:6px; height:6px; border-radius:50%; background:currentColor; animation:busyPulse 1s infinite; }
+  @keyframes busyPulse{ 0%,100%{opacity:.25} 50%{opacity:1} }
 </style>
 </head>
 <body>
@@ -643,7 +649,8 @@
 
     <div class="main-area">
       <header class="topbar">
-        <div class="crumb">TOPSALES Admin / <b id="crumb-current">ภาพรวม</b></div>
+        <div class="crumb">TOPSALES Admin / <b id="crumb-current">ภาพรวม</b>
+          <span class="busy-chip" id="busy-chip" hidden><span class="busy-dot"></span>กำลังอัปเดต…</span></div>
         <div class="top-right">
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
           <button class="btn btn-sm" id="switch-company-btn" style="display:none" onclick="backToPicker()">↔ เปลี่ยนบริษัท</button>
@@ -1511,6 +1518,17 @@ function _setBusy(btn, on){
   btn.classList.toggle('is-busy', on);
 }
 
+/* ★ ป้าย "กำลังอัปเดต…" — คุมจากที่เดียวคือ callApi
+   พื้นเวลาของ Apps Script วัดได้ 1.5-2.9 วิต่อคำขอ **แม้คำขอนั้นไม่ทำอะไรเลย** (28 ก.ย. 2026)
+   เร็วกว่านี้ไม่ได้ สิ่งที่ทำได้คือบอกให้ชัดว่ากำลังรออะไรอยู่ และไม่ล้างของเก่าทิ้งระหว่างรอ
+   ★ เคยลองเอาไปไว้ที่ท้ายตาราง แต่ตัวนับจำนวนแถวเขียนทับทันที — และแบบนี้ครอบหน้าที่ไม่มีตารางด้วย */
+let _busyCount = 0;
+function _busyChip(on){
+  _busyCount = Math.max(0, _busyCount + (on ? 1 : -1));
+  const el = document.getElementById('busy-chip');
+  if (el) el.hidden = _busyCount === 0;
+}
+
 async function callApi(action, payload){
   const body = Object.assign({}, payload || {});
   // Ultra Admin สวมสิทธิ์ตัวแทนอยู่ → แนบ tenantId ให้ทุก action อัตโนมัติ (ฝั่ง backend มีแค่ super_admin เท่านั้นที่ยอมรับค่านี้)
@@ -1524,11 +1542,13 @@ async function callApi(action, payload){
   }
   const btn = guarded ? _pressedButton() : null;
   _setBusy(btn, true);
+  _busyChip(true);
   try {
     return await _callApiSend(action, body);
   } finally {
     if (guarded) INFLIGHT.delete(action);
     _setBusy(btn, false);
+    _busyChip(false);
   }
 }
 
@@ -2277,7 +2297,7 @@ function renderStaffTable(){
 }
 async function loadStaff(){
   const body = document.getElementById('staff-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  tblLoading(body, 5);
   const r = await callApi('listStaffAdmin', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
   staffCache = r.data;
@@ -2336,7 +2356,7 @@ function renderCustomers(){
 }
 async function loadCustomers(){
   const body = document.getElementById('customers-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+  tblLoading(body, 8);
   const [, , r] = await Promise.all([ensureCustomerGroups(), ensureDistChannels(), callApi('listCustomersAdmin', {})]);
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
   custMasterCache = r.customers || (r.data || []).map(c => ({
@@ -2422,7 +2442,7 @@ async function ensureCustomerGroups(){
 /* ══════════════ ข้อมูลกลาง: กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน ══════════════ */
 async function loadCustomerGroupsView(){
   const body = document.getElementById('custgroups-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="2">กำลังโหลด...</td></tr>';
+  tblLoading(body, 2);
   const r = await callApi('listCustomerGroups', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="2">'+esc(r.message)+'</td></tr>'; return; }
   customerGroupsCache = r.data;
@@ -2441,7 +2461,7 @@ async function addCustomerGroupUI(){
 }
 async function loadDistributionChannels(){
   const body = document.getElementById('distchannels-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr>';
+  tblLoading(body, 3);
   const r = await callApi('listDistributionChannels', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="3">'+esc(r.message)+'</td></tr>'; return; }
   body.innerHTML = r.data.length
@@ -2460,7 +2480,7 @@ async function addDistributionChannelUI(){
 }
 async function loadPaymentTypes(){
   const body = document.getElementById('paytypes-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr>';
+  tblLoading(body, 3);
   const r = await callApi('listPaymentTypes', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="3">'+esc(r.message)+'</td></tr>'; return; }
   body.innerHTML = r.data.length
@@ -2482,7 +2502,7 @@ async function addPaymentTypeUI(){
 /* ══════════════ DOCNUM ══════════════ */
 async function loadDocnum(){
   const body = document.getElementById('docnum-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  tblLoading(body, 6);
   const r = await callApi('listDocSeries', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีการตั้งค่า — ใช้ค่าเริ่มต้นอัตโนมัติ</td></tr>'; return; }
@@ -2585,7 +2605,7 @@ function exportSalesOrderList(){
 async function loadSalesOrders(){
   const body = document.getElementById('salesorders-body');
   if (salesOrdersCache.length) renderSalesOrdersTable();
-  else body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  else tblLoading(body, 7);
   const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', {})]);
   if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   salesOrdersCache = r.data;
@@ -2597,7 +2617,7 @@ async function openSaleOrderDetail(id){
   currentSaleOrderId = id;
   _switchProductView('view-saleorderdetail', 'บิลขาย');
   document.getElementById('sod-title').textContent = 'บิลขาย'; document.getElementById('sod-meta').textContent = ''; document.getElementById('sod-actions').innerHTML = '';
-  document.getElementById('sod-body').innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  tblLoading(document.getElementById('sod-body'), 5);
   const r = await callApi('getSalesOrderAdmin', { id });
   if (!r.success) { toast(r.message, true); return; }
   if (currentSaleOrderId !== id) return; // ผู้ใช้กดออกไปหน้าอื่นระหว่างรอโหลด
@@ -3085,7 +3105,7 @@ async function loadProducts(){
   const body = document.getElementById('products-body');
   // เคยโหลดแล้ว → วาดจาก cache ทันที (หน้าไม่ว่าง ไม่ต้องรอ backend 2-4 วิ) แล้วค่อยอัปเดตเบื้องหลัง
   if (productsCache.length) renderProductsTable();
-  else body.innerHTML = '<tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr>';
+  else tblLoading(body, 12);
   // ยิงคู่ขนาน — เดิมรอกลุ่มสินค้าให้เสร็จก่อนค่อยโหลดสินค้า เสียเวลาเป็นสองเท่าโดยไม่จำเป็น
   const [, r] = await Promise.all([ensureProductGroups(), callApi('listProductsAdmin', {})]);
   if (!r.success) { if (!productsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
@@ -3252,7 +3272,7 @@ async function loadProductUnitsUI(){
   const productId = document.getElementById('u-product').value;
   const body = document.getElementById('units-body');
   if (!productId) { body.innerHTML = '<tr class="empty-row"><td colspan="6">เลือกสินค้าก่อน</td></tr>'; return; }
-  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  tblLoading(body, 6);
   const r = await callApi('listProductUnits', { productId });
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   body.innerHTML = r.data.length
@@ -3300,7 +3320,7 @@ function renderPriceListsTable(){
 async function loadPriceLists(){
   const body = document.getElementById('pricelists-body');
   if (pricelistsCache.length) renderPriceListsTable();
-  else body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  else tblLoading(body, 5);
   const r = await callApi('listPriceLists', {});
   if (!r.success) { if (!pricelistsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
   pricelistsCache = r.data;
@@ -3398,7 +3418,7 @@ async function openPriceListDetail(id, opts = {}){
   if (PLD_CACHE[id]) renderPriceListDetail(PLD_CACHE[id]);
   if (PLD_CACHE[id] && opts.noFetch) return;
   else {
-    document.getElementById('pld-body').innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+    tblLoading(document.getElementById('pld-body'), 8);
     document.getElementById('pld-title').textContent = 'ชุดราคา'; document.getElementById('pld-meta').textContent = ''; document.getElementById('pld-actions').innerHTML = ''; document.getElementById('pld-editbar').innerHTML = '';
   }
   const r = await callApi('getPriceList', { id });
@@ -4467,7 +4487,7 @@ function renderPromotionsTable(){
 async function loadPromotions(){
   const body = document.getElementById('promotions-body');
   if (promotionsCache.length) renderPromotionsTable();
-  else body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  else tblLoading(body, 6);
   const [, , r] = await Promise.all([ensureProductGroups(), ensureCustomerGroups(), callApi('listPromotions', {})]);
   if (!r.success) { if (!promotionsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   promotionsCache = r.data;
@@ -4517,7 +4537,7 @@ async function deactivatePromotionUI(id){
 let tenantsCache = [];
 async function loadTenants(){
   const body = document.getElementById('tenants-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr>';
+  tblLoading(body, 5);
   const r = await callApi('listTenants', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
   tenantsCache = r.data;
@@ -4725,7 +4745,7 @@ async function rejectPending(id){
 
 async function loadAdminUsers(){
   const body = document.getElementById('adminusers-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  tblLoading(body, 6);
   // ฝั่งตัวแทน (หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทนอยู่) สร้างได้แค่ tenant_admin ของตัวเอง — ซ่อนช่องเลือกตัวแทนและตัวเลือกสิทธิ์
   const roleWrap = document.getElementById('au-role-wrap');
   roleWrap.style.display = '';
@@ -4802,7 +4822,7 @@ const optsOf = (arr, idF, labF, sel) => arr.map(x => '<option value="'+esc(x[idF
 /* ── ผู้ขาย ── */
 async function loadVendors(){
   const body = document.getElementById('vendors-body');
-  if (vendorsCache.length) renderVendors(); else body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  if (vendorsCache.length) renderVendors(); else tblLoading(body, 6);
   const r = await callApi('listVendors', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   vendorsCache = r.data; renderVendors();
@@ -4910,7 +4930,7 @@ function togglePrWaiting(){ prWaitingOnly = !prWaitingOnly;
   document.getElementById('pr-filter-mine').classList.toggle('btn-primary', prWaitingOnly); loadPurchaseReqs(); }
 async function loadPurchaseReqs(){
   const body = document.getElementById('prs-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  tblLoading(body, 7);
   const r = await callApi('listPurchaseRequisitions', prWaitingOnly ? { waitingForMe: true } : {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   prsCache = r.data; renderPrs();
@@ -4925,7 +4945,7 @@ function renderPrs(){
 async function openPrDetail(id){
   currentPrId = id;
   _switchProductView('view-prdetail', 'ใบขอซื้อ');
-  document.getElementById('prd-body').innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  tblLoading(document.getElementById('prd-body'), 7);
   const r = await callApi('getPurchaseRequisition', { id });
   if (!r.success) { toast(r.message, true); return; }
   renderPrDetail(r.pr);
@@ -5030,7 +5050,7 @@ async function cancelPr(){
 /* ── ใบสั่งซื้อ ── */
 async function loadPurchaseOrders(){
   const body = document.getElementById('pos-body');
-  if (posCache.length) renderPos(); else body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  if (posCache.length) renderPos(); else tblLoading(body, 7);
   const r = await callApi('listPurchaseOrders', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   posCache = r.data; renderPos();
@@ -5045,7 +5065,7 @@ function renderPos(){
 let POD = null;
 async function openPoDetail(id){
   currentPoId = id; _switchProductView('view-podetail', 'ใบสั่งซื้อ');
-  document.getElementById('pod-body').innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+  tblLoading(document.getElementById('pod-body'), 8);
   const r = await callApi('getPurchaseOrder', { id });
   if (!r.success) { toast(r.message, true); return; }
   renderPoDetail(r.po);
@@ -5186,7 +5206,7 @@ async function billFromGr(grId){
 /* ── คลังกลาง ── */
 async function loadGoodsReceipts(){
   const body = document.getElementById('grs-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr>';
+  tblLoading(body, 7);
   const r = await callApi('listGoodsReceipts', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   grsCache = r.data;
@@ -5206,7 +5226,7 @@ async function billFromGrList(grId){
 }
 async function loadWarehouseStock(){
   const body = document.getElementById('ws-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr>';
+  tblLoading(body, 8);
   const r = await callApi('listWarehouseStock', { nonZeroOnly: false });
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
   document.getElementById('ws-summary').innerHTML = 'มูลค่าสินค้าคงเหลือรวม <b>฿'+bahtPlain(r.totalValue)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก) — ตรงกับบัญชีสินค้าคงเหลือ 1300';
@@ -5232,7 +5252,7 @@ async function showLedger(productId, name){
 /* ── เจ้าหนี้ ── */
 async function loadApBills(){
   const body = document.getElementById('ap-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr>';
+  tblLoading(body, 9);
   const r = await callApi('listApBills', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
   apCache = r.data;
@@ -5320,7 +5340,7 @@ function agingTable(rows, partyLabel){
 /* ── ลูกหนี้ ── */
 async function loadArInvoices(){
   const body = document.getElementById('ar-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr>';
+  tblLoading(body, 9);
   const r = await callApi('listArInvoices', {});
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
   arCache = r.data;
@@ -5413,7 +5433,7 @@ async function openArAging(){
 /* ── บัญชีแยกประเภท ── */
 async function loadGlBooks(){
   const body = document.getElementById('gl-body');
-  body.innerHTML = '<tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr>';
+  tblLoading(body, 6);
   const r = await callApi('listJournals', { limit: 100 });
   if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   glCache = r.data;
@@ -5667,6 +5687,24 @@ async function deleteRoleUI(code){
     .observe(document.getElementById('content') || document.body, { childList: true, subtree: true });
   run();
 })();
+
+/* ══════════════ "อย่าล้างของเก่าทิ้งแล้วนั่งรอ" ══════════════
+   ★ พื้นเวลาของ Apps Script วัดได้ 1.5-2.9 วินาทีต่อคำขอ **แม้คำขอนั้นไม่ทำอะไรเลย** (วัด 28 ก.ย. 2026)
+     กดให้เร็วกว่านี้ไม่ได้ สิ่งเดียวที่ทำได้คือ "อย่าให้ผู้ใช้เห็นหน้าว่างระหว่างรอ"
+   ★ เดิมทุก loader เขียนทับ tbody ด้วย "กำลังโหลด..." ทันทีที่เปิดหน้า ของที่เคยโหลดไว้หายหมด
+     แล้วนั่งมอง 2 วินาทีทุกครั้งที่สลับหน้า ทั้งที่ข้อมูลเดิมยังอยู่ในมือ
+     แนวคิดนี้มีอยู่แล้วในหน้าแรก (snapLoad/snapSave) แต่ไม่เคยถูกขยายไปหน้าอื่น
+   ใช้: tblLoading(bodyEl, จำนวนคอลัมน์) แทนการเขียน "กำลังโหลด..." เอง */
+function tblLoading(body, cols){
+  if (!body) return;
+  const hasRows = [...body.rows].some(r => !r.classList.contains('empty-row'));
+  if (!hasRows) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="' + cols + '">กำลังโหลด...</td></tr>';
+    return;
+  }
+  // มีของเดิมอยู่แล้ว — คงไว้ให้ใช้งานต่อได้ ผู้ใช้อ่าน/ค้นหาของเดิมได้ระหว่างรอ
+  // ป้าย "กำลังอัปเดต…" อยู่ที่แถบบน (คุมจาก callApi) ไม่ต้องแตะท้ายตารางซึ่งตัวนับจะเขียนทับอยู่ดี
+}
 
 /* ══════════════ ค้นหาในตาราง ══════════════
    ช่องค้นหาอยู่ใน <thead> เอง จึงถูกตรึงไปกับหัวตาราง — เลื่อนไปแถวที่พันกว่าก็ยังพิมพ์ค้นได้
