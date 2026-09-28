@@ -52,6 +52,15 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   const mobile = (action, payload) => post({ action, lineUserId: uid, payload });
   console.log('restock', JSON.stringify(await mobile('restockVan', { items: [{ productId: ext.record_id, qty: 3000 }, { productId: lav.record_id, qty: 3000 }] })));
 
+  // ★ office_delivery ตัดจากคลังกลางของตัวแทน (ไม่ใช่ van_stock ที่เพิ่ง restock ข้างบน) — ตั้งแต่มียอดจอง (guide 1.3)
+  // เช็คของพอไหมตั้งแต่ตอนเปิดบิลแล้ว ต้องมีของในคลังกลางจริงก่อน ไม่งั้นบิลเครดิต/office_delivery ด้านล่างจะถูกปฏิเสธ
+  const vendor = await admin('saveVendor', { tenantId: tid, name: 'ผู้ขายทดสอบ' });
+  let po = await admin('savePurchaseOrder', { tenantId: tid, vendorId: vendor.vendor.id, orderDate: '2026-09-01', vatType: 'none',
+    items: [{ productId: ext.record_id, qty: 1, unitCode: 'ลัง', unitFactor: 600, unitPrice: 1 }, { productId: lav.record_id, qty: 1, unitCode: 'ลัง', unitFactor: 600, unitPrice: 1 }] });
+  await admin('issuePurchaseOrder', { tenantId: tid, id: po.po.id });
+  console.log('รับของเข้าคลังกลางของตัวแทน (ให้ office_delivery ขายได้)', JSON.stringify(await admin('receiveGoods',
+    { tenantId: tid, poId: po.po.id, items: po.po.items.map(it => ({ poItemId: it.id, qty: 1 })) })).slice(0, 150));
+
   // 3) บิลจริง — เงินสด 1 + 1 หีบ (นับรวม 2 หีบ)
   const beforeQuote = await mobile('quoteSale', { customerId: cust.id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }, { productId: lav.record_id, unitCode: 'CT', qty: 1 }] });
   check('quoteSale ตรงกับเครื่องยนต์ (2,400)', beforeQuote.success && beforeQuote.total === 2400 && beforeQuote.priceList && beforeQuote.priceList.id === bkkList.id, beforeQuote);
