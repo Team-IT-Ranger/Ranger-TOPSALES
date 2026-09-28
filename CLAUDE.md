@@ -7,8 +7,10 @@ it fills the gaps around them.
 
 ## Golden rules
 
-1. **All work happens on git branch `UAT`. Never commit to `main` directly.** `main` only moves via
+1. **All work lands on git branch `UAT`. Never commit to `main` directly.** `main` only moves via
    `git merge UAT --ff-only`, and only after the user explicitly approves what's on UAT.
+   Since 2026-09-28 two people develop in parallel, so work starts on a short-lived `uat/<topic>`
+   branch and merges into `UAT` as soon as the piece is done — see "ทำงานสองคน" below.
    Production is being set up (2026-09-24) but does not answer yet — `/admin/` stays closed and `main`
    must not move until the prod backend answers a real login.
 2. **Environments are fully separate.** **dev** (`1iVJDVuc…`, `backend/.clasp.dev.json`) — the system
@@ -20,6 +22,56 @@ it fills the gaps around them.
    verification (UAT end-to-end test run, or a live browser check), not "should work now."
 4. After a toggle/status-style action, mutate the local JS cache and re-render — don't refetch the
    whole list. This pattern is used throughout `frontend-admin/index.html`; keep following it.
+5. **ตอนนี้มีคนพัฒนา 2 คน (Claude Code 2 บัญชี)** — อ่านหัวข้อถัดไปก่อนลงมือ โดยเฉพาะ
+   "ห้ามทำงานในโฟลเดอร์ `G:`" และ "ประกาศก่อน `clasp push`"
+
+## ทำงานสองคน — กติกา (2026-09-28)
+
+**★ ห้ามให้ทั้งสองบัญชีทำงานในโฟลเดอร์ `G:\Shared drives\...` เดียวกัน เด็ดขาด**
+Google Drive ไม่ merge ไฟล์ที่ถูกเขียนพร้อมกัน มันสร้างไฟล์คู่ขนานแทน · `.git/index` เป็นตัวที่โดนก่อน
+แล้ว repo เสียทั้งก้อน (เคยเจอจริง: ไฟล์ชื่อ `index (1)` ใน `.git`, `07_sales (1).gs`) ซ่อมไม่คุ้ม ต้อง clone ใหม่
+· **เข้าถึงไฟล์เดียวกันได้ ไม่ได้แปลว่าใช้ร่วมกันได้** ช่องทางแชร์คือ GitHub เท่านั้น
+
+**โครง**
+- แต่ละบัญชี clone ของตัวเอง **บนดิสก์ในเครื่อง** (`C:\...`) ไม่ใช่บนไดรฟ์
+- `G:\Shared drives\AppSpace\Ranger-TOPSALES` เหลือบทบาทเป็น **ที่เก็บ `reference/`** (ใบราคาจริง —
+  gitignored ไม่ขึ้น GitHub) ใครต้องใช้ก็อ่านจากพาธนั้นตรงๆ ไม่ต้อง clone ไว้ที่นั่น
+- ห้ามคัดลอก `.git` ข้ามเครื่อง · เริ่มงานทุกครั้งเทียบ `git fetch && git log origin/UAT --oneline -1`
+  กับ `git log --oneline -1` ก่อน
+- `clasp login` เป็นของแต่ละเครื่อง (`~/.clasprc.json`) — เครื่องใหม่ต้องล็อกอินด้วยบัญชีที่มีสิทธิ์ Editor เอง
+
+**แตกกิ่งจาก UAT · merge กลับเร็ว**
+`uat/<เรื่องที่ทำ>` → merge เข้า `UAT` ทันทีที่ชิ้นงานจบ · **ห้ามปล่อยกิ่งค้างข้ามวัน** เพราะไฟล์ที่ชนกัน
+ในโปรเจกต์นี้ใหญ่มาก (ดูตารางล่าง) กิ่งยิ่งอยู่นาน ยิ่งเสียเวลา merge มากกว่าเวลาที่ใช้ทำงานจริง
+· `main` เหมือนเดิมทุกอย่าง (กติกาข้อ 1)
+
+**แบ่งงานตามแกน ไม่ใช่ตามฟีเจอร์** — วัดจาก 30 คอมมิตหลังสุด (28 ก.ย. 2026)
+
+| ไฟล์ | ถูกแก้ | ขนาด | ความเสี่ยงชนกัน |
+|---|---|---|---|
+| `CLAUDE.md` | 21/30 | 961 บรรทัด | **สูงสุด** — ทุกงานจบด้วยการเขียนบันทึกลงนี่ |
+| `frontend-admin/index.html` | 17/30 | **6,078 บรรทัด** | **สูงสุด** — งาน UI ทุกชิ้นอยู่ในไฟล์เดียวนี้ |
+| `backend/00_setup_sheets.gs` | 9/30 | 446 | เพิ่มตารางใหม่ต้องมาที่นี่ |
+| `backend/05_router.gs` | 6/30 | 232 | เพิ่ม action ต้องมาที่นี่ |
+| `backend/NN_*.gs` ที่เหลือ | กระจาย | เล็ก | **ต่ำ — ขนานกันได้สบาย** |
+
+- **แบ่ง: คนหนึ่ง backend + เทสต์ · อีกคน หน้าเว็บ** · สลับแกนกันเป็นรอบ ไม่ใช่สลับกลางงาน
+- **`frontend-admin/index.html` = กุญแจดอกเดียว** — ต้องแตะทั้งคู่เมื่อไหร่ ประกาศก่อนจับ แล้วคืนให้เร็ว
+- **`CLAUDE.md` เขียนต่อท้ายหัวข้อของตัวเอง** อย่าไปจัดระเบียบ/ย้ายหัวข้อของอีกคนในเวลาเดียวกัน
+  (conflict แบบย้ายบล็อกแก้ยากกว่าแบบเพิ่มบรรทัดหลายเท่า)
+
+**★ UAT มีชุดเดียว — คอขวดตัวจริง ใหญ่กว่าเรื่อง git**
+- `clasp push` **เขียนทับทั้งโปรเจกต์** — push ตอนอีกคนกำลังเทสต์ = เขาเทสต์โค้ดเราโดยไม่รู้ตัว
+  **→ ประกาศก่อน push ทุกครั้ง และห้าม push ระหว่างที่อีกคนกำลังเทสต์**
+- Central Sheet ก็ตัวเดียว — e2e สร้างตัวแทนขยะ · `applyCustomerBulkAssign` แก้ทีสองพันแถว
+  ถ้าอีกคนกำลังดูราคาอยู่ ผลที่เห็นจะอธิบายไม่ได้ · **งานที่แก้ข้อมูลเป็นชุด ต้องนัดเวลา**
+- หน้าเว็บไม่มีปัญหา ต่างคนต่างรัน `.dev/serve_utf8.py` ชี้ไป backend ตัวไหนก็ได้
+- **ยังไม่ได้แยก env ที่สอง** — ทางที่สะอาดกว่าคือให้คนที่สองใช้โปรเจกต์ dev (`1iVJDVuc…`, แอปนี้ยังไม่ใช้)
+  ต้องสร้าง Central Sheet ของ dev + `ENV_NAME='dev'` + Script Properties + `BACKENDS.dev`
+  (ใช้ `setupProductionEnvironment()` เป็นแม่แบบ) · **ต้องขอเจ้าของระบบก่อน** เป็นสภาพแวดล้อมส่วนตัวของเขา
+  และในนั้นมี deployment เก่าของ `salesranger-isp` ที่ห้ามแตะ
+- ยังไม่ได้ลอง: URL `.../macros/s/<id>/dev` ของ Apps Script รันโค้ดที่ HEAD เสมอ ไม่ต้องสร้าง version ใหม่
+  ถ้าใช้ได้จะตัดการรอ "Deploy → New version" ออกจากรอบพัฒนาไปเลย (เปิดได้เฉพาะบัญชีที่มีสิทธิ์แก้สคริปต์)
 
 ## Business domain (not derivable from the code)
 
@@ -786,17 +838,16 @@ Express, 1,106 ราย, 38 คอลัมน์, เข้ารหัส TIS
   2) Endpoint URL ของ LIFF app ทั้ง 2 ตัวใน LINE Developers Console (ไม่งั้นแอปมือถือเปิดไม่ขึ้น)
   3) Callback URL ของ LINE Login channel สำหรับหน้าแอดมิน (ไม่งั้นปุ่ม "เข้าสู่ระบบด้วย LINE" ตอบ 400)
   4) ลิงก์ที่แจกให้ทีมใช้งาน
-- Two clones of this repo live on the dev machine, both active and both fast-forward-only from
-  GitHub: `G:\Shared drives\AppSpace\Ranger-TOPSHOP` (Google Shared Drive — the working copy; folder
-  renamed from `salesranger-TOPSHOP` on 2026-09-23, older notes use the old name) and
-  `C:\Users\dev-administrator\appdev\salesranger-TOPSHOP` (local — backup / second checkout, still
-  under the old name).
-  **GitHub is the single source of truth.** Rules: develop in one clone at a time; sync only by
-  push/pull through GitHub, never by copying `.git` between them; `reference/` (ใบราคาจริง) lives in
-  the Drive clone only, per README. Before starting work, confirm the clone is current — compare
-  `git fetch && git log origin/UAT --oneline -1` with `git log --oneline -1`. On the Drive clone,
-  keep the folder "Available offline" and let Drive finish syncing before running git — a
-  half-synced `.git` is how that copy gets corrupted (files named `index (1)` inside `.git`, or
+- **Clones — see "ทำงานสองคน" above for the rules; this is just where they are.**
+  `G:\Shared drives\AppSpace\Ranger-TOPSALES` (Google Shared Drive — folder renamed from
+  `salesranger-TOPSHOP` on 2026-09-23, older notes use the old name) and
+  `C:\Users\dev-administrator\appdev\salesranger-TOPSHOP` (local, still under the old name).
+  **GitHub is the single source of truth** — sync only by push/pull, never by copying `.git`.
+  Before starting work, compare `git fetch && git log origin/UAT --oneline -1` with
+  `git log --oneline -1`. The Drive copy is now reference storage rather than a second workspace:
+  `reference/` (ใบราคาจริง) lives there and nowhere else, per README. Anyone still running git in
+  it must keep the folder "Available offline" and let Drive finish syncing first — a half-synced
+  `.git` is how that copy gets corrupted (files named `index (1)` inside `.git`, or
   `07_sales (1).gs`, mean a Drive collision: re-clone from GitHub rather than trying to repair).
 - Mascot source art (~2 MB PNGs) is kept outside the repo at `G:\Shared drives\AppSpace\mascot-source\`.
   Only the web-sized export `frontend-admin/mascot-sr1.png` (344 KB, displayed at 236×236 on the
