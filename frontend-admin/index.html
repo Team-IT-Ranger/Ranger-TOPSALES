@@ -191,6 +191,8 @@
   /* ★ ห้ามใส่ padding-bottom ให้ตัวที่เลื่อน — ท้ายตารางที่ sticky bottom:0 จะถูกดันลอยขึ้นมาเท่านั้น
      ไม่ชนขอบล่างจริง · อยากได้ที่ว่างท้ายหน้าให้ใส่ margin ที่ลูกตัวสุดท้ายแทน */
   .view-body{ flex:1; min-height:0; overflow:auto; }
+  /* แถบเตือน/ตัวกรองที่ถูกย้ายออกมาตรึง — อยู่ระหว่างหัวหน้างานกับกรอบที่เลื่อน */
+  .view.active > :not(.view-head):not(.view-body){ flex:none; }
   .view-body > :last-child{ margin-bottom:10px; }
   .view-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; gap:16px; }
   .view-head h1{ font-size:19px; margin:0 0 3px; }
@@ -5521,21 +5523,39 @@ async function deleteRoleUI(code){
    และหน้าใหม่ได้เองด้วย · renderer เขียนทับ innerHTML ของลูกข้างในได้ตามปกติ ตัวห่อไม่กระทบ
    ★ ต้องกันการห่อซ้ำ: ถ้ามี .view-body อยู่แล้วให้ข้าม ไม่งั้น MutationObserver จะห่อซ้อนกันไม่รู้จบ */
 (function initViewFrames(){
+  /* ★ สิ่งที่อยู่ "เหนือตาราง" เป็นของกรอบ ไม่ใช่ข้อมูล — แถบเตือน (เช่น "ลูกค้า 8 ร้านยังไม่ได้จัดกลุ่ม")
+     และแถบตัวกรอง ต้องอยู่กับที่ ไม่เลื่อนหายไปพร้อมแถวข้อมูล (ผู้ใช้แจ้ง 28 ก.ย. 2026)
+     ★ จำกัดความสูงไว้ ถ้าของเหนือตารางสูงเกิน MAX ก็ปล่อยให้เลื่อนตามปกติ — ไม่งั้นวันหนึ่งมีใคร
+       วางการ์ดใหญ่ๆ ไว้เหนือตาราง แล้วมันกินจอจนเหลือที่ให้ข้อมูลไม่กี่แถวโดยไม่มีใครตั้งใจ */
+  const PIN_MAX = 240;
+  const isTableBlock = el => el.classList.contains('table-wrap') || !!el.querySelector('.table-wrap');
+
   const wrap = () => {
     document.querySelectorAll('#content > .view').forEach(v => {
-      if (v.querySelector(':scope > .view-body')) return;
-      const kids = [...v.children].filter(el => !el.classList.contains('view-head'));
-      if (!kids.length) return;
-      const body = document.createElement('div');
-      body.className = 'view-body';
-      v.insertBefore(body, kids[0]);
-      kids.forEach(el => body.appendChild(el));
+      let body = v.querySelector(':scope > .view-body');
+      if (!body) {
+        const kids = [...v.children].filter(el => !el.classList.contains('view-head'));
+        if (!kids.length) return;
+        body = document.createElement('div');
+        body.className = 'view-body';
+        v.insertBefore(body, kids[0]);
+        kids.forEach(el => body.appendChild(el));
+      }
+      // จัดสมดุลใหม่ทุกครั้ง: อะไรที่อยู่ก่อนตารางและไม่สูงเกินไป ให้ย้ายออกมาตรึงไว้
+      const inBody = [...body.children];
+      const tableAt = inBody.findIndex(isTableBlock);
+      if (tableAt <= 0) return;                       // ไม่มีตาราง หรือตารางอยู่บนสุดแล้ว
+      const pre = inBody.slice(0, tableAt);
+      const h = pre.reduce((n, el) => n + el.offsetHeight, 0);
+      if (h > PIN_MAX) return;
+      pre.forEach(el => v.insertBefore(el, body));    // ย้ายไปอยู่นอกกรอบที่เลื่อน = ตรึง
     });
   };
-  let timer;
-  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(wrap, 60); })
-    .observe(document.getElementById('content') || document.body, { childList: true, subtree: false });
-  wrap();
+  let timer, busy = false;
+  const run = () => { busy = true; try { wrap(); } finally { setTimeout(() => { busy = false; }, 0); } };
+  new MutationObserver(() => { if (busy) return; clearTimeout(timer); timer = setTimeout(run, 80); })
+    .observe(document.getElementById('content') || document.body, { childList: true, subtree: true });
+  run();
 })();
 
 /* ══════════════ ค้นหาในตาราง ══════════════
