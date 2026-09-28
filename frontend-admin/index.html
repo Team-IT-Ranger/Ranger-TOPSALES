@@ -188,7 +188,10 @@
        main.content{overflow:hidden} ตัดหายไปเลย โดยไม่มีแถบเลื่อนให้เลื่อนลงไปดู */
   .view.active{ display:flex; flex-direction:column; min-height:0; flex:1; }
   .view-head{ flex:none; }
-  .view-body{ flex:1; min-height:0; overflow:auto; padding-bottom:8px; }
+  /* ★ ห้ามใส่ padding-bottom ให้ตัวที่เลื่อน — ท้ายตารางที่ sticky bottom:0 จะถูกดันลอยขึ้นมาเท่านั้น
+     ไม่ชนขอบล่างจริง · อยากได้ที่ว่างท้ายหน้าให้ใส่ margin ที่ลูกตัวสุดท้ายแทน */
+  .view-body{ flex:1; min-height:0; overflow:auto; }
+  .view-body > :last-child{ margin-bottom:10px; }
   .view-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; gap:16px; }
   .view-head h1{ font-size:19px; margin:0 0 3px; }
   .view-head p{ margin:0; color:var(--ink-soft); font-size:12.5px; }
@@ -217,10 +220,14 @@
   /* ★ หัว/ท้ายตารางตรึงขอบ แถวข้อมูลเลื่อนอยู่ข้างใน (ผู้ใช้สั่ง 27 ก.ย. 2026)
      ตารางยาว ๆ อย่างรายชื่อลูกค้า 2,000 ร้าน พอเลื่อนลงไปก็ไม่รู้แล้วว่าคอลัมน์ไหนคืออะไร
      ทำที่ .table-wrap ที่เดียว ตารางทุกหน้าจึงได้ผลพร้อมกัน รวมถึงตารางที่เพิ่มทีหลัง
-     --tbl-max ปรับต่อที่ได้ (ในโมดัลพื้นที่น้อยกว่าหน้าเต็ม) */
-  .table-wrap{ --tbl-max:calc(100vh - 250px);
-    overflow:auto; max-height:var(--tbl-max);
-    background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+
+     ★ แถบเลื่อนชั้นเดียว (ผู้ใช้สั่ง 28 ก.ย. 2026) — ตารางไม่มีกล่องเลื่อนของตัวเองแล้ว
+     ปล่อยให้ยืดเต็มพื้นที่ แล้วให้ .view-body (หรือ .modal-body) เป็นตัวเลื่อนตัวเดียวของหน้า
+     เดิมตารางเลื่อนข้างในและหน้าเลื่อนข้างนอก = สองชั้น หน้าที่มีทั้งตารางและการ์ดข้างล่างจะสับสน
+     หัว/ท้าย/แถวค้นหายังตรึงอยู่ เพราะ sticky เกาะกับ "ตัวที่เลื่อนอยู่ใกล้ที่สุด" ซึ่งตอนนี้คือ .view-body
+     ★ ห้ามใส่ overflow ให้ .table-wrap อีก — ใส่เมื่อไหร่มันจะกลายเป็นตัวเลื่อนของตัวเอง
+       แล้ว sticky จะไปเกาะกับมันแทน หัวตารางก็จะเลื่อนหายไปกับเนื้อทันที */
+  .table-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:10px; }
   .table-wrap > table{ border-collapse:separate; border-spacing:0; }   /* sticky ใช้กับ collapse ไม่ได้ เส้นขอบจะหาย */
   /* หัวตารางต้องทึบแสงเสมอ ไม่งั้นแถวข้อมูลจะเลื่อนทะลุขึ้นมาเห็นซ้อนกัน · ใช้สีเดียวกับท้ายตาราง
      ให้อ่านออกว่าทั้งสองเป็น "กรอบ" ของตาราง ไม่ใช่แถวข้อมูล */
@@ -230,12 +237,10 @@
     background:var(--surface-2); color:var(--ink-soft); font-size:11.5px; padding:7px 12px;
     box-shadow:inset 0 1px 0 var(--border); border-top:none; }
   .table-wrap tfoot .tf-note{ float:right; color:var(--ink-faint); }
-  #pl-modal .table-wrap{ --tbl-max:52vh; }
-  body.density-compact .table-wrap{ --tbl-max:calc(100vh - 210px); }
-  /* จอเตี้ยๆ ให้เหลือพื้นที่ตารางพอใช้งาน ไม่งั้นเห็นทีละสองแถว */
-  @media (max-height:700px){ .table-wrap{ --tbl-max:60vh; } }
-  @media print{ .table-wrap{ max-height:none; overflow:visible; }
-    .table-wrap thead th, .table-wrap tfoot td{ position:static; } }
+  /* ตัวที่เลื่อนจริงคือ .view-body / .modal-body — แนวนอนก็เลื่อนที่เดียวกัน ตารางกว้างๆ จึงเลื่อน
+     ทั้งแถวไปพร้อมหัวตาราง ไม่ใช่หัวอยู่กับที่แล้วเนื้อเลื่อนหนีไปคนละทาง */
+  .view-body, .modal-body{ overflow:auto; }
+  @media print{ .table-wrap thead th, .table-wrap tfoot td, tr.tbl-search-row th{ position:static; } }
   table{ width:100%; border-collapse:collapse; font-size:13px; }
   th{ text-align:left; background:var(--surface-2); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); padding:9px 12px; white-space:nowrap; }
   th.th-sortable{ cursor:pointer; user-select:none; transition:color .12s,background .12s; }
