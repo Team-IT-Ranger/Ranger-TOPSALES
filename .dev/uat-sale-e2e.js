@@ -32,14 +32,6 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   // 2) ตัวแทน + ลูกค้า + พนักงานขาย (ของทดสอบบน UAT)
   const tid = 'UATP' + String(Date.now()).slice(-6);
   console.log('createTenant', tid, JSON.stringify(await admin('createTenant', { tenantId: tid, name: 'ตัวแทนทดสอบราคา', region: 'UAT' })).slice(0, 120));
-
-  // ★ ตั้งแต่ 2026-09-27 ชุดราคาไม่ได้แจกให้ทุกตัวแทนอัตโนมัติแล้ว (package_tenants — "ไม่ระบุ = ไม่มีใครได้")
-  // ตัวแทนใหม่ที่เพิ่งสร้างจึงต้องจ่ายชุดให้เองก่อน ไม่งั้นราคาจะตกไปใช้ discount_rules แบบเดิม (เตี้ยกว่าที่คาด)
-  // อ่านรายชื่อที่จ่ายอยู่แล้วมาต่อท้าย (ไม่ใช้ set ตรงๆ) กัน savePackageTenants เขียนทับของตัวแทนจริงที่ใช้ชุดนี้อยู่
-  const curAssigned = (await admin('listPackageTenants', { packageType: 'price_list', packageId: bkkList.id })).assigned || [];
-  console.log('assign price list', bkkList.id, 'to', tid, JSON.stringify(await admin('savePackageTenants',
-    { packageType: 'price_list', packageId: bkkList.id, tenantIds: curAssigned.concat([tid]) })));
-
   await admin('addCustomerAdmin', { tenantId: tid, name: 'ร้านทดสอบ กทม.', groupId: bkkGroup.record_id, phone: '0800000000' });
   const custs = (await admin('listCustomersAdmin', { tenantId: tid })).customers;
   const cust = custs[custs.length - 1];
@@ -51,15 +43,6 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   const mobile = (action, payload) => post({ action, lineUserId: uid, payload });
   console.log('restock', JSON.stringify(await mobile('restockVan', { items: [{ productId: ext.record_id, qty: 3000 }, { productId: lav.record_id, qty: 3000 }] })));
-
-  // ★ office_delivery ตัดจากคลังกลางของตัวแทน (ไม่ใช่ van_stock ที่เพิ่ง restock ข้างบน) — ตั้งแต่มียอดจอง (guide 1.3)
-  // เช็คของพอไหมตั้งแต่ตอนเปิดบิลแล้ว ต้องมีของในคลังกลางจริงก่อน ไม่งั้นบิลเครดิต/office_delivery ด้านล่างจะถูกปฏิเสธ
-  const vendor = await admin('saveVendor', { tenantId: tid, name: 'ผู้ขายทดสอบ' });
-  let po = await admin('savePurchaseOrder', { tenantId: tid, vendorId: vendor.vendor.id, orderDate: '2026-09-01', vatType: 'none',
-    items: [{ productId: ext.record_id, qty: 1, unitCode: 'ลัง', unitFactor: 600, unitPrice: 1 }, { productId: lav.record_id, qty: 1, unitCode: 'ลัง', unitFactor: 600, unitPrice: 1 }] });
-  await admin('issuePurchaseOrder', { tenantId: tid, id: po.po.id });
-  console.log('รับของเข้าคลังกลางของตัวแทน (ให้ office_delivery ขายได้)', JSON.stringify(await admin('receiveGoods',
-    { tenantId: tid, poId: po.po.id, items: po.po.items.map(it => ({ poItemId: it.id, qty: 1 })) })).slice(0, 150));
 
   // 3) บิลจริง — เงินสด 1 + 1 หีบ (นับรวม 2 หีบ)
   const beforeQuote = await mobile('quoteSale', { customerId: cust.id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 1 }, { productId: lav.record_id, unitCode: 'CT', qty: 1 }] });

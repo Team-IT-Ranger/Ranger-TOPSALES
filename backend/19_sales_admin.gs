@@ -174,26 +174,20 @@ function recordSaleAdmin(session, payload) {
   var freeGoods = calc.freeGoods.filter(function(f) { return !requestedFreeOff[String(f.ruleId) + '_' + String(f.productId)]; });
 
   var need = {};
-  items.forEach(function(it) { need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
-  // หน่วยฐานเสมอ (ดูเหตุผลใน 07_sales.gs) — ของแถมเป็น "ลัง" แล้วตัดเป็นชิ้นคือตัดน้อยไปเป็นร้อยเท่า
-  freeGoods.forEach(function(f) { need[String(f.productId)] = (need[String(f.productId)] || 0) + (Number(f.baseQty) || Number(f.qty) || 0); });
-
-  var stockCheck = { success: true };
   if (fulfillmentType === 'immediate') {
     var myStock = {};
     tenantObjects(tenantId, 'van_stock').filter(function(s) { return String(s.line_user_id) === soldByLineUserId; })
       .forEach(function(s) { myStock[String(s.product_id)] = parseInt(s.qty) || 0; });
+
+    items.forEach(function(it) { need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
+    // หน่วยฐานเสมอ (ดูเหตุผลใน 07_sales.gs) — ของแถมเป็น "ลัง" แล้วตัดเป็นชิ้นคือตัดน้อยไปเป็นร้อยเท่า
+    freeGoods.forEach(function(f) { need[String(f.productId)] = (need[String(f.productId)] || 0) + (Number(f.baseQty) || Number(f.qty) || 0); });
 
     var pids = Object.keys(need);
     for (var ci = 0; ci < pids.length; ci++) {
       var have = myStock[pids[ci]] || 0;
       if (have < need[pids[ci]]) return { success: false, message: 'สต็อกรถของพนักงานคนนี้ไม่พอ (สินค้า ' + pids[ci] + ' มี ' + have + ')' };
     }
-  } else {
-    // office_delivery: ตัดสต็อกจริงตอนเข้า "กำลังจัดส่ง" (34_sales_status.gs) แต่ต้องกันของไว้ตั้งแต่ตอนนี้ (ยอดจอง — guide ข้อ 1.3)
-    // ไม่งั้นอีกบิลหนึ่งยืนยันของชิ้นเดียวกันได้พร้อมกัน แล้วไปเจอตอนจะตัดว่าของไม่พอ (สัญญากับลูกค้าไปแล้วทั้งสองราย)
-    stockCheck = checkOfficeDeliveryStock(tenantId, need);
-    if (!stockCheck.success) return stockCheck;
   }
 
   var orderCode = getNextDocNumber(tenantId, 'SO');
@@ -247,8 +241,6 @@ function recordSaleAdmin(session, payload) {
   if (fulfillmentType === 'immediate') {
     _cutVanStock(tenantId, soldByLineUserId, need, orderId, 'sale');
     cacheClearUser(soldByLineUserId);
-  } else {
-    reserveStockForSale(tenantId, stockCheck.warehouseId, need, orderId);
   }
 
   // ล็อก product_code ของสินค้าที่เพิ่งขายจริง (เหมือน recordSale มือถือ)
@@ -300,10 +292,6 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
       var back = applySaleWarehouseStock(tenantId, order, 1, 'ยกเลิกบิล ' + order.order_code, session.adminUserId);
       if (!back.success) return back;
     }
-  } else {
-    // ยังไม่ถึงจุดตัด (office_delivery ที่ยัง pending_delivery) — ของยังอยู่ในคลังเดิมเป๊ะ แค่ปลดจองก็พอ (guide ข้อ 1.4)
-    // saleStockTaken() คืน true เสมอสำหรับ immediate จึงมาถึง else นี้ได้เฉพาะ office_delivery เท่านั้น
-    releaseStockReservation(tenantId, order.record_id);
   }
 
   var sh = tenantSheet(tenantId, 'sales_orders');

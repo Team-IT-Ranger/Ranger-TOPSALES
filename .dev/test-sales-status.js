@@ -66,18 +66,7 @@ const ctx = {
   // จำลอง 26_roles.gs::_adminRoleLabel (ไม่โหลดทั้งไฟล์ — ไฟล์นี้ต้องมีแค่ _withDocLock กับ 34_sales_status.gs เอง)
   _adminRoleLabel: session => 'แอดมิน (' + (session && session.role_code || '') + ')',
   centralObjects: name => (name === 'products'
-    ? [{ record_id: 101, name: 'น้ำยาล้างจาน' }, { record_id: 102, name: 'ผงซักฟอก' }] : []),
-  // stock_reservations เป็นตารางกลาง (เหมือน warehouse_stock) เก็บใน WH ก้อนเดียวกัน — mock centralAppend/centralNextId/
-  // centralSheet ให้เขียนลง WH ตรงๆ (แบบเดียวกับ tenantAppend/tenantNextId/tenantSheet ด้านบนที่เขียนลง t)
-  centralNextId: name => { WH[name] = WH[name] || []; return WH[name].reduce((m, o) => Math.max(m, parseInt(o.record_id) || 0), 0) + 1; },
-  centralAppend: (name, o) => { WH[name] = WH[name] || []; WH[name].push(Object.assign({}, o)); },
-  centralSheet: name => {
-    const rows = WH[name] || (WH[name] = []);
-    const hdr = ['record_id', 'tenant_id', 'warehouse_id', 'product_id', 'qty', 'order_id', 'status', 'created_at', 'released_at'];
-    const values = [hdr].concat(rows.map(r => hdr.map(h => (r[h] === undefined ? '' : r[h]))));
-    return { getDataRange: () => ({ getValues: () => values }),
-      getRange: (row, col) => ({ setValue: v => { rows[row - 2][hdr[col - 1]] = v; } }) };
-  }
+    ? [{ record_id: 101, name: 'น้ำยาล้างจาน' }, { record_id: 102, name: 'ผงซักฟอก' }] : [])
 };
 vm.createContext(ctx);
 ['20_purchasing_master.gs', '34_sales_status.gs'].forEach(f => {
@@ -212,52 +201,6 @@ eq('อ่านประวัติจากไฟล์ที่ยังไ�
 eq('ป้ายสถานะครบทั้งสี่', Object.keys(ctx.SO_STATUS_LABELS).length, 4);
 eq('จากรอจัดส่ง ไปได้แค่ "กำลังจัดส่ง" หรือยกเลิก (ข้ามจุดตัดสต็อกไม่ได้)', ctx.SO_TRANSITIONS.pending_delivery, ['delivering', 'cancelled']);
 eq('บิลที่ยกเลิกแล้วไปไหนไม่ได้เลย', ctx.SO_TRANSITIONS.cancelled, []);
-
-console.log('\n── ยอดจอง (reserved) — guide ข้อ 1.3 ──');
-WH.warehouse_stock.push({ tenant_id: 'T1', warehouse_id: 'W1', product_id: '201', qty: 50, avg_cost: 5 });
-WH.stock_reservations = [];
-
-eq('ยังไม่มีใครจอง → available = on-hand เต็มจำนวน', ctx.getAvailableQty('T1', 'W1', '201'), 50);
-
-let sc = ctx.checkOfficeDeliveryStock('T1', { 201: 30 });
-eq('ของพอ (30 จาก 50) → ผ่าน พร้อมบอกคลังที่จะใช้', [sc.success, sc.warehouseId], [true, 'W1']);
-ctx.reserveStockForSale('T1', 'W1', { 201: 30 }, 901);
-eq('จองแล้วมีแถว active 1 แถว อ้างอิงใบขายถูกต้อง', WH.stock_reservations.map(r => [r.product_id, r.qty, r.order_id, r.status]),
-  [['201', 30, 901, 'active']]);
-eq('★ available ลดลงตามที่จองไปแล้ว (50 − 30 = 20) — on-hand ไม่ได้ถูกแตะเลย', [ctx.getAvailableQty('T1', 'W1', '201'), whQty(201)], [20, 50]);
-
-console.log('  -- อีกใบหนึ่งมาขอของชิ้นเดียวกันตอนที่ 30 ถูกจองไปแล้ว (สถานการณ์ที่ guide เตือนไว้) --');
-sc = ctx.checkOfficeDeliveryStock('T1', { 201: 25 });
-eq('ขอ 25 ทั้งที่เหลือขายได้จริงแค่ 20 → ปฏิเสธ (ไม่ใช่เอา on-hand 50 มาเทียบ)', [sc.success, /ขายได้จริง 20.*ต้องใช้ 25/.test(sc.message)], [false, true]);
-sc = ctx.checkOfficeDeliveryStock('T1', { 201: 20 });
-eq('ขอพอดีที่เหลือ (20) → ผ่าน', sc.success, true);
-ctx.reserveStockForSale('T1', 'W1', { 201: 20 }, 902);
-eq('จองซ้อนกันได้สองใบ (แถวแยกกัน คนละ order_id)', WH.stock_reservations.filter(r => r.status === 'active').length, 2);
-eq('ตอนนี้ available = 0 (จองครบเต็มของที่มี)', ctx.getAvailableQty('T1', 'W1', '201'), 0);
-
-console.log('  -- ยกเลิกใบแรกก่อนถึงจุดตัด → ปลดจอง ไม่แตะ on-hand --');
-ctx.releaseStockReservation('T1', 901);
-eq('แถวของใบ 901 เปลี่ยนเป็น released พร้อมเวลา · ของใบ 902 ยังไม่ถูกแตะ', [
-  WH.stock_reservations.find(r => r.order_id === 901).status,
-  !!WH.stock_reservations.find(r => r.order_id === 901).released_at,
-  WH.stock_reservations.find(r => r.order_id === 902).status
-], ['released', true, 'active']);
-eq('ปลดจองแล้ว available กลับมา 30 (50 − 20 ที่ยังจองค้างอยู่) โดย on-hand ไม่ขยับเลย', ctx.getAvailableQty('T1', 'W1', '201'), 30);
-
-console.log('  -- เดินสถานะจริงผ่าน updateSalesOrderStatus: จองไว้ก่อน → ตัดจริงตอนกำลังจัดส่ง → ปลดจองอัตโนมัติ --');
-t.sales_orders.push({ record_id: 20, order_code: 'SO-RES-1', customer_id: 1, total: 100, payment_method: 'cash',
-  fulfillment_type: 'office_delivery', status: 'pending_delivery', payment_status: 'unpaid', paid_amount: 0, created_at: '2026-09-28 08:00:00' });
-t.order_items.push({ order_id: 20, product_id: '201', base_qty: 20 });
-ctx.reserveStockForSale('T1', 'W1', { 201: 20 }, 20);   // จำลองสิ่งที่ recordSaleAdmin ทำตอนเปิดบิลใบนี้จริง
-r = ctx.updateSalesOrderStatus(S, { id: 20, status: 'delivering' });
-eq('เข้า "กำลังจัดส่ง" สำเร็จ (ของพอเพราะกันไว้แล้วตั้งแต่ต้น)', r.success, true);
-eq('การจองของบิลนี้ถูกปลดแล้ว (ของถูกตัดจริงเข้า warehouse_stock แทน ไม่ถูกนับซ้ำสองทาง)',
-  WH.stock_reservations.filter(r2 => r2.order_id === 20 && r2.status === 'active').length, 0);
-eq('ถอยกลับมา "รอจัดส่ง" → คืนของเข้าคลัง และจองกันของไว้ใหม่ให้บิลเดิม (ยังเป็นคำมั่นกับลูกค้าอยู่)', (() => {
-  const back = ctx.updateSalesOrderStatus(S, { id: 20, status: 'pending_delivery' });
-  const active = WH.stock_reservations.filter(r2 => r2.order_id === 20 && r2.status === 'active');
-  return [back.success, active.length, active[0] && active[0].qty];
-})(), [true, 1, 20]);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

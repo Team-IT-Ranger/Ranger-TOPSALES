@@ -19,8 +19,7 @@ var CENTRAL_SHEETS = {
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at','line_user_id'],
   tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at',
     'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name',
-    'is_house',   // TRUE บนแถวเดียว = "ตัวแทนบ้าน" ของบริษัทเจ้าของสินค้าเอง ใช้เก็บยอดขายตรงที่ไม่ผ่านตัวแทนจำหน่าย (ดู _ensureHouseTenant ใน 13_tenants.gs)
-    'customer_account'],  // รหัสลูกค้าของตัวแทนรายนี้ในระบบ D365 (Customer account) — เก็บไว้เผื่อเชื่อมข้อมูลกับ D365 ในอนาคต ไม่มีโค้ดฝั่งเราอ่านค่านี้ไปคำนวณอะไรเลย
+    'is_house'],  // TRUE บนแถวเดียว = "ตัวแทนบ้าน" ของบริษัทเจ้าของสินค้าเอง ใช้เก็บยอดขายตรงที่ไม่ผ่านตัวแทนจำหน่าย (ดู _ensureHouseTenant ใน 13_tenants.gs)
 
   // product_code: รหัสประจำตัวสินค้า (เหมือนเลขบัตรประชาชนของสินค้า) — unique บังคับ, สำคัญอันดับ 1
   //   ผู้ใช้ตั้งเอง/แก้เองได้ ไม่ใช่ FK ไปหาอะไร คนละความหมายกับ external_code (รหัสจากไฟล์นำเข้า Express
@@ -146,10 +145,6 @@ var CENTRAL_SHEETS = {
   warehouse_stock: ['record_id','tenant_id','warehouse_id','product_id','qty','avg_cost','updated_at'],
   // บัญชีคุมการเคลื่อนไหวสต็อกคลัง (ledger) — 1 แถว = 1 การเคลื่อนไหว ย้อนรอยได้เสมอ
   stock_ledger: ['record_id','tenant_id','warehouse_id','product_id','change_qty','balance_after','unit_cost','move_type','ref_type','ref_id','note','created_by','created_at'],
-  // ยอดจอง (reserved) ของบิลขายแบบ office_delivery ที่ยังไม่ถึงจุดตัดสต็อกจริง (guide ข้อ 1.3, 34_sales_status.gs)
-  // 1 แถว = 1 (บิล, สินค้า) ไม่ใช่ตัวเลขรวม — จะได้รู้ว่าใบไหนจองอะไรไว้ และปลดทีละใบได้
-  // status: 'active' (ยังกันของอยู่) | 'released' (ปลดแล้ว — เพราะตัดของจริงแล้ว หรือบิลถูกยกเลิก/ปลดก่อนถึงจุดตัด)
-  stock_reservations: ['record_id','tenant_id','warehouse_id','product_id','qty','order_id','status','created_at','released_at'],
 
   // ── สายอนุมัติ: ออกแบบขั้นตอน (steps) เงื่อนไข (ช่วงวงเงิน) และจำนวนผู้อนุมัติต่อขั้นได้ ──
   // approval_flows: 1 สาย = 1 ประเภทเอกสาร (PR) × ช่วงวงเงิน [min_amount, max_amount] (max ว่าง = ไม่จำกัด)

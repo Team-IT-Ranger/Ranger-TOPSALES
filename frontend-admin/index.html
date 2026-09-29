@@ -1208,11 +1208,69 @@
         </section>
 
         <!-- ═══ TENANTS ═══ -->
+        <section class="view" id="view-v-rep-staff">
+          <div class="view-head"><div><h1>รายงานการขายแยกพนักงาน</h1><p>ยอดขายรายคน เทียบช่วงเวลา · ไม่นับบิลที่ยกเลิกแล้ว</p></div></div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rs-from"></div>
+              <div class="field"><label>ถึงวันที่</label><input type="date" id="rs-to"></div>
+              <div class="field"><label>เทียบกับ ตั้งแต่</label><input type="date" id="rs-cfrom"></div>
+              <div class="field"><label>เทียบกับ ถึง</label><input type="date" id="rs-cto"></div>
+              <button class="btn btn-primary" onclick="loadRepStaff()">ดูรายงาน</button>
+            </div>
+          <p class="form-hint">กรอกช่วง "เทียบกับ" ทั้งสองช่องเพื่อเทียบสองช่วงเวลา เว้นว่างไว้ = ดูช่วงเดียว</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>พนักงาน</th><th>จำนวนบิล</th><th>ยอดขาย</th><th>บิล (ช่วงเทียบ)</th><th>ยอดขาย (ช่วงเทียบ)</th><th>เปลี่ยนแปลง</th></tr></thead>
+            <tbody id="rs-body"><tr class="empty-row"><td colspan="6">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <section class="view" id="view-v-rep-cust">
+          <div class="view-head"><div><h1>รายงานการขายแยกลูกค้า</h1><p>ยอดซื้อรายร้าน จัดอันดับ และร้านที่หายไป</p></div></div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rc-from"></div>
+              <div class="field"><label>ถึงวันที่</label><input type="date" id="rc-to"></div>
+              <div class="field"><label>ไม่ซื้อเกินกี่วัน = ร้านหาย</label><input type="number" id="rc-lost" value="60" min="1"></div>
+              <button class="btn btn-primary" onclick="loadRepCust()">ดูรายงาน</button>
+            </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>อันดับ</th><th>รหัสร้าน</th><th>ชื่อร้าน</th><th>จำนวนบิล</th><th>ยอดซื้อ</th></tr></thead>
+            <tbody id="rc-body"><tr class="empty-row"><td colspan="5">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>ร้านที่หายไป <span id="rc-lost-count" class="muted"></span></h3>
+            <p class="form-hint">ร้านที่ยังไม่ปิดกิจการ แต่ไม่ได้ซื้อนานเกินจำนวนวันที่ตั้งไว้ — เป็นภาพ ณ วันนี้เสมอ ไม่ขึ้นกับช่วงวันที่ด้านบน</p>
+            <div class="table-wrap"><table>
+              <thead><tr><th>รหัสร้าน</th><th>ชื่อร้าน</th><th>ซื้อครั้งสุดท้าย</th><th>หายไปกี่วัน</th></tr></thead>
+              <tbody id="rc-lost-body"><tr class="empty-row"><td colspan="4">—</td></tr></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-v-rep-prod">
+          <div class="view-head"><div><h1>รายงานการขายแยกสินค้า</h1><p>ยอดขายรายสินค้าและรายกลุ่มสินค้า · จำนวนนับเป็นหน่วยฐาน</p></div></div>
+            <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rp-from"></div>
+              <div class="field"><label>ถึงวันที่</label><input type="date" id="rp-to"></div>
+              <button class="btn btn-primary" onclick="loadRepProd()">ดูรายงาน</button>
+            </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>กลุ่ม</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>จำนวนบิล</th><th>ยอดขาย</th></tr></thead>
+            <tbody id="rp-body"><tr class="empty-row"><td colspan="7">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
+          </table></div>
+          <div class="form-card">
+            <h3>สรุปรายกลุ่มสินค้า</h3>
+            <div class="table-wrap"><table>
+              <thead><tr><th>กลุ่มสินค้า</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>ยอดขาย</th></tr></thead>
+              <tbody id="rp-group-body"><tr class="empty-row"><td colspan="4">—</td></tr></tbody>
+            </table></div>
+          </div>
+        </section>
+
         <section class="view" id="view-tenants">
           <div class="view-head"><div><h1>ตัวแทนจำหน่าย</h1><p>สร้าง Tenant Sheet ใหม่ให้ตัวแทนแต่ละราย — ฝั่งบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>ชื่อ</th><th>ภาค</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="tenants-body"><tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>ชื่อ</th><th>Customer account (D365)</th><th>ภาค</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+            <tbody id="tenants-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>สร้างตัวแทนใหม่</h3>
@@ -1379,11 +1437,13 @@
 
         <section class="view" id="view-warehousestock">
           <div class="view-head">
-            <div><h1>ยอดคงเหลือในคลัง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p></div>
+            <div><h1>ยอดคงเหลือในคลัง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p>
+              <p class="form-hint"><b>คงเหลือ</b> = ของที่มีอยู่จริงในคลัง · <b>จองแล้ว</b> = ถูกบิลที่ยังไม่ถึงคิวตัดสต็อกกันไว้
+                · <b>ขายได้</b> = คงเหลือ − จองแล้ว คือตัวที่ใช้ตัดสินว่ารับออร์เดอร์เพิ่มได้อีกเท่าไร</p></div>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>สินค้า</th><th>คลัง</th><th>คงเหลือ</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
-            <tbody id="ws-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>คลัง</th><th>คงเหลือ</th><th>จองแล้ว</th><th>ขายได้</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
+            <tbody id="ws-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card" id="ws-ledger-card" style="display:none"><h3 id="ws-ledger-title">ความเคลื่อนไหว</h3><div id="ws-ledger"></div></div>
         </section>
@@ -1987,11 +2047,11 @@ const NAV_GROUPS = [
         soon:'การจัดส่ง', desc:'ติดตามบิลที่รอสำนักงานจัดส่งให้ลูกค้า'}
     ]},
     { n:'1.8', label:'รายงานขาย', items:[
-      {n:'1.8.1', label:'รายงานการขายแยกพนักงาน', view:'v-rep-staff', mod:'sales_report', ready:false, scope:'both',
+      {n:'1.8.1', label:'รายงานการขายแยกพนักงาน', view:'v-rep-staff', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกพนักงาน', desc:'ยอดขายรายคน เทียบช่วงเวลา'},
-      {n:'1.8.2', label:'รายงานการขายแยกลูกค้า', view:'v-rep-cust', mod:'sales_report', ready:false, scope:'both',
+      {n:'1.8.2', label:'รายงานการขายแยกลูกค้า', view:'v-rep-cust', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกลูกค้า', desc:'ยอดซื้อรายร้าน จัดอันดับ ร้านที่หายไป'},
-      {n:'1.8.3', label:'รายงานการขายแยกสินค้า', view:'v-rep-prod', mod:'sales_report', ready:false, scope:'both',
+      {n:'1.8.3', label:'รายงานการขายแยกสินค้า', view:'v-rep-prod', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกสินค้า', desc:'ยอดขายรายสินค้า/กลุ่มสินค้า'}
     ]}
   ]},
@@ -2255,6 +2315,86 @@ function renderQuickLists(){
       : '<div class="ql-empty">'+esc(empty)+'</div>';
   });
 }
+/* ══════════════ รายงานการขาย 1.8.1 / 1.8.2 / 1.8.3 ══════════════
+   backend อยู่ที่ 41_sales_reports.gs (ทีม 2) — ทุกตัวอ่านไฟล์ของตัวแทนรายเดียว ไม่วนเปิดทุกตัวแทน
+   ★ ไม่เก็บ snapshot ข้ามเซสชันให้สามหน้านี้โดยตั้งใจ: ผลผูกกับช่วงวันที่ที่ผู้ใช้เลือก
+     เก็บด้วยชื่อเดียวจะเอาผลของช่วงวันที่เก่ามาโชว์ทับช่วงที่เพิ่งเลือก ซึ่งอ่านไม่ออกว่าเป็นของช่วงไหน */
+const repToday = () => new Date().toISOString().slice(0, 10);
+const repMonthStart = () => repToday().slice(0, 8) + '01';
+const repQty = n => (Number(n) || 0).toLocaleString('th-TH');
+/* เติมค่าตั้งต้น "เดือนนี้" ครั้งแรกที่เปิดหน้า แล้วไม่ทับของที่ผู้ใช้เลือกไว้เองในรอบถัดไป */
+function repInitDates(prefix){
+  const f = document.getElementById(prefix + '-from'), t = document.getElementById(prefix + '-to');
+  if (f && !f.value) f.value = repMonthStart();
+  if (t && !t.value) t.value = repToday();
+  return { dateFrom: f ? f.value : '', dateTo: t ? t.value : '' };
+}
+
+async function loadRepStaff(){
+  const body = document.getElementById('rs-body');
+  const q = repInitDates('rs');
+  const cf = document.getElementById('rs-cfrom').value, ct = document.getElementById('rs-cto').value;
+  // ส่งช่วงเทียบไปต่อเมื่อกรอกครบทั้งคู่ — ส่งไปครึ่งเดียว backend จะถือว่าไม่เทียบ แต่หน้าเว็บจะดูเหมือนกรอกแล้วไม่ทำงาน
+  if ((cf && !ct) || (!cf && ct)) { toast('ช่วงเทียบต้องกรอกทั้งวันเริ่มและวันสิ้นสุด', true); return; }
+  tblLoading(body, 6);
+  const r = await callApi('salesReportByStaff', Object.assign({}, q, cf && ct ? { compareDateFrom: cf, compareDateTo: ct } : {}));
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  const cmp = !!(r.compareDateFrom && r.compareDateTo);
+  body.innerHTML = rowsOrEmpty(r.data.map(x =>
+    '<tr><td>'+esc(x.label)+'</td><td class="mono-data">'+repQty(x.bills)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(x.revenue)+'</td>' +
+    '<td class="mono-data">'+(cmp ? repQty(x.compareBills) : '—')+'</td>' +
+    '<td class="mono-data">'+(cmp ? '฿'+bahtPlain(x.compareRevenue) : '—')+'</td>' +
+    '<td class="mono-data">'+repDelta(x.revenueChangePct)+'</td></tr>').join(''),
+    6, 'ไม่มีการขายในช่วงที่เลือก') +
+    (r.data.length ? '<tr><td><b>รวม</b></td><td class="mono-data"><b>'+repQty(r.totalBills)+'</b></td>' +
+      '<td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td><td colspan="3"></td></tr>' : '');
+}
+/* เปอร์เซ็นต์เปลี่ยนแปลง — backend ส่ง null มาเมื่อไม่ได้เทียบ หรือช่วงก่อนหน้ายอดเป็นศูนย์
+   (หารด้วยศูนย์ไม่ได้ ไม่ใช่ "โต 0%") จึงต้องแยกจากกรณีเปลี่ยนแปลงจริงๆ 0% */
+function repDelta(pct){
+  if (pct === null || pct === undefined) return '—';
+  const v = Number(pct);
+  return '<span class="pill '+(v > 0 ? 'ok' : (v < 0 ? 'off' : 'wait'))+'">'+(v > 0 ? '+' : '')+v.toFixed(1)+'%</span>';
+}
+
+async function loadRepCust(){
+  const body = document.getElementById('rc-body'), lostBody = document.getElementById('rc-lost-body');
+  const q = repInitDates('rc');
+  tblLoading(body, 5);
+  const r = await callApi('salesReportByCustomer', Object.assign({}, q, { lostDays: Number(document.getElementById('rc-lost').value) || 60 }));
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  body.innerHTML = rowsOrEmpty(r.data.map((x, i) =>
+    '<tr><td class="mono-data">'+(i + 1)+'</td><td class="mono-data">'+dash(x.customerCode)+'</td><td>'+esc(x.customerName)+'</td>' +
+    '<td class="mono-data">'+repQty(x.bills)+'</td><td class="mono-data">฿'+bahtPlain(x.revenue)+'</td></tr>').join(''),
+    5, 'ไม่มีการขายในช่วงที่เลือก') +
+    (r.data.length ? '<tr><td colspan="4"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td></tr>' : '');
+  document.getElementById('rc-lost-count').textContent = r.lostCustomerCount ? '(' + r.lostCustomerCount + ' ร้าน)' : '';
+  lostBody.innerHTML = rowsOrEmpty(r.lostCustomers.map(x =>
+    '<tr><td class="mono-data">'+dash(x.customerCode)+'</td><td>'+esc(x.customerName)+'</td>' +
+    '<td class="mono-data">'+(x.lastSaleAt || 'ไม่เคยซื้อ')+'</td>' +
+    '<td class="mono-data">'+(x.daysSinceLastSale === null ? '—' : repQty(x.daysSinceLastSale))+'</td></tr>').join(''),
+    4, 'ไม่มีร้านที่หายไปตามเกณฑ์นี้');
+}
+
+async function loadRepProd(){
+  const body = document.getElementById('rp-body'), gBody = document.getElementById('rp-group-body');
+  const q = repInitDates('rp');
+  tblLoading(body, 7);
+  const r = await callApi('salesReportByProduct', q);
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  body.innerHTML = rowsOrEmpty(r.products.map(x =>
+    '<tr><td class="mono-data">'+dash(x.productCode)+'</td><td>'+esc(x.productName)+'</td><td>'+esc(x.groupName)+'</td>' +
+    '<td class="mono-data">'+repQty(x.qty)+'</td><td class="mono-data">'+(x.freeQty ? repQty(x.freeQty) : '—')+'</td>' +
+    '<td class="mono-data">'+repQty(x.bills)+'</td><td class="mono-data">฿'+bahtPlain(x.revenue)+'</td></tr>').join(''),
+    7, 'ไม่มีการขายในช่วงที่เลือก') +
+    (r.products.length ? '<tr><td colspan="6"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td></tr>' : '');
+  gBody.innerHTML = rowsOrEmpty(r.groups.map(g =>
+    '<tr><td>'+esc(g.groupName)+'</td><td class="mono-data">'+repQty(g.qty)+'</td>' +
+    '<td class="mono-data">'+(g.freeQty ? repQty(g.freeQty) : '—')+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(g.revenue)+'</td></tr>').join(''), 4, '—');
+}
+
 const LOADERS = {
   dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
@@ -2264,7 +2404,8 @@ const LOADERS = {
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks,
-  companysettings: loadCompanySettings, roles: loadRoles
+  companysettings: loadCompanySettings, roles: loadRoles,
+  'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd
 };
 function gotoView(view){
   /* ★ หาเมนูจาก id ที่ "กดมา" ก่อนแปลง — เมนูเดียวสองหน้าจอ (ข้อมูลบริษัท: ฝั่งบริษัทดูของกลาง
@@ -2513,12 +2654,17 @@ async function ensureCustomerGroups(){
 /* ══════════════ ข้อมูลกลาง: กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน ══════════════ */
 async function loadCustomerGroupsView(){
   const body = document.getElementById('custgroups-body');
-  tblLoading(body, 2);
+  if (!customerGroupsCache.length) customerGroupsCache = listSnapLoad('custgroups') || [];
+  if (customerGroupsCache.length) renderCustomerGroups(); else tblLoading(body, 2);
   const r = await callApi('listCustomerGroups', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="2">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!customerGroupsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="2">'+esc(r.message)+'</td></tr>'; return; }
   customerGroupsCache = r.data;
-  body.innerHTML = r.data.length
-    ? r.data.map(g => '<tr><td>'+esc(g.name)+'</td><td>'+esc(g.description||'-')+'</td></tr>').join('')
+  listSnapSave('custgroups', customerGroupsCache);
+  renderCustomerGroups();
+}
+function renderCustomerGroups(){
+  document.getElementById('custgroups-body').innerHTML = customerGroupsCache.length
+    ? customerGroupsCache.map(g => '<tr><td>'+esc(g.name)+'</td><td>'+esc(g.description||'-')+'</td></tr>').join('')
     : '<tr class="empty-row"><td colspan="2">ยังไม่มีกลุ่มลูกค้า</td></tr>';
 }
 async function addCustomerGroupUI(){
@@ -4620,16 +4766,79 @@ async function deactivatePromotionUI(id){
 let tenantsCache = [];
 async function loadTenants(){
   const body = document.getElementById('tenants-body');
-  tblLoading(body, 5);
+  if (!tenantsCache.length) tenantsCache = listSnapLoad('tenants') || [];
+  if (tenantsCache.length) renderTenants(); else tblLoading(body, 5);
   const r = await callApi('listTenants', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!tenantsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   tenantsCache = r.data;
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีตัวแทน</td></tr>'; return; }
-  body.innerHTML = r.data.map(t =>
-    '<tr><td class="mono-data">'+esc(t.tenantId)+'</td><td>'+esc(t.name)+'</td><td>'+esc(t.region||'-')+'</td>' +
-    '<td><span class="pill '+(String(t.isActive)==='TRUE'?'ok':'off')+'">'+(String(t.isActive)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td>' +
-    '<td><a href="'+t.sheetUrl+'" target="_blank" rel="noopener">เปิด Sheet ↗</a></td></tr>'
-  ).join('');
+  listSnapSave('tenants', tenantsCache);
+  renderTenants();
+}
+function renderTenants(){
+  document.getElementById('tenants-body').innerHTML = rowsOrEmpty(tenantsCache.map(t => {
+    const on = isOn(t.isActive);
+    // ★ ตัวแทนบ้าน (HOUSE) ปิดไม่ได้ — เป็นสมุดยอดขายตรงของบริษัทเอง ปิดแล้วเปิดบิลขายตรงไม่ได้ทั้งระบบ
+    //   ซ่อนปุ่มไปเลยแทนที่จะให้กดแล้วค่อยเด้ง error จะได้ไม่มีใครเผลอ
+    const toggle = t.isHouse ? '<span class="muted">ของบริษัท</span>'
+      : '<button class="btn btn-sm" onclick="toggleTenantStatus(\''+esc(t.tenantId)+'\','+(on?'false':'true')+')">'+(on?'ปิดใช้งาน':'เปิดใช้งาน')+'</button>';
+    return '<tr><td class="mono-data">'+esc(t.tenantId)+'</td><td>'+esc(t.name)+'</td>' +
+      '<td class="mono-data">'+dash(t.customerAccount)+'</td><td>'+esc(t.region||'-')+'</td>' +
+      '<td>'+(on?'<span class="pill ok">ใช้งาน</span>':'<span class="pill off">ปิด</span>')+'</td>' +
+      '<td><button class="btn btn-sm" onclick="openTenantEdit(\''+esc(t.tenantId)+'\')">แก้ไข</button> ' + toggle +
+      ' <a href="'+t.sheetUrl+'" target="_blank" rel="noopener">Sheet ↗</a></td></tr>';
+  }).join(''), 6, 'ยังไม่มีตัวแทน');
+}
+
+/* ── แก้ไขข้อมูลตัวแทน ──
+   ใช้ updateTenantProfile ตัวเดียวกับที่ตัวแทนแก้ข้อมูลบริษัทตัวเอง ต่างกันแค่ฝั่งบริษัทส่ง tenantId มาด้วย
+   ไม่ใส่ข้อมูลบัญชีธนาคารในฟอร์มนี้ — เป็นของที่ตัวแทนดูแลเองที่หน้า "ข้อมูลบริษัท" ของเขา */
+function openTenantEdit(tenantId){
+  const t = tenantsCache.find(x => String(x.tenantId) === String(tenantId));
+  if (!t) return;
+  const v = k => esc(t[k] || '');
+  plModal('<h3>แก้ไขตัวแทน ' + esc(t.tenantId) + '</h3>' +
+    '<div class="form-grid g2">' +
+    plField('ชื่อตัวแทน', '<input id="te-name" value="'+v('name')+'">') +
+    plField('ภาค', '<input id="te-region" value="'+v('region')+'">') +
+    plField('Customer account (D365)', '<input id="te-custacc" value="'+v('customerAccount')+'" placeholder="รหัสลูกค้าของตัวแทนรายนี้ในระบบ D365">', 'span2') +
+    plField('โทรศัพท์', '<input id="te-phone" value="'+v('phone')+'">') +
+    plField('อีเมล', '<input id="te-email" value="'+v('email')+'">') +
+    plField('เลขผู้เสียภาษี', '<input id="te-taxid" value="'+v('taxId')+'">') +
+    plField('รหัสสาขา', '<input id="te-branch" value="'+v('branchCode')+'" placeholder="00000 = สำนักงานใหญ่">') +
+    plField('ที่อยู่', '<textarea id="te-address" rows="2">'+v('address')+'</textarea>', 'span2') +
+    '</div>' +
+    '<p class="form-hint">Customer account เก็บไว้เพื่อเชื่อมข้อมูลกับ D365 ในอนาคต ยังไม่มีส่วนไหนของระบบเอาไปคำนวณ</p>' +
+    '<div class="err" id="te-err"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button>' +
+    '<button class="btn btn-primary" onclick="saveTenantEdit(\''+esc(t.tenantId)+'\')">บันทึก</button></div>');
+}
+
+async function saveTenantEdit(tenantId){
+  const g = id => document.getElementById(id).value.trim();
+  const patch = { tenantId, name: g('te-name'), region: g('te-region'), customerAccount: g('te-custacc'),
+    phone: g('te-phone'), email: g('te-email'), taxId: g('te-taxid'), branchCode: g('te-branch'), address: g('te-address') };
+  if (!patch.name) return plModalErr('กรุณากรอกชื่อตัวแทน');
+  const r = await callApi('updateTenantProfile', patch);
+  if (!r.success) return plModalErr(r.message);
+  plModalClose();
+  // แก้ cache ในเครื่องแล้ววาดใหม่ ไม่โหลดรายการทั้งหมดซ้ำ (กติกาข้อ 4 ใน CLAUDE.md)
+  const t = tenantsCache.find(x => String(x.tenantId) === String(tenantId));
+  if (t) Object.assign(t, { name: patch.name, region: patch.region, customerAccount: patch.customerAccount,
+    phone: patch.phone, email: patch.email, taxId: patch.taxId, branchCode: patch.branchCode, address: patch.address });
+  listSnapSave('tenants', tenantsCache);
+  renderTenants();
+  toast('บันทึกข้อมูลตัวแทนแล้ว');
+}
+
+async function toggleTenantStatus(tenantId, makeActive){
+  if (!makeActive && !confirm('ปิดใช้งานตัวแทน ' + tenantId + ' — พนักงานของตัวแทนรายนี้จะเปิดบิลขายไม่ได้ ยืนยันหรือไม่?')) return;
+  const r = await callApi('updateTenantStatus', { tenantId, isActive: !!makeActive });
+  if (!r.success) { toast(r.message, true); return; }
+  const t = tenantsCache.find(x => String(x.tenantId) === String(tenantId));
+  if (t) t.isActive = !!makeActive;
+  listSnapSave('tenants', tenantsCache);
+  renderTenants();
+  toast(r.message);
 }
 async function createTenantUI(){
   const tenantId = document.getElementById('t-id').value.trim();
@@ -5297,11 +5506,16 @@ async function billFromGr(grId){
 /* ── คลังกลาง ── */
 async function loadGoodsReceipts(){
   const body = document.getElementById('grs-body');
-  tblLoading(body, 7);
+  if (!grsCache.length) grsCache = listSnapLoad('goodsreceipts') || [];
+  if (grsCache.length) renderGrs(); else tblLoading(body, 7);
   const r = await callApi('listGoodsReceipts', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!grsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
   grsCache = r.data;
-  body.innerHTML = rowsOrEmpty(grsCache.map(g =>
+  listSnapSave('goodsreceipts', grsCache);
+  renderGrs();
+}
+function renderGrs(){
+  document.getElementById('grs-body').innerHTML = rowsOrEmpty(grsCache.map(g =>
     '<tr><td class="mono-data">'+esc(g.grNo)+'</td><td class="mono-data">'+esc(g.receiveDate)+'</td>' +
     '<td class="clickable-row" onclick="openPoDetail('+g.poId+')">'+dash(g.poNo)+'</td><td>'+dash(g.vendorName)+'</td>' +
     '<td>'+g.itemCount+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
@@ -5315,18 +5529,40 @@ async function billFromGrList(grId){
   if (!r.success) { toast(r.message, true); return; }
   apCache = []; toast(r.message); loadGoodsReceipts();
 }
+let wsCache = [];
 async function loadWarehouseStock(){
   const body = document.getElementById('ws-body');
-  tblLoading(body, 8);
+  if (!wsCache.length) wsCache = listSnapLoad('warehousestock') || [];
+  if (wsCache.length) renderWarehouseStock(); else tblLoading(body, 10);
   const r = await callApi('listWarehouseStock', { nonZeroOnly: false });
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
-  document.getElementById('ws-summary').innerHTML = 'มูลค่าสินค้าคงเหลือรวม <b>฿'+bahtPlain(r.totalValue)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก) — ตรงกับบัญชีสินค้าคงเหลือ 1300';
-  body.innerHTML = rowsOrEmpty(r.data.map(s =>
-    '<tr><td class="mono-data">'+dash(s.productCode)+'</td><td>'+esc(s.productName)+'</td><td>'+esc(s.warehouseName)+'</td>' +
-    '<td class="mono-data">'+s.qty+'</td><td>'+esc(s.unit)+'</td><td class="mono-data">฿'+bahtPlain(s.avgCost)+'</td>' +
-    '<td class="mono-data">฿'+bahtPlain(s.value)+'</td>' +
-    '<td><button class="btn btn-sm" onclick="showLedger('+s.productId+',\''+esc(s.productName)+'\')">ความเคลื่อนไหว</button></td></tr>').join(''),
-    8, 'ยังไม่มีสินค้าในคลัง — รับของจากใบสั่งซื้อก่อน');
+  if (!r.success) { if (!wsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
+  wsCache = r.data;
+  listSnapSave('warehousestock', wsCache);
+  renderWarehouseStock();
+}
+/* ★ ยอดรวมคิดจากแถวเอง ไม่ได้เก็บ totalValue ที่ backend ส่งมา — เป็นการบวกชุดเดียวกันเป๊ะ
+   (backend ก็บวก r.value ของทุกแถว) แต่ทำแบบนี้แล้วหน้าที่กู้จาก snapshot ได้ยอดรวมถูกด้วย
+   ถ้าเก็บเลขที่ส่งมาแทน พอเปิดแอปใหม่จะมีตารางแต่ยอดรวมหาย */
+function renderWarehouseStock(){
+  const total = wsCache.reduce((s, x) => s + (Number(x.value) || 0), 0);
+  document.getElementById('ws-summary').innerHTML = 'มูลค่าสินค้าคงเหลือรวม <b>฿'+bahtPlain(total)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก) — ตรงกับบัญชีสินค้าคงเหลือ 1300';
+  document.getElementById('ws-body').innerHTML = rowsOrEmpty(wsCache.map(s => {
+    const qty = Number(s.qty) || 0, rsv = Number(s.reserved) || 0;
+    // available มาจาก backend ไม่ได้คิดเองซ้ำ — คิดสองที่แล้ววันหนึ่งนิยามขยับ จะได้เลขคนละตัวโดยไม่มีใครรู้
+    const avail = Number(s.available) || 0;
+    /* ★ ของที่ถูกจองไว้คือต้นเหตุคลาสสิกของการขายเกิน: ตาราง "คงเหลือ 100" แต่รับเพิ่มได้จริงแค่ 20
+       จึงทำให้ตาเห็นความต่าง — จองแล้วเป็นตัวหนา และขายได้เปลี่ยนสีเมื่อไม่เท่าคงเหลือ
+       ขายได้ติดลบ = จองเกินของที่มี (ของถูกตัดไปทางอื่นหลังจองแล้ว) ต้องเห็นชัดที่สุด */
+    const availCell = avail < 0 ? '<span class="pill off">'+avail+'</span>'
+      : (rsv > 0 ? '<span class="pill wait">'+avail+'</span>' : String(avail));
+    return '<tr><td class="mono-data">'+dash(s.productCode)+'</td><td>'+esc(s.productName)+'</td><td>'+esc(s.warehouseName)+'</td>' +
+      '<td class="mono-data">'+qty+'</td>' +
+      '<td class="mono-data">'+(rsv ? '<b>'+rsv+'</b>' : '—')+'</td>' +
+      '<td class="mono-data">'+availCell+'</td>' +
+      '<td>'+esc(s.unit)+'</td><td class="mono-data">฿'+bahtPlain(s.avgCost)+'</td>' +
+      '<td class="mono-data">฿'+bahtPlain(s.value)+'</td>' +
+      '<td><button class="btn btn-sm" onclick="showLedger('+s.productId+',\''+esc(s.productName)+'\')">ความเคลื่อนไหว</button></td></tr>';
+  }).join(''), 10, 'ยังไม่มีสินค้าในคลัง — รับของจากใบสั่งซื้อก่อน');
 }
 async function showLedger(productId, name){
   const card = document.getElementById('ws-ledger-card');
@@ -5343,11 +5579,16 @@ async function showLedger(productId, name){
 /* ── เจ้าหนี้ ── */
 async function loadApBills(){
   const body = document.getElementById('ap-body');
-  tblLoading(body, 9);
+  if (!apCache.length) apCache = listSnapLoad('apbills') || [];
+  if (apCache.length) renderApBills(); else tblLoading(body, 9);
   const r = await callApi('listApBills', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!apCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
   apCache = r.data;
-  body.innerHTML = rowsOrEmpty(apCache.map(b =>
+  listSnapSave('apbills', apCache);
+  renderApBills();
+}
+function renderApBills(){
+  document.getElementById('ap-body').innerHTML = rowsOrEmpty(apCache.map(b =>
     '<tr><td class="mono-data">'+esc(b.billNo)+'</td><td>'+esc(b.vendorName)+'</td>' +
     '<td class="mono-data">'+dash(b.vendorInvoiceNo || b.grNo || b.poNo)+'</td><td class="mono-data">'+esc(b.billDate)+'</td>' +
     '<td class="mono-data">'+dash(b.dueDate)+'</td><td class="mono-data">฿'+bahtPlain(b.total)+'</td>' +
@@ -5431,11 +5672,16 @@ function agingTable(rows, partyLabel){
 /* ── ลูกหนี้ ── */
 async function loadArInvoices(){
   const body = document.getElementById('ar-body');
-  tblLoading(body, 9);
+  if (!arCache.length) arCache = listSnapLoad('arinvoices') || [];
+  if (arCache.length) renderArInvoices(); else tblLoading(body, 9);
   const r = await callApi('listArInvoices', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!arCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
   arCache = r.data;
-  body.innerHTML = rowsOrEmpty(arCache.map(iv =>
+  listSnapSave('arinvoices', arCache);
+  renderArInvoices();
+}
+function renderArInvoices(){
+  document.getElementById('ar-body').innerHTML = rowsOrEmpty(arCache.map(iv =>
     '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td>'+esc(iv.customerName)+'</td><td class="mono-data">'+dash(iv.salesOrderId)+'</td>' +
     '<td class="mono-data">'+esc(iv.invoiceDate)+'</td><td class="mono-data">'+dash(iv.dueDate)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(iv.total)+'</td><td class="mono-data">฿'+bahtPlain(iv.receivedAmount)+'</td>' +
@@ -5524,11 +5770,16 @@ async function openArAging(){
 /* ── บัญชีแยกประเภท ── */
 async function loadGlBooks(){
   const body = document.getElementById('gl-body');
-  tblLoading(body, 6);
+  if (!glCache.length) glCache = listSnapLoad('glbooks') || [];
+  if (glCache.length) renderGlBooks(); else tblLoading(body, 6);
   const r = await callApi('listJournals', { limit: 100 });
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!glCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   glCache = r.data;
-  body.innerHTML = rowsOrEmpty(glCache.map(j =>
+  listSnapSave('glbooks', glCache);
+  renderGlBooks();
+}
+function renderGlBooks(){
+  document.getElementById('gl-body').innerHTML = rowsOrEmpty(glCache.map(j =>
     '<tr class="clickable-row" onclick="openJournal('+j.id+')"><td class="mono-data">'+esc(j.journalNo)+'</td><td class="mono-data">'+esc(j.journalDate)+'</td>' +
     '<td>'+esc(j.source)+'</td><td class="wrap">'+esc(j.memo)+'</td><td class="mono-data">฿'+bahtPlain(j.totalDebit)+'</td>' +
     '<td>'+pill2(DOC_ST, j.status)+'</td></tr>').join(''), 6, 'ยังไม่มีใบสำคัญ');
