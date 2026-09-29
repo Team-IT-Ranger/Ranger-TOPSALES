@@ -825,7 +825,7 @@
           </div>
           <div id="sod-status-card"></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead>
+            <thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย (ไม่รวม VAT)</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>หลังหักส่วนลด</th><th>รวมภาษีแล้ว</th></tr></thead>
             <tbody id="sod-body"></tbody>
           </table></div>
           <div id="sod-history"></div>
@@ -2827,7 +2827,7 @@ async function openSaleOrderDetail(id){
   currentSaleOrderId = id;
   _switchProductView('view-saleorderdetail', 'บิลขาย');
   document.getElementById('sod-title').textContent = 'บิลขาย'; document.getElementById('sod-meta').textContent = ''; document.getElementById('sod-actions').innerHTML = '';
-  tblLoading(document.getElementById('sod-body'), 5);
+  tblLoading(document.getElementById('sod-body'), 9);
   const r = await callApi('getSalesOrderAdmin', { id });
   if (!r.success) { toast(r.message, true); return; }
   if (currentSaleOrderId !== id) return; // ผู้ใช้กดออกไปหน้าอื่นระหว่างรอโหลด
@@ -2852,21 +2852,30 @@ function renderSaleOrderDetail(r){
     (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
   renderSaleOrderStatusCard(r);
   renderSaleOrderHistory(r);
-  const rows = r.items.map(it =>
-    '<tr'+(it.isFree ? ' style="background:var(--blue-pale)"' : '')+'><td>' +
+  // ★ 2026-09-30 (2) "ราคาก่อนภาษีเป็นตัวตั้งต้น" — เดิมหน้านี้โชว์แค่ราคา/หน่วย+รวม ไม่มีส่วนลดต่อบรรทัดเลย
+  // ตอนนี้ใช้ listBreakdown (จาก list_price_ex_vat ที่บันทึกไว้ตอนขาย) เหมือน sonPreview เป๊ะ
+  const rows = r.items.map(it => { var lb = it.listBreakdown;
+    var unitPrice = lb ? lb.unitPriceExVat : it.price, unitDisc = lb ? lb.unitDiscountExVat : (it.unitDiscount||0),
+        before = lb ? lb.beforeDiscountExVat : it.lineTotal, disc = lb ? lb.discountExVat : (it.lineDiscount||0),
+        after = lb ? lb.netExVat : (it.netTotal != null ? it.netTotal : it.lineTotal);
+    return '<tr'+(it.isFree ? ' style="background:var(--blue-pale)"' : '')+'><td>' +
     (it.productCode ? '<span class="mono-data">'+esc(it.productCode)+'</span> ' : '') + esc(it.productName) + (it.isFree ? ' <span class="unit">(ของแถม)</span>' : '') + '</td>' +
-    '<td>'+esc(it.unitCode||'-')+'</td><td>'+it.qty+'</td><td class="mono-data">฿'+baht(it.price)+'</td><td class="mono-data">฿'+baht(it.lineTotal)+'</td></tr>'
+    '<td>'+esc(it.unitCode||'-')+'</td><td>'+it.qty+'</td>' +
+    (it.isFree ? '<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td class="mono-data">ฟรี</td>'
+      : '<td class="mono-data">฿'+baht(unitPrice)+'</td><td class="mono-data">'+(unitDisc ? '-฿'+baht(unitDisc) : '-')+'</td>' +
+        '<td class="mono-data">฿'+baht(before)+'</td><td class="mono-data">'+(disc ? '-฿'+baht(disc) : '-')+'</td>' +
+        '<td class="mono-data">฿'+baht(after)+'</td><td class="mono-data">฿'+baht(it.lineTotal)+'</td>') + '</tr>'; }
   ).join('');
   const vatPct = Math.round((o.vatRate != null ? o.vatRate : 0.07) * 100);
   document.getElementById('sod-body').innerHTML = rows +
-    '<tr><td colspan="4" style="text-align:right"><b>ยอดรวมก่อนหักส่วนลด</b></td><td class="mono-data">฿'+baht(o.subtotal)+'</td></tr>' +
-    (o.discount ? '<tr><td colspan="4" style="text-align:right">ส่วนลด</td><td class="mono-data">-฿'+baht(o.discount)+'</td></tr>' : '') +
+    '<tr><td colspan="8" style="text-align:right"><b>ราคารวมหลังหักส่วนลดสินค้า (ไม่รวมภาษี)</b></td><td class="mono-data">฿'+baht(o.subtotalAfterProductDiscountExVat)+'</td></tr>' +
+    (o.billDiscountExVat ? '<tr><td colspan="8" style="text-align:right">ส่วนลดท้ายบิล (ไม่รวมภาษี)</td><td class="mono-data">-฿'+baht(o.billDiscountExVat)+'</td></tr>' : '') +
     (o.vatMixed
-      ? '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้าที่ยกเว้นภาษี</td><td class="mono-data">฿'+baht(o.exemptAmount)+'</td></tr>' +
-        '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้าที่เสียภาษี</td><td class="mono-data">฿'+baht(o.taxableExVat)+'</td></tr>'
-      : '<tr><td colspan="4" style="text-align:right">มูลค่าสินค้า'+(o.applyVat?' (ไม่รวมภาษี)':'')+'</td><td class="mono-data">฿'+baht(o.subtotalExVat)+'</td></tr>') +
-    (o.applyVat ? '<tr><td colspan="4" style="text-align:right">ภาษีมูลค่าเพิ่ม '+vatPct+'%</td><td class="mono-data">฿'+baht(o.vatAmount)+'</td></tr>' : '') +
-    '<tr><td colspan="4" style="text-align:right"><b>สุทธิ</b></td><td class="mono-data"><b>฿'+baht(o.total)+'</b></td></tr>';
+      ? '<tr><td colspan="8" style="text-align:right">มูลค่าสินค้าที่ยกเว้นภาษี</td><td class="mono-data">฿'+baht(o.exemptAmount)+'</td></tr>' +
+        '<tr><td colspan="8" style="text-align:right">มูลค่าสินค้าที่เสียภาษี</td><td class="mono-data">฿'+baht(o.taxableExVat)+'</td></tr>'
+      : '<tr><td colspan="8" style="text-align:right">ราคาสุทธิหักส่วนลดท้ายบิล (ไม่รวมภาษี)</td><td class="mono-data">฿'+baht(o.subtotalExVat)+'</td></tr>') +
+    (o.applyVat ? '<tr><td colspan="8" style="text-align:right">ภาษีมูลค่าเพิ่ม '+vatPct+'%</td><td class="mono-data">฿'+baht(o.vatAmount)+'</td></tr>' : '') +
+    '<tr><td colspan="8" style="text-align:right"><b>ราคารวมภาษีมูลค่าเพิ่ม</b></td><td class="mono-data"><b>฿'+baht(o.total)+'</b></td></tr>';
 }
 
 /* ใบปะหน้าพัสดุ 100×150 มม. — ★ ห้ามมีราคา ใบนี้ติดอยู่บนกล่องตลอดทาง คนเห็นระหว่างทางเยอะที่สุด
@@ -3138,25 +3147,31 @@ async function sonPreview(){
   if (!r.success) { out.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   sonPreviewData = { customerId, paymentType, fulfillmentType, soldByLineUserId, items };
 
-  // ★ 2026-09-30 เจ้าของระบบสั่ง: แสดงราคา/ส่วนลดแยกรายบรรทัด ไม่ใช่แค่ยอดรวมท้ายบิล — ตัวเลขมาจาก
-  // _allocateLineDiscount (18_pricing_engine.gs) กระจายส่วนลดรวมตามสัดส่วนมูลค่าให้แล้ว ที่นี่แค่แสดงผล
-  out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>ราคา/หน่วย</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>สุทธิ</th></tr></thead><tbody>' +
-    r.lines.map(l => '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+l.qty+'</td><td>'+esc(l.unitCode)+'</td>' +
-      '<td class="mono-data">฿'+baht(l.unitPrice)+'</td><td class="mono-data">'+(l.unitDiscount ? '-฿'+baht(l.unitDiscount) : '-')+'</td>' +
-      '<td class="mono-data">฿'+baht(l.lineTotal)+'</td><td class="mono-data">'+(l.lineDiscount ? '-฿'+baht(l.lineDiscount) : '-')+'</td>' +
-      '<td class="mono-data">฿'+baht(l.netTotal != null ? l.netTotal : l.lineTotal)+'</td></tr>').join('') +
+  // ★ 2026-09-30 (2) เจ้าของระบบสั่ง: "ราคาก่อนภาษีเป็นตัวตั้งต้น" — ราคาต่อหน่วย/ส่วนลด/ก่อน-หลังหักส่วนลด
+  // เป็นเลขไม่รวมภาษี (มาจากราคาตั้ง G ของใบราคาจริง ผ่าน listBreakdown, _lineListBreakdown 18_pricing_engine.gs)
+  // แล้วค่อยแยกคอลัมน์ "รวมภาษีแล้ว" ไว้ท้ายสุด — บรรทัดที่ไม่มีชุดราคาอ้างอิง (เส้นทางโปรโมชั่นเดิม) ไม่มี
+  // listBreakdown จะ fallback ไปใช้ตัวเลขรวมภาษีเดิมในคอลัมน์เหล่านั้นแทน (ไม่มีราคาตั้งให้ถอดภาษีจริง)
+  out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>ราคา/หน่วย (ไม่รวม VAT)</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>หลังหักส่วนลด</th><th>รวมภาษีแล้ว</th></tr></thead><tbody>' +
+    r.lines.map(l => { var lb = l.listBreakdown;
+      var unitPrice = lb ? lb.unitPriceExVat : l.unitPrice, unitDisc = lb ? lb.unitDiscountExVat : (l.unitDiscount||0),
+          before = lb ? lb.beforeDiscountExVat : l.lineTotal, disc = lb ? lb.discountExVat : (l.lineDiscount||0),
+          after = lb ? lb.netExVat : (l.netTotal != null ? l.netTotal : l.lineTotal);
+      return '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+l.qty+'</td><td>'+esc(l.unitCode)+'</td>' +
+      '<td class="mono-data">฿'+baht(unitPrice)+'</td><td class="mono-data">'+(unitDisc ? '-฿'+baht(unitDisc) : '-')+'</td>' +
+      '<td class="mono-data">฿'+baht(before)+'</td><td class="mono-data">'+(disc ? '-฿'+baht(disc) : '-')+'</td>' +
+      '<td class="mono-data">฿'+baht(after)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>'; }).join('') +
     (r.freeGoods||[]).map(f => '<tr style="background:var(--blue-pale)"><td colspan="3">'+esc(_sonProdLabel(f.productId))+' <span class="unit">(ของแถม: '+esc(f.ruleName)+')</span></td>' +
-      '<td colspan="2">'+f.qty+' '+esc(f.unitCode||'')+'</td><td>-</td><td>-</td><td>ฟรี</td></tr>').join('') +
+      '<td colspan="2">'+f.qty+' '+esc(f.unitCode||'')+'</td><td>-</td><td>-</td><td>-</td><td>ฟรี</td></tr>').join('') +
     '</tbody></table></div>' +
     (r.priceListName ? '<div class="activity-row"><span>ใช้ชุดราคา</span><span class="amt">'+esc(r.priceListName)+'</span></div>' : '') +
-    '<div class="activity-row"><span>ยอดรวมก่อนหักส่วนลด</span><span class="amt mono-data">฿'+baht(r.subtotal)+'</span></div>' +
-    (r.discount ? '<div class="activity-row"><span>ส่วนลด</span><span class="amt mono-data">-฿'+baht(r.discount)+'</span></div>' : '') +
+    '<div class="activity-row"><span>ราคารวมหลังหักส่วนลดสินค้า (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalAfterProductDiscountExVat)+'</span></div>' +
+    (r.billDiscountExVat ? '<div class="activity-row"><span>ส่วนลดท้ายบิล (ไม่รวมภาษี)</span><span class="amt mono-data">-฿'+baht(r.billDiscountExVat)+'</span></div>' : '') +
     (r.vatMixed
       ? '<div class="activity-row"><span>มูลค่าสินค้าที่ยกเว้นภาษี</span><span class="amt mono-data">฿'+baht(r.exemptAmount)+'</span></div>' +
         '<div class="activity-row"><span>มูลค่าสินค้าที่เสียภาษี</span><span class="amt mono-data">฿'+baht(r.taxableExVat)+'</span></div>'
-      : '<div class="activity-row"><span>มูลค่าสินค้า'+(r.applyVat?' (ไม่รวมภาษี)':'')+'</span><span class="amt mono-data">฿'+baht(r.subtotalExVat)+'</span></div>') +
+      : '<div class="activity-row"><span>ราคาสุทธิหักส่วนลดท้ายบิล (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalExVat)+'</span></div>') +
     (r.applyVat ? '<div class="activity-row"><span>ภาษีมูลค่าเพิ่ม '+Math.round((r.vatRate != null ? r.vatRate : 0.07)*100)+'%</span><span class="amt mono-data">฿'+baht(r.vatAmount)+'</span></div>' : '') +
-    '<div class="activity-row"><b>สุทธิ</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
+    '<div class="activity-row"><b>ราคารวมภาษีมูลค่าเพิ่ม</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
   document.getElementById('son-confirm').style.display = '';
 }
 async function sonSubmit(){

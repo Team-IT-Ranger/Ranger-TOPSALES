@@ -1,7 +1,8 @@
-// รัน: node .dev/test-pricelist-parser.js   (ต้องมี .dev/xlsx.full.min.js — ดาวน์โหลดจาก CDN ไม่ commit)
+// รัน: node .dev/test-pricelist-parser.js   (REFERENCE_DIR=<พาธ> ถ้า reference/ ไม่ได้อยู่ข้างๆ repo นี้
+// เช่นเครื่องที่ยังไม่ได้ clone ไว้ที่ G:\Shared drives\...\reference — ดู CLAUDE.md "ทำงานสองคน")
 const XLSX=require('./xlsx.full.min.js'), fs=require('fs'), path=require('path');
 const P=require('../frontend-admin/pricelist-parser.js');
-const dir=path.join(__dirname,'..','reference');
+const dir=process.env.REFERENCE_DIR || path.join(__dirname,'..','reference');
 for (const f of fs.readdirSync(dir).filter(x=>x.endsWith('.xlsx')&&x.startsWith('Go Live'))) {
   const res=P.parse(XLSX, fs.readFileSync(path.join(dir,f)), {type:'buffer'});
   console.log('\n=====',f.slice(0,60),'| sheets:',res.sheets.length,'hiddenSheetsSkipped:',res.skippedHiddenSheets);

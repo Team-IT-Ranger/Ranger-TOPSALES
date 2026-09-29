@@ -124,6 +124,27 @@ function _allocateLineDiscount(items, totalDiscount, noDiscOf) {
   items.forEach(function(it) { if (noDiscOf[String(it.productId)]) { it.lineDiscount = 0; it.unitDiscount = 0; it.netTotal = Number(it.lineTotal) || 0; } });
 }
 
+/**
+ * ส่วนลดขั้นบันได (ราคาตั้งก่อนภาษี → ราคาตามขั้นที่ขายจริง) ต่อบรรทัด (2026-09-30 (2) เจ้าของระบบสั่ง —
+ * "ระบบราคาจะใช้ราคาก่อนภาษีเป็นตัวตั้งต้น" ใบขายต้องโชว์ราคาตั้ง/ส่วนลด/ราคาหลังหักส่วนลดก่อนคิด VAT เสมอ)
+ * คนละชั้นกับ _allocateLineDiscount ด้านบน — ชั้นนั้นคือโปร/ส่วนลดท้ายบิลที่กระจายทีหลัง (รวมทุกบรรทัด)
+ * ส่วนนี้คือส่วนลดขั้นบันไดที่ผูกกับสินค้า/ปริมาณโดยตรง ไม่ขึ้นกับโปรใดๆ (มาจากใบราคาเอง คอลัมน์ G/J/P)
+ * ใช้ได้ทั้งตอนคิดราคาสด (_priceSaleCart, 07_sales.gs) และตอนเปิดดูบิลเก่าย้อนหลัง (getSaleDetail/
+ * getSalesOrderAdmin) จากค่าที่บันทึกไว้ในบรรทัด — ไม่มีราคาตั้งอ้างอิง (listPriceExVat ว่าง เช่น บิลเส้นทาง
+ * โปรโมชั่นเดิมที่ไม่มีชุดราคา) คืน null ทั้งก้อน หน้าจอต้องซ่อนคอลัมน์นี้เอง
+ * lineTotalInclVat: ราคารวมภาษีของบรรทัดที่ขั้นราคานั้น (ก่อนหักโปร/ส่วนลดท้ายบิล)
+ */
+function _lineListBreakdown(listPriceExVat, qty, lineTotalInclVat, taxed, rate) {
+  if (listPriceExVat === '' || listPriceExVat === null || listPriceExVat === undefined) return null;
+  listPriceExVat = Number(listPriceExVat);
+  qty = Number(qty) || 0;
+  var netExVat = taxed ? _round2((Number(lineTotalInclVat) || 0) / (1 + rate)) : _round2(Number(lineTotalInclVat) || 0);
+  var beforeDiscountExVat = _round2(listPriceExVat * qty);
+  var discountExVat = _round2(beforeDiscountExVat - netExVat);
+  return { unitPriceExVat: listPriceExVat, beforeDiscountExVat: beforeDiscountExVat,
+           unitDiscountExVat: qty ? _round2(discountExVat / qty) : 0, discountExVat: discountExVat, netExVat: netExVat };
+}
+
 function saleVatBreakdown(lines, billDiscount, taxOf, rate) {
   var r = rate === undefined || rate === null ? currentVatRate() : Number(rate);
   var grossVat = 0, grossExempt = 0;
@@ -292,7 +313,8 @@ function priceCart(ctx, cart, opts) {
     var lineTotal = _round2(price * qty);
     subtotal += lineTotal;
     lines.push({ productId: String(c.productId), unitCode: unitCode, unitFactor: Number(item.unit_factor) || 1, qty: qty,
-                 unitPrice: price, lineTotal: lineTotal, tierLabel: item.tier_label || '', lineId: item.line_id });
+                 unitPrice: price, lineTotal: lineTotal, tierLabel: item.tier_label || '', lineId: item.line_id,
+                 listPriceExVat: (item.list_price_ex_vat === '' || item.list_price_ex_vat == null) ? null : Number(item.list_price_ex_vat) });
   }
   subtotal = _round2(subtotal);
 

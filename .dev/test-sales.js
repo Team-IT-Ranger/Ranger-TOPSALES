@@ -80,5 +80,28 @@ r = ctx.quoteSale({ role: 'van_sales' }, { customerId: 1, paymentType: 'cash', i
 eq('ได้ราคาจริงจากเส้นทางโปรโมชั่นเดิม ไม่ใช่ {priceList:null} เปล่าๆ',
   [r.success, r.priceList, r.lines.length, r.lines[0].lineTotal], [true, null, 1, 20]);
 
+console.log('\n── _priceSaleCart(): "ราคาก่อนภาษีเป็นตัวตั้งต้น" (2026-09-30 (2)) — listBreakdown ต่อบรรทัด + ยอดสรุปไม่รวมภาษี ──');
+{
+  // ชุดราคาจริงมี list_price_ex_vat (G ในใบราคา) — ราคา 1 หีบ เงินสด ฿1,210 (รวม VAT) จากราคาตั้ง ฿1,166.34
+  const priceListItems = [{ record_id: 1, price_list_id: 9, line_id: 1, product_id: 1, unit_code: 'CT', unit_factor: 60,
+    min_qty: 1, max_qty: '', list_price_ex_vat: 1166.34, cash_price_incl_vat: 1210, credit_price_incl_vat: 1225, van_only: 'FALSE', tier_label: 'ซื้อ 1 หีบ' }];
+  const realGetCtx2 = ctx.getPricingContextForCustomer;
+  ctx.getPricingContextForCustomer = () => ({ list: { record_id: 9, name: 'ชุดราคาทดสอบ (2)' }, items: priceListItems, billPromos: [] });
+  r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'cash', false);
+  eq('ขายผ่านชุดราคาที่มี list_price_ex_vat → items[0].listBreakdown คำนวณถูก (ก่อนลด/ส่วนลด/หลังลด ไม่รวม VAT)',
+    [r.success, r.items[0].listBreakdown && r.items[0].listBreakdown.unitPriceExVat,
+     r.items[0].listBreakdown && r.items[0].listBreakdown.discountExVat, r.items[0].listBreakdown && r.items[0].listBreakdown.netExVat],
+    [true, 1166.34, 35.5, 1130.84]);
+  eq('ยอดสรุปบิล: ราคารวมหลังหักส่วนลดสินค้า (ไม่รวมภาษี) = subtotalExVat เพราะไม่มีโปร/ส่วนลดท้ายบิล',
+    [r.calc.vat.subtotalAfterProductDiscountExVat, r.calc.vat.billDiscountExVat, r.calc.vat.exVat],
+    [1130.84, 0, 1130.84]);
+  ctx.getPricingContextForCustomer = realGetCtx2;
+
+  // เส้นทาง fallback (ไม่มีชุดราคา) ไม่มี list_price_ex_vat ให้อ้างอิง → listBreakdown ต้องเป็น null (ไม่ใช่โยน error)
+  r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'cash', false);
+  eq('เส้นทางโปรโมชั่นเดิม (ไม่มีชุดราคา) → listBreakdown เป็น null ทุกบรรทัด (ไม่มีราคาตั้งให้ถอด)',
+    r.items[0].listBreakdown, null);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

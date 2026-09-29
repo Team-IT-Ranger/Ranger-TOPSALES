@@ -188,23 +188,33 @@ function getSaleDetail(user, payload) {
   centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c; });
   var cust = customers[String(order.customer_id)];
 
+  var vat = _orderVat(order);   // อ่านภาพนิ่งภาษีที่บันทึกไว้ตอนขาย ไม่คำนวณใหม่ (guide VAT ข้อ 4)
   var items = tenantObjects(user.tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
-    .map(function(it) { var p = products[String(it.product_id)]; return {
+    .map(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
+      var lineTotal = parseFloat(it.line_total) || 0; return {
       productId: it.product_id, name: p ? p.name : '(สินค้าถูกลบ)',
       unitCode: it.unit_code, qty: parseFloat(it.qty) || 0, price: parseFloat(it.price) || 0,
-      lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1',
+      lineTotal: lineTotal, isFree: String(it.is_free) === '1',
       // ส่วนลดต่อบรรทัด (2026-09-30) — บิลเก่าก่อนมีคอลัมน์นี้อ่านเป็น '' → parseFloat ได้ NaN → || 0 ดักไว้
       unitDiscount: parseFloat(it.unit_discount) || 0, lineDiscount: parseFloat(it.line_discount) || 0,
-      netTotal: (parseFloat(it.line_total) || 0) - (parseFloat(it.line_discount) || 0)
+      netTotal: lineTotal - (parseFloat(it.line_discount) || 0),
+      // ★ (2) ราคาตั้งก่อนภาษี — บิลเก่าก่อนมีคอลัมน์นี้ list_price_ex_vat ว่าง → listBreakdown เป็น null (ซ่อนคอลัมน์เอง)
+      listBreakdown: _lineListBreakdown(it.list_price_ex_vat, it.qty, lineTotal, taxStatus === TAX_VAT, vat.rate)
     }; });
-
-  var vat = _orderVat(order);   // อ่านภาพนิ่งภาษีที่บันทึกไว้ตอนขาย ไม่คำนวณใหม่ (guide VAT ข้อ 4)
+  // ★ (2) ราคารวมหลังหักส่วนลดสินค้า (ก่อนโปร/ส่วนลดท้ายบิล) ไม่รวมภาษี — ส่วนลดท้ายบิลเป็นเศษที่เหลือ กันปัดเศษไม่ตรงกัน
+  var preDiscountExVat = 0;
+  tenantObjects(user.tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
+    .forEach(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
+      var lt = parseFloat(it.line_total) || 0; preDiscountExVat += taxStatus === TAX_VAT ? lt / (1 + vat.rate) : lt; });
+  preDiscountExVat = _round2(preDiscountExVat);
   return { success: true,
     order: {
       code: order.order_code, customer: cust ? customerFullName(cust) : 'ลูกค้าทั่วไป', customerPhone: cust ? cust.phone : '',
       subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
       applyVat: vat.applyVat && vat.vat > 0, vatRate: vat.rate, vatAmount: vat.vat,
       subtotalExVat: vat.exVat, exemptAmount: vat.exemptAmount, taxableExVat: vat.taxableExVat, vatMixed: vat.mixed,
+      // ★ (2) ราคาก่อนภาษีเป็นตัวตั้งต้น — ยอดสรุปบิลฝั่งไม่รวม VAT ก่อนบวก VAT ทีเดียวตอนท้าย
+      subtotalAfterProductDiscountExVat: preDiscountExVat, billDiscountExVat: _round2(preDiscountExVat - vat.exVat),
       paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: order.status,
       createdAt: safeDateStr(order.created_at)
     },

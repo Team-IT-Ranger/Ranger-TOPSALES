@@ -54,17 +54,26 @@ function getSalesOrderAdmin(session, payload) {
   var customers = {};
   centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c; });
 
+  var orderVat = _orderVat(order);
   var items = tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
-    .map(function(it) { var p = products[String(it.product_id)]; return {
+    .map(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
+      var lineTotal = parseFloat(it.line_total) || 0; return {
       productId: it.product_id, productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)',
       unitCode: it.unit_code, unitFactor: it.unit_factor, qty: parseFloat(it.qty) || 0, baseQty: parseFloat(it.base_qty) || 0,
-      price: parseFloat(it.price) || 0, lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1',
-      taxStatus: String(it.tax_status || '') || productTaxStatus(p),
+      price: parseFloat(it.price) || 0, lineTotal: lineTotal, isFree: String(it.is_free) === '1',
+      taxStatus: taxStatus,
       // ส่วนลดต่อบรรทัด (2026-09-30) — บิลเก่าก่อนมีคอลัมน์นี้อ่านเป็น '' → parseFloat ได้ NaN → || 0 ดักไว้
       unitDiscount: parseFloat(it.unit_discount) || 0, lineDiscount: parseFloat(it.line_discount) || 0,
-      netTotal: (parseFloat(it.line_total) || 0) - (parseFloat(it.line_discount) || 0)
+      netTotal: lineTotal - (parseFloat(it.line_discount) || 0),
+      // ★ (2) ราคาตั้งก่อนภาษี — บิลเก่าก่อนมีคอลัมน์นี้ list_price_ex_vat ว่าง → listBreakdown เป็น null (ซ่อนคอลัมน์เอง)
+      listBreakdown: _lineListBreakdown(it.list_price_ex_vat, it.qty, lineTotal, taxStatus === TAX_VAT, orderVat.rate)
     }; });
   var discounts = tenantObjects(tenantId, 'order_discounts').filter(function(d) { return String(d.order_id) === String(order.record_id); });
+  // ★ (2) ราคารวมหลังหักส่วนลดสินค้า (ก่อนโปร/ส่วนลดท้ายบิล) ไม่รวมภาษี — ส่วนลดท้ายบิลเป็นเศษที่เหลือ กันปัดเศษไม่ตรงกัน
+  var preDiscountExVat = 0;
+  items.forEach(function(it) { preDiscountExVat += it.taxStatus === TAX_VAT ? it.lineTotal / (1 + orderVat.rate) : it.lineTotal; });
+  preDiscountExVat = _round2(preDiscountExVat);
+  var billDiscountExVat = _round2(preDiscountExVat - orderVat.exVat);
 
   var cust = customers[String(order.customer_id)];
   var status = String(order.status || '');
@@ -76,9 +85,11 @@ function getSalesOrderAdmin(session, payload) {
       customerShipTo: cust ? (cust.ship_to_address || '') : '', customerTaxId: cust ? (cust.tax_id || '') : '',
       customerTaxBranch: cust ? (cust.tax_branch_code || '') : '',
       subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
-      vatRate: _orderVat(order).rate, subtotalExVat: _orderVat(order).exVat, vatAmount: _orderVat(order).vat,
-      exemptAmount: _orderVat(order).exemptAmount, taxableExVat: _orderVat(order).taxableExVat, vatMixed: _orderVat(order).mixed,
-      applyVat: _orderVat(order).applyVat && _orderVat(order).vat > 0, vatType: _orderVat(order).vatType,
+      vatRate: orderVat.rate, subtotalExVat: orderVat.exVat, vatAmount: orderVat.vat,
+      exemptAmount: orderVat.exemptAmount, taxableExVat: orderVat.taxableExVat, vatMixed: orderVat.mixed,
+      applyVat: orderVat.applyVat && orderVat.vat > 0, vatType: orderVat.vatType,
+      // ★ (2) ราคาก่อนภาษีเป็นตัวตั้งต้น — ยอดสรุปบิลฝั่งไม่รวม VAT ก่อนบวก VAT ทีเดียวตอนท้าย (ดู subtotalExVat/vatAmount ด้านบน)
+      subtotalAfterProductDiscountExVat: preDiscountExVat, billDiscountExVat: billDiscountExVat,
       paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: status,
       statusLabel: SO_STATUS_LABELS[status] || status,
       paymentStatus: orderPaymentStatus(order), paymentLabel: SO_PAYMENT_LABELS[orderPaymentStatus(order)] || '',
@@ -129,12 +140,15 @@ function previewSaleAdmin(session, payload) {
 
   return { success: true,
     lines: priced.items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty, unitPrice: it.price, lineTotal: it.lineTotal,
-      tierLabel: it.tierLabel || '', unitDiscount: it.unitDiscount || 0, lineDiscount: it.lineDiscount || 0, netTotal: it.netTotal != null ? it.netTotal : it.lineTotal }; }),
+      tierLabel: it.tierLabel || '', unitDiscount: it.unitDiscount || 0, lineDiscount: it.lineDiscount || 0, netTotal: it.netTotal != null ? it.netTotal : it.lineTotal,
+      listBreakdown: it.listBreakdown || null }; }),
     freeGoods: priced.calc.freeGoods, subtotal: priced.calc.subtotal, discount: priced.calc.discount, total: priced.calc.total,
     // ให้คนเปิดบิลเห็นภาษีก่อนกดบันทึก — ตัวเลขชุดเดียวกับที่จะถูกบันทึกลงบิลจริง
     vatRate: priced.calc.vat.rate, subtotalExVat: priced.calc.vat.exVat, vatAmount: priced.calc.vat.vat,
     exemptAmount: priced.calc.vat.exemptAmount, taxableExVat: priced.calc.vat.taxableExVat, vatMixed: priced.calc.vat.mixed,
     applyVat: priced.calc.vat.applyVat, vatType: priced.calc.vat.vatType,
+    // ★ (2) ราคาก่อนภาษีเป็นตัวตั้งต้น — ยอดสรุปบิลฝั่งไม่รวม VAT ก่อนบวก VAT ทีเดียวตอนท้าย
+    subtotalAfterProductDiscountExVat: priced.calc.vat.subtotalAfterProductDiscountExVat, billDiscountExVat: priced.calc.vat.billDiscountExVat,
     priceListName: priced.priceListUsed ? priced.priceListUsed.name : null
   };
 }
@@ -234,6 +248,7 @@ function recordSaleAdmin(session, payload) {
       record_id: tenantNextId(tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
       unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
       price: it.price, line_total: it.lineTotal, unit_discount: it.unitDiscount || 0, line_discount: it.lineDiscount || 0,
+      list_price_ex_vat: it.listPriceExVat != null ? it.listPriceExVat : '',
       is_free: 0, tax_status: calc.vat.taxOf(it.productId)
     });
   });

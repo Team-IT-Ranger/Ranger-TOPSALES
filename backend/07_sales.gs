@@ -94,6 +94,7 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
       // ★ ส่วนลดต่อบรรทัด (2026-09-30) — priceCart() คำนวณ/กระจายให้แล้ว แค่ก๊อบมาตรงๆ (ดู _allocateLineDiscount, 18_pricing_engine.gs)
       it.unitDiscount = pl.unitDiscount || 0; it.lineDiscount = pl.lineDiscount || 0;
       it.netTotal = pl.netTotal != null ? pl.netTotal : pl.lineTotal;
+      it.listPriceExVat = pl.listPriceExVat;   // ★ (2) ราคาตั้งก่อนภาษี — ดู _lineListBreakdown ด้านล่าง
     });
     priceListUsed = pricingCtx.list;
     /* ★ discount ที่บันทึกลงบิลต้องเป็นส่วนลด "รวมทุกชั้น" ให้ subtotal - discount = total เสมอ
@@ -124,6 +125,20 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
   calc.vat.applyVat = customerApplyVat && calc.vat.vat > 0;
   calc.vat.vatType = currentVatType();
   calc.vat.taxOf = function(pid) { return customerApplyVat ? productTaxStatus(productMap[String(pid)]) : TAX_EXEMPT; };
+
+  /* ★ (2) ราคาก่อนภาษีเป็นตัวตั้งต้น (2026-09-30) — ยอดสรุปบิลแบบไม่รวม VAT ก่อน แล้วค่อยบวก VAT ทีเดียวตอนท้าย
+     รวมหลังหักส่วนลดสินค้า (ก่อนโปร/ส่วนลดท้ายบิล) − ส่วนลดท้ายบิล = calc.vat.exVat (มีอยู่แล้ว) เสมอ โดยสร้าง
+     "ส่วนลดท้ายบิล" เป็นเศษที่เหลือ ไม่คำนวณแยก กันปัดเศษสองทางไม่ตรงกัน */
+  var preDiscountExVat = 0;
+  items.forEach(function(it) {
+    var taxed = customerApplyVat && productTaxStatus(productMap[String(it.productId)]) === TAX_VAT;
+    var amt = Number(it.lineTotal) || 0;
+    preDiscountExVat += taxed ? amt / (1 + calc.vat.rate) : amt;
+    var taxedForList = taxed;
+    it.listBreakdown = _lineListBreakdown(it.listPriceExVat, it.qty, it.lineTotal, taxedForList, calc.vat.rate);
+  });
+  calc.vat.subtotalAfterProductDiscountExVat = _round2(preDiscountExVat);
+  calc.vat.billDiscountExVat = _round2(calc.vat.subtotalAfterProductDiscountExVat - calc.vat.exVat);
 
   return { success: true, items: items, calc: calc, priceListUsed: priceListUsed };
 }
@@ -206,6 +221,7 @@ function recordSale(user, payload) {
       record_id: tenantNextId(user.tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
       unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
       price: it.price, line_total: it.lineTotal, unit_discount: it.unitDiscount || 0, line_discount: it.lineDiscount || 0,
+      list_price_ex_vat: it.listPriceExVat != null ? it.listPriceExVat : '',
       is_free: 0, tax_status: calc.vat.taxOf(it.productId)
     });
   });
@@ -278,11 +294,13 @@ function quoteSale(user, payload) {
     success: true,
     lines: priced.items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty,
       unitPrice: it.price, lineTotal: it.lineTotal, tierLabel: it.tierLabel || '',
-      unitDiscount: it.unitDiscount || 0, lineDiscount: it.lineDiscount || 0, netTotal: it.netTotal != null ? it.netTotal : it.lineTotal }; }),
+      unitDiscount: it.unitDiscount || 0, lineDiscount: it.lineDiscount || 0, netTotal: it.netTotal != null ? it.netTotal : it.lineTotal,
+      listBreakdown: it.listBreakdown || null }; }),
     freeGoods: calc.freeGoods, appliedRules: calc.appliedRules,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
     priceList: priced.priceListUsed ? { id: priced.priceListUsed.record_id, name: priced.priceListUsed.name } : null,
     applyVat: vat.applyVat, vatRate: vat.rate, vatAmount: vat.vat, subtotalExVat: vat.exVat,
-    exemptAmount: vat.exemptAmount, taxableExVat: vat.taxableExVat, vatMixed: vat.mixed
+    exemptAmount: vat.exemptAmount, taxableExVat: vat.taxableExVat, vatMixed: vat.mixed,
+    subtotalAfterProductDiscountExVat: vat.subtotalAfterProductDiscountExVat, billDiscountExVat: vat.billDiscountExVat
   };
 }

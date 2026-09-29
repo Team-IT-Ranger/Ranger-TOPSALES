@@ -22,7 +22,10 @@ var TENANT_SHEET_TABS = {
   // unit_discount/line_discount เพิ่ม 2026-09-30 — ส่วนลดต่อบรรทัด (เจ้าของระบบสั่ง) มาจาก _allocateLineDiscount
   // (18_pricing_engine.gs) บันทึกเป็นภาพนิ่งตอนขายเหมือนภาษี ไม่คำนวณใหม่ตอนเปิดดูย้อนหลัง — บิลเก่าก่อนมีคอลัมน์นี้
   // อ่านได้ว่าง (''), หน้าจอต้องอ่านเป็น 0 เอง (ดู getSaleDetail/getSalesOrderAdmin)
-  order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','unit_discount','line_discount','is_free','tax_status'],
+  // list_price_ex_vat เพิ่ม 2026-09-30 (2) — ราคาตั้งต้น (ก่อนภาษี) ของ "ขั้นราคา" ที่ขายจริง ก๊อบมาจาก
+  // price_list_items.list_price_ex_vat ตอนขาย (ภาพนิ่งเช่นกัน) ใช้คำนวณส่วนลดขั้นบันไดต่อบรรทัดตอนเปิดดูย้อนหลัง
+  // (ดู _lineListBreakdown, 18_pricing_engine.gs) ว่าง = ไม่มีราคาตั้งอ้างอิง (บิลจากเส้นทางโปรโมชั่นเดิม ไม่มีชุดราคา)
+  order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','unit_discount','line_discount','list_price_ex_vat','is_free','tax_status'],
   order_discounts:     ['record_id','order_id','rule_id','rule_name','type','value','free_product_id','free_qty'],
   van_stock:           ['line_user_id','product_id','qty'],
   stock_movements:     ['record_id','line_user_id','product_id','change_qty','type','ref_id','created_at'],

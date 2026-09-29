@@ -302,5 +302,41 @@ console.log('\n-- โปรระบุรายการสินค้าห�
   eq('★ ระบุรายการสินค้าไว้ ต้องชนะกลุ่ม (แคบกว่าชนะ ไม่งั้นตั้งเจาะจงแล้วไม่มีผล)', both.discount, 20);
 }
 
+/* ★ 2026-09-30 (2) "ราคาก่อนภาษีเป็นตัวตั้งต้น" — _lineListBreakdown() ถอดส่วนลดขั้นบันไดจากราคาตั้ง (G ใบราคาจริง)
+   เทียบกับราคาที่ขายจริง (cash/credit_price_incl_vat) ใช้ตัวเลขจริงจากไฟล์ Go Live Oct-Dec 2569 (เหนือ/อีสาน/ตะวันออก):
+   รหัส 10189/10191 (เอ็กซ์ตรีม แซนดัลวูด) G=1166.34 ซื้อ 1 หีบ เงินสด = ฿1,210 → ส่วนลด ฿35.50 */
+console.log('\n-- _lineListBreakdown() (2026-09-30 (2), ราคาก่อนภาษีเป็นตัวตั้งต้น) --');
+{
+  const lb = ctx._lineListBreakdown(1166.34, 1, 1210, true, 0.07);
+  eq('1 หีบ เงินสด: ราคาตั้ง 1,166.34 → สุทธิ 1,210 (รวม VAT) = 1,130.84 (ไม่รวม VAT) → ส่วนลด 35.50',
+     [lb.unitPriceExVat, lb.beforeDiscountExVat, lb.netExVat, lb.discountExVat, lb.unitDiscountExVat],
+     [1166.34, 1166.34, 1130.84, 35.5, 35.5]);
+
+  const lb3 = ctx._lineListBreakdown(1166.34, 3, 3600, true, 0.07);
+  eq('3 หีบ (สมมติ ราคาต่อหน่วยรวม VAT 1,200): ก่อนลด 3,499.02 · ส่วนลดต่อหน่วยหารจากส่วนลดรวม',
+     [lb3.beforeDiscountExVat, _round(lb3.netExVat + lb3.discountExVat)], [_round(1166.34 * 3), lb3.beforeDiscountExVat]);
+
+  eq('ไม่มีราคาตั้งอ้างอิง (null/ว่าง) → คืน null ทั้งก้อน (บิลเส้นทางโปรโมชั่นเดิม ไม่มีชุดราคา)',
+     [ctx._lineListBreakdown(null, 1, 1210, true, 0.07), ctx._lineListBreakdown('', 1, 1210, true, 0.07)], [null, null]);
+
+  const lbExempt = ctx._lineListBreakdown(100, 2, 190, false, 0.07);
+  eq('สินค้ายกเว้น VAT (taxed=false) → netExVat = lineTotal ตรงๆ ไม่ถอดภาษี', lbExempt.netExVat, 190);
+
+  const lbZeroQty = ctx._lineListBreakdown(100, 0, 0, true, 0.07);
+  eq('qty=0 ไม่หารด้วยศูนย์ → unitDiscountExVat = 0', lbZeroQty.unitDiscountExVat, 0);
+}
+
+// priceCart() ต้องส่ง listPriceExVat ออกมาต่อบรรทัดด้วย เมื่อ price_list_items มี list_price_ex_vat
+console.log('\n-- priceCart() ส่ง listPriceExVat ต่อบรรทัด --');
+{
+  const rowWithList = Object.assign({}, row(1, 101, 'CT', 60, 1, 1, 1210, 1225), { list_price_ex_vat: 1166.34 });
+  const pctxList = { list: { record_id: 2, name: 'ทดสอบราคาตั้ง' }, items: [rowWithList], billPromos: [] };
+  const r1 = ctx.priceCart(pctxList, [{ productId: 101, unitCode: 'CT', qty: 1 }], cash);
+  eq('มี list_price_ex_vat ในชุดราคา → lines[0].listPriceExVat ตรงกับที่ตั้งไว้', [r1.success, r1.lines[0].listPriceExVat], [true, 1166.34]);
+
+  const r2 = ctx.priceCart(pctx, [{ productId: 101, unitCode: 'CT', qty: 1 }], cash);   // pctx เดิม ไม่มี list_price_ex_vat
+  eq('ไม่มี list_price_ex_vat (ชุดราคาเดิมก่อนมีคอลัมน์นี้) → listPriceExVat เป็น null', r2.lines[0].listPriceExVat, null);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
