@@ -131,6 +131,11 @@ function getAvailableQty(scope, warehouseId, productId) {
 
 /** เช็คของพอขายไหม (อ่านอย่างเดียว) — เรียกก่อนสร้างบิล office_delivery เหมือนที่ฝั่งรถเช็ค van_stock ก่อนสร้างบิล
  *  need: { productId: จำนวนหน่วยฐานที่ต้องใช้ }  ของไม่พอสักตัวเดียว = ปฏิเสธทั้งใบ ไม่ใช่ตัดครึ่งๆ กลางๆ */
+// ★ 2026-09-30 เจ้าของระบบสั่ง: office_delivery ของไม่พอ = แค่เตือน ไม่ใช่ error ที่ห้ามบันทึก — ต่างจากขายจากรถ
+// (fulfillmentType='immediate', เช็คแยกใน recordSale/recordSaleAdmin) ที่ยังบล็อกเหมือนเดิม เพราะของบนรถต้องมี
+// จริงถึงจะยื่นให้ลูกค้าได้ทันที ส่วน office_delivery เป็นแค่ "คำมั่นว่าจะส่งของให้" ของยังไม่ต้องอยู่ครบตอนนี้
+// (อาจกำลังสั่งซื้อเพิ่มอยู่) — จองไปก่อนได้แม้เกินของที่มีจริง สะท้อนออกมาเป็น "ขายได้" ติดลบที่หน้าคลังสินค้า
+// (บทความคู่มือ purchasing-03 อธิบายไว้แล้วว่าเลขติดลบตรงนั้นคือสัญญาณเตือนให้รีบสั่งของเพิ่ม)
 function checkOfficeDeliveryStock(tenantId, need) {
   var scope = _saleStockScope(tenantId);
   var warehouseId = _ensureScopeWarehouse(scope);
@@ -144,8 +149,8 @@ function checkOfficeDeliveryStock(tenantId, need) {
     var avail = getAvailableQty(scope, warehouseId, pid);
     if (avail < need[pid]) short.push((names[pid] || ('สินค้า ' + pid)) + ' (ขายได้จริง ' + avail + ' หลังหักที่จองไว้แล้ว ต้องใช้ ' + need[pid] + ')');
   });
-  if (short.length) return { success: false, message: 'ของในคลังไม่พอขาย: ' + short.join(' · ') };
-  return { success: true, warehouseId: warehouseId };
+  var warning = short.length ? ('ของในคลังไม่พอขาย (บันทึกบิลแล้ว แต่ต้องรีบสั่งของเพิ่ม): ' + short.join(' · ')) : '';
+  return { success: true, warehouseId: warehouseId, warning: warning };
 }
 
 /** จองของให้บิล office_delivery ใบหนึ่ง (เขียนแถว 'active' ทีละสินค้า) — เรียกหลังสร้างบิลแล้ว (ต้องมี orderId)

@@ -59,7 +59,10 @@ function getSalesOrderAdmin(session, payload) {
       productId: it.product_id, productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)',
       unitCode: it.unit_code, unitFactor: it.unit_factor, qty: parseFloat(it.qty) || 0, baseQty: parseFloat(it.base_qty) || 0,
       price: parseFloat(it.price) || 0, lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1',
-      taxStatus: String(it.tax_status || '') || productTaxStatus(p)
+      taxStatus: String(it.tax_status || '') || productTaxStatus(p),
+      // ส่วนลดต่อบรรทัด (2026-09-30) — บิลเก่าก่อนมีคอลัมน์นี้อ่านเป็น '' → parseFloat ได้ NaN → || 0 ดักไว้
+      unitDiscount: parseFloat(it.unit_discount) || 0, lineDiscount: parseFloat(it.line_discount) || 0,
+      netTotal: (parseFloat(it.line_total) || 0) - (parseFloat(it.line_discount) || 0)
     }; });
   var discounts = tenantObjects(tenantId, 'order_discounts').filter(function(d) { return String(d.order_id) === String(order.record_id); });
 
@@ -125,7 +128,8 @@ function previewSaleAdmin(session, payload) {
   if (!priced.success) return priced;
 
   return { success: true,
-    lines: priced.items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty, unitPrice: it.price, lineTotal: it.lineTotal }; }),
+    lines: priced.items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty, unitPrice: it.price, lineTotal: it.lineTotal,
+      tierLabel: it.tierLabel || '', unitDiscount: it.unitDiscount || 0, lineDiscount: it.lineDiscount || 0, netTotal: it.netTotal != null ? it.netTotal : it.lineTotal }; }),
     freeGoods: priced.calc.freeGoods, subtotal: priced.calc.subtotal, discount: priced.calc.discount, total: priced.calc.total,
     // ให้คนเปิดบิลเห็นภาษีก่อนกดบันทึก — ตัวเลขชุดเดียวกับที่จะถูกบันทึกลงบิลจริง
     vatRate: priced.calc.vat.rate, subtotalExVat: priced.calc.vat.exVat, vatAmount: priced.calc.vat.vat,
@@ -192,8 +196,8 @@ function recordSaleAdmin(session, payload) {
   } else {
     // office_delivery: ตัดสต็อกจริงตอนเข้า "กำลังจัดส่ง" (34_sales_status.gs) แต่ต้องกันของไว้ตั้งแต่ตอนนี้ (ยอดจอง — guide ข้อ 1.3)
     // ไม่งั้นอีกบิลหนึ่งยืนยันของชิ้นเดียวกันได้พร้อมกัน แล้วไปเจอตอนจะตัดว่าของไม่พอ (สัญญากับลูกค้าไปแล้วทั้งสองราย)
+    // ★ ของไม่พอ = แค่ warning ไม่บล็อกการบันทึก (ต่างจากขายจากรถด้านบน) ดูคอมเมนต์ที่ checkOfficeDeliveryStock (34_sales_status.gs)
     stockCheck = checkOfficeDeliveryStock(tenantId, need);
-    if (!stockCheck.success) return stockCheck;
   }
 
   var orderCode = getNextDocNumber(tenantId, 'SO');
@@ -229,7 +233,8 @@ function recordSaleAdmin(session, payload) {
     tenantAppend(tenantId, 'order_items', {
       record_id: tenantNextId(tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
       unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
-      price: it.price, line_total: it.lineTotal, is_free: 0, tax_status: calc.vat.taxOf(it.productId)
+      price: it.price, line_total: it.lineTotal, unit_discount: it.unitDiscount || 0, line_discount: it.lineDiscount || 0,
+      is_free: 0, tax_status: calc.vat.taxOf(it.productId)
     });
   });
   freeGoods.forEach(function(f) {
@@ -262,7 +267,8 @@ function recordSaleAdmin(session, payload) {
     if (p && !isFlagOn(p.has_transactions)) centralUpdate('products', pid, { has_transactions: 'TRUE' });
   });
 
-  return { success: true, orderId: orderId, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType };
+  return { success: true, orderId: orderId, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType,
+    stockWarning: stockCheck.warning || '' };
 }
 
 // ยกเลิกบิลขาย — คืนของเข้าที่เดิมให้อัตโนมัติถ้าบิลนี้เลยจุดตัดสต็อกไปแล้ว (สต็อกรถ หรือ คลังกลาง)

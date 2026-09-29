@@ -192,7 +192,10 @@ function getSaleDetail(user, payload) {
     .map(function(it) { var p = products[String(it.product_id)]; return {
       productId: it.product_id, name: p ? p.name : '(สินค้าถูกลบ)',
       unitCode: it.unit_code, qty: parseFloat(it.qty) || 0, price: parseFloat(it.price) || 0,
-      lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1'
+      lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1',
+      // ส่วนลดต่อบรรทัด (2026-09-30) — บิลเก่าก่อนมีคอลัมน์นี้อ่านเป็น '' → parseFloat ได้ NaN → || 0 ดักไว้
+      unitDiscount: parseFloat(it.unit_discount) || 0, lineDiscount: parseFloat(it.line_discount) || 0,
+      netTotal: (parseFloat(it.line_total) || 0) - (parseFloat(it.line_discount) || 0)
     }; });
 
   var vat = _orderVat(order);   // อ่านภาพนิ่งภาษีที่บันทึกไว้ตอนขาย ไม่คำนวณใหม่ (guide VAT ข้อ 4)

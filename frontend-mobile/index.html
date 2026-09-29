@@ -506,6 +506,11 @@ function enterApp(){
   $('me-sub').textContent = [ME.role === 'van_sales' ? 'หน่วยรถ (Cash Van)' : (ME.role || ''), ME.tenantId].filter(Boolean).join(' · ');
   if (ME.pictureUrl) { $('me-pic').src = ME.pictureUrl; $('me-pic').classList.remove('hidden'); $('me-av').classList.add('hidden'); }
   else $('me-av').textContent = (ME.name || '?').slice(0, 1);
+  // ★ 2026-09-30 เจ้าของระบบสั่ง: พนักงานเครดิต (credit_sales) ดีฟอลต์ "ส่งจากสำนักงาน" + ชำระ "เครดิต" ตั้งแต่
+  // เปิดแอป (พนักงานขับรถ/van_sales ยังดีฟอลต์เงินสด + ตัดสต็อกรถทันทีเหมือนเดิม — ค่าเริ่มต้นในตัว HTML)
+  // ตั้งครั้งเดียวตอนเข้าแอปต่อเซสชัน ไม่บังคับซ้ำทุกครั้งที่กลับมาแท็บขาย เพราะจะไปแย่งค่าที่ผู้ใช้เปลี่ยนเองไว้
+  // ราคาเงินสด/เครดิตเลือกตามค่า PAY นี้อยู่แล้วในตัว (isCreditPayment ที่ quoteSale/recordSale) ไม่ต้องแก้อะไรเพิ่ม
+  if (ME.role === 'credit_sales') { setPay('credit_term'); $('s-office').checked = true; }
   const cached = lsGet('boot_' + ME.lineUserId, null);
   if (cached) DATA = cached.data;
   gotoTab('home');
@@ -621,7 +626,11 @@ function renderSaleDetail(r){
       '<div class="row"><span>ชำระเงิน</span><span>' + (o.paymentMethod === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></div>' +
     '</div>' +
     '<div class="card stack" style="margin-top:10px">' +
-      items.map(it => '<div class="row"><span>' + esc(it.name) + '<br><span class="note">' + it.qty + ' ' + esc(unitLabelForItem(it)) + ' × ฿' + baht(it.price) + '</span></span><span class="mono">฿' + baht(it.lineTotal) + '</span></div>').join('') +
+      // ★ 2026-09-30 เจ้าของระบบสั่ง: โชว์ราคา/ส่วนลดต่อหน่วยและต่อบรรทัดด้วย ไม่ใช่แค่ยอดสุทธิ
+      items.map(it => '<div class="row"><span>' + esc(it.name) + '<br><span class="note">' + it.qty + ' ' + esc(unitLabelForItem(it)) + ' × ฿' + baht(it.price) +
+        (it.unitDiscount ? ' (ลด ฿' + baht(it.unitDiscount) + '/หน่วย)' : '') +
+        (it.lineDiscount ? '<br>รวมก่อนลด ฿' + baht(it.lineTotal) + ' − ส่วนลด ฿' + baht(it.lineDiscount) : '') +
+        '</span></span><span class="mono">฿' + baht(it.netTotal != null ? it.netTotal : it.lineTotal) + '</span></div>').join('') +
       free.map(it => '<div class="row" style="background:#EAF6EE;border-radius:8px"><span>🎁 ' + esc(it.name) + '<br><span class="note">' + it.qty + ' ' + esc(unitLabelForItem(it)) + ' ฟรี</span></span><span class="mono">ฟรี</span></div>').join('') +
     '</div>' +
     '<div class="card stack" style="margin-top:10px">' +
@@ -783,9 +792,14 @@ function renderCartDetail(){
     CART.map(c => {
       const p = prodById(c.productId) || { name: '#' + c.productId }, u = p.id ? unitOf(p, c.unitCode) : { unitLabel: '', price: 0 };
       const ql = hasQuote && QUOTE.lines.find(l => String(l.productId) === String(c.productId) && String(l.unitCode) === (c.unitCode || String(l.unitCode)));
+      // ★ 2026-09-30 เจ้าของระบบสั่ง: โชว์จำนวน/หน่วย/ราคาต่อหน่วย/ส่วนลดต่อหน่วย/รวมก่อนลด/ส่วนลดรวม/สุทธิ ต่อบรรทัด
       const unitPrice = ql ? ql.unitPrice : u.price, line = ql ? ql.lineTotal : u.price * c.qty;
-      return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + c.qty + ' ' + esc(u.unitLabel) + ' × ฿' + baht(unitPrice) + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') + '</span></span>' +
-        '<span style="display:flex;align-items:center;gap:8px"><span class="mono">฿' + baht(line) + '</span>' +
+      const unitDisc = ql ? (ql.unitDiscount || 0) : 0, lineDisc = ql ? (ql.lineDiscount || 0) : 0;
+      const net = ql ? (ql.netTotal != null ? ql.netTotal : ql.lineTotal) : line;
+      return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + c.qty + ' ' + esc(u.unitLabel) + ' × ฿' + baht(unitPrice) +
+          (unitDisc ? ' (ลด ฿' + baht(unitDisc) + '/หน่วย)' : '') + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') +
+          (lineDisc ? '<br>รวมก่อนลด ฿' + baht(line) + ' − ส่วนลด ฿' + baht(lineDisc) : '') + '</span></span>' +
+        '<span style="display:flex;align-items:center;gap:8px"><span class="mono">฿' + baht(net) + '</span>' +
         '<button class="btn btn-sm" onclick="removeCartItem(\'' + esc(c.productId) + '\',\'' + esc(c.unitCode) + '\')">✕</button></span></div>';
     }).join('') +
     // ★ ของแถม — พื้นหลังต่างสีให้เห็นชัดว่าไม่ใช่รายการที่คิดเงิน แตะแถวเพื่อติ๊กออกถ้าของจริงไม่มีบนรถ/ลูกค้าไม่เอา
@@ -868,7 +882,9 @@ async function submitSale(){
     }
     if (r.duplicate) { afterSale(); toast(r.message, 'err'); return; }   // เคยบันทึกไปแล้ว ไม่ได้เพิ่มใบที่สอง
     if (!r.success) { toast(r.message || 'บันทึกไม่สำเร็จ', 'err'); return; }
-    afterSale(); toast('บิล ' + (r.orderCode || '') + ' · ฿' + baht(r.total), 'ok');
+    afterSale();
+    // ★ 2026-09-30 เจ้าของระบบสั่ง: ของในคลังไม่พอสำหรับบิลส่งจากสำนักงาน = แค่เตือน ไม่บล็อกการบันทึก (checkOfficeDeliveryStock, 34_sales_status.gs)
+    toast('บิล ' + (r.orderCode || '') + ' · ฿' + baht(r.total) + (r.stockWarning ? ' — ⚠️ ' + r.stockWarning : ''), r.stockWarning ? 'err' : 'ok');
     refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
   } finally { pressBusy(btn, false); btn.innerHTML = label; renderCartBar(); }
 }

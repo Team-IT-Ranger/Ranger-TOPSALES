@@ -227,10 +227,13 @@ eq('จองแล้วมีแถว active 1 แถว อ้างอิ�
 eq('★ available ลดลงตามที่จองไปแล้ว (50 − 30 = 20) — on-hand ไม่ได้ถูกแตะเลย', [ctx.getAvailableQty('T1', 'W1', '201'), whQty(201)], [20, 50]);
 
 console.log('  -- อีกใบหนึ่งมาขอของชิ้นเดียวกันตอนที่ 30 ถูกจองไปแล้ว (สถานการณ์ที่ guide เตือนไว้) --');
+// ★ 2026-09-30 เจ้าของระบบสั่ง: office_delivery ของไม่พอ = แค่เตือน ไม่บล็อกการบันทึก (ต่างจากเดิมที่ปฏิเสธทั้งใบ)
+// — ยังจองต่อได้แม้เกินของที่มีจริง (ตั้งใจ: เป็นคำมั่นว่าจะส่งของ ยังไม่ต้องมีของครบตอนนี้ อาจกำลังสั่งซื้อเพิ่มอยู่)
 sc = ctx.checkOfficeDeliveryStock('T1', { 201: 25 });
-eq('ขอ 25 ทั้งที่เหลือขายได้จริงแค่ 20 → ปฏิเสธ (ไม่ใช่เอา on-hand 50 มาเทียบ)', [sc.success, /ขายได้จริง 20.*ต้องใช้ 25/.test(sc.message)], [false, true]);
+eq('ขอ 25 ทั้งที่เหลือขายได้จริงแค่ 20 → ผ่านเสมอ (success:true) แต่มี warning บอกไว้ (ไม่ใช่เอา on-hand 50 มาเทียบ)',
+  [sc.success, /ขายได้จริง 20.*ต้องใช้ 25/.test(sc.warning)], [true, true]);
 sc = ctx.checkOfficeDeliveryStock('T1', { 201: 20 });
-eq('ขอพอดีที่เหลือ (20) → ผ่าน', sc.success, true);
+eq('ขอพอดีที่เหลือ (20) → ผ่าน ไม่มี warning', [sc.success, sc.warning], [true, '']);
 ctx.reserveStockForSale('T1', 'W1', { 201: 20 }, 902);
 eq('จองซ้อนกันได้สองใบ (แถวแยกกัน คนละ order_id)', WH.stock_reservations.filter(r => r.status === 'active').length, 2);
 eq('ตอนนี้ available = 0 (จองครบเต็มของที่มี)', ctx.getAvailableQty('T1', 'W1', '201'), 0);

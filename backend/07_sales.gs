@@ -88,7 +88,13 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
       items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
       { isCredit: isCreditPayment(paymentType), isVan: !!isVan });
     if (!priced.success) return { success: false, message: priced.message, code: priced.code };
-    items.forEach(function(it, i) { it.price = priced.lines[i].unitPrice; it.lineTotal = priced.lines[i].lineTotal; it.tierLabel = priced.lines[i].tierLabel || ''; });
+    items.forEach(function(it, i) {
+      var pl = priced.lines[i];
+      it.price = pl.unitPrice; it.lineTotal = pl.lineTotal; it.tierLabel = pl.tierLabel || '';
+      // ★ ส่วนลดต่อบรรทัด (2026-09-30) — priceCart() คำนวณ/กระจายให้แล้ว แค่ก๊อบมาตรงๆ (ดู _allocateLineDiscount, 18_pricing_engine.gs)
+      it.unitDiscount = pl.unitDiscount || 0; it.lineDiscount = pl.lineDiscount || 0;
+      it.netTotal = pl.netTotal != null ? pl.netTotal : pl.lineTotal;
+    });
     priceListUsed = pricingCtx.list;
     /* ★ discount ที่บันทึกลงบิลต้องเป็นส่วนลด "รวมทุกชั้น" ให้ subtotal - discount = total เสมอ
        priced.total หักทั้งโปรโมชั่นและส่วนลดท้ายบิลไปแล้ว ถ้าบันทึกแค่ billDiscount ตัวเลขบนบิลจะไม่ลงกัน */
@@ -99,6 +105,11 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
                priced.billPercent ? [{ ruleId: 'BILL', ruleName: 'ส่วนลดท้ายบิล ' + priced.billPercent + '% (ยอดรวมครบ ' + priced.billMinExVat + ' บาท ไม่รวม VAT)', type: 'percent', value: priced.billDiscount }] : []) };
   } else {
     calc = applyPromotions(itemsWithGroup, customerId);
+    // ★ ส่วนลดต่อบรรทัด (2026-09-30) — เส้นทางโปรโมชั่นเดิมไม่ได้แจกแจงต่อบรรทัดมาให้ ต้องกระจายเองที่นี่
+    // ด้วยฟังก์ชันเดียวกับเส้นทางชุดราคา (_allocateLineDiscount) ไม่งั้นสองเส้นทางปัดเศษไม่ตรงกัน
+    var noDiscOf = {};
+    items.forEach(function(it) { noDiscOf[it.productId] = isNoDiscountProduct(productMap[it.productId]); });
+    _allocateLineDiscount(items, calc.discount, noDiscOf);
   }
 
   /* แยกภาษีจากรายการจริง — ทำหลังได้ราคาสุดท้ายแล้ว ใช้ได้ทั้งสองทาง (ชุดราคา / โปรโมชั่นแบบเดิม)
@@ -161,8 +172,8 @@ function recordSale(user, payload) {
     }
   } else {
     // office_delivery: กันของไว้ตั้งแต่เปิดบิล (ยอดจอง — guide ข้อ 1.3) เหตุผลเดียวกับ recordSaleAdmin (19_sales_admin.gs)
+    // ★ ของไม่พอ = แค่ warning ไม่บล็อกการบันทึก (ต่างจากขายจากรถด้านบน) ดูคอมเมนต์ที่ checkOfficeDeliveryStock (34_sales_status.gs)
     stockCheck = checkOfficeDeliveryStock(user.tenantId, need);
-    if (!stockCheck.success) return stockCheck;
   }
 
   var orderCode = getNextDocNumber(user.tenantId, 'SO');
@@ -194,7 +205,8 @@ function recordSale(user, payload) {
     tenantAppend(user.tenantId, 'order_items', {
       record_id: tenantNextId(user.tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
       unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
-      price: it.price, line_total: it.lineTotal, is_free: 0, tax_status: calc.vat.taxOf(it.productId)
+      price: it.price, line_total: it.lineTotal, unit_discount: it.unitDiscount || 0, line_discount: it.lineDiscount || 0,
+      is_free: 0, tax_status: calc.vat.taxOf(it.productId)
     });
   });
   freeGoods.forEach(function(f) {
@@ -228,7 +240,8 @@ function recordSale(user, payload) {
 
   cacheClearUser(user.lineUserId);
 
-  return { success: true, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType };
+  return { success: true, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType,
+    stockWarning: stockCheck.warning || '' };
 }
 
 // need: { productId: จำนวนหน่วยฐานที่จะตัดออกจากสต็อกรถ } — ค่าติดลบ = คืนสต็อกกลับ (ใช้ตอนยกเลิกบิล)
@@ -264,7 +277,8 @@ function quoteSale(user, payload) {
   return {
     success: true,
     lines: priced.items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty,
-      unitPrice: it.price, lineTotal: it.lineTotal, tierLabel: it.tierLabel || '' }; }),
+      unitPrice: it.price, lineTotal: it.lineTotal, tierLabel: it.tierLabel || '',
+      unitDiscount: it.unitDiscount || 0, lineDiscount: it.lineDiscount || 0, netTotal: it.netTotal != null ? it.netTotal : it.lineTotal }; }),
     freeGoods: calc.freeGoods, appliedRules: calc.appliedRules,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
     priceList: priced.priceListUsed ? { id: priced.priceListUsed.record_id, name: priced.priceListUsed.name } : null,

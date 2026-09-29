@@ -98,6 +98,32 @@ function isNoDiscountProduct(p) {
  *   (ลดทั้งก้อนจากฝั่งคิดภาษีอย่างเดียว = คิดภาษีน้อยไป · ลดจากฝั่งยกเว้น = คิดภาษีเกิน)
  * ทุกยอดคำนวณแบบ "ตัวสุดท้ายเป็นเศษที่เหลือ" เพื่อให้ exVat + vat = ยอดสุทธิ เป๊ะเสมอ
  */
+/**
+ * กระจายส่วนลดรวมของบิล (โปร + ส่วนลดท้ายบิล) ไปยัง items ตามสัดส่วน lineTotal (2026-09-30 เจ้าของระบบสั่ง —
+ * เดิมส่งกลับแค่ยอดส่วนลดรวมท้ายบิล ไม่มีให้ดูรายบรรทัดเลย) ใช้ร่วมกันทั้ง priceCart() (เส้นทางชุดราคา) และ
+ * _priceSaleCart() (เส้นทางโปรโมชั่นเดิม, 07_sales.gs) ต้องเรียกตัวเดียวกันไม่งั้นสองเส้นทางปัดเศษไม่ตรงกัน
+ * items: [{ productId, qty, lineTotal }] — เติม lineDiscount/unitDiscount/netTotal ลงใน object เดิมตรงๆ (mutate)
+ * noDiscOf[productId] = true ได้ 0 เสมอ (สินค้าห้ามลดราคา) เหมือนตอนคิดฐานส่วนลดตอนคิดราคา
+ * แถวสุดท้ายที่ไม่ถูกยกเว้นรับเศษที่เหลือ ให้ sum(lineDiscount) === totalDiscount เป๊ะเสมอ (แพทเทิร์นเดียวกับ
+ * saleVatBreakdown ด้านล่างที่ให้แถวสุดท้ายรับเศษ)
+ */
+function _allocateLineDiscount(items, totalDiscount, noDiscOf) {
+  noDiscOf = noDiscOf || {};
+  var base = 0;
+  items.forEach(function(it) { if (!noDiscOf[String(it.productId)]) base += Number(it.lineTotal) || 0; });
+  base = _round2(base);
+  var discList = items.filter(function(it) { return !noDiscOf[String(it.productId)]; });
+  var allocated = 0;
+  discList.forEach(function(it, i) {
+    var d = (i === discList.length - 1) ? _round2(totalDiscount - allocated)
+      : (base > 0 ? _round2(totalDiscount * (Number(it.lineTotal) || 0) / base) : 0);
+    if (i < discList.length - 1) allocated += d;
+    it.lineDiscount = d; it.unitDiscount = (Number(it.qty) || 0) ? _round2(d / Number(it.qty)) : 0;
+    it.netTotal = _round2((Number(it.lineTotal) || 0) - d);
+  });
+  items.forEach(function(it) { if (noDiscOf[String(it.productId)]) { it.lineDiscount = 0; it.unitDiscount = 0; it.netTotal = Number(it.lineTotal) || 0; } });
+}
+
 function saleVatBreakdown(lines, billDiscount, taxOf, rate) {
   var r = rate === undefined || rate === null ? currentVatRate() : Number(rate);
   var grossVat = 0, grossExempt = 0;
@@ -313,12 +339,16 @@ function priceCart(ctx, cart, opts) {
     }), ctx.freeGoodsSets, ctx.unitBase);
   }
 
+  // ★ ส่วนลดต่อบรรทัด (2026-09-30) — เติม lineDiscount/unitDiscount/netTotal ลงใน lines ตรงๆ (ดู _allocateLineDiscount ด้านล่าง)
+  var totalDiscount = _round2(promoDiscount + billDiscount);
+  _allocateLineDiscount(lines, totalDiscount, noDiscOf);
+
   return { success: true, lines: lines, subtotal: subtotal, subtotalExVat: _round2(exVat),
            discountableSubtotal: discountable, freeGoods: freeGoods,
            promoDiscount: promoDiscount, promoRules: promo.appliedRules || [],
            billPercent: bill ? bill.percent : 0, billMinExVat: bill ? bill.minAmountExVat : 0,
            billBase: billBase, billDiscount: billDiscount,
-           discount: _round2(promoDiscount + billDiscount),
+           discount: totalDiscount,
            total: _round2(subtotal - promoDiscount - billDiscount),
            priceListId: ctx.list.record_id, priceListName: ctx.list.name };
 }

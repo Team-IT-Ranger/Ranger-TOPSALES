@@ -64,6 +64,18 @@ eq('กาว 45 หีบ = 54,000 (ไม่รวม VAT 50,467) → ลด�
 
 r = price([{ productId: 201, unitCode: 'CT', qty: 47 }], cash);           // 56,400 → ex 52,710
 eq('กาว 47 หีบ ลด 0.5% (ไม่ใช่ 1%)', [r.billPercent, r.billDiscount], [0.5, 282]);
+eq('  ★ ส่วนลดต่อบรรทัด (2026-09-30): บรรทัดเดียว → รับส่วนลดเต็มก้อนตรงเป๊ะ',
+  [r.lines[0].lineDiscount, r.lines[0].netTotal], [r.discount, r.total]);
+
+console.log('\n-- ★ ส่วนลดต่อบรรทัด (2026-09-30 เจ้าของระบบสั่ง): กระจายตามสัดส่วนข้ามหลายบรรทัด --');
+r = price([{ productId: 101, unitCode: 'CT', qty: 1 }, { productId: 201, unitCode: 'CT', qty: 45 }], cash);
+{
+  const sumLineDiscount = _round(r.lines.reduce((s, l) => s + l.lineDiscount, 0));
+  const sumNetTotal = _round(r.lines.reduce((s, l) => s + l.netTotal, 0));
+  eq('ผลรวมส่วนลดต่อบรรทัดเท่ากับส่วนลดรวมทั้งบิลเป๊ะ (บรรทัดสุดท้ายรับเศษที่เหลือ)', sumLineDiscount, r.discount);
+  eq('ผลรวมยอดสุทธิต่อบรรทัดเท่ากับยอดสุทธิทั้งบิลเป๊ะ', sumNetTotal, r.total);
+  eq('ทั้งสองบรรทัดได้ส่วนลดจริง (กระจายตามสัดส่วน ไม่ใช่บรรทัดเดียวกินหมด)', r.lines.every(l => l.lineDiscount > 0), true);
+}
 
 r = price([{ productId: 201, unitCode: 'CT', qty: 90 }], cash);           // 108,000 → ex 100,934 ≥ 100,000
 eq('กาว 90 หีบ = 108,000 (ไม่รวม VAT 100,934) → ลดเพิ่ม 1% ขั้นเดียว = 1,080', [r.billPercent, r.billDiscount, r.total], [1, 1080, 106920]);
@@ -240,6 +252,8 @@ console.log('\n-- โปรโมชั่นซ้อนบนชุดรา�
   eq('  ส่วนลดรวมที่จะบันทึกลงบิล', r2.discount, 6113.25);
   eq('  subtotal - discount = total เป๊ะ', _round(r2.subtotal - r2.discount), r2.total);
   eq('  บอกได้ว่าโปรข้อไหนถูกใช้', r2.promoRules.map(x => x.ruleName), ['ลดกลุ่มน้ำยา 10%']);
+  eq('  ★ ส่วนลดต่อบรรทัด (2026-09-30): บรรทัดเดียว → รับส่วนลดเต็มก้อน (lineDiscount = discount รวม, netTotal = total รวม)',
+    [r2.lines[0].lineDiscount, r2.lines[0].netTotal], [r2.discount, r2.total]);
 
   const other = Object.assign({}, withPromo, { promoRules: [Object.assign({}, promoRule, { productGroupId: 9 })] });
   eq('โปรของกลุ่มสินค้าอื่น ไม่โดนตะกร้านี้', ctx.priceCart(other, cart50, cash).promoDiscount, 0);
@@ -248,6 +262,8 @@ console.log('\n-- โปรโมชั่นซ้อนบนชุดรา�
   const n = ctx.priceCart(noDisc, cart50, cash);
   eq('★ สินค้าห้ามลดราคา โปรกินไม่ได้ (เหมือนที่ส่วนลดท้ายบิลกินไม่ได้)', [n.promoDiscount, n.billDiscount], [0, 0]);
   eq('  แต่ยังนับเข้าเกณฑ์ขั้นตามเดิม', n.billPercent, 0.5);
+  eq('  ★ ส่วนลดต่อบรรทัด: สินค้าห้ามลดราคา ได้ 0 เสมอ เต็มราคาเดิม',
+    [n.lines[0].lineDiscount, n.lines[0].unitDiscount, n.lines[0].netTotal], [0, 0, n.lines[0].lineTotal]);
 
   const freebie = Object.assign({}, withPromo, { promoRules: [Object.assign({}, promoRule,
     { type: 'free_goods', freeProductId: 102, freeQty: 1, minQty: 10 })] });

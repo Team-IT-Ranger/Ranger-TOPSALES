@@ -19,7 +19,10 @@ var TENANT_SHEET_TABS = {
   // base_qty คือจำนวนแปลงเป็นหน่วยฐานแล้ว (qty × unit_factor) ใช้ตัดสต็อกและเช็คโปรโมชั่นเท่านั้น
   // tax_status = สถานะภาษีของสินค้า "ณ ตอนขาย" — ถ่ายภาพเก็บไว้ ไม่อ่านจากทะเบียนสินค้าตอนแสดงผล
   //   วันที่สินค้าเปลี่ยนสถานะภาษี ใบเก่าต้องไม่เปลี่ยนตาม (หลักเดียวกับราคาที่เก็บลงบรรทัด)
-  order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free','tax_status'],
+  // unit_discount/line_discount เพิ่ม 2026-09-30 — ส่วนลดต่อบรรทัด (เจ้าของระบบสั่ง) มาจาก _allocateLineDiscount
+  // (18_pricing_engine.gs) บันทึกเป็นภาพนิ่งตอนขายเหมือนภาษี ไม่คำนวณใหม่ตอนเปิดดูย้อนหลัง — บิลเก่าก่อนมีคอลัมน์นี้
+  // อ่านได้ว่าง (''), หน้าจอต้องอ่านเป็น 0 เอง (ดู getSaleDetail/getSalesOrderAdmin)
+  order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','unit_discount','line_discount','is_free','tax_status'],
   order_discounts:     ['record_id','order_id','rule_id','rule_name','type','value','free_product_id','free_qty'],
   van_stock:           ['line_user_id','product_id','qty'],
   stock_movements:     ['record_id','line_user_id','product_id','change_qty','type','ref_id','created_at'],

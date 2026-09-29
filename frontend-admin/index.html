@@ -3138,9 +3138,15 @@ async function sonPreview(){
   if (!r.success) { out.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   sonPreviewData = { customerId, paymentType, fulfillmentType, soldByLineUserId, items };
 
-  out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>' +
-    r.lines.map(l => '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+esc(l.unitCode)+'</td><td>'+l.qty+'</td><td class="mono-data">฿'+baht(l.unitPrice)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>').join('') +
-    (r.freeGoods||[]).map(f => '<tr style="background:var(--blue-pale)"><td colspan="2">'+esc(_sonProdLabel(f.productId))+' <span class="unit">(ของแถม: '+esc(f.ruleName)+')</span></td><td>'+f.qty+'</td><td>-</td><td>-</td></tr>').join('') +
+  // ★ 2026-09-30 เจ้าของระบบสั่ง: แสดงราคา/ส่วนลดแยกรายบรรทัด ไม่ใช่แค่ยอดรวมท้ายบิล — ตัวเลขมาจาก
+  // _allocateLineDiscount (18_pricing_engine.gs) กระจายส่วนลดรวมตามสัดส่วนมูลค่าให้แล้ว ที่นี่แค่แสดงผล
+  out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>ราคา/หน่วย</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>สุทธิ</th></tr></thead><tbody>' +
+    r.lines.map(l => '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+l.qty+'</td><td>'+esc(l.unitCode)+'</td>' +
+      '<td class="mono-data">฿'+baht(l.unitPrice)+'</td><td class="mono-data">'+(l.unitDiscount ? '-฿'+baht(l.unitDiscount) : '-')+'</td>' +
+      '<td class="mono-data">฿'+baht(l.lineTotal)+'</td><td class="mono-data">'+(l.lineDiscount ? '-฿'+baht(l.lineDiscount) : '-')+'</td>' +
+      '<td class="mono-data">฿'+baht(l.netTotal != null ? l.netTotal : l.lineTotal)+'</td></tr>').join('') +
+    (r.freeGoods||[]).map(f => '<tr style="background:var(--blue-pale)"><td colspan="3">'+esc(_sonProdLabel(f.productId))+' <span class="unit">(ของแถม: '+esc(f.ruleName)+')</span></td>' +
+      '<td colspan="2">'+f.qty+' '+esc(f.unitCode||'')+'</td><td>-</td><td>-</td><td>ฟรี</td></tr>').join('') +
     '</tbody></table></div>' +
     (r.priceListName ? '<div class="activity-row"><span>ใช้ชุดราคา</span><span class="amt">'+esc(r.priceListName)+'</span></div>' : '') +
     '<div class="activity-row"><span>ยอดรวมก่อนหักส่วนลด</span><span class="amt mono-data">฿'+baht(r.subtotal)+'</span></div>' +
@@ -3157,7 +3163,8 @@ async function sonSubmit(){
   if (!sonPreviewData) return;
   const r = await callApi('recordSaleAdmin', sonPreviewData);
   if (!r.success) { toast(r.message, true); return; }
-  toast('เปิดบิลขายสำเร็จ ('+r.orderCode+')');
+  // ★ 2026-09-30 เจ้าของระบบสั่ง: ของในคลังไม่พอสำหรับบิลส่งจากสำนักงาน = แค่เตือน ไม่บล็อกการบันทึก (checkOfficeDeliveryStock, 34_sales_status.gs)
+  toast('เปิดบิลขายสำเร็จ ('+r.orderCode+')' + (r.stockWarning ? ' — ⚠️ ' + r.stockWarning : ''), !!r.stockWarning);
   // แพตช์ cache ในเครื่องแทนการโหลดรายการทั้งหมดซ้ำ
   const cust = customersCache.find(c => String(c.id) === String(sonPreviewData.customerId));
   salesOrdersCache.unshift({
