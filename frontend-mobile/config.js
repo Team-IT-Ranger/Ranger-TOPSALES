@@ -15,8 +15,9 @@
     uat:  'https://script.google.com/macros/s/AKfycbwsdgUjEe1RQFeuHQ3je92eok-ezYp2vVRL571eXNdRs1lfEAEXf1rSEIPFClb7GTYu7A/exec' /* TOPSHOP Backend UAT — ห้ามใส่ URL ของ production ตรงนี้ */
   };
   var LIFF_IDS = {
-    prod: '2010417493-GXAqTbSu',   /* Endpoint URL ต้องอัปเดตหลังย้ายไป Cloudflare Pages (เดิม GitHub Pages /mobile/) */
-    uat:  '2010417493-pYb6cS8e'   /* Endpoint URL ต้องอัปเดตหลังย้ายไป Cloudflare Pages (เดิม GitHub Pages /mobile-uat/) */
+    /* Endpoint URL ต้องอัปเดตใน LINE Developers Console ให้ตรงกับ URL ใหม่นี้เป๊ะ ไม่งั้น LIFF เปิดไม่ขึ้น */
+    prod: '2010417493-GXAqTbSu',   /* Endpoint URL ใหม่: https://ranger-topsales-mobile.pages.dev/ */
+    uat:  '2010417493-pYb6cS8e'   /* Endpoint URL ใหม่: https://uat.ranger-topsales-mobile.pages.dev/ */
   };
   var h = location.hostname;
   var env = (h.indexOf('uat') !== -1 || h === 'localhost' || h === '127.0.0.1') ? 'uat' : 'prod';

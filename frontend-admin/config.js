@@ -4,6 +4,10 @@
    hostname มีคำว่า "uat" (Cloudflare Pages ตั้งชื่อ branch alias ของกิ่ง UAT เป็น uat.<โปรเจกต์>.pages.dev
    ให้เองอัตโนมัติ ตัวพิมพ์เล็กเสมอ) หรือ localhost = 'uat' · นอกนั้น = 'prod'
 
+   URL จริงหลังย้าย (2026-09-29): prod = https://ranger-topsales-admin.pages.dev/ (ยืนยันแล้วว่าโหลดถูกต้อง
+   เข้าหน้า login ปกติ ไม่ขึ้นแบนเนอร์ "ยังไม่เปิดใช้งาน") · uat = https://uat.ranger-topsales-admin.pages.dev/
+   (โปรเจกต์เพิ่งต่อ Cloudflare ครั้งแรก กิ่ง UAT ยังไม่ build ให้ตอนตรวจ — commit นี้ยิง push เพื่อกระตุ้น build ด้วย)
+
    สถานะ ณ 2026-09-24: **เปิด production แล้ว** — โปรเจกต์ prod 1XObaZXu… (เจ้าของ channarong@thanatkorn.com
    บัญชีเดียวกับ dev/uat และเป็นเจ้าของไฟล์ฐานข้อมูลทั้งหมด) มี Central Sheet + ผังบัญชีของตัวเองแยกจาก UAT
    - ห้ามเอา URL ของ dev หรือ uat มาใส่ช่อง prod เด็ดขาด (เคยพลาดมาแล้วตอนเข้าใจผิดว่า dev คือ production) */
