@@ -2092,23 +2092,19 @@ const NAV_GROUPS = [
     { n:'5.3', label:'ลูกหนี้', items:[
       {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'owner'} ]}
   ]},
-  /* กลุ่ม 6 สำรองไว้ตามที่เจ้าของระบบสั่ง — อย่าเอาไปใช้โดยไม่ถาม */
-  { n:'7', icon:'users', label:'ผู้ใช้งานและสิทธิ์', subs:[
-    { n:'7.1', label:'ผู้ใช้งาน', items:[
-      {n:'7.1.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true, scope:'both'} ]},
-    { n:'7.2', label:'สิทธิ์', items:[
-      {n:'7.2.1', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true, scope:'both'} ]}
-  ]},
-  { n:'8', icon:'building', label:'เครือข่ายตัวแทน', subs:[
-    { n:'8.1', label:'ตัวแทนจำหน่าย', items:[
-      {n:'8.1.1', label:'รายชื่อตัวแทน', view:'tenants', mod:'tenants', ready:true, scope:'owner'} ]}
-  ]},
+  /* กลุ่ม 6/7/8 สำรองไว้ (เจ้าของระบบสั่ง 2026-09-29 — ย้ายตัวแทนจำหน่าย + ผู้ใช้งาน/สิทธิ์ เข้าไปรวมกับ
+     "ตั้งค่าระบบ" หมดแล้ว เพื่อลดจำนวนโมดูลบนสุดที่ต้องไล่ดู) — อย่าเอาไปใช้โดยไม่ถาม */
   { n:'9', icon:'gear', label:'ตั้งค่าระบบ', subs:[
     { n:'9.1', label:'ข้อมูลบริษัท', items:[
       /* หน้าจอคนละตัวตามฝั่ง แต่เป็นเมนูเดียวกัน — gotoView แปลงให้ตอนกด */
       {n:'9.1.1', label:'ข้อมูลบริษัท', view:'companyinfo', mod:'settings', ready:true, scope:'both'} ]},
     { n:'9.2', label:'เลขที่เอกสาร', items:[
-      {n:'9.2.1', label:'ตั้งค่ารูปแบบเลขที่เอกสาร', view:'docnum', mod:'docnum', ready:true, scope:'both'} ]}
+      {n:'9.2.1', label:'ตั้งค่ารูปแบบเลขที่เอกสาร', view:'docnum', mod:'docnum', ready:true, scope:'both'} ]},
+    { n:'9.3', label:'ตัวแทนจำหน่าย', items:[
+      {n:'9.3.1', label:'รายชื่อตัวแทน', view:'tenants', mod:'tenants', ready:true, scope:'owner'} ]},
+    { n:'9.4', label:'สิทธิ์การใช้งาน', items:[
+      {n:'9.4.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true, scope:'both'},
+      {n:'9.4.2', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true, scope:'both'} ]}
   ]}
 ];
 
@@ -2275,7 +2271,7 @@ function findMeta(view){
 }
 
 /* ═══════════ รายการโปรด / ใช้ล่าสุด ═══════════
-   เก็บต่อผู้ใช้ใน localStorage — เมนูมี 9 กลุ่ม กว่าจะไล่หาเมนูที่ใช้ทุกวันก็หลายคลิก
+   เก็บต่อผู้ใช้ใน localStorage — เมนูมีหลายกลุ่ม กว่าจะไล่หาเมนูที่ใช้ทุกวันก็หลายคลิก
    ★ เก็บแค่ "ชื่อ view" ไม่เก็บ label — label เปลี่ยนเมื่อไหร่รายการเก่าจะได้ไม่ค้างชื่อผิด */
 const QL_MAX = 10;
 const qlKey = k => 'topshop_' + APP_ENV + '_' + k + '_' + ((SESSION && SESSION.adminUserId) || 'anon');
