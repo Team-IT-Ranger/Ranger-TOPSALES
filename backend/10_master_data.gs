@@ -67,10 +67,23 @@ function listStaffAdmin(session, payload) {
   }; }) };
 }
 
-// payload: { lineUserId, status('Yes'/'No'), role('van_sales'/'credit_sales'), tenantId? }
+// payload: { lineUserId, status('Yes'/'No'), role('van_sales'/'credit_sales'), newTenantId? }
+// ★ ใช้ชื่อ "newTenantId" ไม่ใช่ "tenantId" โดยตั้งใจ — payload.tenantId ทั้งระบบมีความหมายอื่นอยู่แล้ว
+// ("ตัวแทนที่ Ultra Admin กำลังสวมสิทธิ์ทำงานแทนอยู่" อ่านโดย _effectiveTenantId ด้านล่าง และ callApi
+// ฝั่งหน้าเว็บแนบให้อัตโนมัติทุกคำขอเมื่อเลือกตัวแทนไว้บนแถบบน) ถ้าใช้ชื่อเดียวกัน คำขอนี้จะเปลี่ยนพฤติกรรม
+// ไม่ได้เมื่อ Ultra Admin กำลังสวมสิทธิ์ตัวแทนอื่นอยู่พอดี (effTenantId จะกลายเป็นค่านั้นโดยไม่ได้ตั้งใจ)
+// newTenantId แก้ได้เฉพาะฝั่งบริษัท/Ultra Admin (effTenantId ว่าง) — ใช้แก้กรณีผู้ใช้เลือกสังกัดผิดตอนสมัคร
+// (2026-09-29 เจ้าของระบบสั่ง: liff_users เป็นคิวรวมของทุกช่องทางแล้ว สังกัดตั้งต้นมาจากที่ผู้ใช้เลือกเอง
+// แก้ให้ถูกได้ทีหลัง) ฝั่งตัวแทนแก้ไม่ได้เหมือนเดิม กันสวมสิทธิ์ย้ายพนักงานข้ามตัวแทนอื่น
 function updateStaffAdmin(session, payload) {
   var err = _requirePermission(session, 'staff', 'edit'); if (err) return err;
   var effTenantId = _effectiveTenantId(session, payload);
+  var newTenantId = null;
+  if (payload.newTenantId !== undefined) {
+    if (effTenantId) return { success: false, message: 'ไม่มีสิทธิ์เปลี่ยนสังกัดของพนักงาน (แก้ได้เฉพาะฝั่งบริษัท)' };
+    newTenantId = String(payload.newTenantId || '').trim();
+    if (newTenantId && !_activeTenantRow(newTenantId)) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
+  }
   var sh = centralSheet('liff_users');
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -78,6 +91,7 @@ function updateStaffAdmin(session, payload) {
       if (effTenantId && String(data[i][3]) !== String(effTenantId)) return { success: false, message: 'ไม่มีสิทธิ์แก้ไขพนักงานของตัวแทนอื่น' };
       if (payload.status) sh.getRange(i + 1, 5).setValue(payload.status);
       if (payload.role) sh.getRange(i + 1, 3).setValue(payload.role);
+      if (newTenantId !== null) sh.getRange(i + 1, 4).setValue(newTenantId);
       centralInvalidate('liff_users');   // เขียนแบบดิบ ไม่ผ่าน centralUpdate
       return { success: true };
     }

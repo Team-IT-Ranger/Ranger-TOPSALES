@@ -28,7 +28,8 @@ const sheets = {
     { record_id: 1, username: 'admin', display_name: 'ระบบ', role_code: 'super_admin', tenant_id: '', status: 'active' },
     { record_id: 2, username: 'owner', display_name: 'แอดมินบริษัท', role_code: 'owner_admin', tenant_id: '', status: 'active' },
     { record_id: 3, username: 't1admin', display_name: 'แอดมินตัวแทน 1', role_code: 'tenant_admin', tenant_id: 'T1', status: 'active' }
-  ]
+  ],
+  liff_users: []
 };
 const sheetOf = n => { if (!sheets[n]) sheets[n] = []; return sheets[n]; };
 const CACHE = {};
@@ -61,6 +62,12 @@ Object.keys(fakes).forEach(k => { ctx[k] = fakes[k]; });
 ['14_permissions.gs', '17_pricing.gs', '20_purchasing_master.gs', '26_roles.gs', '16_admin_users.gs', '29_admin_signup.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 ctx._hashPassword = (pw, salt) => 'hash:' + salt + ':' + pw;   // ของจริงอยู่ใน 04_auth.gs (ไม่ได้โหลดในเทสต์นี้)
+// checkUser ของจริงอยู่ใน 04_auth.gs (ไม่ได้โหลดในเทสต์นี้ — centralSheet ในฮาร์เนสนี้เป็น stub ธรรมดา
+// ไม่รองรับ getDataRange จริง) จำลองแค่พฤติกรรมที่ registerAdminUserWithLine/promoteToAdmin ต้องใช้
+ctx.checkUser = lineUid => {
+  const u = sheetOf('liff_users').find(x => x.line_user_id === lineUid);
+  return u ? { exists: true, name: u.display_name, role: u.role, tenantId: u.tenant_id, status: u.status } : { exists: false };
+};
 
 let failed = 0;
 const eq = (name, actual, expected) => {
@@ -198,28 +205,34 @@ eq('บัญชีบริษัทกลางเลือกตัวแท�
 eq('บทบาทฝั่งบริษัทที่สร้างเองก็เลือกตัวแทนได้ (สิทธิ์รายโมดูลยังตรวจตามบทบาทเดิม)',
    ctx._effectiveTenantId(OWNER_STAFF, { tenantId: 'T1' }), 'T1');
 
-console.log('\n── สมัครด้วยตัวตน LINE (ไม่ต้องตั้งรหัสผ่าน) ──');
+console.log('\n── สมัครด้วยตัวตน LINE (2026-09-29: ลงทะเบียนเข้า liff_users เสมอ ไม่ว่าจะมาจากแอปไหน) ──');
 const LID3 = 'U33333333333333333333333333333333';
 CACHE['signupticket_TK1'] = JSON.stringify({ lineUserId: LID3, displayName: 'ชนรงค์ ธนัทกร' });
 r = ctx.registerAdminUserWithLine({ signupTicket: 'TK1', tenantId: 'T1' });
-const created = sheets.admin_users.find(u => u.line_user_id === LID3);
+const createdLiff = sheets.liff_users.find(u => u.line_user_id === LID3);
 eq('สมัครด้วยตั๋วสำเร็จ และได้สถานะรออนุมัติ', [r.success, r.pending], [true, true]);
-eq('  ชื่อผู้ใช้ตั้งต้นมาจากชื่อใน LINE', created.display_name, 'ชนรงค์ ธนัทกร');
-eq('  ไม่มีรหัสผ่านในระบบ (ตัวตนยืนยันด้วย LINE แล้ว)', [created.password_hash, created.salt], ['', '']);
-eq('  ผูก LINE id ที่ยืนยันแล้ว + ยังไม่มีบทบาท', [created.line_user_id, created.role_code, created.status], [LID3, '', 'pending']);
-eq('  username สร้างให้อัตโนมัติจากชื่อ', created.username.length > 2, true);
+eq('  ลงทะเบียนเข้า liff_users ไม่ใช่ admin_users ตรงๆ', sheets.admin_users.some(u => u.line_user_id === LID3), false);
+eq('  ชื่อที่แสดงมาจากชื่อใน LINE', createdLiff.display_name, 'ชนรงค์ ธนัทกร');
+eq('  ผูก LINE id ที่ยืนยันแล้ว + สังกัดตามที่เลือก + สถานะรอตัดสินใจ', [createdLiff.line_user_id, createdLiff.tenant_id, createdLiff.status], [LID3, 'T1', 'No']);
 fails('ตั๋วใช้ซ้ำไม่ได้', ctx.registerAdminUserWithLine({ signupTicket: 'TK1', tenantId: 'T1' }), /หมดอายุ|ไม่พบ/);
 fails('ไม่มีตั๋ว → ปฏิเสธ', ctx.registerAdminUserWithLine({ tenantId: 'T1' }), /ตั๋วลงทะเบียน/);
 CACHE['signupticket_TK2'] = JSON.stringify({ lineUserId: LID3, displayName: 'คนเดิม' });
-fails('LINE เดิมที่มีบัญชีแล้ว สมัครซ้ำไม่ได้', ctx.registerAdminUserWithLine({ signupTicket: 'TK2' }), /ผูกกับบัญชี/);
+r = ctx.registerAdminUserWithLine({ signupTicket: 'TK2' });
+eq('LINE เดิมที่ลงทะเบียนไว้แล้ว สมัครซ้ำได้แค่บอกว่ารออยู่ (ไม่สร้างแถวซ้ำ)',
+  [r.success, r.already, sheets.liff_users.filter(u => u.line_user_id === LID3).length], [true, true, 1]);
 CACHE['signupticket_TK3'] = JSON.stringify({ lineUserId: 'U44444444444444444444444444444444', displayName: 'x' });
 fails('เลือกสังกัดที่ปิดใช้งาน → ปฏิเสธ', ctx.registerAdminUserWithLine({ signupTicket: 'TK3', tenantId: 'TZ' }), /ไม่พบตัวแทน/);
-eq('ชื่อซ้ำกัน → username ไม่ชนกัน', (() => {
-  CACHE['signupticket_TK4'] = JSON.stringify({ lineUserId: 'U55555555555555555555555555555555', displayName: 'ชนรงค์ ธนัทกร' });
-  ctx.registerAdminUserWithLine({ signupTicket: 'TK4' });
-  const names = sheets.admin_users.filter(u => String(u.display_name) === 'ชนรงค์ ธนัทกร').map(u => u.username);
-  return names.length === 2 && names[0] !== names[1];
-})(), true);
+CACHE['signupticket_TK5'] = JSON.stringify({ lineUserId: LID3, displayName: 'x' });
+fails('LINE ที่เป็นแอดมินอยู่แล้ว สมัครซ้ำไม่ได้ (เผื่อตั๋วเก่าค้าง)', (() => {
+  sheets.admin_users.push({ record_id: 99, username: 'promoted.already', display_name: 'ชนรงค์ ธนัทกร', role_code: 'tenant_admin', tenant_id: 'T1', status: 'active', line_user_id: LID3 });
+  const res = ctx.registerAdminUserWithLine({ signupTicket: 'TK5' });
+  sheets.admin_users.pop();
+  return res;
+})(), /ผูกกับบัญชี/);
+
+// promoteToAdmin/updateStaffAdmin (ทั้งคู่เขียน liff_users แบบดิบผ่าน getRange().setValue()) ทดสอบแยกไว้ที่
+// .dev/test-user-promotion.js ด้วยฮาร์เนส FakeSheet ที่รองรับ getDataRange/getRange จริง — centralSheet
+// ในไฟล์นี้เป็น stub ธรรมดา {__name} เท่านั้น ไม่รองรับการเขียนดิบแบบนั้น
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

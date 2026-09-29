@@ -143,6 +143,7 @@ var ADMIN_ACTION_MAP = {
   linkAdminLineId:        linkAdminLineId,
   approveAdminUser:       approveAdminUser,
   rejectAdminUser:        rejectAdminUser,
+  promoteToAdmin:         promoteToAdmin,
   saveRole:               saveRole,
   deleteRole:             deleteRole,
 

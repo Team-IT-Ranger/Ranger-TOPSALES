@@ -728,9 +728,9 @@
         <section class="view" id="view-adminusers">
           <div class="view-head"><div><h1>ผู้ใช้งานและอนุมัติ</h1><p>บัญชีแอดมิน พนักงานขาย และบอท ที่เข้าระบบได้ทั้งหมด — คนละตารางข้างหลัง ดู/อนุมัติที่เดียว</p></div></div>
           <div class="form-card" id="pending-card" style="display:none">
-            <h3>คำขอใช้งานที่รออนุมัติ <span class="pill wait" id="pending-count"></span></h3>
-            <p class="form-hint">ผู้ใช้ใหม่ลงทะเบียนเองจากหน้าเข้าสู่ระบบ — อนุมัติพร้อมกำหนดสิทธิ์ หรือปฏิเสธคำขอ (เฉพาะบัญชีแอดมิน —
-              พนักงานขาย/บอทเป็นบัญชี LINE ล้วน ไม่มีสถานะ "ปฏิเสธ" แยกจาก "รออนุมัติ" จึงกดอนุมัติได้จากตารางด้านล่างเลย)</p>
+            <h3>รออนุมัติ <span class="pill wait" id="pending-count"></span></h3>
+            <p class="form-hint">ทุกคนที่เพิ่งยืนยันตัวตนด้วย LINE ไม่ว่าจะมาจากแอปมือถือ แอปแอดมิน หรือเพิ่มเพื่อนกับ RangerBot
+              รวมกันมาที่นี่ที่เดียว — เลือกว่าจะตั้งเป็นแอดมินหรือพนักงานขาย แก้สังกัดที่เลือกผิดมาได้ในหน้าต่างเดียวกัน</p>
             <div id="pending-list"></div>
           </div>
           <div id="ud-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
@@ -1555,7 +1555,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'createPriceList','clonePriceList','savePriceListLine','deletePriceListLine','savePriceListBillPromos',
   'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
   'createTenant','updateTenantStatus','saveCompanyProfile','updateTenantProfile','saveRole','deleteRole',
-  'createAdminUser','updateAdminUser','approveAdminUser','rejectAdminUser','linkAdminLineId','changeMyPassword',
+  'createAdminUser','updateAdminUser','approveAdminUser','rejectAdminUser','promoteToAdmin','linkAdminLineId','changeMyPassword',
   'updateStaffAdmin','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
@@ -2082,7 +2082,7 @@ const NAV_GROUPS = [
         soon:'รายงานเคลื่อนไหวสินค้า', desc:'เข้า-ออก-คงเหลือรายสินค้า อ้างเอกสารต้นทาง (ข้อมูลมีอยู่แล้วใน stock_ledger)'}
     ]}
   ]},
-  { n:'5', icon:'book', label:'บัญชี', subs:[
+  { n:'5', icon:'book', label:'งานบัญชีการเงิน', subs:[
     { n:'5.1', label:'บัญชีทั่วไป', items:[
       {n:'5.1.1', label:'สมุดรายวัน / งบทดลอง', view:'glbooks', mod:'accounting', ready:true, scope:'owner'} ]},
     { n:'5.2', label:'เจ้าหนี้', items:[
@@ -2393,7 +2393,7 @@ async function loadRepProd(){
 const LOADERS = {
   dashboard: loadDashboard, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
-  companyprofile: loadCompanyProfile, adminusers: () => { loadUserDirectory(); loadPendingAdminUsers(); }, pricelists: loadPriceLists,
+  companyprofile: loadCompanyProfile, adminusers: loadUserDirectory, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
   salesorders: loadSalesOrders,
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
@@ -4958,45 +4958,54 @@ const roleLabelOf = code => {
   return r ? r.label : (ADMIN_ROLE_LABEL[code] || code);
 };
 
-/* ═══════════ ผู้ใช้งานและอนุมัติ — รวม admin_users + liff_users เป็นตารางเดียว (2026-09-29) ═══════════
-   ข้อมูลจริงยังคนละตารางเหมือนเดิม (userDirRaw.admin จาก listAdminUsers, userDirRaw.staff จาก listStaffAdmin)
-   udDecorate() ผสมเป็น userDirCache แถวเดียวกัน ติด kind: 'admin' | 'staff' | 'bot'
-   ★ แยก staff/bot จาก tenant_id: liff_users แถวไหน tenant_id ว่าง = มาจาก RangerBot เสมอ (registerUser ของแอปมือถือ
-     บังคับเลือกตัวแทนก่อนเสมอ ดู backend/04_auth.gs — พนักงานขายจริงจึงมี tenant_id ติดมาทุกแถว มีแค่บอทที่ไม่มี)
-   ★ liff_users.status มีแค่ Yes/No — "No" ไม่แยกระหว่าง "ยังไม่เคยอนุมัติ" กับ "เคยอนุมัติแล้วถูกระงับ" (backend
-     ไม่มี state ที่สาม) จึงยังไม่ทำการ์ด "รออนุมัติ" แบบ admin ให้ staff/bot — ใช้ปุ่ม "อนุมัติ" ในตารางแทน
-     (พฤติกรรมเดิมก่อนรวมหน้าก็เป็นแบบนี้อยู่แล้ว ไม่ได้ถอยหลัง) การ์ดรออนุมัติด้านบนจึงมีแค่บัญชีแอดมิน */
+/* ═══════════ ผู้ใช้งานและอนุมัติ — โมเดลใหม่ทั้งหมด (2026-09-29 เจ้าของระบบสั่ง) ═══════════
+   เดิมรอบแรก (28 ก.ย.) รวมแค่ "หน้าจอ" แต่คิวรออนุมัติยังแยกอยู่ (แอดมิน vs พนักงาน/บอท) ผู้ใช้บอกว่ายังงง
+   ลองเข้าระบบจริงแล้วไม่เห็นคนใหม่ๆ ที่เพิ่งเพิ่มเพื่อนกับบอท (เพราะไปโผล่ปนอยู่ในตารางหลัก ไม่ได้อยู่การ์ดรออนุมัติ)
+
+   รอบนี้เปลี่ยนที่มา ไม่ใช่แค่หน้าตา: **ทุกช่องทาง (มือถือ/แอดมิน/เพิ่มเพื่อนกับ RangerBot) ลงทะเบียนเข้า liff_users
+   เหมือนกันหมดแล้ว** (ดู backend/29_admin_signup.gs, backend/30_admin_line_login.gs) — คิวรออนุมัติจึงมีที่มา
+   เดียวจริงๆ: liff_users ที่ status ยังไม่ 'Yes' (การ์ดด้านบน) แล้ว Ultra Admin เลือกทางใดทางหนึ่งต่อคนเท่านั้น:
+     • "ตั้งเป็นแอดมิน" → promoteToAdmin สร้างแถว admin_users ทันที (Ultra Admin เท่านั้น)
+     • "ตั้งเป็นพนักงานขาย" → updateStaffAdmin(status:'Yes') ใครก็ได้ที่มีสิทธิ์ staff/edit ทำได้ (เหมือนเดิม)
+   ทั้งสองทางแก้สังกัดที่ผู้ใช้เลือกผิดตอนสมัครได้ในหน้าต่างเดียวกัน (ดีฟอลต์ = สังกัดที่เขาเลือกไว้)
+
+   ตารางหลักด้านล่างจึงเหลือแค่ "คนที่ตัดสินใจแล้ว": admin_users ทุกแถว + liff_users ที่ status='Yes' เท่านั้น
+   — คนที่ยังรอตัดสินใจจะไม่โผล่ซ้ำสองที่อีกต่อไป (kind มีแค่ 'admin'/'staff' เท่านั้น ไม่มี 'bot' แยกแล้ว เพราะ
+   ต้นทางไม่ใช่ตัวตัดสิน — บอทที่ถูกเลือกเป็นพนักงานขายก็คือพนักงานขาย บอทที่ถูกเลือกเป็นแอดมินก็คือแอดมิน) */
 let userDirCache = [];
 let userDirRaw = { admin: [], staff: [] };
 let userDirFilter = 'all';
 const UD_TYPE_META = {
   admin: { label: 'แอดมิน', bg: '#F1ECFB', fg: '#6B3FA0' },
-  staff: { label: 'พนักงานขาย', bg: '#E3F6F0', fg: '#157A6E' },
-  bot:   { label: 'บอท', bg: '#E5F6FB', fg: '#0E6C8C' }
+  staff: { label: 'พนักงานขาย', bg: '#E3F6F0', fg: '#157A6E' }
 };
 const udTag = kind => { const m = UD_TYPE_META[kind];
   return '<span style="font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:'+m.bg+';color:'+m.fg+'">'+m.label+'</span>'; };
+function tenantLabelOf(tenantId){
+  if (!tenantId) return 'บริษัท (ไม่ระบุ)';
+  const t = (tenantsCache || []).find(x => x.tenantId === tenantId);
+  return t ? (t.tenantId + ' — ' + t.name) : tenantId;
+}
 function udStatus(kind, raw){
   if (kind === 'admin') {
     if (raw === 'active') return { statusOk:true, statusLabel:'ใช้งาน', statusPill:'ok' };
-    if (raw === 'pending') return { statusOk:false, statusLabel:'รออนุมัติ', statusPill:'wait' };
+    if (raw === 'pending') return { statusOk:false, statusLabel:'รออนุมัติ (เส้นทางฉุกเฉิน)', statusPill:'wait' };
     if (raw === 'rejected') return { statusOk:false, statusLabel:'ถูกปฏิเสธ', statusPill:'off' };
     return { statusOk:false, statusLabel:'ระงับแล้ว', statusPill:'off' };
   }
-  return raw === 'Yes' ? { statusOk:true, statusLabel:'ใช้งาน', statusPill:'ok' } : { statusOk:false, statusLabel:'รออนุมัติ', statusPill:'wait' };
+  return { statusOk:true, statusLabel:'ใช้งาน', statusPill:'ok' };   // ตารางหลักมีแต่ staff ที่ status='Yes' แล้ว
 }
+// ตารางหลัก = คนที่ตัดสินใจแล้วเท่านั้น (admin_users ทุกแถว + liff_users status='Yes')
 function udDecorate(){
   const admins = userDirRaw.admin.map(u => {
     const st = udStatus('admin', u.status);
     return Object.assign({ kind:'admin', id:u.id, name:u.displayName || u.username, org:u.tenantId || 'บริษัท',
       role: roleLabelOf(u.roleCode), last:'-', raw:u }, st);
   });
-  const staff = userDirRaw.staff.map(u => {
-    const isBot = !u.tenantId;
+  const staff = userDirRaw.staff.filter(u => u.status === 'Yes').map(u => {
     const st = udStatus('staff', u.status);
-    const roleLabel = (isBot && (!u.role || u.role === 'รออนุมัติ')) ? 'ถาม-ตอบข้อมูล (บอท)' : (u.role || '-');
-    return Object.assign({ kind: isBot ? 'bot' : 'staff', id:u.lineUserId, name:u.displayName || '(ยังไม่มีชื่อ)',
-      org:u.tenantId || 'บริษัท', role:roleLabel, last:u.lastLogin || '-', raw:u }, st);
+    return Object.assign({ kind:'staff', id:u.lineUserId, name:u.displayName || '(ยังไม่มีชื่อ)',
+      org:u.tenantId || 'บริษัท', role:u.role || '-', last:u.lastLogin || '-', raw:u }, st);
   });
   userDirCache = admins.concat(staff);
 }
@@ -5007,7 +5016,7 @@ function renderUdFilters(){
   const box = document.getElementById('ud-filters'); if (!box) return;
   const count = k => userDirCache.filter(u => k === 'all' || u.kind === k).length;
   const chip = (key, label) => '<button class="btn '+(userDirFilter===key?'btn-primary':'')+'" style="border-radius:999px" onclick="udSetFilter(\''+key+'\')">'+label+' ('+count(key)+')</button>';
-  box.innerHTML = chip('all','ทั้งหมด') + chip('admin','แอดมิน') + chip('staff','พนักงานขาย') + chip('bot','บอท');
+  box.innerHTML = chip('all','ทั้งหมด') + chip('admin','แอดมิน') + chip('staff','พนักงานขาย');
 }
 function udSetFilter(k){ userDirFilter = k; renderUdFilters(); renderUserDirTable(); }
 function renderUserDirTable(){
@@ -5034,13 +5043,11 @@ function openUserManageModal(kind, id){
       : '<div class="field"><label>บทบาท / สิทธิ์</label><select id="um-role">' +
         (ROLES_CACHE || []).map(r => '<option value="'+esc(r.code)+'"'+(r.code===u.raw.roleCode?' selected':'')+'>'+esc(r.label)+(r.tenantId?' ('+esc(r.tenantId)+')':'')+'</option>').join('') +
         '</select></div>';
-  } else if (kind === 'staff') {
+  } else {
     roleField = '<div class="field"><label>บทบาท</label><select id="um-role">' +
       '<option value="van_sales"'+(u.raw.role==='van_sales'?' selected':'')+'>พนักงานขับรถ (เงินสด)</option>' +
       '<option value="credit_sales"'+(u.raw.role==='credit_sales'?' selected':'')+'>พนักงานเครดิต</option>' +
       '</select></div>';
-  } else {
-    roleField = '<div class="field"><label>บทบาท</label><div class="form-hint">'+esc(u.role)+' — กำหนดจากการใช้งานจริง ไม่มีให้เลือก</div></div>';
   }
   const lineIdShown = kind === 'admin' ? (u.raw.lineUserId || '-') : u.id;
   plModal(
@@ -5051,7 +5058,7 @@ function openUserManageModal(kind, id){
     '<div class="field"><label>สถานะ</label><div><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span></div></div>' +
     '<div class="field"><label>LINE user id</label><div class="mono-data">'+esc(lineIdShown)+'</div></div>' +
     '<div class="field"><label>เข้าใช้ล่าสุด</label><div>'+esc(u.last)+'</div></div>' +
-    (isSuperAdmin ? '' : '<div class="form-actions" style="justify-content:flex-start;margin:4px 0 0"><button class="btn" onclick="udToggleTarget()">'+(u.statusOk ? 'ระงับการใช้งาน' : 'อนุมัติ / เปิดใช้งาน')+'</button></div>') +
+    (isSuperAdmin ? '' : '<div class="form-actions" style="justify-content:flex-start;margin:4px 0 0"><button class="btn" onclick="udToggleTarget()">ระงับการใช้งาน</button></div>') +
     plModalActions('saveUserManage()', 'บันทึก')
   );
 }
@@ -5075,46 +5082,103 @@ async function saveUserManage(){
     loadUserDirectory();
   });
 }
+// ตารางหลักมีแต่คนที่อนุมัติแล้ว (statusOk เสมอ) — ปุ่มนี้จึงมีความหมายเดียวคือ "ระงับ" ไม่ใช่ toggle สองทาง
 async function udToggleTarget(){
   const u = udManageTarget; if (!u) return;
   const r = u.kind === 'admin'
-    ? await callApi('updateAdminUser', { id: u.id, status: u.statusOk ? 'suspended' : 'active' })
-    : await callApi('updateStaffAdmin', { lineUserId: u.id, status: u.statusOk ? 'No' : 'Yes' });
+    ? await callApi('updateAdminUser', { id: u.id, status: 'suspended' })
+    : await callApi('updateStaffAdmin', { lineUserId: u.id, status: 'No' });
   if (!r.success) { toast(r.message, true); return; }
   plModalClose();
-  toast('อัปเดตสถานะสำเร็จ');
+  toast('ระงับการใช้งานแล้ว');
   loadUserDirectory();
 }
-async function loadPendingAdminUsers(){
+
+/* ── คิวรออนุมัติ (รวมทุกช่องทางจาก liff_users ที่ status ยังไม่ 'Yes') ── */
+function pendingLiffRows(){ return (userDirRaw.staff || []).filter(u => u.status !== 'Yes'); }
+function renderPendingCard(){
   const card = document.getElementById('pending-card'), list = document.getElementById('pending-list');
   if (!card) return;
-  const r = await callApi('listPendingAdminUsers', {});
-  const rows = (r.success && r.data) || [];
+  const rows = pendingLiffRows();
   card.style.display = rows.length ? '' : 'none';
-  document.getElementById('pending-count').textContent = rows.length ? rows.length + ' คำขอ' : '';
-  await ensureRolesForDropdown();
-  const roleOpts = ROLES_CACHE.filter(x => x.code !== 'super_admin')
-    .map(x => '<option value="'+esc(x.code)+'">'+esc(x.label)+(x.tenantId ? ' ('+esc(x.tenantId)+')' : '')+'</option>').join('');
+  document.getElementById('pending-count').textContent = rows.length ? rows.length + ' คน' : '';
+  const canPromote = SESSION && SESSION.roleCode === 'super_admin';
   list.innerHTML = rows.map(u =>
-    '<div class="activity-row"><span><b>'+esc(u.displayName)+'</b> <span class="mono-data">'+esc(u.username)+'</span>'+
-      ' · สังกัด '+esc(u.tenantName)+' · LINE <span class="mono-data">'+esc((u.lineUserId||'-').slice(0,12))+'…</span>'+
-      ' · ขอเมื่อ '+esc(u.requestedAt)+'</span>'+
-    '<span><select id="pa-role-'+u.id+'" style="margin-right:6px"><option value="">— เลือกสิทธิ์ —</option>'+roleOpts+'</select>'+
-      '<button class="btn btn-sm btn-primary" onclick="approvePending('+u.id+')">อนุมัติ</button> '+
-      '<button class="btn btn-sm" onclick="rejectPending('+u.id+')">ปฏิเสธ</button></span></div>').join('');
+    '<div class="activity-row"><span><b>'+esc(u.displayName || '(ยังไม่มีชื่อ)')+'</b>'+
+      ' · สังกัดที่เลือกไว้ '+esc(tenantLabelOf(u.tenantId))+
+      ' · LINE <span class="mono-data">'+esc((u.lineUserId||'-').slice(0,12))+'…</span></span>'+
+    '<span>' + (canPromote ? '<button class="btn btn-sm btn-primary" onclick="openPromoteModal(\''+esc(u.lineUserId)+'\')">ตั้งเป็นแอดมิน</button> ' : '') +
+      '<button class="btn btn-sm" onclick="openApproveStaffModal(\''+esc(u.lineUserId)+'\')">ตั้งเป็นพนักงานขาย</button></span></div>'
+  ).join('');
 }
-async function approvePending(id){
-  const roleCode = document.getElementById('pa-role-' + id).value;
-  if (!roleCode) { toast('เลือกสิทธิ์ให้ผู้ใช้ก่อนอนุมัติ', true); return; }
-  const r = await callApi('approveAdminUser', { id, roleCode });
-  if (!r.success) { toast(r.message, true); return; }
-  toast(r.message); loadPendingAdminUsers(); loadUserDirectory();
+async function openPromoteModal(lineUserId){
+  const u = pendingLiffRows().find(x => x.lineUserId === lineUserId);
+  if (!u) return;
+  if (!tenantsCache.length) await loadTenantsQuiet();
+  await ensureRolesForDropdown();
+  const tenantOpts = '<option value="">บริษัท (ไม่สังกัดตัวแทน)</option>' +
+    tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'"'+(t.tenantId===u.tenantId?' selected':'')+'>'+esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
+  const roleOpts = (ROLES_CACHE || []).map(r => '<option value="'+esc(r.code)+'">'+esc(r.label)+(r.tenantId?' ('+esc(r.tenantId)+')':'')+'</option>').join('');
+  plModal(
+    '<h3>ตั้งเป็นแอดมิน: '+esc(u.displayName || '(ยังไม่มีชื่อ)')+'</h3>'+
+    '<p class="form-hint">สังกัดตั้งต้นมาจากที่เขาเลือกไว้ตอนสมัคร — แก้ให้ถูกได้ถ้าเลือกผิดมา</p>'+
+    '<div class="field"><label>สังกัด</label><select id="pm-tenant">'+tenantOpts+'</select></div>'+
+    '<div class="field"><label>บทบาท / สิทธิ์</label><select id="pm-role"><option value="">— เลือกบทบาท —</option>'+roleOpts+'</select></div>'+
+    plModalActions('confirmPromote(\''+esc(lineUserId)+'\')', 'ยืนยันตั้งเป็นแอดมิน')
+  );
 }
-async function rejectPending(id){
-  if (!confirm('ปฏิเสธคำขอนี้? ผู้ใช้จะเข้าระบบไม่ได้และสมัครด้วย username เดิมซ้ำไม่ได้')) return;
-  const r = await callApi('rejectAdminUser', { id });
-  if (!r.success) { toast(r.message, true); return; }
-  toast(r.message); loadPendingAdminUsers();
+async function confirmPromote(lineUserId){
+  const roleCode = document.getElementById('pm-role').value;
+  if (!roleCode) { plModalErr('เลือกบทบาทก่อน'); return; }
+  const tenantId = document.getElementById('pm-tenant').value;
+  await plBusy(async () => {
+    const r = await callApi('promoteToAdmin', { lineUserId, roleCode, tenantId });
+    if (!r.success) { plModalErr(r.message); return; }
+    plModalClose();
+    toast(r.message);
+    loadUserDirectory();
+  });
+}
+async function openApproveStaffModal(lineUserId){
+  const u = pendingLiffRows().find(x => x.lineUserId === lineUserId);
+  if (!u) return;
+  const eff = EFFECTIVE_TENANT_ID();
+  let tenantField;
+  if (eff) {
+    // ฝั่งตัวแทน: แก้สังกัดไม่ได้อยู่แล้ว (backend บล็อก) — โชว์เป็นค่าคงที่แทนช่องที่กดแล้วพังเงียบๆ
+    tenantField = '<div class="field"><label>สังกัด (ตัวแทน)</label><div>'+esc(tenantLabelOf(eff))+'</div></div>';
+  } else {
+    if (!tenantsCache.length) await loadTenantsQuiet();
+    const tenantOpts = tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'"'+(t.tenantId===u.tenantId?' selected':'')+'>'+esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
+    tenantField = '<div class="field"><label>สังกัด (ตัวแทน)</label><select id="as-tenant"><option value="">— เลือกตัวแทน —</option>'+tenantOpts+'</select></div>';
+  }
+  plModal(
+    '<h3>ตั้งเป็นพนักงานขาย: '+esc(u.displayName || '(ยังไม่มีชื่อ)')+'</h3>'+
+    '<p class="form-hint">สังกัดตั้งต้นมาจากที่เขาเลือกไว้ตอนสมัคร — แก้ให้ถูกได้ถ้าเลือกผิดมา (ฝั่งบริษัท/Ultra Admin เท่านั้น)</p>'+
+    tenantField +
+    '<div class="field"><label>บทบาท</label><select id="as-role">'+
+      '<option value="van_sales"'+(u.role==='van_sales'?' selected':'')+'>พนักงานขับรถ (เงินสด)</option>'+
+      '<option value="credit_sales"'+(u.role==='credit_sales'?' selected':'')+'>พนักงานเครดิต</option>'+
+    '</select></div>'+
+    plModalActions('confirmApproveStaff(\''+esc(lineUserId)+'\')', 'ยืนยันตั้งเป็นพนักงานขาย')
+  );
+}
+async function confirmApproveStaff(lineUserId){
+  const u = pendingLiffRows().find(x => x.lineUserId === lineUserId);
+  const role = document.getElementById('as-role').value;
+  const payload = { lineUserId, status: 'Yes', role };
+  const tenantSel = document.getElementById('as-tenant');
+  if (tenantSel) {
+    if (!tenantSel.value) { plModalErr('เลือกสังกัด (ตัวแทน) ก่อน'); return; }
+    if (u && tenantSel.value !== (u.tenantId || '')) payload.newTenantId = tenantSel.value;
+  }
+  await plBusy(async () => {
+    const r = await callApi('updateStaffAdmin', payload);
+    if (!r.success) { plModalErr(r.message); return; }
+    plModalClose();
+    toast('ตั้งเป็นพนักงานขายแล้ว');
+    loadUserDirectory();
+  });
 }
 
 async function loadUserDirectory(){
@@ -5123,11 +5187,13 @@ async function loadUserDirectory(){
   if (userDirCache.length) { renderUdFilters(); renderUserDirTable(); } else tblLoading(body, 7);
   const roleWrap = document.getElementById('au-role-wrap');
   if (roleWrap) roleWrap.style.display = '';
-  // ★ ยิง listAdminUsers + listStaffAdmin ขนานกัน (คนละตารางข้างหลัง) — Promise.all ราคาเท่าคำขอเดียว (กติกา CLAUDE.md ข้อ 7)
+  // ★ ยิง listAdminUsers + listStaffAdmin + listTenants ขนานกัน (คนละตารางข้างหลัง) — Promise.all ราคาเท่าคำขอเดียว
+  // (กติกา CLAUDE.md ข้อ 7) — ต้องมี tenantsCache ให้พร้อมก่อนเรนเดอร์การ์ดรออนุมัติ (โชว์ชื่อตัวแทนแทนรหัส)
   const [, adminR, staffR] = await Promise.all([
     ensureRolesForDropdown().then(() => onAdminRoleChange()),
     callApi('listAdminUsers', {}),
-    callApi('listStaffAdmin', {})
+    callApi('listStaffAdmin', {}),
+    tenantsCache.length ? Promise.resolve() : loadTenantsQuiet()
   ]);
   if (!adminR.success && !staffR.success) {
     if (!userDirCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(adminR.message || staffR.message)+'</td></tr>';
@@ -5139,6 +5205,7 @@ async function loadUserDirectory(){
   listSnapSave('userdirectory', userDirCache);
   renderUdFilters();
   renderUserDirTable();
+  renderPendingCard();
 }
 async function createAdminUserUI(){
   const username = document.getElementById('au-username').value.trim();

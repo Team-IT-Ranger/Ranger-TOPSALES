@@ -10,10 +10,14 @@
  *      (ใช้ channel secret ฝั่งเซิร์ฟเวอร์เท่านั้น) แล้วหาบัญชีที่ผูกกับ LINE user id นั้น
  *
  * ผลลัพธ์ที่เป็นไปได้:
- *   - เจอบัญชี active + มีบทบาท → ออก session token เหมือน adminLogin ทุกประการ
- *   - เจอบัญชี pending/rejected/ระงับ → บอกสถานะให้ชัด (ไม่ปล่อยเข้า)
- *   - ไม่เจอบัญชี → คืน needRegister + **ตั๋วสมัคร (signupTicket)** ที่ผูกกับ LINE id ที่เพิ่งยืนยัน (อายุ 15 นาที)
+ *   - เจอบัญชี admin_users active + มีบทบาท → ออก session token เหมือน adminLogin ทุกประการ
+ *   - เจอบัญชี admin_users pending/rejected/ระงับ → บอกสถานะให้ชัด (ไม่ปล่อยเข้า — เส้นทางฉุกเฉินเก่าเท่านั้น)
+ *   - ไม่เจอใน admin_users แต่เจอใน liff_users (2026-09-29 คิวรวมของทุกช่องทาง):
+ *       status ยังไม่ 'Yes' → บอกว่ารอ Ultra Admin ตัดสินใจอยู่ (ไม่เสนอฟอร์มสมัครซ้ำ)
+ *       status 'Yes' → เคยถูกตัดสินให้เป็นพนักงานขายแล้ว บอกให้ไปใช้แอปมือถือแทน
+ *   - ไม่เจอที่ไหนเลย → คืน needRegister + **ตั๋วสมัคร (signupTicket)** ที่ผูกกับ LINE id ที่เพิ่งยืนยัน (อายุ 15 นาที)
  *     หน้าเว็บเอาตั๋วนี้ไปสมัครต่อโดย **ไม่ต้องตั้งรหัสผ่าน** — ตัวตนถูกยืนยันโดย LINE แล้ว ตั้งรหัสอีกก็ซ้ำซ้อน
+ *     (ลงทะเบียนแล้วได้แถวใน liff_users ไม่ใช่ admin_users ตรงๆ อีกต่อไป — ดู 29_admin_signup.gs)
  *
  * **ต้องตั้งค่าใน LINE Developers Console**: Callback URL ของ LINE Login channel ต้องมี URL ของหน้าแอดมิน
  * ทั้ง production และ UAT ไม่งั้น LINE จะปฏิเสธตั้งแต่ขั้นที่ 1 (ข้อความ 400 invalid redirect_uri)
@@ -70,6 +74,16 @@ function adminLoginWithLine(payload) {
 
   var found = _adminByLineId(profile.userId);
   if (!found) {
+    // ★ 2026-09-29 ก่อนเสนอสมัครใหม่ ต้องเช็ค liff_users ก่อนเสมอ (คิวรวมของทุกช่องทางแล้ว) — คนที่ลงทะเบียนไปแล้ว
+    // แต่ Ultra Admin ยังไม่ตัดสินใจ ไม่ควรเห็นฟอร์มสมัครซ้ำ และคนที่ถูกตัดสินให้เป็นพนักงานขายแล้วต้องรู้ว่าใช้แอปผิด
+    var liffExisting = checkUser(profile.userId);
+    if (liffExisting.exists) {
+      if (String(liffExisting.status) === 'Yes') {
+        return { success: false, message: 'บัญชีนี้เป็นพนักงานขาย ไม่ใช่แอดมิน — กรุณาเข้าใช้งานผ่านแอปมือถือ (LIFF) แทน' };
+      }
+      return { success: false, pendingApproval: true,
+        message: 'ลงทะเบียนไว้แล้ว รอผู้ดูแลระบบตัดสินใจว่าจะให้เป็นแอดมินหรือพนักงานขาย' };
+    }
     // ตั๋วสมัคร: ผูกกับตัวตน LINE ที่เพิ่งยืนยัน ใช้ได้ครั้งเดียวภายใน 15 นาที (ดู registerAdminUserWithLine)
     var ticket = Utilities.getUuid();
     cache.put(SIGNUP_TICKET_PREFIX + ticket, JSON.stringify({

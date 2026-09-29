@@ -1,21 +1,24 @@
 /**
  * ===================== ลงทะเบียนผู้ใช้ใหม่ + รออนุมัติ (Admin App) =====================
- * กติกาของเจ้าของระบบ (2026-09-24): **ผู้ใช้ใหม่ของทุกแอปต้องเลือกสังกัดก่อน และรอผู้ดูแลระบบอนุมัติเสมอ**
- *   - แอปมือถือ (LIFF): มีอยู่แล้วใน 04_auth.gs — registerUser() เลือกตัวแทน → status 'No' → แอดมินอนุมัติ
- *     ที่เมนู "พนักงานขาย" (updateStaffAdmin ใน 10_master_data.gs)
- *   - แอปแอดมิน: ไฟล์นี้ — สมัครเองจากหน้าล็อกอิน → บัญชีสถานะ 'pending' **ไม่มีบทบาท (role_code ว่าง)**
- *     จึงยังล็อกอินไม่ได้และไม่มีสิทธิ์ใดๆ จนกว่าผู้ดูแลจะกดอนุมัติพร้อมกำหนดบทบาท
+ * ★ 2026-09-29 เปลี่ยนโมเดลใหม่ทั้งหมด (เจ้าของระบบสั่ง — โมเดลเดิมมีสองคิว/สองตารางทำให้งง):
+ *   **ทุกช่องทาง (แอปมือถือ, สมัครจากแอปแอดมิน, เพิ่มเพื่อนกับ RangerBot) ลงทะเบียนเข้า `liff_users` เหมือนกันหมด**
+ *   ไม่มีใครถูกสร้างเป็น admin_users ตรงๆ อีกต่อไปตอนสมัคร — `admin_users` มีไว้เฉพาะคนที่ **Ultra Admin ตัดสินใจ
+ *   แล้ว** ว่าจะให้เป็นแอดมิน (`promoteToAdmin` ด้านล่าง สร้างแถวให้ทันที ไม่ต้องผ่านสถานะ pending คั่นกลางอีก
+ *   เพราะการกดตั้งเป็นแอดมิน "คือ" การอนุมัติอยู่แล้วในตัวมันเอง)
+ *   คิวรออนุมัติที่ใช้งานจริงตอนนี้คือ liff_users ที่ status ยังไม่เป็น 'Yes' (อ่านผ่าน listStaffAdmin)
+ *   ผู้ดูแลมีสองทางเลือกต่อคนเดียวเท่านั้น: **ตั้งเป็นแอดมิน** (ฟังก์ชันนี้) หรือ **ตั้งเป็นพนักงานขาย**
+ *   (`updateStaffAdmin` ใน 10_master_data.gs) — สังกัดตัวแทนตั้งต้นมาจากที่ผู้ใช้เลือกตอนสมัคร (หรือว่างถ้ามาจากบอท)
+ *   Ultra Admin แก้ให้ถูกได้เสมอถ้าผู้ใช้เลือกผิด (updateStaffAdmin รับ tenantId แล้ว)
  *
- * สถานะของ admin_users: active (ใช้งานได้) · pending (รออนุมัติ) · rejected (ถูกปฏิเสธ) · อื่นๆ = ถูกระงับ
+ * `registerAdminUser` (ของเดิม กรอก username+password เอง) ยังอยู่เผื่อกรณีฉุกเฉิน แต่หน้าเว็บไม่เรียกแล้ว —
+ * ยังคงเขียนตรงเข้า admin_users สถานะ pending เหมือนเดิม (เส้นทางนี้ไม่ผ่าน liff_users โดยตั้งใจ เพราะไม่มี LINE
+ * มายืนยันตัวตนตั้งแต่ต้นอยู่แล้ว)
+ *
+ * สถานะของ admin_users: active (ใช้งานได้) · pending (ค้างจากเส้นทางฉุกเฉินด้านบนเท่านั้น) · rejected (ถูกปฏิเสธ)
+ * · อื่นๆ = ถูกระงับ
  *
  * **ทุกบัญชีผูกกับ LINE user id เสมอ** (กติกาเจ้าของระบบ 2026-09-24) — ใช้ LINE user id เป็นตัวตนกลางของทุกแอป
  * บัญชีแอดมิน 1 บัญชี = LINE user id 1 ค่า (ซ้ำกันไม่ได้) และเป็นค่าเดียวกับที่ใช้เข้าแอปมือถือ
- *
- * สายอนุมัติตามลำดับชั้น:
- *   - ขอเป็น "แอดมินของตัวแทนจำหน่าย" (สังกัดเป็นตัวแทน) → **Ultra Admin (super_admin) อนุมัติเท่านั้น**
- *   - ขอเป็นผู้ใช้ของบริษัทเจ้าของสินค้า → Ultra Admin หรือแอดมินฝั่งบริษัทที่มีสิทธิ์ users_roles แก้ไข
- *   - พนักงานของตัวแทน (ผู้ใช้แอปมือถือใน liff_users) → **แอดมินของตัวแทนนั้นอนุมัติเอง**
- *     ที่เมนู "พนักงานขาย" (updateStaffAdmin ใน 10_master_data.gs) — ไม่ผ่านไฟล์นี้
  */
 var ADMIN_STATUS_ACTIVE = 'active', ADMIN_STATUS_PENDING = 'pending', ADMIN_STATUS_REJECTED = 'rejected';
 
@@ -195,7 +198,15 @@ function _uniqueUsername(base, lineUserId) {
   return slug + '.' + String(Date.now()).slice(-5);
 }
 
-/** payload: { signupTicket, tenantId ('' = บริษัทเจ้าของสินค้า), displayName? } */
+/**
+ * ★ 2026-09-29 เปลี่ยนวิธีคิดใหม่ตามที่เจ้าของระบบสั่ง: "บันทึกทุกคนจากทุกช่องทางลง liff_users ให้หมด"
+ *   ก่อนหน้านี้สมัครจากแอปแอดมินจะลง admin_users สถานะ pending ตรงๆ ทำให้ผู้ดูแลต้องไล่ดูสองตาราง/สองคิว
+ *   (admin_users pending + liff_users ที่ยังไม่อนุมัติ) แล้วงงว่าอันไหนคืออันไหน — ตอนนี้ **ทุกคนที่ยังไม่มีบัญชี
+ *   ไม่ว่าจะมาทางแอปไหน (มือถือ/แอดมิน/เพิ่มเพื่อนกับ RangerBot) ลงจุดเดียวกันคือ liff_users** แล้ว Ultra Admin
+ *   เป็นคนตัดสินใจทีหลังว่าจะ "ตั้งเป็นแอดมิน" (เรียก promoteToAdmin ด้านล่าง — ค่อยสร้างแถว admin_users ตอนนั้น)
+ *   หรือ "ตั้งเป็นพนักงานขาย" (updateStaffAdmin ใน 10_master_data.gs) — ดูคิวรวมที่ listStaffAdmin
+ * payload: { signupTicket, tenantId ('' = บริษัท — ยังไม่รู้ว่าจะได้เป็นแอดมินหรือพนักงาน), displayName? }
+ */
 function registerAdminUserWithLine(payload) {
   payload = payload || {};
   var ticket = String(payload.signupTicket || '').trim();
@@ -215,17 +226,63 @@ function registerAdminUserWithLine(payload) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return { success: false, message: 'ระบบกำลังบันทึกข้อมูลอยู่ ลองใหม่อีกครั้ง' };
   try {
-    var dup = _adminByLineId(tk.lineUserId);
-    if (dup) return { success: false, message: 'LINE นี้ผูกกับบัญชี "' + dup.username + '" อยู่แล้ว — กดเข้าสู่ระบบด้วย LINE ได้เลย' };
-    var username = _uniqueUsername(displayName, tk.lineUserId);
-    centralAppend('admin_users', {
-      record_id: centralNextId('admin_users'), username: username,
-      password_hash: '', salt: '',                    // ไม่มีรหัสผ่าน — เข้าระบบด้วย LINE เท่านั้น
-      display_name: displayName, role_code: '', tenant_id: tenantId,
-      status: ADMIN_STATUS_PENDING, created_at: nowStr(), line_user_id: tk.lineUserId
+    // กันเคสหายาก: มีคนถูกตั้งเป็นแอดมินไปแล้วแต่ตั๋วเก่ายังไม่หมดอายุ (ปกติ adminLoginWithLine จะเจอใน
+    // admin_users ก่อนแล้วไม่ออกตั๋วให้ซ้ำ — เช็คซ้ำไว้เผื่อเรียก action นี้ตรงๆ)
+    var dupAdmin = _adminByLineId(tk.lineUserId);
+    if (dupAdmin) { cache.remove(SIGNUP_TICKET_PREFIX + ticket); return { success: false, message: 'LINE นี้ผูกกับบัญชี "' + dupAdmin.username + '" อยู่แล้ว — กดเข้าสู่ระบบด้วย LINE ได้เลย' }; }
+    var existing = checkUser(tk.lineUserId);   // เช็คกับ liff_users (ฟังก์ชันกลางใน 04_auth.gs) กันแถวซ้ำ
+    if (existing.exists) {
+      cache.remove(SIGNUP_TICKET_PREFIX + ticket);
+      return { success: true, already: true,
+        message: 'บัญชีนี้ลงทะเบียนไว้แล้ว รอผู้ดูแลระบบตัดสินใจสิทธิ์อยู่ (สถานะ: ' + (existing.status || '-') + ')' };
+    }
+    centralAppend('liff_users', {
+      line_user_id: tk.lineUserId, display_name: displayName, role: 'รออนุมัติ',
+      tenant_id: tenantId, status: 'No', last_login: new Date()
     });
     cache.remove(SIGNUP_TICKET_PREFIX + ticket);      // ตั๋วใช้ได้ครั้งเดียว
-    return { success: true, pending: true, username: username,
-      message: 'ลงทะเบียนแล้วในชื่อ "' + displayName + '" — รอผู้ดูแลระบบอนุมัติและกำหนดสิทธิ์ ครั้งต่อไปกดเข้าสู่ระบบด้วย LINE ได้เลย' };
+    return { success: true, pending: true,
+      message: 'ลงทะเบียนแล้วในชื่อ "' + displayName + '" — รอผู้ดูแลระบบตัดสินใจว่าจะให้เป็นแอดมินหรือพนักงานขาย' };
   } finally { lock.releaseLock(); }
+}
+
+/**
+ * Ultra Admin ตั้งคนจาก liff_users ให้เป็นแอดมิน — เดียวกับ "อนุมัติ" ของโมเดลเดิมแต่มาจากคิวรวมแล้ว
+ * payload: { lineUserId, roleCode, tenantId ('' = บริษัท) } — สร้างแถว admin_users ใหม่ทันที (ไม่มีสถานะ pending
+ * คั่นกลางอีกแล้ว เพราะการที่ Ultra Admin กดตั้งเป็นแอดมิน "คือ" การอนุมัติในตัวมันเองอยู่แล้ว)
+ * liff_users แถวเดิมถูกตั้ง status='Yes' ไปด้วยเพื่อไม่ให้ค้างอยู่ในคิวรออนุมัติ (โชว์ซ้ำสองที่)
+ */
+function promoteToAdmin(session, payload) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้นที่ตั้งแอดมินใหม่ได้' };
+  payload = payload || {};
+  var lineUserId = String(payload.lineUserId || '').trim();
+  if (!isLineUserId(lineUserId)) return { success: false, message: 'รูปแบบ LINE User ID ไม่ถูกต้อง' };
+
+  var liffRow = checkUser(lineUserId);
+  if (!liffRow.exists) return { success: false, message: 'ไม่พบผู้ใช้รายนี้ใน liff_users (ยังไม่เคยลงทะเบียนช่องทางใดเลย)' };
+
+  var dup = _adminByLineId(lineUserId);
+  if (dup) return { success: false, message: 'LINE นี้เป็นแอดมินอยู่แล้ว (บัญชี "' + dup.username + '")' };
+
+  var tenantId = String(payload.tenantId || '').trim();
+  if (tenantId && !_activeTenantRow(tenantId)) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
+  var roleCode = resolveAssignableRole(session, String(payload.roleCode || ''), tenantId);
+  if (!roleCode) return { success: false, message: 'กรุณาเลือกบทบาทที่ถูกต้อง (กำหนด super_admin ผ่านหน้าจอไม่ได้)' };
+
+  var displayName = liffRow.name || 'ผู้ใช้ LINE';
+  var username = _uniqueUsername(displayName, lineUserId);
+  centralAppend('admin_users', {
+    record_id: centralNextId('admin_users'), username: username,
+    password_hash: '', salt: '',                      // ไม่มีรหัสผ่าน — เข้าระบบด้วย LINE เท่านั้น เหมือนบัญชีที่สมัครเอง
+    display_name: displayName, role_code: roleCode, tenant_id: tenantId,
+    status: ADMIN_STATUS_ACTIVE, created_at: nowStr(), line_user_id: lineUserId
+  });
+  var sh = centralSheet('liff_users');
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === lineUserId) { sh.getRange(i + 1, 5).setValue('Yes'); break; }  // คอลัมน์ 5 = status
+  }
+  centralInvalidate('liff_users');
+  return { success: true, username: username,
+    message: 'ตั้ง ' + displayName + ' เป็นแอดมินแล้ว (บทบาท: ' + roleCode + ', username: ' + username + ')' };
 }
