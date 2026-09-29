@@ -56,10 +56,16 @@ function updateCustomerAdmin(session, payload) {
 }
 
 // ── Admin App: พนักงานขาย (ตัวแทน/Ultra Admin ที่สวมสิทธิ์ อนุมัติ/ปิดการใช้งานพนักงาน) ──
+// ★ ใช้ _effectiveTenantId ไม่ใช่ _salesTenantId (2026-09-29 แก้บั๊ก) — _salesTenantId fallback ไปที่ HOUSE
+// ให้ super_admin/owner_admin ที่ไม่ได้สวมสิทธิ์ตัวแทนไหนอยู่ เหมาะกับ listCustomersAdmin (ลูกค้าตรงของบริษัท
+// อยู่ใต้ HOUSE จริง) แต่ผิดกับที่นี่: ผู้ใช้ที่เพิ่งลงทะเบียน/เพิ่มเพื่อนกับบอทยังไม่ถูกกำหนด tenant_id เลย (ว่าง)
+// filter ด้วย HOUSE จึงกรองคิวรออนุมัติทิ้งหมด Ultra Admin เห็น 0 คนทั้งที่ liff_users มีจริง (เจอ 2026-09-29 —
+// ผู้ใช้เห็น 7 คนในชีตตรงๆ แต่หน้าเว็บว่าง) ต้องสอดคล้องกับ listAdminUsers (14_permissions.gs) และ
+// updateStaffAdmin ด้านล่างซึ่งใช้ _effectiveTenantId อยู่แล้ว: ไม่สวมสิทธิ์ = เห็นทุกคนทุกตัวแทน (รวมที่ยังไม่มีสังกัด)
 function listStaffAdmin(session, payload) {
   var err = _requirePermission(session, 'staff', 'view'); if (err) return err;
   var rows = centralObjects('liff_users');
-  var effTenantId = _salesTenantId(session, payload || {}); // เหตุผลเดียวกับ listCustomersAdmin ด้านบน
+  var effTenantId = _effectiveTenantId(session, payload || {});
   if (effTenantId) rows = rows.filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
   return { success: true, data: rows.map(function(u) { return {
     lineUserId: u.line_user_id, displayName: u.display_name, role: u.role, tenantId: u.tenant_id,

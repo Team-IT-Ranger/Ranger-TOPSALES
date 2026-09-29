@@ -117,5 +117,19 @@ fails('แก้เป็นตัวแทนที่ปิดใช้งา�
 fixed = ctx.centralObjects('liff_users').find(u => u.line_user_id === LID5);
 eq('  สังกัดเดิมไม่ถูกแตะเมื่อปฏิเสธ', fixed.tenant_id, 'T2');
 
+console.log('\n── คิวรออนุมัติ: listStaffAdmin ต้องไม่กรอง tenant_id ว่างทิ้ง (บั๊กที่เจอจริง 2026-09-29) ──');
+// เพิ่มเพื่อนกับบอท/สมัครผ่านแอดมิน ยังไม่ได้เลือกสังกัด → tenant_id ว่าง เหมือนภาพจริงที่เจ้าของระบบส่งมา
+const LID6 = 'U88888888888888888888888888888888';
+ctx.centralAppend('liff_users', { line_user_id: LID6, display_name: 'เพิ่มเพื่อนกับบอท', role: 'รออนุมัติ', tenant_id: '', status: 'No', last_login: '' });
+// ★ เดิมใช้ _salesTenantId ซึ่ง super_admin ที่ไม่ได้สวมสิทธิ์ตัวแทนไหนอยู่จะ fallback ไปที่ HOUSE โดยอัตโนมัติ
+// แล้ว filter tenant_id === 'HOUSE' ทิ้งแถวที่ยังไม่มีสังกัดเลยหมด — Ultra Admin เห็นคิวรออนุมัติว่างทั้งที่มีจริง
+// (ผู้ใช้ส่งภาพหน้าชีตมายืนยัน 7 แถว แต่หน้าเว็บว่าง) แก้เป็น _effectiveTenantId ซึ่งไม่ fallback ให้ตรงกับ
+// listAdminUsers (14_permissions.gs) และ updateStaffAdmin ด้านบน
+let sr = ctx.listStaffAdmin(SUPER, {});
+eq('Ultra Admin ไม่สวมสิทธิ์ตัวแทนไหน เห็นทุกแถวรวมที่ยังไม่มีสังกัด', sr.data.some(u => u.lineUserId === LID6), true);
+sr = ctx.listStaffAdmin(T1SESS, {});
+eq('ฝั่งตัวแทนยังเห็นเฉพาะของตัวเอง ไม่เห็นแถวที่ยังไม่มีสังกัด', sr.data.some(u => u.lineUserId === LID6), false);
+eq('  และไม่เห็นของตัวแทนอื่น (T2)', sr.data.some(u => u.tenantId === 'T2'), false);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
