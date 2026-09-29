@@ -231,9 +231,19 @@
         <button data-v="credit_term" onclick="setPay('credit_term')">เครดิต</button>
       </div>
       <label class="check"><input type="checkbox" id="s-office" onchange="cartChanged()"> ส่งจากสำนักงาน (ไม่ตัดสต็อกบนรถ)</label>
-      <input class="inp" id="s-q" placeholder="ค้นหาสินค้า..." oninput="renderProducts()">
     </div>
-    <div class="stack" id="s-list"></div>
+    <!-- ★ 2026-09-30 เจ้าของระบบสั่ง: แยก "หน้าเลือกสินค้า" ออกจาก "หน้าตะกร้า" ให้ชัดเจนเหมือนฝั่งแอดมิน
+         (เดิมรายการสินค้าทั้งหมดกับของที่เลือกไว้ปนกันในลิสต์เดียว หาของที่เลือกไปแล้วไม่เจอ) — ยังแตะ +/− ไวเหมือนเดิม
+         แค่มีปุ่มสลับสองโหมดชัดๆ แทนการต้องกางแถบล่างเพื่อดูว่าเลือกอะไรไปแล้วบ้าง (ดู setSellMode/renderSellMode) -->
+    <div class="seg" id="sell-mode-seg" style="margin-bottom:12px">
+      <button id="sm-pick" onclick="setSellMode('pick')">+ เพิ่มสินค้า</button>
+      <button id="sm-cart" onclick="setSellMode('cart')">ตะกร้า<span id="sm-cart-n"></span></button>
+    </div>
+    <div id="sell-pick">
+      <input class="inp" id="s-q" placeholder="ค้นหาสินค้า..." oninput="renderProducts()" style="margin-bottom:10px">
+      <div class="stack" id="s-list"></div>
+    </div>
+    <div class="stack hidden" id="sell-cart"></div>
     <div style="height:120px"></div>
   </section>
 
@@ -286,11 +296,10 @@
 
   <!-- แถบตะกร้า (เฉพาะหน้าขาย) -->
   <div class="cartbar hidden" id="cartbar"><div class="inner">
-    <div class="sum" onclick="toggleCartDetail()">
+    <div class="sum" onclick="setSellMode('cart')">
       <div><div class="note" id="cb-count">0 รายการ</div><div class="tot" id="cb-total">฿0.00</div></div>
       <div class="note" id="cb-src" style="text-align:right;max-width:55%"></div>
     </div>
-    <div class="detail hidden" id="cb-detail"></div>
     <div id="cb-err"></div>
     <button class="btn btn-green btn-block" id="cb-save" style="margin-top:8px" onclick="submitSale()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.2 8.6 6.4 11.8l6.4-7"/></svg>บันทึกการขาย</button>
   </div></div>
@@ -514,7 +523,7 @@ function gotoTab(t){
 }
 function renderCurrentTab(){
   if (TAB === 'home') renderHome();
-  if (TAB === 'sell') { renderCustSelect(); renderProducts(); renderCartBar(); }
+  if (TAB === 'sell') { renderCustSelect(); renderProducts(); renderCartBar(); renderSellMode(); }
   if (TAB === 'stock') renderStock();
   if (TAB === 'visit') renderVisit();
   if (TAB === 'cust') renderCustomers();
@@ -636,53 +645,79 @@ function cartChanged(){
   }, 500);
 }
 function estimate(){ return CART.reduce((s, c) => { const p = prodById(c.productId); return s + (p ? unitOf(p, c.unitCode).price * c.qty : 0); }, 0); }
-let CART_OPEN = false;
+// ★ 2026-09-30 เจ้าของระบบสั่ง: แยก "หน้าเลือกสินค้า" (pick) กับ "หน้าตะกร้า" (cart) ออกจากกันชัดเจน
+// (เดิมของที่เลือกไว้แล้วปนอยู่ในลิสต์สินค้าทั้งหมด ต้องไล่เลื่อนหา ตอนนี้มีปุ่มสลับสองโหมดตรงๆ)
+let SELL_MODE = 'pick';
+function setSellMode(m){ SELL_MODE = m; renderSellMode(); }
+function renderSellMode(){
+  const pick = SELL_MODE !== 'cart';
+  $('sm-pick').classList.toggle('on', pick);
+  $('sm-cart').classList.toggle('on', !pick);
+  $('sell-pick').classList.toggle('hidden', !pick);
+  $('sell-cart').classList.toggle('hidden', pick);
+  $('sm-cart-n').textContent = CART.length ? ' (' + CART.length + ')' : '';
+  if (!pick) renderCartDetail();
+}
+function removeCartItem(pid, code){
+  CART = CART.filter(c => !(String(c.productId) === String(pid) && c.unitCode === code));
+  renderProducts(); cartChanged();
+}
 // ★ ของแถม (2026-09-30, เจ้าของระบบสั่ง — เอนจิ้นคิดของแถมให้อยู่แล้วแต่แอปไม่เคยโชว์เลยสักบรรทัด)
 // FREE_OFF = เซ็ตของ ruleId ที่พนักงานติ๊กออก (ของแถมชิ้นนั้นไม่มีจริงบนรถ/ลูกค้าไม่รับ) ค่าเริ่มต้นติ๊กรับทุกชิ้น
 // ให้ตรงกับที่ recordSale จะบันทึกถ้าไม่ส่ง payload.freeGoods มาเลย (ดู 07_sales.gs)
 let FREE_OFF = new Set();
-function toggleCartDetail(){ CART_OPEN = !CART_OPEN; renderCartBar(); }
 function toggleFreeGood(ruleId){ if (FREE_OFF.has(ruleId)) FREE_OFF.delete(ruleId); else FREE_OFF.add(ruleId); renderCartBar(); }
-function renderCartBar(){
-  const bar = $('cartbar');
-  bar.classList.toggle('hidden', TAB !== 'sell' || !CART.length);
-  if (!CART.length) return;
-  $('cb-count').textContent = CART.length + ' รายการ · แตะเพื่อ' + (CART_OPEN ? 'ซ่อน' : 'ดูรายละเอียด');
+// รายการที่คิดเงิน + ของแถม + ปุ่มล้าง/เพิ่มต่อ — ใช้แสดงในโหมด "ตะกร้า" เท่านั้น (โหมดเลือกสินค้าไม่โชว์ตรงนี้)
+function renderCartDetail(){
+  const box = $('sell-cart'); if (!box) return;
+  if (!CART.length) { box.innerHTML = '<p class="muted">ยังไม่มีสินค้าในตะกร้า — กด "+ เพิ่มสินค้า" เพื่อเริ่มเลือก</p>'; return; }
   const priced = QUOTE && QUOTE.success && QUOTE.priceList;
   const freeGoods = (priced && QUOTE.freeGoods) || [];
-  let total = estimate(), src, err = '';
-  if (priced) { total = QUOTE.total; src = 'ชุดราคา: ' + esc(QUOTE.priceList.name); }
-  else if (QUOTE && QUOTE.success) src = 'ราคาตั้งต้น — ส่วนลดโปรฯ คิดตอนบันทึก';
-  else if (QUOTE && !QUOTE.success) { src = QUOTE.offline ? 'ประมาณการ (ออฟไลน์)' : 'คิดราคาไม่ได้'; if (!QUOTE.offline) err = QUOTE.message; }
-  else src = navigator.onLine ? 'กำลังคิดราคา...' : 'ประมาณการ (ออฟไลน์) — คิดจริงตอนส่ง';
-  if (freeGoods.length) src += ' · 🎁 มีของแถม ' + freeGoods.length + ' รายการ';
-  $('cb-total').textContent = '฿' + baht(total);
-  $('cb-src').innerHTML = src;
-  $('cb-err').innerHTML = err ? '<div class="err">' + esc(err) + '</div>' : '';
-  const det = $('cb-detail'); det.classList.toggle('hidden', !CART_OPEN);
-  if (CART_OPEN) {
-    det.innerHTML = CART.map(c => {
+  box.innerHTML = '<div class="card stack">' +
+    CART.map(c => {
       const p = prodById(c.productId) || { name: '#' + c.productId }, u = p.id ? unitOf(p, c.unitCode) : { unitLabel: '', price: 0 };
       const ql = priced && (QUOTE.lines || []).find(l => String(l.productId) === String(c.productId) && String(l.unitCode) === (c.unitCode || String(l.unitCode)));
       const unitPrice = ql ? ql.unitPrice : u.price, line = ql ? ql.lineTotal : u.price * c.qty;
-      return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + c.qty + ' ' + esc(u.unitLabel) + ' × ฿' + baht(unitPrice) + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') + '</span></span><span class="mono">฿' + baht(line) + '</span></div>';
+      return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + c.qty + ' ' + esc(u.unitLabel) + ' × ฿' + baht(unitPrice) + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') + '</span></span>' +
+        '<span style="display:flex;align-items:center;gap:8px"><span class="mono">฿' + baht(line) + '</span>' +
+        '<button class="btn btn-sm" onclick="removeCartItem(\'' + esc(c.productId) + '\',\'' + esc(c.unitCode) + '\')">✕</button></span></div>';
     }).join('') +
-      // ★ ของแถม — พื้นหลังต่างสีให้เห็นชัดว่าไม่ใช่รายการที่คิดเงิน แตะแถวเพื่อติ๊กออกถ้าของจริงไม่มีบนรถ/ลูกค้าไม่เอา
-      freeGoods.map(f => {
-        const p = prodById(f.productId) || { name: '#' + f.productId }, off = FREE_OFF.has(f.ruleId);
-        const unitLabel = p.id ? unitOf(p, f.unitCode).unitLabel : f.unitCode;
-        return '<div class="row" style="background:#EAF6EE;border-radius:8px" onclick="toggleFreeGood(\'' + esc(f.ruleId) + '\')">' +
-          '<span><input type="checkbox" ' + (off ? '' : 'checked') + ' onclick="event.stopPropagation();toggleFreeGood(\'' + esc(f.ruleId) + '\')" style="margin-right:6px">' +
-          '🎁 ' + esc(p.name) + '<br><span class="note">' + f.qty + ' ' + esc(unitLabel) + ' ฟรี · ' + esc(f.ruleName) + (off ? ' · <b>ไม่ให้ของแถมนี้</b>' : '') + '</span></span>' +
-          '<span class="mono">' + (off ? '—' : 'ฟรี') + '</span></div>';
-      }).join('') +
-      (priced && QUOTE.billDiscount ? '<div class="row"><span>โปรระดับบิล ลด ' + esc(QUOTE.billPercent) + '%</span><span class="mono">-฿' + baht(QUOTE.billDiscount) + '</span></div>' : '') +
-      '<div class="row"><button class="btn btn-sm" onclick="clearCart()">ล้างตะกร้า</button><span></span></div>';
-  }
-  const save = $('cb-save'); save.disabled = !!err;
-  save.innerHTML = navigator.onLine ? MI.check + 'บันทึกการขาย' : MI.box + 'บันทึกเข้าคิว (ออฟไลน์)';
+    // ★ ของแถม — พื้นหลังต่างสีให้เห็นชัดว่าไม่ใช่รายการที่คิดเงิน แตะแถวเพื่อติ๊กออกถ้าของจริงไม่มีบนรถ/ลูกค้าไม่เอา
+    freeGoods.map(f => {
+      const p = prodById(f.productId) || { name: '#' + f.productId }, off = FREE_OFF.has(f.ruleId);
+      const unitLabel = p.id ? unitOf(p, f.unitCode).unitLabel : f.unitCode;
+      return '<div class="row" style="background:#EAF6EE;border-radius:8px" onclick="toggleFreeGood(\'' + esc(f.ruleId) + '\')">' +
+        '<span><input type="checkbox" ' + (off ? '' : 'checked') + ' onclick="event.stopPropagation();toggleFreeGood(\'' + esc(f.ruleId) + '\')" style="margin-right:6px">' +
+        '🎁 ' + esc(p.name) + '<br><span class="note">' + f.qty + ' ' + esc(unitLabel) + ' ฟรี · ' + esc(f.ruleName) + (off ? ' · <b>ไม่ให้ของแถมนี้</b>' : '') + '</span></span>' +
+        '<span class="mono">' + (off ? '—' : 'ฟรี') + '</span></div>';
+    }).join('') +
+    (priced && QUOTE.billDiscount ? '<div class="row"><span>โปรระดับบิล ลด ' + esc(QUOTE.billPercent) + '%</span><span class="mono">-฿' + baht(QUOTE.billDiscount) + '</span></div>' : '') +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-sm" onclick="clearCart()">ล้างตะกร้า</button>' +
+    '<button class="btn btn-sm" onclick="setSellMode(\'pick\')">+ เพิ่มสินค้าอีก</button></div>';
 }
-function clearCart(){ if (!confirm('ล้างตะกร้าทั้งหมด?')) return; CART = []; CART_OPEN = false; FREE_OFF = new Set(); renderProducts(); cartChanged(); }
+function renderCartBar(){
+  const bar = $('cartbar');
+  bar.classList.toggle('hidden', TAB !== 'sell' || !CART.length);
+  if (CART.length) {
+    const priced = QUOTE && QUOTE.success && QUOTE.priceList;
+    const freeGoods = (priced && QUOTE.freeGoods) || [];
+    let total = estimate(), src, err = '';
+    if (priced) { total = QUOTE.total; src = 'ชุดราคา: ' + esc(QUOTE.priceList.name); }
+    else if (QUOTE && QUOTE.success) src = 'ราคาตั้งต้น — ส่วนลดโปรฯ คิดตอนบันทึก';
+    else if (QUOTE && !QUOTE.success) { src = QUOTE.offline ? 'ประมาณการ (ออฟไลน์)' : 'คิดราคาไม่ได้'; if (!QUOTE.offline) err = QUOTE.message; }
+    else src = navigator.onLine ? 'กำลังคิดราคา...' : 'ประมาณการ (ออฟไลน์) — คิดจริงตอนส่ง';
+    if (freeGoods.length) src += ' · 🎁 มีของแถม ' + freeGoods.length + ' รายการ';
+    $('cb-count').textContent = CART.length + ' รายการ · แตะเพื่อดูตะกร้า';
+    $('cb-total').textContent = '฿' + baht(total);
+    $('cb-src').innerHTML = src;
+    $('cb-err').innerHTML = err ? '<div class="err">' + esc(err) + '</div>' : '';
+    const save = $('cb-save'); save.disabled = !!err;
+    save.innerHTML = navigator.onLine ? MI.check + 'บันทึกการขาย' : MI.box + 'บันทึกเข้าคิว (ออฟไลน์)';
+  }
+  renderSellMode();
+}
+function clearCart(){ if (!confirm('ล้างตะกร้าทั้งหมด?')) return; CART = []; FREE_OFF = new Set(); SELL_MODE = 'pick'; renderProducts(); cartChanged(); }
 async function submitSale(){
   if (!CART.length) return;
   const btn = $('cb-save'); if (btn.disabled) return;
@@ -723,7 +758,7 @@ function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
   if (!$('s-office').checked) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
   lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
-  CART = []; CART_OPEN = false; QUOTE = null; FREE_OFF = new Set(); renderProducts(); renderCartBar();
+  CART = []; QUOTE = null; FREE_OFF = new Set(); SELL_MODE = 'pick'; renderProducts(); renderCartBar();
 }
 
 /* ══════════════ สต็อก ══════════════ */
