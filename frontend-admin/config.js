@@ -1,5 +1,8 @@
 /* ตั้งค่าตามสภาพแวดล้อม — ไฟล์เดียวใช้ได้ทุกที่ ไม่มีค่าที่ต่างกันตาม branch (merge UAT → main จึงไม่ชนกัน)
-   ENV ตัดสินจาก URL ที่เปิด: /admin-uat/ และ localhost = 'uat' · นอกนั้น (/admin/) = 'prod'
+   ENV ตัดสินจาก **hostname** ที่เปิด (ไม่ใช่ path อีกต่อไป — ย้ายจาก GitHub Pages แบบ path-routed
+   /admin/ กับ /admin-uat/ ไป Cloudflare Pages แบบคนละโดเมน/โปรเจกต์แล้ว 2026-09-29):
+   hostname มีคำว่า "uat" (Cloudflare Pages ตั้งชื่อ branch alias ของกิ่ง UAT เป็น uat.<โปรเจกต์>.pages.dev
+   ให้เองอัตโนมัติ ตัวพิมพ์เล็กเสมอ) หรือ localhost = 'uat' · นอกนั้น = 'prod'
 
    สถานะ ณ 2026-09-24: **เปิด production แล้ว** — โปรเจกต์ prod 1XObaZXu… (เจ้าของ channarong@thanatkorn.com
    บัญชีเดียวกับ dev/uat และเป็นเจ้าของไฟล์ฐานข้อมูลทั้งหมด) มี Central Sheet + ผังบัญชีของตัวเองแยกจาก UAT
@@ -10,7 +13,7 @@
     prod: 'https://script.google.com/macros/s/AKfycbxGSgR4oQLbS1kyy6c-JIj4g4ZaRUhk-bLnz3z_R2YQIu4guMsueyfxH3xK4eggRJorzQ/exec',
     uat:  'https://script.google.com/macros/s/AKfycbwsdgUjEe1RQFeuHQ3je92eok-ezYp2vVRL571eXNdRs1lfEAEXf1rSEIPFClb7GTYu7A/exec' /* TOPSHOP Backend UAT */
   };
-  var h = location.hostname, p = location.pathname;
-  var env = (p.indexOf('/admin-uat/') !== -1 || h === 'localhost' || h === '127.0.0.1') ? 'uat' : 'prod';
+  var h = location.hostname;
+  var env = (h.indexOf('uat') !== -1 || h === 'localhost' || h === '127.0.0.1') ? 'uat' : 'prod';
   window.APP_CONFIG = { ENV: env, BACKEND_URL: BACKENDS[env] };
 })();
