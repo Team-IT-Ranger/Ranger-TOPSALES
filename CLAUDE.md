@@ -169,6 +169,19 @@ Google Drive ไม่ merge ไฟล์ที่ถูกเขียนพร
   เปลี่ยนชื่อจากเครื่องนี้ไม่ได้เพราะ clasp มีแค่ `drive.file`/`drive.metadata.readonly` สำหรับไฟล์นั้น
   ลบได้ด้วย `clasp delete-script 1BDLcQIB…` เมื่อเจ้าของระบบสั่ง)
 - ยังไม่ merge `UAT` → `main` จนกว่า backend prod จะตอบล็อกอินได้จริง (ไม่งั้น `/admin/` เปิดมาแล้วพัง)
+- **★ 2026-09-29 merge แล้ว** — เจ้าของระบบยืนยันเห็นคิวรออนุมัติครบใน UAT แล้วสั่ง "push ทั้งหมดขึ้น prod"
+  `main` ff-merge จาก `UAT` (`a70a667`, 88 คอมมิต) + push แล้ว · backend push เข้าโปรเจกต์ prod (`1XObaZXu…`)
+  แล้ว redeploy deployment เดิม (`AKfycbxGSgR4…`) เป็น **@14** — ยิง action หลอกเช็ค deployment สดแล้วตอบถูก
+  · frontend: GitHub Pages workflow รันแล้ว (build ใหม่ยืนยันแล้ว) และ Cloudflare Pages (โฮสต์จริงตอนนี้ —
+  ดู "ย้ายไป Cloudflare Pages" ด้านล่าง) build production branch ใหม่แล้วเช่นกัน (เจอ `openApproveStaffModal`
+  ในหน้าที่เสิร์ฟจริง ยืนยันว่าไม่ใช่ของแคช)
+  · **★ พบบั๊กที่ต้องแก้ต่อ**: `config.js` ตัดสิน env จาก **hostname** (ของ Cloudflare Pages ที่มี `uat.` เป็น
+  subdomain) แต่ GitHub Pages ยังคงโครง path เดิม (`/admin-uat/`, `/mobile-uat/`) — hostname ของ github.io
+  ไม่มีคำว่า `uat` เลย ดังนั้น **`/admin-uat/` และ `/mobile-uat/` บน GitHub Pages ตอนนี้ชี้เข้า backend prod
+  เงียบๆ** (เทียบไฟล์แล้ว `config.js` ที่เสิร์ฟบนทั้งสอง path เหมือนกันเป๊ะ) ใครยังใช้ลิงก์ GitHub Pages เดิม
+  ทดสอบอยู่จะกลายเป็นทดสอบกับข้อมูลจริงโดยไม่รู้ตัว — **ยังไม่ได้แก้** เพราะไม่ชัดว่าเจ้าของระบบต้องการปิด
+  GitHub Pages workflow ไปเลย (Cloudflare เป็นโฮสต์จริงแล้ว) หรือจะให้ config.js รองรับทั้งสองแบบ (hostname
+  + path fallback) ไว้ก่อน · ต้องถามเจ้าของระบบก่อนแก้
 
 ## ความเร็วในการเปิดแอป — สถาปัตยกรรมที่วางไว้ (2026-09-24)
 

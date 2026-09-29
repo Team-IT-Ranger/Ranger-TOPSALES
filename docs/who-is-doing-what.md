@@ -84,6 +84,14 @@
   super_admin เห็นแต่ tenant_admin ไม่เห็นของตัวแทนอื่น) · push + redeploy ขึ้น UAT แล้ว (**@51**) —
   ยิง action หลอกตรวจ deployment สดแล้วตอบถูกต้อง แต่**ยังไม่ได้คลิกทดสอบจริงในแอป** (ไม่มี credential ของ
   เจ้าของระบบ) รอเจ้าของระบบกดดูหน้า "ผู้ใช้งานและอนุมัติ" อีกที
+  · **★ 2026-09-29 เจ้าของระบบยืนยันเห็นครบ 7 คนแล้ว → สั่ง push ทั้งหมดขึ้น prod**: `main` ff-merge จาก
+  `UAT` (`a70a667`, 88 คอมมิต — ทุก test suite ผ่านก่อน merge ยกเว้น `test-pricelist-parser.js` ที่พังจาก
+  ไฟล์ vendor หายซึ่งเป็นมาก่อนแล้ว ไม่เกี่ยวกับงานรอบนี้) push ขึ้น origin แล้ว · backend prod (`1XObaZXu…`)
+  push + redeploy deployment เดิมเป็น **@14** แล้ว เช็คสดผ่าน · frontend ทั้ง GitHub Pages และ Cloudflare
+  Pages build ใหม่ยืนยันแล้ว (ดูรายละเอียดที่ CLAUDE.md หัวข้อ "เปิด production")
+  · **★ เจอบั๊กใหม่ตอนเช็ค**: GitHub Pages `/admin-uat/`+`/mobile-uat/` ตอนนี้ชี้เข้า backend **prod** เงียบๆ
+  เพราะ `config.js` เปลี่ยนไปตัดสิน env จาก hostname (ของ Cloudflare) แต่ path ของ GitHub Pages ไม่มีคำว่า
+  `uat` ในโดเมน — รายละเอียด+ทางเลือกแก้อยู่ใน CLAUDE.md แล้ว **ยังไม่แก้ รอเจ้าของระบบตัดสินใจ**
 - **กิ่ง**: `UAT` ตรงๆ (งานทั้งหมดเป็นงานสั้น ทำเสร็จ merge กลับทันที ไม่ปล่อยกิ่งค้าง)
 - **อัปเดต**: 2026-09-29
 
