@@ -62,13 +62,23 @@ console.log('\n── quoteSale(): ของแถมต้องผ่านก
 // ruleId ที่ไม่มีอยู่จะไม่ตรงกับที่ recordSale คาดหวังเลย
 const realGetCtx = ctx.getPricingContextForCustomer, realPriceCart = ctx.priceCart;
 ctx.getPricingContextForCustomer = () => ({ list: { record_id: 99, name: 'ชุดทดสอบ' } });
-ctx.priceCart = () => ({ success: true, lines: [], subtotal: 0, total: 0,
+ctx.priceCart = () => ({ success: true, lines: [{ unitPrice: 20, lineTotal: 20, tierLabel: '' }], subtotal: 20, total: 20,
   freeGoods: [{ setId: 5, setName: 'ชุดแถมทดสอบ', tierGroup: '5', itemId: 7, productId: 2, unitCode: 'PC', qty: 3, baseQty: 3, reason: 'ซื้อครบ 12 ลัง' }] });
-r = ctx.quoteSale({ role: 'van_sales' }, { customerId: 1, paymentType: 'cash', items: [] });
+r = ctx.quoteSale({ role: 'van_sales' }, { customerId: 1, paymentType: 'cash', items: [{ productId: 1, unitCode: '', qty: 1 }] });
 eq('quoteSale คืนของแถมที่มี ruleId/ruleName (แปลงร่างแล้ว) ไม่ใช่ setId/reason ดิบ',
   [r.success, r.freeGoods[0].ruleId, r.freeGoods[0].ruleName, r.freeGoods[0].applied],
   [true, 'FG5-5', 'ชุดแถมทดสอบ — ซื้อครบ 12 ลัง', true]);
+eq('  โชว์ VAT ด้วย (บั๊กเดิม: quoteSale ไม่คำนวณ VAT เลย)', typeof r.vatAmount, 'number');
 ctx.getPricingContextForCustomer = realGetCtx; ctx.priceCart = realPriceCart;
+
+console.log('\n── quoteSale(): ร้านที่ยังไม่มีชุดราคาที่ใช้งานอยู่ ต้องได้ราคาจริง ไม่ใช่ค่าว่าง ──');
+// บั๊กเดิมอีกจุด: quoteSale เจอ getPricingContextForCustomer คืน null (ร้านนี้ยังไม่มีชุดราคา) แล้วตอบ
+// {success:true, priceList:null} เปล่าๆ ทันที — ไม่ไปต่อที่เส้นทางโปรโมชั่นเดิม (applyPromotions) เหมือนตอน
+// recordSale จริง แอปเลยตกไปใช้ราคาประมาณการจากเครื่อง (estimate()) ซึ่งไม่มีส่วนลด/ของแถมของ discount_rules เลย
+// (harness นี้ตั้ง getPricingContextForCustomer ให้คืน null เป็นค่าเริ่มต้นอยู่แล้ว — ไม่ต้อง stub เพิ่ม)
+r = ctx.quoteSale({ role: 'van_sales' }, { customerId: 1, paymentType: 'cash', items: [{ productId: 1, unitCode: '', qty: 1 }] });
+eq('ได้ราคาจริงจากเส้นทางโปรโมชั่นเดิม ไม่ใช่ {priceList:null} เปล่าๆ',
+  [r.success, r.priceList, r.lines.length, r.lines[0].lineTotal], [true, null, 1, 20]);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

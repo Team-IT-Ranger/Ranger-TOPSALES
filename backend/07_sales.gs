@@ -88,7 +88,7 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
       items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
       { isCredit: isCreditPayment(paymentType), isVan: !!isVan });
     if (!priced.success) return { success: false, message: priced.message, code: priced.code };
-    items.forEach(function(it, i) { it.price = priced.lines[i].unitPrice; it.lineTotal = priced.lines[i].lineTotal; });
+    items.forEach(function(it, i) { it.price = priced.lines[i].unitPrice; it.lineTotal = priced.lines[i].lineTotal; it.tierLabel = priced.lines[i].tierLabel || ''; });
     priceListUsed = pricingCtx.list;
     /* ★ discount ที่บันทึกลงบิลต้องเป็นส่วนลด "รวมทุกชั้น" ให้ subtotal - discount = total เสมอ
        priced.total หักทั้งโปรโมชั่นและส่วนลดท้ายบิลไปแล้ว ถ้าบันทึกแค่ billDiscount ตัวเลขบนบิลจะไม่ลงกัน */
@@ -251,19 +251,24 @@ function _cutVanStock(tenantId, lineUserId, need, orderId, movementType) {
   });
 }
 
-// ── ราคาในตะกร้า (Mobile) ก่อนกดขาย — ใช้เครื่องยนต์ชุดเดียวกับ recordSale เป๊ะ ผลจึงตรงกับบิลที่จะออก ──
+// ── ราคาในตะกร้า (Mobile) ก่อนกดขาย — เรียก _priceSaleCart() ตัวเดียวกับ recordSale เป๊ะ (ไม่ใช่แค่ "คล้ายกัน")
 // payload: { customerId, paymentType, items:[{productId, unitCode, qty}] }
-// ไม่มีชุดราคาที่ใช้ได้ → { success:true, priceList:null } (ให้แอปใช้ราคาจากข้อมูลตั้งต้นแบบเดิม)
+// ★ 2026-09-30 เขียนใหม่ทั้งฟังก์ชัน — ของเดิมเรียก priceCart() ตรงๆ ซึ่งมีช่องโหว่สองจุดที่ทำให้ "ราคาที่เห็น
+// ก่อนกด" ไม่ตรงกับ "ราคาที่บันทึกจริง": (1) ไม่คำนวณ VAT เลยสักฟิลด์ (2) ร้านที่กลุ่มยังไม่มีชุดราคาที่ใช้งานอยู่
+// จะได้ {success:true, priceList:null} เปล่าๆ กลับไป ไม่ผ่านเส้นทางโปรโมชั่นเดิม (applyPromotions) เหมือนตอน
+// recordSale จริง — แอปจึงตกไปใช้ราคาตั้งต้นจากเครื่อง (estimate()) ซึ่งอาจต่างจากยอดที่จะออกบิลจริง
 function quoteSale(user, payload) {
-  var ctx = getPricingContextForCustomer(payload.customerId);   // ต้องตรงกับตอนบันทึกบิลเป๊ะ
-  if (!ctx) return { success: true, priceList: null };
-  var res = priceCart(ctx, (payload.items || []).map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
-    { isCredit: isCreditPayment(payload.paymentType), isVan: user.role === 'van_sales' });
-  if (res.success) {
-    res.priceList = { id: ctx.list.record_id, name: ctx.list.name };
-    // ★ ต้องผ่าน _shapeFreeGoods เหมือน recordSale เป๊ะ (ruleId/ruleName) ไม่ใช่ผลดิบจาก computeFreeGoods
-    // ไม่งั้นแอปมือถือโชว์ของแถมได้ แต่ ruleId ที่ผูกไว้ไม่ตรงกับที่ recordSale ใช้ตัดสินใจตอนจะ opt-out
-    res.freeGoods = _shapeFreeGoods(res.freeGoods);
-  }
-  return res;
+  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales');
+  if (!priced.success) return priced;
+  var calc = priced.calc, vat = calc.vat;
+  return {
+    success: true,
+    lines: priced.items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty,
+      unitPrice: it.price, lineTotal: it.lineTotal, tierLabel: it.tierLabel || '' }; }),
+    freeGoods: calc.freeGoods, appliedRules: calc.appliedRules,
+    subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
+    priceList: priced.priceListUsed ? { id: priced.priceListUsed.record_id, name: priced.priceListUsed.name } : null,
+    applyVat: vat.applyVat, vatRate: vat.rate, vatAmount: vat.vat, subtotalExVat: vat.exVat,
+    exemptAmount: vat.exemptAmount, taxableExVat: vat.taxableExVat, vatMixed: vat.mixed
+  };
 }

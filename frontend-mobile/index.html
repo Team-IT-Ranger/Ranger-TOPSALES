@@ -209,6 +209,9 @@
       <div class="kpi"><div class="v" id="k-rev">-</div><div class="l">ยอดขาย (บาท)</div></div>
       <div class="kpi"><div class="v" id="k-visits">-</div><div class="l">เยี่ยมร้าน</div></div>
     </div>
+    <!-- ★ 2026-09-30 เจ้าของระบบสั่ง: "บิลที่บันทึกแล้วไปดูที่ไหน ในแอพไม่มีให้ดูเลย" — getRecentSales มีอยู่แล้ว
+         ใน backend (06_bootstrap.gs) แต่ไม่เคยถูกเรียกจากหน้าจอไหนของแอปมือถือเลยสักที่ ต่อเข้ากับที่นี่ -->
+    <div class="card" style="margin-bottom:12px"><h3>บิลล่าสุดของฉัน</h3><div id="h-recent"><div class="empty">-</div></div></div>
     <div class="card" style="margin-bottom:12px">
       <h3>ข้อมูลในเครื่อง</h3>
       <div class="row"><span>Sync ล่าสุด</span><span id="h-sync">-</span></div>
@@ -531,20 +534,33 @@ function renderCurrentTab(){
 }
 
 /* ══════════════ หน้าแรก ══════════════ */
+// ★ 2026-09-30 เจ้าของระบบสั่ง — บิลที่บันทึกแล้วไม่มีที่ดูเลยในแอป: getRecentSales มีอยู่แล้วใน backend
+// (06_bootstrap.gs, กรองเฉพาะบิลของ user คนนี้ที่ sale_by ตรงกัน) แค่ไม่เคยถูกเรียก ต่อเข้าคู่กับ getDashboard
+let RECENT_SALES = [];
 async function loadDashboard(){
   if (!navigator.onLine) return;
   try {
-    const r = await api('getDashboard', {});
-    if (!r.success) return;
-    $('k-bills').textContent = r.bills || 0; $('k-rev').textContent = baht(r.revenue); $('k-visits').textContent = r.visits || 0;
-    $('h-top').innerHTML = (r.topProducts || []).length
-      ? r.topProducts.map((t, i) => '<div class="row"><span>'+(i+1)+'. '+esc(t.name)+'</span><b>'+esc(t.sold)+'</b></div>').join('')
-      : '<div class="empty">ยังไม่มียอดขายวันนี้</div>';
+    const [r, rs] = await Promise.all([api('getDashboard', {}), api('getRecentSales', { limit: 15 })]);
+    if (r.success) {
+      $('k-bills').textContent = r.bills || 0; $('k-rev').textContent = baht(r.revenue); $('k-visits').textContent = r.visits || 0;
+      $('h-top').innerHTML = (r.topProducts || []).length
+        ? r.topProducts.map((t, i) => '<div class="row"><span>'+(i+1)+'. '+esc(t.name)+'</span><b>'+esc(t.sold)+'</b></div>').join('')
+        : '<div class="empty">ยังไม่มียอดขายวันนี้</div>';
+    }
+    if (rs.success) { RECENT_SALES = rs.data || []; lsSet('recent_' + ME.lineUserId, RECENT_SALES); renderRecentSales(); }
   } catch (e) {}
+}
+function renderRecentSales(){
+  const box = $('h-recent'); if (!box) return;
+  box.innerHTML = RECENT_SALES.length
+    ? RECENT_SALES.map(o => '<div class="row"><span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(o.code) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></span><span class="mono">฿' + baht(o.total) + '</span></div>').join('')
+    : '<div class="empty">ยังไม่มีรายการขาย</div>';
 }
 function renderHome(){
   const c = lsGet('boot_' + ME.lineUserId, null);
   $('h-sync').textContent = c ? new Date(c.ts).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : 'ยังไม่เคย';
+  RECENT_SALES = lsGet('recent_' + ME.lineUserId, RECENT_SALES);
+  renderRecentSales();
   const q = loadQueue();
   $('h-queue').innerHTML = q.length ? '<span class="pill warn">' + q.length + ' บิล</span>' : '0';
   $('h-queue-list').innerHTML = q.map((s, i) => '<div class="row"><span class="muted">' + esc(new Date(s.savedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })) + ' · ' + esc(custName(s.customerId)) + ' · ' + s.items.length + ' รายการ' +
@@ -631,18 +647,29 @@ function setQty(pid, v){
   renderProducts(); cartChanged();
 }
 // ราคาจริงคิดที่เซิร์ฟเวอร์ (quoteSale ใช้เครื่องยนต์เดียวกับตอนบันทึกบิล) — หน่วง 500ms กันยิงถี่ตอนกด +/−
+// แยก fetchQuote() ออกมาให้ปุ่ม "คำนวณราคา" (2026-09-30, เจ้าของระบบสั่ง — อยากได้จุดยืนยันชัดๆ ก่อนบันทึก
+// เหมือนหน้าเปิดบิลขายฝั่งแอดมิน) เรียกซ้ำได้ทันทีโดยไม่ต้องรอ debounce
 function cartChanged(){
   QUOTE = null; renderCartBar();
   clearTimeout(quoteTimer);
   if (!CART.length || !navigator.onLine) return;
-  quoteTimer = setTimeout(async () => {
-    const seq = ++quoteSeq;
-    try {
-      const r = await api('quoteSale', { customerId: Number($('s-cust').value) || 0, paymentType: PAY, items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })) }, 30000);
-      if (seq !== quoteSeq) return;                  // ตะกร้าเปลี่ยนไปแล้วระหว่างรอ — ทิ้งผลเก่า
-      QUOTE = r; renderCartBar();
-    } catch (e) { if (seq === quoteSeq) { QUOTE = { success: false, message: 'คิดราคาไม่ได้ (' + e.message + ')', offline: true }; renderCartBar(); } }
-  }, 500);
+  quoteTimer = setTimeout(fetchQuote, 500);
+}
+async function fetchQuote(){
+  const seq = ++quoteSeq;
+  try {
+    const r = await api('quoteSale', { customerId: Number($('s-cust').value) || 0, paymentType: PAY, items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })) }, 30000);
+    if (seq !== quoteSeq) return;                  // ตะกร้าเปลี่ยนไปแล้วระหว่างรอ — ทิ้งผลเก่า
+    QUOTE = r; renderCartBar();
+  } catch (e) { if (seq === quoteSeq) { QUOTE = { success: false, message: 'คิดราคาไม่ได้ (' + e.message + ')', offline: true }; renderCartBar(); } }
+}
+async function recalcPrice(){
+  if (!CART.length || !navigator.onLine) return;
+  clearTimeout(quoteTimer);
+  const btn = $('cart-recalc-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังคำนวณ...'; }
+  await fetchQuote();
+  if (btn) { btn.disabled = false; btn.textContent = '🧮 คำนวณราคา'; }
 }
 function estimate(){ return CART.reduce((s, c) => { const p = prodById(c.productId); return s + (p ? unitOf(p, c.unitCode).price * c.qty : 0); }, 0); }
 // ★ 2026-09-30 เจ้าของระบบสั่ง: แยก "หน้าเลือกสินค้า" (pick) กับ "หน้าตะกร้า" (cart) ออกจากกันชัดเจน
@@ -667,16 +694,24 @@ function removeCartItem(pid, code){
 // ให้ตรงกับที่ recordSale จะบันทึกถ้าไม่ส่ง payload.freeGoods มาเลย (ดู 07_sales.gs)
 let FREE_OFF = new Set();
 function toggleFreeGood(ruleId){ if (FREE_OFF.has(ruleId)) FREE_OFF.delete(ruleId); else FREE_OFF.add(ruleId); renderCartBar(); }
-// รายการที่คิดเงิน + ของแถม + ปุ่มล้าง/เพิ่มต่อ — ใช้แสดงในโหมด "ตะกร้า" เท่านั้น (โหมดเลือกสินค้าไม่โชว์ตรงนี้)
+// รายการที่คิดเงิน + ของแถม + สรุปภาษี/ยอดสุทธิ + ปุ่มล้าง/เพิ่มต่อ — ใช้แสดงในโหมด "ตะกร้า" เท่านั้น
+// ★ 2026-09-30 เจ้าของระบบสั่ง: อยากได้ปุ่ม "คำนวณราคา" ชัดๆ ก่อนบันทึก เพื่อตรวจสอบราคา/ส่วนลด/ภาษี/ของแถม
+// เหมือนหน้าเปิดบิลขายฝั่งแอดมิน — quoteSale ยังคำนวณอัตโนมัติตอนแก้ตะกร้าเหมือนเดิม (หน่วง 500ms) ปุ่มนี้แค่
+// ให้กดคำนวณซ้ำได้ทันทีเป็นจุดยืนยันชัดๆ ก่อนกดบันทึกจริง ไม่ได้บังคับว่าต้องกดก่อนถึงจะบันทึกได้
 function renderCartDetail(){
   const box = $('sell-cart'); if (!box) return;
   if (!CART.length) { box.innerHTML = '<p class="muted">ยังไม่มีสินค้าในตะกร้า — กด "+ เพิ่มสินค้า" เพื่อเริ่มเลือก</p>'; return; }
-  const priced = QUOTE && QUOTE.success && QUOTE.priceList;
-  const freeGoods = (priced && QUOTE.freeGoods) || [];
-  box.innerHTML = '<div class="card stack">' +
+  const hasQuote = QUOTE && QUOTE.success && QUOTE.lines && QUOTE.lines.length;
+  const freeGoods = (hasQuote && QUOTE.freeGoods) || [];
+  const rules = (hasQuote && QUOTE.appliedRules) || [];
+  const recalcBtn = '<button class="btn btn-sm" id="cart-recalc-btn" onclick="recalcPrice()"' + (navigator.onLine ? '' : ' disabled') + '>🧮 คำนวณราคา</button>' +
+    (hasQuote ? ' <span class="note">คำนวณแล้ว — ' + (QUOTE.priceList ? 'ชุดราคา: ' + esc(QUOTE.priceList.name) : 'ตามเงื่อนไขส่งเสริมการขาย') + '</span>'
+      : (QUOTE && !QUOTE.success ? '<span class="note pill bad">' + esc(QUOTE.offline ? 'ออฟไลน์ — คิดจริงตอนส่ง' : 'คิดราคาไม่ได้') + '</span>' : ''));
+  box.innerHTML = '<div style="margin-bottom:10px">' + recalcBtn + '</div>' +
+    '<div class="card stack">' +
     CART.map(c => {
       const p = prodById(c.productId) || { name: '#' + c.productId }, u = p.id ? unitOf(p, c.unitCode) : { unitLabel: '', price: 0 };
-      const ql = priced && (QUOTE.lines || []).find(l => String(l.productId) === String(c.productId) && String(l.unitCode) === (c.unitCode || String(l.unitCode)));
+      const ql = hasQuote && QUOTE.lines.find(l => String(l.productId) === String(c.productId) && String(l.unitCode) === (c.unitCode || String(l.unitCode)));
       const unitPrice = ql ? ql.unitPrice : u.price, line = ql ? ql.lineTotal : u.price * c.qty;
       return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + c.qty + ' ' + esc(u.unitLabel) + ' × ฿' + baht(unitPrice) + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') + '</span></span>' +
         '<span style="display:flex;align-items:center;gap:8px"><span class="mono">฿' + baht(line) + '</span>' +
@@ -691,8 +726,21 @@ function renderCartDetail(){
         '🎁 ' + esc(p.name) + '<br><span class="note">' + f.qty + ' ' + esc(unitLabel) + ' ฟรี · ' + esc(f.ruleName) + (off ? ' · <b>ไม่ให้ของแถมนี้</b>' : '') + '</span></span>' +
         '<span class="mono">' + (off ? '—' : 'ฟรี') + '</span></div>';
     }).join('') +
-    (priced && QUOTE.billDiscount ? '<div class="row"><span>โปรระดับบิล ลด ' + esc(QUOTE.billPercent) + '%</span><span class="mono">-฿' + baht(QUOTE.billDiscount) + '</span></div>' : '') +
+    // ★ ส่วนลด — แสดงทุกกฎที่โดนใช้ (ไม่ว่าจะมาจากชุดราคาหรือเส้นทางโปรโมชั่นเดิม) ไม่ใช่แค่ "ส่วนลดท้ายบิล" ตัวเดียว
+    rules.map(rl => '<div class="row"><span>' + esc(rl.ruleName) + '</span><span class="mono">-฿' + baht(rl.value) + '</span></div>').join('') +
     '</div>' +
+    (hasQuote ? '<div class="card stack" style="margin-top:10px">' +
+      '<div class="row"><span>ยอดก่อนหักส่วนลด</span><span class="mono">฿' + baht(QUOTE.subtotal) + '</span></div>' +
+      (QUOTE.discount ? '<div class="row"><span>ส่วนลดรวม</span><span class="mono">-฿' + baht(QUOTE.discount) + '</span></div>' : '') +
+      (QUOTE.applyVat
+        ? (QUOTE.vatMixed
+            ? '<div class="row"><span>มูลค่าที่ยกเว้นภาษี</span><span class="mono">฿' + baht(QUOTE.exemptAmount) + '</span></div>' +
+              '<div class="row"><span>มูลค่าที่เสียภาษี</span><span class="mono">฿' + baht(QUOTE.taxableExVat) + '</span></div>'
+            : '<div class="row"><span>มูลค่าสินค้า (ไม่รวมภาษี)</span><span class="mono">฿' + baht(QUOTE.subtotalExVat) + '</span></div>') +
+          '<div class="row"><span>ภาษีมูลค่าเพิ่ม ' + Math.round((QUOTE.vatRate != null ? QUOTE.vatRate : 0.07) * 100) + '%</span><span class="mono">฿' + baht(QUOTE.vatAmount) + '</span></div>'
+        : '') +
+      '<div class="row"><b>ยอดสุทธิ</b><span class="mono"><b>฿' + baht(QUOTE.total) + '</b></span></div>' +
+    '</div>' : '') +
     '<div style="display:flex;gap:8px;margin-top:10px"><button class="btn btn-sm" onclick="clearCart()">ล้างตะกร้า</button>' +
     '<button class="btn btn-sm" onclick="setSellMode(\'pick\')">+ เพิ่มสินค้าอีก</button></div>';
 }
@@ -700,11 +748,10 @@ function renderCartBar(){
   const bar = $('cartbar');
   bar.classList.toggle('hidden', TAB !== 'sell' || !CART.length);
   if (CART.length) {
-    const priced = QUOTE && QUOTE.success && QUOTE.priceList;
-    const freeGoods = (priced && QUOTE.freeGoods) || [];
+    const hasQuote = QUOTE && QUOTE.success && QUOTE.lines && QUOTE.lines.length;
+    const freeGoods = (hasQuote && QUOTE.freeGoods) || [];
     let total = estimate(), src, err = '';
-    if (priced) { total = QUOTE.total; src = 'ชุดราคา: ' + esc(QUOTE.priceList.name); }
-    else if (QUOTE && QUOTE.success) src = 'ราคาตั้งต้น — ส่วนลดโปรฯ คิดตอนบันทึก';
+    if (hasQuote) { total = QUOTE.total; src = QUOTE.priceList ? ('ชุดราคา: ' + esc(QUOTE.priceList.name)) : 'ตามเงื่อนไขส่งเสริมการขาย'; }
     else if (QUOTE && !QUOTE.success) { src = QUOTE.offline ? 'ประมาณการ (ออฟไลน์)' : 'คิดราคาไม่ได้'; if (!QUOTE.offline) err = QUOTE.message; }
     else src = navigator.onLine ? 'กำลังคิดราคา...' : 'ประมาณการ (ออฟไลน์) — คิดจริงตอนส่ง';
     if (freeGoods.length) src += ' · 🎁 มีของแถม ' + freeGoods.length + ' รายการ';
