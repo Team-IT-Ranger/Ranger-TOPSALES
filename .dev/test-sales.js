@@ -55,5 +55,20 @@ eq('แพ็ค Cash Van เงินสด ผ่านปกติ (ราค
 r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'credit_term', false);
 eq('ขายเป็นลัง (ไม่ใช่แพ็ค) ด้วยเครดิตนอก Cash Van ยังขายได้ปกติ (กติกานี้จำเพาะแพ็คเท่านั้น)', r.success, true);
 
+console.log('\n── quoteSale(): ของแถมต้องผ่านการแปลงร่างเหมือน recordSale เป๊ะ (ruleId/ruleName) ──');
+// บั๊กที่เจอจริง 2026-09-29: quoteSale ไม่เคยผ่าน _shapeFreeGoods() เลย ต่างจาก _priceSaleCart (ที่ recordSale
+// เรียกใช้) ซึ่งแปลงร่างเป็น {ruleId,ruleName,applied} เสมอ — มือถือเลยเห็นของแถมเป็นรูปดิบจาก computeFreeGoods()
+// (setId/tierGroup/reason) และถ้าจะส่ง opt-out (payload.freeGoods[].applied=false) กลับไปตอนบันทึกจริง
+// ruleId ที่ไม่มีอยู่จะไม่ตรงกับที่ recordSale คาดหวังเลย
+const realGetCtx = ctx.getPricingContextForCustomer, realPriceCart = ctx.priceCart;
+ctx.getPricingContextForCustomer = () => ({ list: { record_id: 99, name: 'ชุดทดสอบ' } });
+ctx.priceCart = () => ({ success: true, lines: [], subtotal: 0, total: 0,
+  freeGoods: [{ setId: 5, setName: 'ชุดแถมทดสอบ', tierGroup: '5', itemId: 7, productId: 2, unitCode: 'PC', qty: 3, baseQty: 3, reason: 'ซื้อครบ 12 ลัง' }] });
+r = ctx.quoteSale({ role: 'van_sales' }, { customerId: 1, paymentType: 'cash', items: [] });
+eq('quoteSale คืนของแถมที่มี ruleId/ruleName (แปลงร่างแล้ว) ไม่ใช่ setId/reason ดิบ',
+  [r.success, r.freeGoods[0].ruleId, r.freeGoods[0].ruleName, r.freeGoods[0].applied],
+  [true, 'FG5-5', 'ชุดแถมทดสอบ — ซื้อครบ 12 ลัง', true]);
+ctx.getPricingContextForCustomer = realGetCtx; ctx.priceCart = realPriceCart;
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

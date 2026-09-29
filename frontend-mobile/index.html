@@ -637,18 +637,25 @@ function cartChanged(){
 }
 function estimate(){ return CART.reduce((s, c) => { const p = prodById(c.productId); return s + (p ? unitOf(p, c.unitCode).price * c.qty : 0); }, 0); }
 let CART_OPEN = false;
+// ★ ของแถม (2026-09-30, เจ้าของระบบสั่ง — เอนจิ้นคิดของแถมให้อยู่แล้วแต่แอปไม่เคยโชว์เลยสักบรรทัด)
+// FREE_OFF = เซ็ตของ ruleId ที่พนักงานติ๊กออก (ของแถมชิ้นนั้นไม่มีจริงบนรถ/ลูกค้าไม่รับ) ค่าเริ่มต้นติ๊กรับทุกชิ้น
+// ให้ตรงกับที่ recordSale จะบันทึกถ้าไม่ส่ง payload.freeGoods มาเลย (ดู 07_sales.gs)
+let FREE_OFF = new Set();
 function toggleCartDetail(){ CART_OPEN = !CART_OPEN; renderCartBar(); }
+function toggleFreeGood(ruleId){ if (FREE_OFF.has(ruleId)) FREE_OFF.delete(ruleId); else FREE_OFF.add(ruleId); renderCartBar(); }
 function renderCartBar(){
   const bar = $('cartbar');
   bar.classList.toggle('hidden', TAB !== 'sell' || !CART.length);
   if (!CART.length) return;
   $('cb-count').textContent = CART.length + ' รายการ · แตะเพื่อ' + (CART_OPEN ? 'ซ่อน' : 'ดูรายละเอียด');
   const priced = QUOTE && QUOTE.success && QUOTE.priceList;
+  const freeGoods = (priced && QUOTE.freeGoods) || [];
   let total = estimate(), src, err = '';
   if (priced) { total = QUOTE.total; src = 'ชุดราคา: ' + esc(QUOTE.priceList.name); }
   else if (QUOTE && QUOTE.success) src = 'ราคาตั้งต้น — ส่วนลดโปรฯ คิดตอนบันทึก';
   else if (QUOTE && !QUOTE.success) { src = QUOTE.offline ? 'ประมาณการ (ออฟไลน์)' : 'คิดราคาไม่ได้'; if (!QUOTE.offline) err = QUOTE.message; }
   else src = navigator.onLine ? 'กำลังคิดราคา...' : 'ประมาณการ (ออฟไลน์) — คิดจริงตอนส่ง';
+  if (freeGoods.length) src += ' · 🎁 มีของแถม ' + freeGoods.length + ' รายการ';
   $('cb-total').textContent = '฿' + baht(total);
   $('cb-src').innerHTML = src;
   $('cb-err').innerHTML = err ? '<div class="err">' + esc(err) + '</div>' : '';
@@ -659,13 +666,23 @@ function renderCartBar(){
       const ql = priced && (QUOTE.lines || []).find(l => String(l.productId) === String(c.productId) && String(l.unitCode) === (c.unitCode || String(l.unitCode)));
       const unitPrice = ql ? ql.unitPrice : u.price, line = ql ? ql.lineTotal : u.price * c.qty;
       return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + c.qty + ' ' + esc(u.unitLabel) + ' × ฿' + baht(unitPrice) + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') + '</span></span><span class="mono">฿' + baht(line) + '</span></div>';
-    }).join('') + (priced && QUOTE.billDiscount ? '<div class="row"><span>โปรระดับบิล ลด ' + esc(QUOTE.billPercent) + '%</span><span class="mono">-฿' + baht(QUOTE.billDiscount) + '</span></div>' : '') +
+    }).join('') +
+      // ★ ของแถม — พื้นหลังต่างสีให้เห็นชัดว่าไม่ใช่รายการที่คิดเงิน แตะแถวเพื่อติ๊กออกถ้าของจริงไม่มีบนรถ/ลูกค้าไม่เอา
+      freeGoods.map(f => {
+        const p = prodById(f.productId) || { name: '#' + f.productId }, off = FREE_OFF.has(f.ruleId);
+        const unitLabel = p.id ? unitOf(p, f.unitCode).unitLabel : f.unitCode;
+        return '<div class="row" style="background:#EAF6EE;border-radius:8px" onclick="toggleFreeGood(\'' + esc(f.ruleId) + '\')">' +
+          '<span><input type="checkbox" ' + (off ? '' : 'checked') + ' onclick="event.stopPropagation();toggleFreeGood(\'' + esc(f.ruleId) + '\')" style="margin-right:6px">' +
+          '🎁 ' + esc(p.name) + '<br><span class="note">' + f.qty + ' ' + esc(unitLabel) + ' ฟรี · ' + esc(f.ruleName) + (off ? ' · <b>ไม่ให้ของแถมนี้</b>' : '') + '</span></span>' +
+          '<span class="mono">' + (off ? '—' : 'ฟรี') + '</span></div>';
+      }).join('') +
+      (priced && QUOTE.billDiscount ? '<div class="row"><span>โปรระดับบิล ลด ' + esc(QUOTE.billPercent) + '%</span><span class="mono">-฿' + baht(QUOTE.billDiscount) + '</span></div>' : '') +
       '<div class="row"><button class="btn btn-sm" onclick="clearCart()">ล้างตะกร้า</button><span></span></div>';
   }
   const save = $('cb-save'); save.disabled = !!err;
   save.innerHTML = navigator.onLine ? MI.check + 'บันทึกการขาย' : MI.box + 'บันทึกเข้าคิว (ออฟไลน์)';
 }
-function clearCart(){ if (!confirm('ล้างตะกร้าทั้งหมด?')) return; CART = []; CART_OPEN = false; renderProducts(); cartChanged(); }
+function clearCart(){ if (!confirm('ล้างตะกร้าทั้งหมด?')) return; CART = []; CART_OPEN = false; FREE_OFF = new Set(); renderProducts(); cartChanged(); }
 async function submitSale(){
   if (!CART.length) return;
   const btn = $('cb-save'); if (btn.disabled) return;
@@ -673,8 +690,13 @@ async function submitSale(){
   pressBusy(btn, true);
   try {
     const gps = await getGPS();
+    // ของแถมที่พนักงานติ๊กออก (ของจริงไม่มีบนรถ/ลูกค้าไม่รับ) — ไม่ส่งมาเลย = ได้ของแถมครบตามที่คิดไว้ปกติ
+    // (เซิร์ฟเวอร์คำนวณของแถมเองเสมอ payload.freeGoods ใช้แค่ "ตัดออก" ไม่ได้ใช้ "เพิ่มเอง" ดู 07_sales.gs)
+    const freeGoods = (QUOTE && QUOTE.success && QUOTE.freeGoods && QUOTE.freeGoods.length)
+      ? QUOTE.freeGoods.map(f => ({ ruleId: f.ruleId, productId: f.productId, applied: !FREE_OFF.has(f.ruleId) }))
+      : undefined;
     const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: $('s-office').checked ? 'office_delivery' : 'immediate',
-      items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })),
+      items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })), freeGoods,
       latitude: gps.lat, longitude: gps.lng, googleMap: gps.map, savedAt: new Date().toISOString(),
       // สร้างครั้งเดียวต่อ "ความตั้งใจจะบันทึกหนึ่งบิล" — ส่งใหม่/ส่งจากคิวใช้ค่าเดิม เซิร์ฟเวอร์จึงบันทึกใบเดียว
       requestId: newRequestId() };
@@ -701,7 +723,7 @@ function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
   if (!$('s-office').checked) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
   lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
-  CART = []; CART_OPEN = false; QUOTE = null; renderProducts(); renderCartBar();
+  CART = []; CART_OPEN = false; QUOTE = null; FREE_OFF = new Set(); renderProducts(); renderCartBar();
 }
 
 /* ══════════════ สต็อก ══════════════ */

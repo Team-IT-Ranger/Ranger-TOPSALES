@@ -17,6 +17,17 @@
  * fulfillmentType='immediate'      → ตัดสต็อกบนรถทันที (คนขายมีของบนรถ ขายจบในที่)
  * fulfillmentType='office_delivery'→ ไม่ตัดสต็อกรถ บันทึกเป็น SO รอสำนักงานจัดส่ง (status='pending_delivery')
  */
+// แปลงผลดิบจาก computeFreeGoods() (39_free_goods.gs — setId/tierGroup/reason) เป็นรูปที่ทั้ง client และ
+// recordSale ใช้ตัดสินใจร่วมกัน: ruleId ผูกโปร+ขั้นที่ชนะไว้ตัวเดียว (ใช้จับคู่ตอน client ส่ง opt-out
+// payload.freeGoods[].applied=false กลับมา ดู recordSale) — ★ ใช้ทั้งที่นี่และ quoteSale ต้องเรียกตัวเดียวกัน
+// เสมอ ไม่งั้น ruleId ที่ quoteSale โชว์ให้ผู้ใช้เห็นจะไม่ตรงกับที่ recordSale คาดหวังตอนจะ opt-out จริง
+function _shapeFreeGoods(raw) {
+  return (raw || []).map(function(f) {
+    return { ruleId: 'FG' + f.setId + '-' + f.tierGroup, ruleName: f.setName + ' — ' + f.reason,
+      productId: f.productId, qty: f.qty, unitCode: f.unitCode, baseQty: f.baseQty, applied: true };
+  });
+}
+
 // ── คิดราคาตะกร้าล้วนๆ ไม่แตะสต็อก/ไม่บันทึกอะไร — ใช้ร่วมกันทั้ง recordSale (มือถือ) และฝั่งแอดมิน (19_sales_admin.gs)
 // rawItems: [{productId, qty, unitCode}]   คืน { success, items, calc, priceListUsed } หรือ { success:false, message, code? }
 function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
@@ -83,10 +94,7 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
        priced.total หักทั้งโปรโมชั่นและส่วนลดท้ายบิลไปแล้ว ถ้าบันทึกแค่ billDiscount ตัวเลขบนบิลจะไม่ลงกัน */
     calc = { subtotal: priced.subtotal, discount: priced.discount, total: priced.total,
              // ★ ของแถมของเส้นทางชุดราคา มาจาก "ชุดแถม" (39_free_goods.gs) ไม่ใช่ discount_rules
-             freeGoods: (priced.freeGoods || []).map(function(f) {
-               return { ruleId: 'FG' + f.setId + '-' + f.tierGroup, ruleName: f.setName + ' — ' + f.reason,
-                 productId: f.productId, qty: f.qty, unitCode: f.unitCode, baseQty: f.baseQty, applied: true };
-             }),
+             freeGoods: _shapeFreeGoods(priced.freeGoods),
              appliedRules: (priced.promoRules || []).concat(
                priced.billPercent ? [{ ruleId: 'BILL', ruleName: 'ส่วนลดท้ายบิล ' + priced.billPercent + '% (ยอดรวมครบ ' + priced.billMinExVat + ' บาท ไม่รวม VAT)', type: 'percent', value: priced.billDiscount }] : []) };
   } else {
@@ -251,6 +259,11 @@ function quoteSale(user, payload) {
   if (!ctx) return { success: true, priceList: null };
   var res = priceCart(ctx, (payload.items || []).map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
     { isCredit: isCreditPayment(payload.paymentType), isVan: user.role === 'van_sales' });
-  if (res.success) res.priceList = { id: ctx.list.record_id, name: ctx.list.name };
+  if (res.success) {
+    res.priceList = { id: ctx.list.record_id, name: ctx.list.name };
+    // ★ ต้องผ่าน _shapeFreeGoods เหมือน recordSale เป๊ะ (ruleId/ruleName) ไม่ใช่ผลดิบจาก computeFreeGoods
+    // ไม่งั้นแอปมือถือโชว์ของแถมได้ แต่ ruleId ที่ผูกไว้ไม่ตรงกับที่ recordSale ใช้ตัดสินใจตอนจะ opt-out
+    res.freeGoods = _shapeFreeGoods(res.freeGoods);
+  }
   return res;
 }

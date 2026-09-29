@@ -10,11 +10,16 @@
 
 ## Deploy
 
-GitHub Pages ด้วย workflow เดียวกับ Admin App (`.github/workflows/deploy-admin.yml`) — push แล้วขึ้นเอง
-- `UAT` branch → `https://<pages>/mobile-uat/`
-- `main` branch → `https://<pages>/mobile/`
+**โฮสต์จริงคือ Cloudflare Pages แล้ว** (ย้ายจาก GitHub Pages 2026-09-29 — ดู CLAUDE.md หัวข้อ "เปิด production"):
+push แล้วขึ้นเอง คนละโดเมน/โปรเจกต์ต่อ env ไม่ใช่คนละ path อีกต่อไป
+- `UAT` branch → `https://uat.<โปรเจกต์ Cloudflare Pages ของ mobile>.pages.dev/` (branch alias อัตโนมัติ)
+- `main` branch → `https://<โปรเจกต์ Cloudflare Pages ของ mobile>.pages.dev/`
 
-`config.js` เลือก backend ตาม URL เหมือน `frontend-admin/config.js` (`/mobile-uat/` และ localhost = UAT)
+`config.js` เลือก backend/LIFF ID ตาม **hostname** (มีคำว่า `uat` = UAT, localhost = UAT ด้วย, นอกนั้น = prod)
+— ไม่ใช่ path อีกต่อไป ดู URL ปัจจุบันจริงในตัวไฟล์ `config.js` เอง (คอมเมนต์หัวไฟล์มี)
+· GitHub Pages workflow (`.github/workflows/deploy-admin.yml`) ยัง build `/mobile/`+`/mobile-uat/` อยู่ด้วย
+เผื่อลิงก์เก่า แต่ **ตอนนี้ path-based ของ GitHub Pages พังแล้ว** (ทั้งสอง path ชี้เข้า backend prod เหมือนกัน
+เพราะ hostname ของ github.io ไม่มีคำว่า uat) — ยังไม่ได้ตัดสินใจว่าจะปิด workflow นี้หรือแก้ให้รองรับทั้งคู่
 
 ## ตั้งค่า LINE (ทำครั้งเดียวต่อสภาพแวดล้อม — ยังไม่ได้ทำ)
 
@@ -58,12 +63,22 @@ production ไม่มีทางเข้านี้ (โค้ดเช็�
 
 ## ยังไม่ได้ทำ / ข้อควรรู้
 
-- LIFF ID ทั้งสอง env (ข้างบน)
+- ~~LIFF ID ทั้งสอง env~~ **ตั้งไว้ครบแล้ว** (ดู `LIFF_IDS` ใน `config.js`) — ที่ยังไม่ยืนยันคือยังไม่เคยทดสอบผ่าน
+  LINE จริงบนมือถือจริงสักครั้ง (ควรลองก่อนปล่อยให้พนักงานใช้งานจริง)
 - ~~backend เชื่อ `lineUserId` ที่ client ส่งมาโดยไม่ตรวจ~~ **แก้แล้ว 2026-09-24** — แอปส่ง `idToken` ทุกคำขอ
   และ backend ยืนยันกับ LINE ก่อนเสมอ (`backend/27_line_auth.gs`) · สิ่งที่ยังต้องทำคือตั้ง Script Property
   `LINE_LOGIN_CHANNEL_ID` (ถ้าต่างจาก `LINE_CHANNEL_ID`) และติ๊ก scope `openid` ใน LIFF app
-- `recordSale` ไม่มี idempotency key — ถ้าจะให้คิวออฟไลน์ส่งซ้ำได้ปลอดภัย ควรเพิ่ม `clientRef` ที่ backend กันบิลซ้ำ
-- ของแถม (ของแถมตามชุดราคา) — พักไว้ตามลำดับความสำคัญของผู้ใช้; เพดานแพ็คต่อร้าน (ไม่เกิน 4 แพ็ค) ยังไม่ทำ
+- ~~`recordSale` ไม่มี idempotency key~~ **มีแล้ว** — เป็นส่วนหนึ่งของงาน "กันกดซ้ำ/กันบันทึกซ้ำ" ทั้งระบบ
+  2026-09-27 (`backend/35_idempotency.gs`, ดู `IDEMPOTENT_ACTIONS`) ไม่ใช่แค่มือถือ ครอบทุก action ที่สร้างของใหม่
+- ~~ของแถม (ของแถมตามชุดราคา) — พักไว้~~ **เอนจิ้นทำแล้ว 2026-09-27 และมือถือก็คำนวณให้เหมือนแอดมิน** แต่
+  **จนถึง 2026-09-29 หน้าจอไม่เคยโชว์ของแถมเลยสักบรรทัด** (คำนวณ/บันทึกถูกต้อง แต่พนักงานไม่เห็นว่าต้องส่งอะไร
+  เพิ่ม) — **แก้แล้ว 2026-09-30**: ตะกร้าโชว์ของแถมเป็นแถวสีเขียวแยกจากรายการที่คิดเงิน พร้อมเหตุผล (ซื้อครบกี่ลัง)
+  และติ๊กออกได้ถ้าของจริงไม่มีบนรถ/ลูกค้าไม่รับ (ส่งเป็น `payload.freeGoods[].applied=false` — backend รองรับ
+  มาตั้งแต่แรกแต่ไม่มี UI ส่งมาเลย) · `quoteSale` เดิมส่งรูปดิบของของแถมที่ไม่ตรงกับที่ `recordSale` ใช้ตัดสินใจ
+  ตอน opt-out ด้วย (แก้พร้อมกัน — ดู `_shapeFreeGoods()` ใน `backend/07_sales.gs`)
+- เพดานแพ็คต่อร้าน (ไม่เกิน 4 แพ็ค) ยังไม่ทำ
+- ไม่มีการแสดง VAT ในหน้าขายของมือถือ (บิลมีคำนวณ/บันทึกอยู่แล้ว แค่ไม่โชว์ให้พนักงานเห็นระหว่างขาย)
+- ฟีเจอร์ "เยี่ยมร้าน" (เช็คอิน/บันทึกเยี่ยม/สินค้าคู่แข่ง) เก็บข้อมูลจริง แต่แอดมินยังไม่มีหน้าจอไหนอ่านข้อมูลนี้เลย
 
 ## ไฟล์อ้างอิงเก่า
 
