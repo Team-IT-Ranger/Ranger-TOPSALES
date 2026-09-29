@@ -721,19 +721,26 @@
         </section>
 
         <!-- ═══ ADMIN USERS ═══ -->
+        <!-- รวม "บัญชีผู้ใช้งาน" (admin_users) กับ "พนักงานขาย" (liff_users) เป็นหน้าเดียว 2026-09-29
+             (เจ้าของระบบสั่ง — สองบัญชีคนละตารางข้างหลังทำให้งงว่าจะไปดู/อนุมัติที่ไหน) ข้อมูลยังคนละตารางเหมือนเดิม
+             เปลี่ยนแค่ชั้นหน้าจอ: ดู renderUserDirTable()/loadUserDirectory() ท้ายไฟล์ — "บทบาทและสิทธิ์" (roles)
+             ไม่รวมมาด้วยเพราะเป็นคนละเรื่อง (นิยามว่าบทบาทไหนทำอะไรได้ ไม่ใช่รายชื่อคน) -->
         <section class="view" id="view-adminusers">
-          <div class="view-head"><div><h1>ผู้ใช้งานระบบ</h1><p>บัญชีแอดมินที่เข้า Admin App ได้ — คนละส่วนกับพนักงานขับรถขาย (LIFF)</p></div></div>
+          <div class="view-head"><div><h1>ผู้ใช้งานและอนุมัติ</h1><p>บัญชีแอดมิน พนักงานขาย และบอท ที่เข้าระบบได้ทั้งหมด — คนละตารางข้างหลัง ดู/อนุมัติที่เดียว</p></div></div>
           <div class="form-card" id="pending-card" style="display:none">
             <h3>คำขอใช้งานที่รออนุมัติ <span class="pill wait" id="pending-count"></span></h3>
-            <p class="form-hint">ผู้ใช้ใหม่ลงทะเบียนเองจากหน้าเข้าสู่ระบบ — อนุมัติพร้อมกำหนดสิทธิ์ หรือปฏิเสธคำขอ</p>
+            <p class="form-hint">ผู้ใช้ใหม่ลงทะเบียนเองจากหน้าเข้าสู่ระบบ — อนุมัติพร้อมกำหนดสิทธิ์ หรือปฏิเสธคำขอ (เฉพาะบัญชีแอดมิน —
+              พนักงานขาย/บอทเป็นบัญชี LINE ล้วน ไม่มีสถานะ "ปฏิเสธ" แยกจาก "รออนุมัติ" จึงกดอนุมัติได้จากตารางด้านล่างเลย)</p>
             <div id="pending-list"></div>
           </div>
+          <div id="ud-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>Username</th><th>ชื่อ</th><th>สิทธิ์</th><th>ตัวแทน</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="adminusers-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สังกัด</th><th>บทบาท / สิทธิ์</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead>
+            <tbody id="userdir-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card">
-            <h3>เพิ่มผู้ใช้งานใหม่</h3>
+            <h3>เพิ่มผู้ใช้งานใหม่ (แอดมิน)</h3>
+            <p class="form-hint">พนักงานขายสมัครเองผ่านแอปมือถือ (LIFF) — ช่องนี้เพิ่มได้เฉพาะบัญชีแอดมิน</p>
             <div class="form-grid g2">
               <div class="field"><label>Username</label><input id="au-username" autocomplete="off"></div>
               <div class="field"><label>รหัสผ่าน <span class="unit">(อย่างน้อย 8 ตัวอักษร)</span></label><input id="au-password" type="password" autocomplete="new-password"></div>
@@ -756,15 +763,6 @@
             <div class="field"><label>ยืนยันรหัสผ่านใหม่</label><input id="cpw-confirm" type="password" autocomplete="new-password"></div>
             <div class="form-actions"><button class="btn btn-primary" onclick="changeMyPasswordUI()">เปลี่ยนรหัสผ่าน</button></div>
           </div>
-        </section>
-
-        <!-- ═══ STAFF ═══ -->
-        <section class="view" id="view-staff">
-          <div class="view-head"><div><h1>พนักงานขาย</h1><p>อนุมัติ/ระงับผู้ใช้ LINE ที่ลงทะเบียนเข้ามา — พนักงานลงทะเบียนเองผ่านแอป LIFF</p></div></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>ชื่อ</th><th>บทบาท</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead>
-            <tbody id="staff-body"><tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr></tbody>
-          </table></div>
         </section>
 
         <!-- ═══ CUSTOMERS ═══ -->
@@ -2038,8 +2036,8 @@ const NAV_GROUPS = [
       {n:'1.4.5', label:'ประเภทการชำระเงิน', view:'paytypes', mod:'settings', ready:true, scope:'owner', grey:'tenant'}
     ]},
     { n:'1.5', label:'พนักงานและเขตขาย', items:[
-      {n:'1.5.1', label:'รายชื่อพนักงานขาย', view:'staff', mod:'staff', ready:true, scope:'both'},
-      {n:'1.5.2', label:'เขตการขายของพนักงาน', view:'v-zone', mod:'zones', ready:false, scope:'both',
+      /* รายชื่อพนักงานขายย้ายไปรวมกับ "ผู้ใช้งานและอนุมัติ" (9.4.1) แล้ว 2026-09-29 — คนละหน้าที่ทับซ้อนกันเดิม */
+      {n:'1.5.1', label:'เขตการขายของพนักงาน', view:'v-zone', mod:'zones', ready:false, scope:'both',
         soon:'เขตการขาย', desc:'แบ่งเขต/เส้นทางให้พนักงานขับรถขาย ผูกกับลูกค้าแต่ละราย'}
     ]},
     { n:'1.6', label:'การจัดส่ง', items:[
@@ -2103,7 +2101,8 @@ const NAV_GROUPS = [
     { n:'9.3', label:'ตัวแทนจำหน่าย', items:[
       {n:'9.3.1', label:'รายชื่อตัวแทน', view:'tenants', mod:'tenants', ready:true, scope:'owner'} ]},
     { n:'9.4', label:'สิทธิ์การใช้งาน', items:[
-      {n:'9.4.1', label:'บัญชีผู้ใช้งาน', view:'adminusers', mod:'users_roles', ready:true, scope:'both'},
+      /* รวม "บัญชีผู้ใช้งาน" (admin_users) + "พนักงานขาย" (liff_users) เป็นหน้าเดียว 2026-09-29 — ดูหมายเหตุที่ view-adminusers */
+      {n:'9.4.1', label:'ผู้ใช้งานและอนุมัติ', view:'adminusers', mod:'users_roles', ready:true, scope:'both'},
       {n:'9.4.2', label:'บทบาทและสิทธิ์', view:'roles', mod:'users_roles', ready:true, scope:'both'} ]}
   ]}
 ];
@@ -2392,9 +2391,9 @@ async function loadRepProd(){
 }
 
 const LOADERS = {
-  dashboard: loadDashboard, staff: loadStaff, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
+  dashboard: loadDashboard, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
-  companyprofile: loadCompanyProfile, adminusers: () => { loadAdminUsers(); loadPendingAdminUsers(); }, pricelists: loadPriceLists,
+  companyprofile: loadCompanyProfile, adminusers: () => { loadUserDirectory(); loadPendingAdminUsers(); }, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
   salesorders: loadSalesOrders,
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
@@ -2475,37 +2474,9 @@ function kpi(lbl, val, sub){ return '<div class="kpi"><div class="lbl">'+esc(lbl
 function activityRow(left, right){ return '<div class="activity-row"><span>'+left+'</span><span class="amt mono-data">'+right+'</span></div>'; }
 
 /* ══════════════ STAFF ══════════════ */
+// staffCache เหลือไว้ให้ ensureStaffCache() ใช้เท่านั้น (เติม dropdown "พนักงานที่จะตัดสต็อกให้" ตอนเปิดบิลขาย)
+// หน้าจอ "พนักงานขาย" เดิมรวมเข้ากับ "ผู้ใช้งานและอนุมัติ" แล้ว 2026-09-29 — ดู renderUserDirTable()/loadUserDirectory() ด้านล่าง
 let staffCache = [];
-function renderStaffTable(){
-  const body = document.getElementById('staff-body');
-  if (!staffCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="5">ยังไม่มีพนักงานลงทะเบียน</td></tr>'; return; }
-  body.innerHTML = staffCache.map(u =>
-    '<tr><td>'+esc(u.displayName)+'</td><td>'+esc(u.role)+'</td>' +
-    '<td><span class="pill '+(u.status==='Yes'?'ok':'wait')+'">'+(u.status==='Yes'?'อนุมัติแล้ว':'รออนุมัติ')+'</span></td>' +
-    '<td class="mono-data">'+esc(u.lastLogin||'-')+'</td>' +
-    '<td><button class="btn btn-sm" onclick="toggleStaffStatus(\''+u.lineUserId+'\',\''+u.status+'\')">'+(u.status==='Yes'?'ระงับ':'อนุมัติ')+'</button></td></tr>'
-  ).join('');
-}
-async function loadStaff(){
-  const body = document.getElementById('staff-body');
-  if (!staffCache.length) staffCache = listSnapLoad('staff') || [];
-  if (staffCache.length) renderStaffTable(); else tblLoading(body, 5);
-  const r = await callApi('listStaffAdmin', {});
-  if (!r.success) { if (!staffCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="5">'+esc(r.message)+'</td></tr>'; return; }
-  staffCache = r.data;
-  listSnapSave('staff', staffCache);
-  renderStaffTable();
-}
-async function toggleStaffStatus(lineUserId, currentStatus){
-  const newStatus = currentStatus === 'Yes' ? 'No' : 'Yes';
-  const r = await callApi('updateStaffAdmin', { lineUserId, status: newStatus });
-  if (!r.success) { toast(r.message, true); return; }
-  const u = staffCache.find(x => x.lineUserId === lineUserId);
-  if (u) u.status = newStatus;
-  renderStaffTable();
-  toast('อัปเดตสถานะสำเร็จ');
-  loadDashboard();
-}
 
 /* ══════════════ CUSTOMERS ══════════════
    ทะเบียนลูกค้าโครงสร้างใหม่ (2026-09-26) — backend ส่ง r.customers (camelCase, มีชื่อเต็มคำนวณมาแล้ว)
@@ -4981,23 +4952,138 @@ async function ensureRolesForDropdown(force){
   }
   return ROLES_CACHE;
 }
-let adminUsersCache = [];
 const ADMIN_ROLE_LABEL = { super_admin:'ผู้ดูแลระบบสูงสุด', owner_admin:'แอดมินบริษัท', tenant_admin:'แอดมินตัวแทน' };
 const roleLabelOf = code => {
   const r = (ROLES_CACHE || []).find(x => x.code === code);
   return r ? r.label : (ADMIN_ROLE_LABEL[code] || code);
 };
-function renderAdminUsersTable(){
-  const body = document.getElementById('adminusers-body');
-  if (!adminUsersCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีผู้ใช้งาน</td></tr>'; return; }
-  body.innerHTML = adminUsersCache.map(u =>
-    '<tr><td class="mono-data">'+esc(u.username)+'</td><td>'+esc(u.displayName)+'</td><td>'+esc(roleLabelOf(u.roleCode))+'</td>' +
-    '<td class="mono-data">'+esc(u.tenantId||'-')+'</td>' +
-    '<td><span class="pill '+(u.status==='active'?'ok':'off')+'">'+(u.status==='active'?'ใช้งาน':'ปิด')+'</span></td>' +
-    '<td>' + (u.roleCode === 'super_admin' ? '<span style="color:var(--ink-faint);font-size:11.5px">แก้ผ่าน Editor</span>' :
-      '<button class="btn btn-sm" onclick="toggleAdminUserStatusUI(\''+u.id+'\',\''+u.status+'\')">'+(u.status==='active'?'ปิดใช้งาน':'เปิดใช้งาน')+'</button> ' +
-      '<button class="btn btn-sm" onclick="resetAdminUserPasswordUI(\''+u.id+'\',\''+esc(u.username)+'\')">รีเซ็ตรหัสผ่าน</button>') + '</td></tr>'
+
+/* ═══════════ ผู้ใช้งานและอนุมัติ — รวม admin_users + liff_users เป็นตารางเดียว (2026-09-29) ═══════════
+   ข้อมูลจริงยังคนละตารางเหมือนเดิม (userDirRaw.admin จาก listAdminUsers, userDirRaw.staff จาก listStaffAdmin)
+   udDecorate() ผสมเป็น userDirCache แถวเดียวกัน ติด kind: 'admin' | 'staff' | 'bot'
+   ★ แยก staff/bot จาก tenant_id: liff_users แถวไหน tenant_id ว่าง = มาจาก RangerBot เสมอ (registerUser ของแอปมือถือ
+     บังคับเลือกตัวแทนก่อนเสมอ ดู backend/04_auth.gs — พนักงานขายจริงจึงมี tenant_id ติดมาทุกแถว มีแค่บอทที่ไม่มี)
+   ★ liff_users.status มีแค่ Yes/No — "No" ไม่แยกระหว่าง "ยังไม่เคยอนุมัติ" กับ "เคยอนุมัติแล้วถูกระงับ" (backend
+     ไม่มี state ที่สาม) จึงยังไม่ทำการ์ด "รออนุมัติ" แบบ admin ให้ staff/bot — ใช้ปุ่ม "อนุมัติ" ในตารางแทน
+     (พฤติกรรมเดิมก่อนรวมหน้าก็เป็นแบบนี้อยู่แล้ว ไม่ได้ถอยหลัง) การ์ดรออนุมัติด้านบนจึงมีแค่บัญชีแอดมิน */
+let userDirCache = [];
+let userDirRaw = { admin: [], staff: [] };
+let userDirFilter = 'all';
+const UD_TYPE_META = {
+  admin: { label: 'แอดมิน', bg: '#F1ECFB', fg: '#6B3FA0' },
+  staff: { label: 'พนักงานขาย', bg: '#E3F6F0', fg: '#157A6E' },
+  bot:   { label: 'บอท', bg: '#E5F6FB', fg: '#0E6C8C' }
+};
+const udTag = kind => { const m = UD_TYPE_META[kind];
+  return '<span style="font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:'+m.bg+';color:'+m.fg+'">'+m.label+'</span>'; };
+function udStatus(kind, raw){
+  if (kind === 'admin') {
+    if (raw === 'active') return { statusOk:true, statusLabel:'ใช้งาน', statusPill:'ok' };
+    if (raw === 'pending') return { statusOk:false, statusLabel:'รออนุมัติ', statusPill:'wait' };
+    if (raw === 'rejected') return { statusOk:false, statusLabel:'ถูกปฏิเสธ', statusPill:'off' };
+    return { statusOk:false, statusLabel:'ระงับแล้ว', statusPill:'off' };
+  }
+  return raw === 'Yes' ? { statusOk:true, statusLabel:'ใช้งาน', statusPill:'ok' } : { statusOk:false, statusLabel:'รออนุมัติ', statusPill:'wait' };
+}
+function udDecorate(){
+  const admins = userDirRaw.admin.map(u => {
+    const st = udStatus('admin', u.status);
+    return Object.assign({ kind:'admin', id:u.id, name:u.displayName || u.username, org:u.tenantId || 'บริษัท',
+      role: roleLabelOf(u.roleCode), last:'-', raw:u }, st);
+  });
+  const staff = userDirRaw.staff.map(u => {
+    const isBot = !u.tenantId;
+    const st = udStatus('staff', u.status);
+    const roleLabel = (isBot && (!u.role || u.role === 'รออนุมัติ')) ? 'ถาม-ตอบข้อมูล (บอท)' : (u.role || '-');
+    return Object.assign({ kind: isBot ? 'bot' : 'staff', id:u.lineUserId, name:u.displayName || '(ยังไม่มีชื่อ)',
+      org:u.tenantId || 'บริษัท', role:roleLabel, last:u.lastLogin || '-', raw:u }, st);
+  });
+  userDirCache = admins.concat(staff);
+}
+function udFilteredRows(){
+  return userDirCache.filter(u => userDirFilter === 'all' || u.kind === userDirFilter);
+}
+function renderUdFilters(){
+  const box = document.getElementById('ud-filters'); if (!box) return;
+  const count = k => userDirCache.filter(u => k === 'all' || u.kind === k).length;
+  const chip = (key, label) => '<button class="btn '+(userDirFilter===key?'btn-primary':'')+'" style="border-radius:999px" onclick="udSetFilter(\''+key+'\')">'+label+' ('+count(key)+')</button>';
+  box.innerHTML = chip('all','ทั้งหมด') + chip('admin','แอดมิน') + chip('staff','พนักงานขาย') + chip('bot','บอท');
+}
+function udSetFilter(k){ userDirFilter = k; renderUdFilters(); renderUserDirTable(); }
+function renderUserDirTable(){
+  const body = document.getElementById('userdir-body'); if (!body) return;
+  const rows = udFilteredRows();
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">ไม่มีผู้ใช้งานในกลุ่มนี้</td></tr>'; return; }
+  body.innerHTML = rows.map(u =>
+    '<tr><td>'+esc(u.name)+'</td><td>'+udTag(u.kind)+'</td><td>'+esc(u.org)+'</td><td>'+esc(u.role)+'</td>' +
+    '<td><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span></td>' +
+    '<td class="mono-data">'+esc(u.last)+'</td>' +
+    '<td style="text-align:right"><button class="btn btn-sm" onclick="openUserManageModal(\''+u.kind+'\',\''+esc(String(u.id))+'\')">จัดการ</button></td></tr>'
   ).join('');
+}
+let udManageTarget = null;
+function openUserManageModal(kind, id){
+  const u = userDirCache.find(x => x.kind === kind && String(x.id) === String(id));
+  if (!u) return;
+  udManageTarget = u;
+  const isSuperAdmin = kind === 'admin' && u.raw.roleCode === 'super_admin';
+  let roleField;
+  if (kind === 'admin') {
+    roleField = isSuperAdmin
+      ? '<div class="field"><label>บทบาท / สิทธิ์</label><div class="form-hint">แก้ไขได้เฉพาะผ่าน Apps Script Editor เท่านั้น</div></div>'
+      : '<div class="field"><label>บทบาท / สิทธิ์</label><select id="um-role">' +
+        (ROLES_CACHE || []).map(r => '<option value="'+esc(r.code)+'"'+(r.code===u.raw.roleCode?' selected':'')+'>'+esc(r.label)+(r.tenantId?' ('+esc(r.tenantId)+')':'')+'</option>').join('') +
+        '</select></div>';
+  } else if (kind === 'staff') {
+    roleField = '<div class="field"><label>บทบาท</label><select id="um-role">' +
+      '<option value="van_sales"'+(u.raw.role==='van_sales'?' selected':'')+'>พนักงานขับรถ (เงินสด)</option>' +
+      '<option value="credit_sales"'+(u.raw.role==='credit_sales'?' selected':'')+'>พนักงานเครดิต</option>' +
+      '</select></div>';
+  } else {
+    roleField = '<div class="field"><label>บทบาท</label><div class="form-hint">'+esc(u.role)+' — กำหนดจากการใช้งานจริง ไม่มีให้เลือก</div></div>';
+  }
+  const lineIdShown = kind === 'admin' ? (u.raw.lineUserId || '-') : u.id;
+  plModal(
+    '<h3>'+esc(u.name)+'</h3>' +
+    '<div class="field"><label>ประเภท</label><div>'+udTag(kind)+'</div></div>' +
+    '<div class="field"><label>สังกัด</label><div>'+esc(u.org)+'</div></div>' +
+    roleField +
+    '<div class="field"><label>สถานะ</label><div><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span></div></div>' +
+    '<div class="field"><label>LINE user id</label><div class="mono-data">'+esc(lineIdShown)+'</div></div>' +
+    '<div class="field"><label>เข้าใช้ล่าสุด</label><div>'+esc(u.last)+'</div></div>' +
+    (isSuperAdmin ? '' : '<div class="form-actions" style="justify-content:flex-start;margin:4px 0 0"><button class="btn" onclick="udToggleTarget()">'+(u.statusOk ? 'ระงับการใช้งาน' : 'อนุมัติ / เปิดใช้งาน')+'</button></div>') +
+    plModalActions('saveUserManage()', 'บันทึก')
+  );
+}
+async function saveUserManage(){
+  const u = udManageTarget; if (!u) return;
+  await plBusy(async () => {
+    const roleSel = document.getElementById('um-role');
+    let r;
+    if (u.kind === 'admin') {
+      const payload = { id: u.id };
+      if (roleSel) payload.roleCode = roleSel.value;
+      r = await callApi('updateAdminUser', payload);
+    } else {
+      const payload = { lineUserId: u.id };
+      if (roleSel) payload.role = roleSel.value;
+      r = await callApi('updateStaffAdmin', payload);
+    }
+    if (!r.success) { plModalErr(r.message); return; }
+    plModalClose();
+    toast('บันทึกแล้ว');
+    loadUserDirectory();
+  });
+}
+async function udToggleTarget(){
+  const u = udManageTarget; if (!u) return;
+  const r = u.kind === 'admin'
+    ? await callApi('updateAdminUser', { id: u.id, status: u.statusOk ? 'suspended' : 'active' })
+    : await callApi('updateStaffAdmin', { lineUserId: u.id, status: u.statusOk ? 'No' : 'Yes' });
+  if (!r.success) { toast(r.message, true); return; }
+  plModalClose();
+  toast('อัปเดตสถานะสำเร็จ');
+  loadUserDirectory();
 }
 async function loadPendingAdminUsers(){
   const card = document.getElementById('pending-card'), list = document.getElementById('pending-list');
@@ -5022,7 +5108,7 @@ async function approvePending(id){
   if (!roleCode) { toast('เลือกสิทธิ์ให้ผู้ใช้ก่อนอนุมัติ', true); return; }
   const r = await callApi('approveAdminUser', { id, roleCode });
   if (!r.success) { toast(r.message, true); return; }
-  toast(r.message); loadPendingAdminUsers(); loadAdminUsers();
+  toast(r.message); loadPendingAdminUsers(); loadUserDirectory();
 }
 async function rejectPending(id){
   if (!confirm('ปฏิเสธคำขอนี้? ผู้ใช้จะเข้าระบบไม่ได้และสมัครด้วย username เดิมซ้ำไม่ได้')) return;
@@ -5031,23 +5117,28 @@ async function rejectPending(id){
   toast(r.message); loadPendingAdminUsers();
 }
 
-async function loadAdminUsers(){
-  const body = document.getElementById('adminusers-body');
-  if (!adminUsersCache.length) adminUsersCache = listSnapLoad('adminusers') || [];
-  if (adminUsersCache.length) renderAdminUsersTable(); else tblLoading(body, 6);
-  // ฝั่งตัวแทน (หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทนอยู่) สร้างได้แค่ tenant_admin ของตัวเอง — ซ่อนช่องเลือกตัวแทนและตัวเลือกสิทธิ์
+async function loadUserDirectory(){
+  const body = document.getElementById('userdir-body');
+  if (!userDirCache.length) userDirCache = listSnapLoad('userdirectory') || [];
+  if (userDirCache.length) { renderUdFilters(); renderUserDirTable(); } else tblLoading(body, 7);
   const roleWrap = document.getElementById('au-role-wrap');
-  roleWrap.style.display = '';
-  // ★ เดิมรอ ensureRolesForDropdown() ให้เสร็จก่อนค่อยยิงรายชื่อ = จ่ายค่าคงที่ของ Apps Script สองรอบ (~4 วิ)
-  // ยิงขนานกัน แต่ onAdminRoleChange() ยังต้องรอบทบาทมาก่อน จึงผูกไว้ท้ายสายของมันเอง
-  const [, r] = await Promise.all([
+  if (roleWrap) roleWrap.style.display = '';
+  // ★ ยิง listAdminUsers + listStaffAdmin ขนานกัน (คนละตารางข้างหลัง) — Promise.all ราคาเท่าคำขอเดียว (กติกา CLAUDE.md ข้อ 7)
+  const [, adminR, staffR] = await Promise.all([
     ensureRolesForDropdown().then(() => onAdminRoleChange()),
-    callApi('listAdminUsers', {})
+    callApi('listAdminUsers', {}),
+    callApi('listStaffAdmin', {})
   ]);
-  if (!r.success) { if (!adminUsersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
-  adminUsersCache = r.data;
-  listSnapSave('adminusers', adminUsersCache);
-  renderAdminUsersTable();
+  if (!adminR.success && !staffR.success) {
+    if (!userDirCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(adminR.message || staffR.message)+'</td></tr>';
+    return;
+  }
+  userDirRaw.admin = adminR.success ? adminR.data : [];
+  userDirRaw.staff = staffR.success ? staffR.data : [];
+  udDecorate();
+  listSnapSave('userdirectory', userDirCache);
+  renderUdFilters();
+  renderUserDirTable();
 }
 async function createAdminUserUI(){
   const username = document.getElementById('au-username').value.trim();
@@ -5061,16 +5152,7 @@ async function createAdminUserUI(){
   if (!r.success) { toast(r.message, true); return; }
   toast('เพิ่มผู้ใช้งานสำเร็จ');
   ['au-username','au-password','au-displayname'].forEach(id => document.getElementById(id).value = '');
-  loadAdminUsers();
-}
-async function toggleAdminUserStatusUI(id, currentStatus){
-  const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
-  const r = await callApi('updateAdminUser', { id, status: newStatus });
-  if (!r.success) { toast(r.message, true); return; }
-  const u = adminUsersCache.find(x => String(x.id) === String(id));
-  if (u) u.status = newStatus;
-  renderAdminUsersTable();
-  toast('อัปเดตสถานะสำเร็จ');
+  loadUserDirectory();
 }
 async function resetAdminUserPasswordUI(id, username){
   const newPassword = prompt('ตั้งรหัสผ่านใหม่ให้ ' + username + ' (อย่างน้อย 8 ตัวอักษร)');
