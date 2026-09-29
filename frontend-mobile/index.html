@@ -158,6 +158,15 @@
   body.density-compact .kpi .v{ font-size:16px; }
   body.density-compact .inp{ padding:8px 10px; font-size:14px; }
   body.density-compact h2{ font-size:16px; margin:2px 0 10px; }
+  /* ★ พิมพ์ซ้ำ/บันทึก PDF จากมือถือ (2026-09-30) — ใช้ window.print() ของเบราว์เซอร์ตรงๆ ไม่มีเอนจิ้นเอกสาร
+     เหมือนฝั่งแอดมิน (doc-print.js) เพราะบริบทคนละแบบ: อันนี้คือใบสรุปให้คนขับเปิดดู/ส่งลูกค้าดูเอง
+     ไม่ใช่เอกสารทางการ 6 แบบของสำนักงาน — ซ่อนทุกอย่างของแอป เหลือแต่ #sd-body ตอนสั่งพิมพ์ */
+  @media print {
+    .env-bar, .top, .tabs, .cartbar, .no-print { display:none !important; }
+    .screen{ display:none !important; }
+    #tab-saledetail{ display:block !important; padding:0; }
+    #tab-saledetail #sd-body{ display:block !important; }
+  }
 </style>
 </head>
 <body>
@@ -295,6 +304,16 @@
       <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="toggleAddCust(false)">ยกเลิก</button><button class="btn btn-green" style="flex:2" id="c-save" onclick="submitCust()">บันทึกลูกค้า</button></div>
     </div>
     <div class="stack" id="c-list"></div>
+  </section>
+
+  <!-- รายละเอียดบิล / พิมพ์ซ้ำ (2026-09-30 เจ้าของระบบสั่ง — เปิดจากการ์ด "บิลล่าสุดของฉัน" ที่หน้าแรก
+       ไม่ได้อยู่ในแท็บล่าง เปิด/ปิดด้วย openSaleDetail()/closeSaleDetail() เอง ไม่ผ่าน gotoTab) -->
+  <section class="screen" id="tab-saledetail">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px" class="no-print">
+      <button class="btn btn-sm" onclick="closeSaleDetail()">← กลับ</button>
+      <h2 style="margin:0">รายละเอียดบิล</h2>
+    </div>
+    <div id="sd-body"><div class="empty">กำลังโหลด...</div></div>
   </section>
 
   <!-- แถบตะกร้า (เฉพาะหน้าขาย) -->
@@ -552,8 +571,11 @@ async function loadDashboard(){
 }
 function renderRecentSales(){
   const box = $('h-recent'); if (!box) return;
+  // แตะแถวเพื่อดูรายละเอียด/พิมพ์ซ้ำ (2026-09-30) — ออฟไลน์เปิดดูไม่ได้ เพราะยังไม่ได้แคชรายละเอียดบิลไว้ในเครื่อง
   box.innerHTML = RECENT_SALES.length
-    ? RECENT_SALES.map(o => '<div class="row"><span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(o.code) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></span><span class="mono">฿' + baht(o.total) + '</span></div>').join('')
+    ? RECENT_SALES.map(o => '<div class="row" onclick="openSaleDetail(\'' + esc(o.code) + '\')" style="cursor:pointer">' +
+        '<span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(o.code) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></span>' +
+        '<span class="mono">฿' + baht(o.total) + '</span></div>').join('')
     : '<div class="empty">ยังไม่มีรายการขาย</div>';
 }
 function renderHome(){
@@ -566,6 +588,55 @@ function renderHome(){
   $('h-queue-list').innerHTML = q.map((s, i) => '<div class="row"><span class="muted">' + esc(new Date(s.savedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })) + ' · ' + esc(custName(s.customerId)) + ' · ' + s.items.length + ' รายการ' +
     (s.lastError ? '<br><span class="pill bad">ส่งไม่ผ่าน</span> ' + esc(s.lastError) : '') + '</span>' +
     (s.lastError ? '<button class="btn btn-sm" onclick="dropQueued(' + i + ')">ลบ</button>' : '') + '</div>').join('');
+}
+
+/* ══════════════ รายละเอียดบิล / พิมพ์ซ้ำ (2026-09-30 เจ้าของระบบสั่ง) ══════════════
+   ไม่ใช้ระบบเอกสาร 6 แบบแบบแอดมิน (doc-print.js) — คนละบริบท: นี่คือใบสรุปให้คนขับดูเอง/โชว์ลูกค้า
+   ไม่ใช่เอกสารทางการที่ต้องมีผู้ออกบิล/ช่องลงชื่อ ใช้ window.print() ของเบราว์เซอร์ตรงๆ (ดู @media print ใน <style>) */
+function unitLabelForItem(it){ const p = prodById(it.productId); return p ? unitOf(p, it.unitCode).unitLabel : (it.unitCode || 'ชิ้น'); }
+async function openSaleDetail(code){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('tab-saledetail').classList.add('active');
+  $('sd-body').innerHTML = '<div class="empty">กำลังโหลด...</div>';
+  scrollTo(0, 0);
+  if (!navigator.onLine) { $('sd-body').innerHTML = '<div class="empty">ต้องออนไลน์ถึงจะเปิดดูรายละเอียดบิลได้</div>'; return; }
+  try {
+    const r = await api('getSaleDetail', { orderCode: code });
+    if (!r.success) { $('sd-body').innerHTML = '<div class="empty">' + esc(r.message) + '</div>'; return; }
+    renderSaleDetail(r);
+  } catch (e) { $('sd-body').innerHTML = '<div class="empty">โหลดไม่ได้ (' + esc(e.message) + ')</div>'; }
+}
+function closeSaleDetail(){
+  $('tab-saledetail').classList.remove('active');
+  $('tab-' + TAB).classList.add('active');
+}
+function renderSaleDetail(r){
+  const o = r.order;
+  const items = r.items.filter(it => !it.isFree), free = r.items.filter(it => it.isFree);
+  $('sd-body').innerHTML =
+    '<div class="card stack">' +
+      '<div class="row"><b>' + esc(o.code) + '</b><span class="note">' + esc(o.createdAt) + '</span></div>' +
+      '<div class="row"><span>ลูกค้า</span><span>' + esc(o.customer) + '</span></div>' +
+      (o.customerPhone ? '<div class="row"><span>โทร</span><span>' + esc(o.customerPhone) + '</span></div>' : '') +
+      '<div class="row"><span>ชำระเงิน</span><span>' + (o.paymentMethod === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></div>' +
+    '</div>' +
+    '<div class="card stack" style="margin-top:10px">' +
+      items.map(it => '<div class="row"><span>' + esc(it.name) + '<br><span class="note">' + it.qty + ' ' + esc(unitLabelForItem(it)) + ' × ฿' + baht(it.price) + '</span></span><span class="mono">฿' + baht(it.lineTotal) + '</span></div>').join('') +
+      free.map(it => '<div class="row" style="background:#EAF6EE;border-radius:8px"><span>🎁 ' + esc(it.name) + '<br><span class="note">' + it.qty + ' ' + esc(unitLabelForItem(it)) + ' ฟรี</span></span><span class="mono">ฟรี</span></div>').join('') +
+    '</div>' +
+    '<div class="card stack" style="margin-top:10px">' +
+      '<div class="row"><span>ยอดก่อนหักส่วนลด</span><span class="mono">฿' + baht(o.subtotal) + '</span></div>' +
+      (o.discount ? '<div class="row"><span>ส่วนลดรวม</span><span class="mono">-฿' + baht(o.discount) + '</span></div>' : '') +
+      (o.applyVat
+        ? (o.vatMixed
+            ? '<div class="row"><span>มูลค่าที่ยกเว้นภาษี</span><span class="mono">฿' + baht(o.exemptAmount) + '</span></div>' +
+              '<div class="row"><span>มูลค่าที่เสียภาษี</span><span class="mono">฿' + baht(o.taxableExVat) + '</span></div>'
+            : '<div class="row"><span>มูลค่าสินค้า (ไม่รวมภาษี)</span><span class="mono">฿' + baht(o.subtotalExVat) + '</span></div>') +
+          '<div class="row"><span>ภาษีมูลค่าเพิ่ม ' + Math.round((o.vatRate != null ? o.vatRate : 0.07) * 100) + '%</span><span class="mono">฿' + baht(o.vatAmount) + '</span></div>'
+        : '') +
+      '<div class="row"><b>ยอดสุทธิ</b><span class="mono"><b>฿' + baht(o.total) + '</b></span></div>' +
+    '</div>' +
+    '<button class="btn btn-primary btn-block no-print" style="margin-top:12px" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>';
 }
 
 /* ══════════════ คิวบิลออฟไลน์ ══════════════ */

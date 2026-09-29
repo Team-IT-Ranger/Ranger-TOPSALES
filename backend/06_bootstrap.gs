@@ -170,3 +170,41 @@ function getRecentSales(user, payload) {
 
   return { success: true, data: orders };
 }
+
+// รายละเอียดบิลใบเดียว (ดูซ้ำ/พิมพ์ซ้ำจากแอปมือถือ) — payload: { orderCode }
+// ★ กันดูบิลของคนอื่น: กรอง sale_by === user.lineUserId เหมือน getRecentSales ด้านบน — คนขับเห็นได้แค่บิลตัวเอง
+// (ไม่ใช้ getSalesOrderAdmin ของ 19_sales_admin.gs เพราะตัวนั้นตรวจสิทธิ์แบบ session/token ของแอดมิน
+// คนละระบบยืนยันตัวตนกับมือถือที่ใช้ lineUserId — ดูรายละเอียดครบเอกสารทางการ (ผู้ออกบิล ฯลฯ) ยังต้องเปิดแอดมิน)
+function getSaleDetail(user, payload) {
+  var order = null;
+  tenantObjects(user.tenantId, 'sales_orders').forEach(function(o) {
+    if (String(o.order_code) === String(payload.orderCode) && String(o.sale_by) === String(user.lineUserId)) order = o;
+  });
+  if (!order) return { success: false, message: 'ไม่พบบิลนี้ หรือไม่ใช่บิลของท่าน' };
+
+  var products = {};
+  centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
+  var customers = {};
+  centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c; });
+  var cust = customers[String(order.customer_id)];
+
+  var items = tenantObjects(user.tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
+    .map(function(it) { var p = products[String(it.product_id)]; return {
+      productId: it.product_id, name: p ? p.name : '(สินค้าถูกลบ)',
+      unitCode: it.unit_code, qty: parseFloat(it.qty) || 0, price: parseFloat(it.price) || 0,
+      lineTotal: parseFloat(it.line_total) || 0, isFree: String(it.is_free) === '1'
+    }; });
+
+  var vat = _orderVat(order);   // อ่านภาพนิ่งภาษีที่บันทึกไว้ตอนขาย ไม่คำนวณใหม่ (guide VAT ข้อ 4)
+  return { success: true,
+    order: {
+      code: order.order_code, customer: cust ? customerFullName(cust) : 'ลูกค้าทั่วไป', customerPhone: cust ? cust.phone : '',
+      subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
+      applyVat: vat.applyVat && vat.vat > 0, vatRate: vat.rate, vatAmount: vat.vat,
+      subtotalExVat: vat.exVat, exemptAmount: vat.exemptAmount, taxableExVat: vat.taxableExVat, vatMixed: vat.mixed,
+      paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: order.status,
+      createdAt: safeDateStr(order.created_at)
+    },
+    items: items
+  };
+}

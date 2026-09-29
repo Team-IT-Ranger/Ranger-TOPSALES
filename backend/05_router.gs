@@ -9,6 +9,7 @@ var ACTION_MAP = {
   getBootstrap:   getBootstrap,
   getDashboard:   getDashboard,
   getRecentSales: getRecentSales,
+  getSaleDetail:  getSaleDetail,
   recordSale:     recordSale,
   quoteSale:      quoteSale,
   restockVan:     restockVan,
