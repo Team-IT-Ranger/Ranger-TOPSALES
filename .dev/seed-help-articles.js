@@ -2,8 +2,9 @@
  * ใส่เนื้อหาคู่มือใช้งานระบบรอบแรก (module 8, เจ้าของระบบสั่ง 2026-09-29) — ครอบคลุมเฉพาะงานที่
  * แอดมินตัวแทนใช้จริง (ไม่รวมหน้าที่บริษัทคุมอย่างเดียว เช่น ตั้งราคา/VAT/บัญชี)
  *
- *   BACKEND_URL='<exec url>' ADMIN_TOKEN='<token>' node .dev/seed-help-articles.js [--commit]
- *   ไม่ใส่ --commit = ดูอย่างเดียว (แสดงรายการที่จะสร้าง/ข้าม)
+ *   UAT_URL='<uat exec url>' UAT_USER='<username แอดมิน>' UAT_PASS='<รหัสผ่าน>' node .dev/seed-help-articles.js [--commit]
+ *   ไม่ใส่ --commit = ดูอย่างเดียว (แสดงรายการที่จะสร้าง/ข้าม) · ต้องล็อกอินด้วยบัญชี super_admin หรือ owner_admin
+ *   (บัญชีที่ใช้เข้าหน้าแอดมินตามปกตินั่นแหละ — สคริปต์ล็อกอินให้เองเหมือน .dev/uat-sale-e2e.js ไม่ต้องหา token เอง)
  *
  * รันซ้ำได้ — เช็คจาก `code` ผ่าน listHelpArticles ก่อนเสมอ ถ้ามีอยู่แล้วจะข้าม (ไม่ทับเนื้อหาที่เจ้าของระบบ
  * อาจแก้ไปแล้วจากหน้าจอ) ต้องการอัปเดตเนื้อหาที่มีอยู่แล้วให้แก้ตรงในแอปแทน ไม่ใช่รันสคริปต์นี้ซ้ำ
@@ -13,10 +14,11 @@
  * เป็น [ภาพ: https://...] ทีหลังได้จากหน้าจอคู่มือเอง ไม่ต้องรันสคริปต์นี้ใหม่
  */
 const COMMIT = process.argv.includes('--commit');
-const ENDPOINT = process.env.BACKEND_URL, TOKEN = process.env.ADMIN_TOKEN;
-if (!ENDPOINT || !TOKEN) { console.error('ต้องตั้ง BACKEND_URL และ ADMIN_TOKEN'); process.exit(1); }
+const ENDPOINT = process.env.UAT_URL, USER = process.env.UAT_USER, PASS = process.env.UAT_PASS;
+if (!ENDPOINT || !USER || !PASS) { console.error('ต้องตั้ง UAT_URL, UAT_USER, UAT_PASS ก่อน (ดูตัวอย่างคำสั่งด้านบนของไฟล์นี้)'); process.exit(1); }
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
+let TOKEN = null;
 const call = async (action, payload) => {
   let t;
   for (let i = 1; i <= 3; i++) {
@@ -218,6 +220,15 @@ const ARTICLES = [
 ];
 
 (async () => {
+  const login = await call('adminLogin', { username: USER, password: PASS });
+  if (!login.success || !login.token) { console.error('ล็อกอินไม่สำเร็จ: ' + (login.message || 'ไม่ได้ token กลับมา')); process.exit(1); }
+  TOKEN = login.token;
+  console.log('ล็อกอินสำเร็จ: ' + (login.displayName || USER) + (login.roleCode ? ' (' + login.roleCode + ')' : ''));
+  if (login.roleCode !== 'super_admin' && login.roleCode !== 'owner_admin') {
+    console.error('บัญชีนี้ไม่ใช่ super_admin/owner_admin — แก้คู่มือไม่ได้ (saveHelpArticle จะถูกปฏิเสธทุกบทความ)');
+    process.exit(1);
+  }
+
   const existing = await call('listHelpArticles', { includeInactive: true });
   if (!existing.success) { console.error('อ่านรายการเดิมไม่สำเร็จ: ' + existing.message); process.exit(1); }
   const haveCodes = new Set(existing.data.map(a => a.code));
