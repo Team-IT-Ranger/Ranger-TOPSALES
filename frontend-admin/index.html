@@ -1341,6 +1341,21 @@
           <div id="roles-list"><p class="form-hint">กำลังโหลด...</p></div>
         </section>
 
+        <!-- ═══ คู่มือใช้งานระบบ (module 8, เจ้าของระบบสั่ง 2026-09-29) ═══
+             เนื้อหามาจากตาราง help_articles (Central Sheet) ไม่ hardcode ในไฟล์นี้ — ดู helpRenderBody()
+             ด้านล่างสำหรับกติกาการเขียนขั้นตอน/ภาพในช่อง body -->
+        <section class="view" id="view-helpcenter">
+          <div class="view-head">
+            <div><h1>คู่มือใช้งานระบบ</h1><p>ทำตามขั้นตอนได้เลยโดยไม่ต้องมีคนสอน — ค้นหาสิ่งที่อยากทำ แล้วกดเข้าไปดู</p></div>
+            <button class="btn btn-primary" id="hc-add-btn" style="display:none" onclick="openHelpArticleForm(null)">+ เพิ่มบทความ</button>
+          </div>
+          <div class="form-card" style="margin-bottom:14px">
+            <input id="hc-search" type="text" placeholder="ค้นหา เช่น เปิดบิลขาย, อนุมัติพนักงาน, รับของเข้าคลัง…" oninput="renderHelpList()" style="width:100%">
+          </div>
+          <div id="hc-cats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"></div>
+          <div id="hc-list"></div>
+        </section>
+
         <!-- ═══ งานซื้อ: ผู้ขาย ═══ -->
         <section class="view" id="view-vendors">
           <div class="view-head">
@@ -1565,7 +1580,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'savePackageTenants','migratePackageAssignments',
   'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus',
   'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
-  'ensureDefaultSalesUnit']);
+  'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin']);
@@ -1997,7 +2012,8 @@ const ICONS = {
   gear:     '<circle cx="8" cy="8" r="2.1"/><path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7 3.6 3.6"/>',
   cart:     '<circle cx="6.4" cy="12.8" r="1.1"/><circle cx="11.6" cy="12.8" r="1.1"/><path d="M1.8 2.6h2.1l1.7 7.6h7l1.4-5.4H4.4"/>',
   book:     '<path d="M3 3.4A1.4 1.4 0 0 1 4.4 2H13v9.6H4.4A1.4 1.4 0 0 0 3 13z"/><path d="M3 11.6V13h10"/><path d="M5.8 5h4.4M5.8 7.4h4.4"/>',
-  chart:    '<path d="M2.6 13.2V8.6M6.2 13.2V4.8M9.8 13.2v-3.2M13.4 13.2V6.8"/>'
+  chart:    '<path d="M2.6 13.2V8.6M6.2 13.2V4.8M9.8 13.2v-3.2M13.4 13.2V6.8"/>',
+  help:     '<circle cx="8" cy="8" r="5.6"/><path d="M6.1 6.1a1.9 1.9 0 1 1 2.7 1.7c-.6.3-.8.8-.8 1.4v.3"/><path d="M8 11.2v.01"/>'
 };
 const navIcon = name => '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
 
@@ -2090,8 +2106,15 @@ const NAV_GROUPS = [
     { n:'5.3', label:'ลูกหนี้', items:[
       {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'owner'} ]}
   ]},
-  /* กลุ่ม 6/7/8 สำรองไว้ (เจ้าของระบบสั่ง 2026-09-29 — ย้ายตัวแทนจำหน่าย + ผู้ใช้งาน/สิทธิ์ เข้าไปรวมกับ
-     "ตั้งค่าระบบ" หมดแล้ว เพื่อลดจำนวนโมดูลบนสุดที่ต้องไล่ดู) — อย่าเอาไปใช้โดยไม่ถาม */
+  /* กลุ่ม 6/7 สำรองไว้ (เจ้าของระบบสั่ง 2026-09-29 — ย้ายตัวแทนจำหน่าย + ผู้ใช้งาน/สิทธิ์ เข้าไปรวมกับ
+     "ตั้งค่าระบบ" หมดแล้ว เพื่อลดจำนวนโมดูลบนสุดที่ต้องไล่ดู) — อย่าเอาไปใช้โดยไม่ถาม
+     กลุ่ม 8 ใช้แล้ว (คู่มือใช้งานระบบ ด้านล่าง — เจ้าของระบบสั่ง 2026-09-29 เช่นกัน) */
+  { n:'8', icon:'help', label:'คู่มือใช้งานระบบ', subs:[
+    { n:'8.1', label:'คู่มือใช้งานระบบ', items:[
+      /* mod ไม่ใส่ตั้งใจ — canView(undefined)=true เสมอ ทุกบทบาทอ่านคู่มือได้หมด ไม่ต้องตั้งสิทธิ์รายโมดูล
+         (แก้ไข/เพิ่มบทความยังถูกกันไว้แค่ super_admin/owner_admin ที่ backend อยู่ดี — ดู helpCanEdit()) */
+      {n:'8.1.1', label:'คู่มือใช้งานระบบ', view:'helpcenter', ready:true, scope:'both'} ]}
+  ]},
   { n:'9', icon:'gear', label:'ตั้งค่าระบบ', subs:[
     { n:'9.1', label:'ข้อมูลบริษัท', items:[
       /* หน้าจอคนละตัวตามฝั่ง แต่เป็นเมนูเดียวกัน — gotoView แปลงให้ตอนกด */
@@ -2400,7 +2423,8 @@ const LOADERS = {
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
-  'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd
+  'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
+  helpcenter: loadHelpCenter
 };
 function gotoView(view){
   /* ★ หาเมนูจาก id ที่ "กดมา" ก่อนแปลง — เมนูเดียวสองหน้าจอ (ข้อมูลบริษัท: ฝั่งบริษัทดูของกลาง
@@ -6478,6 +6502,145 @@ function toggleDensity(){
   try { saved = localStorage.getItem(LS_DENSITY) || 'compact'; } catch (e) { saved = 'compact'; }
   applyDensity(saved);
 })();
+
+/* ═══════════ คู่มือใช้งานระบบ (module 8, เจ้าของระบบสั่ง 2026-09-29 — "Training-Free" สำหรับแอดมินตัวแทน) ═══════════
+   เนื้อหาอยู่ในตาราง help_articles (Central Sheet) ไม่ hardcode ที่นี่ — แอปนี้ UI เปลี่ยนแทบทุกวัน เนื้อหาคู่มือ
+   จึงต้องแก้ได้ทันทีจากหน้าจอนี้เองโดยไม่ต้อง push โค้ด (ดู backend/42_help_center.gs)
+   แก้ไข/เพิ่มบทความจำกัดแค่ super_admin/owner_admin (helpCanEdit มาจาก backend เสมอ ไม่เช็คฝั่งนี้เอง) —
+   ส่วนการ "อ่าน" เปิดให้ทุกบทบาท เมนู 8.1.1 จึงไม่ใส่ mod ไว้เลย (ดู navState ด้านบน) */
+const HELP_CATEGORIES = [
+  { code:'start', label:'เริ่มต้นใช้งาน' },
+  { code:'sales', label:'งานขายประจำวัน' },
+  { code:'customers', label:'ลูกค้า' },
+  { code:'purchasing', label:'งานซื้อและคลัง' },
+  { code:'users', label:'ผู้ใช้งานและทีมขาย' },
+  { code:'settings', label:'ตั้งค่าของตัวแทน' }
+];
+const helpCategoryLabel = c => (HELP_CATEGORIES.find(x => x.code === c) || {}).label || c;
+let helpArticles = [], helpCanEdit = false, helpCatFilter = 'all', helpOpenId = null;
+
+/* กติกาเขียน body ในตาราง help_articles (เขียนแบบสเปรดชีตธรรมดา ไม่ใช่ HTML):
+   - บรรทัดขึ้นต้น "1." "2." ฯลฯ ติดกัน = ขั้นตอน (แสดงเป็นลิสต์เรียงเลข)
+   - บรรทัด "[ภาพ: ...]" = ช่องภาพหน้าจอ — ข้อความหลัง "ภาพ:" เป็น URL (ขึ้นต้น http) = แสดงรูปจริง
+     ไม่ใช่ URL = แสดงกรอบเตือน "ยังไม่มีภาพ" พร้อมคำอธิบายว่าต้องไปถ่ายหน้าจออะไรมาใส่ — เขียนคู่มือได้ทันที
+     ก่อนมีภาพจริง แล้วค่อยแปะ URL ทีหลังโดยไม่ต้องเขียนเนื้อหาใหม่
+   - บรรทัดว่าง = ขึ้นย่อหน้าใหม่ */
+function helpRenderBody(text){
+  const lines = String(text || '').split('\n');
+  let html = '', inList = false;
+  const closeList = () => { if (inList) { html += '</ol>'; inList = false; } };
+  lines.forEach(raw => {
+    const line = raw.trim();
+    if (!line) { closeList(); return; }
+    const img = line.match(/^\[ภาพ:\s*(.+)\]$/);
+    if (img) {
+      closeList();
+      const val = img[1].trim();
+      html += /^https?:\/\//i.test(val)
+        ? '<div style="margin:10px 0"><img src="'+esc(val)+'" style="max-width:100%;border-radius:8px;border:1px solid var(--line)"></div>'
+        : '<div style="margin:10px 0;padding:10px 12px;border:1px dashed var(--line);border-radius:8px;background:var(--bg);color:var(--muted);font-size:13px">📷 ยังไม่มีภาพ — '+esc(val)+'</div>';
+      return;
+    }
+    const step = line.match(/^\d+[.)]\s*(.+)$/);
+    if (step) { if (!inList) { html += '<ol style="margin:8px 0;padding-left:22px">'; inList = true; } html += '<li style="margin:4px 0">'+esc(step[1])+'</li>'; return; }
+    closeList();
+    html += '<p style="margin:8px 0">'+esc(line)+'</p>';
+  });
+  closeList();
+  return html || '<p class="form-hint">(ยังไม่มีเนื้อหา)</p>';
+}
+
+async function loadHelpCenter(){
+  const box = document.getElementById('hc-list');
+  if (!helpArticles.length) { helpArticles = listSnapLoad('helparticles') || []; if (helpArticles.length) { renderHelpCats(); renderHelpList(); } else box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>'; }
+  const r = await callApi('listHelpArticles', { includeInactive: true });
+  if (!r.success) { if (!helpArticles.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  helpArticles = r.data; helpCanEdit = !!r.canEdit;
+  listSnapSave('helparticles', helpArticles);
+  document.getElementById('hc-add-btn').style.display = helpCanEdit ? '' : 'none';
+  renderHelpCats(); renderHelpList();
+}
+function renderHelpCats(){
+  const box = document.getElementById('hc-cats'); if (!box) return;
+  const visible = helpCanEdit ? helpArticles : helpArticles.filter(a => a.isActive);
+  const chip = (key, label) => '<button class="btn '+(helpCatFilter===key?'btn-primary':'')+'" style="border-radius:999px" onclick="helpSetCat(\''+key+'\')">'+label+'</button>';
+  box.innerHTML = chip('all','ทั้งหมด') + HELP_CATEGORIES.filter(c => visible.some(a => a.category === c.code)).map(c => chip(c.code, c.label)).join('');
+}
+function helpSetCat(c){ helpCatFilter = c; renderHelpCats(); renderHelpList(); }
+function renderHelpList(){
+  const box = document.getElementById('hc-list'); if (!box) return;
+  const q = (document.getElementById('hc-search').value || '').trim().toLowerCase();
+  let rows = helpCanEdit ? helpArticles : helpArticles.filter(a => a.isActive);
+  if (helpCatFilter !== 'all') rows = rows.filter(a => a.category === helpCatFilter);
+  if (q) rows = rows.filter(a => (a.title+' '+a.summary+' '+a.body).toLowerCase().indexOf(q) !== -1);
+  if (!rows.length) { box.innerHTML = '<p class="form-hint">ไม่พบบทความที่ตรงกับที่ค้นหา</p>'; return; }
+  const catOrder = HELP_CATEGORIES.map(c => c.code);
+  rows = rows.slice().sort((a,b) => catOrder.indexOf(a.category) - catOrder.indexOf(b.category));
+  let curCat = null, html = '';
+  rows.forEach(a => {
+    if (a.category !== curCat) { curCat = a.category; html += '<h3 style="margin:18px 0 8px">'+esc(helpCategoryLabel(curCat))+'</h3>'; }
+    const open = helpOpenId === a.id;
+    html += '<div class="form-card" style="margin-bottom:10px;padding:14px 16px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer" onclick="helpToggleOpen(\''+a.id+'\')">' +
+        '<div><b>'+esc(a.title)+'</b>' + (!a.isActive ? ' <span class="pill off">ปิดอยู่</span>' : '') +
+          (a.summary ? '<div class="form-hint" style="margin-top:2px">'+esc(a.summary)+'</div>' : '') + '</div>' +
+        '<span style="color:var(--muted)">'+(open?'▾':'▸')+'</span>' +
+      '</div>' +
+      (open ? '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">' + helpRenderBody(a.body) +
+        (helpCanEdit ? '<div class="form-actions" style="justify-content:flex-start;margin-top:10px">' +
+          '<button class="btn btn-sm" onclick="event.stopPropagation();openHelpArticleForm(\''+a.id+'\')">แก้ไข</button>' +
+          '<button class="btn btn-sm" onclick="event.stopPropagation();helpToggleActive(\''+a.id+'\')">'+(a.isActive?'ปิดใช้งาน':'เปิดใช้งาน')+'</button>' +
+        '</div>' : '') + '</div>' : '') +
+    '</div>';
+  });
+  box.innerHTML = html;
+}
+function helpToggleOpen(id){ helpOpenId = helpOpenId === id ? null : id; renderHelpList(); }
+async function helpToggleActive(id){
+  const a = helpArticles.find(x => x.id === id); if (!a) return;
+  const r = await callApi('setHelpArticleActive', { id, isActive: !a.isActive });
+  if (!r.success) { toast(r.message, true); return; }
+  a.isActive = !a.isActive; listSnapSave('helparticles', helpArticles);
+  renderHelpCats(); renderHelpList();
+}
+let helpFormId = null;
+function openHelpArticleForm(id){
+  helpFormId = id;
+  const a = id ? helpArticles.find(x => x.id === id) : null;
+  const catOpts = HELP_CATEGORIES.map(c => '<option value="'+c.code+'"'+(a && a.category===c.code?' selected':'')+'>'+c.label+'</option>').join('');
+  plModal(
+    '<h3>'+(a ? 'แก้ไขบทความ' : 'เพิ่มบทความใหม่')+'</h3>' +
+    '<div class="form-grid g2">' +
+      '<div class="field"><label>รหัสบทความ (code)</label><input id="hf-code" placeholder="เช่น sales-06" value="'+esc(a?a.code:'')+'"'+(a?' readonly':'')+'></div>' +
+      '<div class="field"><label>หมวดหมู่</label><select id="hf-category">'+catOpts+'</select></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>หัวข้อ</label><input id="hf-title" value="'+esc(a?a.title:'')+'"></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>คำอธิบายสั้น (โชว์ในรายการ)</label><input id="hf-summary" value="'+esc(a?a.summary:'')+'"></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>ลำดับแสดง (ตัวเลขน้อยขึ้นก่อน)</label><input id="hf-sort" type="number" value="'+(a?a.sortOrder:0)+'"></div>' +
+      '<div class="field" style="grid-column:1/-1"><label>เนื้อหา</label>' +
+        '<p class="form-hint">แต่ละบรรทัดขึ้นต้น "1." "2." ฯลฯ = ขั้นตอน · บรรทัด [ภาพ: คำอธิบาย] หรือ [ภาพ: URL] = ภาพหน้าจอ</p>' +
+        '<textarea id="hf-body" rows="12" style="width:100%;font-family:inherit">'+esc(a?a.body:'')+'</textarea></div>' +
+    '</div>' +
+    plModalActions('confirmSaveHelpArticle()', 'บันทึก')
+  );
+}
+async function confirmSaveHelpArticle(){
+  const payload = {
+    id: helpFormId || undefined,
+    code: document.getElementById('hf-code').value.trim(),
+    category: document.getElementById('hf-category').value,
+    title: document.getElementById('hf-title').value.trim(),
+    summary: document.getElementById('hf-summary').value.trim(),
+    sortOrder: Number(document.getElementById('hf-sort').value) || 0,
+    body: document.getElementById('hf-body').value
+  };
+  if (!payload.code || !payload.title) { plModalErr('กรุณากรอกรหัสบทความและหัวข้อ'); return; }
+  await plBusy(async () => {
+    const r = await callApi('saveHelpArticle', payload);
+    if (!r.success) { plModalErr(r.message); return; }
+    plModalClose(); toast(r.message || 'บันทึกแล้ว');
+    helpArticles = []; loadHelpCenter();
+  });
+}
 
 /* ── สภาพแวดล้อม ── */
 (function initEnv(){

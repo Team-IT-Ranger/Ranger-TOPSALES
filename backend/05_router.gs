@@ -214,7 +214,11 @@ var ADMIN_ACTION_MAP = {
 
   importExpressProducts:  importExpressProducts,
   importExpressCustomers: importExpressCustomers,
-  exportExpressSales:     exportExpressSales
+  exportExpressSales:     exportExpressSales,
+
+  listHelpArticles:       listHelpArticles,          // คู่มือใช้งานระบบ (42_help_center.gs)
+  saveHelpArticle:        saveHelpArticle,
+  setHelpArticleActive:   setHelpArticleActive
 };
 
 /** คีย์กันซ้ำผูกกับผู้ใช้+action ด้วย เผื่อ requestId ของสองเครื่องบังเอิญชนกัน (และกันคนอื่นยิง id ทับ) */

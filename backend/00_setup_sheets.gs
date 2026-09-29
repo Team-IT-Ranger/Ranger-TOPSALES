@@ -211,7 +211,15 @@ var CENTRAL_SHEETS = {
 
   provinces: ['id','name','name_en','region'],
   districts: ['id','name','name_en','province_id'],
-  subdistricts: ['id','name','name_en','district_id','zipcode']
+  subdistricts: ['id','name','name_en','district_id','zipcode'],
+
+  // คู่มือใช้งานระบบ (module 8, เจ้าของระบบสั่ง 2026-09-29) — "Training-Free" สำหรับแอดมินตัวแทน
+  // เก็บเป็นข้อมูลใน Sheet โดยตั้งใจ (ไม่ hardcode ใน index.html) เพราะแอปนี้ UI เปลี่ยนแทบทุกวัน
+  // เนื้อหาต้องแก้ได้ทันทีโดยไม่ต้อง push โค้ด — เจ้าของระบบ/super_admin/owner_admin แก้ได้ผ่านหน้าจอ 8.1.1 เอง
+  // body: ข้อความล้วน — บรรทัดขึ้นต้น "1." "2." ฯลฯ = ขั้นตอน · บรรทัด [ภาพ: ...] = ช่องใส่ภาพหน้าจอ
+  //   (ถ้าข้อความหลัง "ภาพ:" เป็น URL แสดงเป็นรูปจริง ถ้าไม่ใช่ URL แสดงเป็นกรอบเตือน "ยังไม่มีภาพ" พร้อมคำอธิบาย
+  //   ให้รู้ว่าต้องไปถ่ายหน้าจออะไรมาใส่ — ดู helpRenderBody() ใน index.html)
+  help_articles: ['record_id','code','category','title','summary','body','sort_order','is_active','updated_at','updated_by']
 };
 
 // สคีมาเปลี่ยน (เพิ่มตาราง/คอลัมน์ใน CENTRAL_SHEETS หรือเพิ่มโมดูลสิทธิ์ใหม่ใน OWNER_MODULES/TENANT_MODULES)
