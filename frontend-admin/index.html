@@ -4931,10 +4931,26 @@ async function uploadLogoUI(){
 }
 
 /* ══════════════ ADMIN USERS ══════════════ */
+/* ★ ตัวเลือก "สังกัด" ของทั้งระบบอยู่ที่ฟังก์ชันนี้ที่เดียว (เจ้าของระบบสั่ง 30 ก.ย. 2026)
+   คนสังกัดได้แค่สองแบบเท่านั้น: **บริษัท** (tenant_id ว่าง) หรือ **ตัวแทนจำหน่าย**รายใดรายหนึ่ง
+   จึง **ตัด HOUSE ออกเสมอ** — HOUSE เป็นสมุดขายตรงของบริษัทเอง ไม่ใช่ตัวแทนที่คนจะไปสังกัด
+   (ดู _ensureHouseTenant ใน 13_tenants.gs) โผล่ในลิสต์แล้วคนจะเลือกโดยเข้าใจว่าคือ "บริษัท"
+
+   ★ ถ้าค่าปัจจุบันของคนคนนั้นไม่อยู่ในลิสต์ (เช่นเคยถูกตั้งเป็น HOUSE ไว้ก่อนกติกานี้) ต้องใส่กลับเข้าไป
+     ไม่งั้น select จะเด้งไปตัวแรกเอง แล้วกดบันทึกทีเดียว "ย้ายสังกัดเขาทิ้งโดยไม่มีใครตั้งใจ" */
+function tenantOptions(selected, blankLabel){
+  const cur = String(selected || '');
+  const list = (tenantsCache || []).filter(t => !t.isHouse);
+  const html = list.map(t => '<option value="'+esc(t.tenantId)+'"'+(String(t.tenantId) === cur ? ' selected' : '')+'>' +
+    esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
+  const orphan = (cur && !list.some(t => String(t.tenantId) === cur))
+    ? '<option value="'+esc(cur)+'" selected>'+esc(cur)+' — (สังกัดเดิม ไม่อยู่ในรายชื่อแล้ว)</option>' : '';
+  const blank = blankLabel ? '<option value=""'+(cur ? '' : ' selected')+'>'+esc(blankLabel)+'</option>' : '';
+  return blank + orphan + html;
+}
 async function ensureTenantsForDropdown(){
   if (!tenantsCache.length) await loadTenantsQuiet();
-  const sel = document.getElementById('au-tenant');
-  sel.innerHTML = tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'">'+esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
+  document.getElementById('au-tenant').innerHTML = tenantOptions('', null);
 }
 /* ── ที่เก็บไฟล์ฐานข้อมูลบน Drive (24_drive_layout.gs) ── */
 async function loadDbLayout(){
@@ -5096,10 +5112,18 @@ function openUserManageModal(kind, id){
       '</select></div>';
   }
   const lineIdShown = kind === 'admin' ? (u.raw.lineUserId || '-') : u.id;
+  /* สังกัดแก้ได้แล้ว (เจ้าของระบบสั่ง 30 ก.ย. 2026) — เดิมเป็นข้อความอ่านอย่างเดียว ตั้งผิดมาแล้วแก้ไม่ได้เลย
+     ต้องไปไล่แก้ในชีต · ฝั่งตัวแทนยังแก้ไม่ได้ (backend บล็อกอยู่แล้ว) จึงโชว์เป็นข้อความเหมือนเดิม
+     ไม่ใช่ช่องที่กดได้แล้วพังเงียบ · บัญชี super_admin ห้ามแตะทั้งบทบาทและสังกัด */
+  const canEditOrg = !EFFECTIVE_TENANT_ID() && !isSuperAdmin;
+  const orgField = canEditOrg
+    ? '<div class="field"><label>สังกัด</label><select id="um-tenant">' +
+        tenantOptions(u.raw.tenantId, 'บริษัท (ไม่สังกัดตัวแทน)') + '</select></div>'
+    : '<div class="field"><label>สังกัด</label><div>'+esc(u.org)+'</div></div>';
   plModal(
     '<h3>'+esc(u.name)+'</h3>' +
     '<div class="field"><label>ประเภท</label><div>'+udTag(kind)+'</div></div>' +
-    '<div class="field"><label>สังกัด</label><div>'+esc(u.org)+'</div></div>' +
+    orgField +
     roleField +
     '<div class="field"><label>สถานะ</label><div><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span></div></div>' +
     '<div class="field"><label>LINE user id</label><div class="mono-data">'+esc(lineIdShown)+'</div></div>' +
@@ -5112,14 +5136,21 @@ async function saveUserManage(){
   const u = udManageTarget; if (!u) return;
   await plBusy(async () => {
     const roleSel = document.getElementById('um-role');
+    const tenantSel = document.getElementById('um-tenant');
+    /* ★ ส่งเฉพาะตอนค่าเปลี่ยนจริง และต้องชื่อ newTenantId ไม่ใช่ tenantId —
+       `tenantId` ถูกจองความหมายไว้แล้วว่า "กำลังทำงานในนามตัวแทนรายไหน" (callApi แนบให้เองเมื่อ
+       Ultra Admin เลือกตัวแทน) ส่งไปจะกลายเป็นสวมสิทธิ์แทนที่จะย้ายสังกัด */
+    const orgChanged = tenantSel && tenantSel.value !== (u.raw.tenantId || '');
     let r;
     if (u.kind === 'admin') {
       const payload = { id: u.id };
       if (roleSel) payload.roleCode = roleSel.value;
+      if (orgChanged) payload.newTenantId = tenantSel.value;
       r = await callApi('updateAdminUser', payload);
     } else {
       const payload = { lineUserId: u.id };
       if (roleSel) payload.role = roleSel.value;
+      if (orgChanged) payload.newTenantId = tenantSel.value;
       r = await callApi('updateStaffAdmin', payload);
     }
     if (!r.success) { plModalErr(r.message); return; }
@@ -5162,8 +5193,7 @@ async function openPromoteModal(lineUserId){
   if (!u) return;
   if (!tenantsCache.length) await loadTenantsQuiet();
   await ensureRolesForDropdown();
-  const tenantOpts = '<option value="">บริษัท (ไม่สังกัดตัวแทน)</option>' +
-    tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'"'+(t.tenantId===u.tenantId?' selected':'')+'>'+esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
+  const tenantOpts = tenantOptions(u.tenantId, 'บริษัท (ไม่สังกัดตัวแทน)');
   const roleOpts = (ROLES_CACHE || []).map(r => '<option value="'+esc(r.code)+'">'+esc(r.label)+(r.tenantId?' ('+esc(r.tenantId)+')':'')+'</option>').join('');
   plModal(
     '<h3>ตั้งเป็นแอดมิน: '+esc(u.displayName || '(ยังไม่มีชื่อ)')+'</h3>'+
@@ -5195,8 +5225,8 @@ async function openApproveStaffModal(lineUserId){
     tenantField = '<div class="field"><label>สังกัด (ตัวแทน)</label><div>'+esc(tenantLabelOf(eff))+'</div></div>';
   } else {
     if (!tenantsCache.length) await loadTenantsQuiet();
-    const tenantOpts = tenantsCache.map(t => '<option value="'+esc(t.tenantId)+'"'+(t.tenantId===u.tenantId?' selected':'')+'>'+esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
-    tenantField = '<div class="field"><label>สังกัด (ตัวแทน)</label><select id="as-tenant"><option value="">— เลือกตัวแทน —</option>'+tenantOpts+'</select></div>';
+    tenantField = '<div class="field"><label>สังกัด (ตัวแทน)</label><select id="as-tenant">' +
+      tenantOptions(u.tenantId, '— เลือกตัวแทน —') + '</select></div>';
   }
   plModal(
     '<h3>ตั้งเป็นพนักงานขาย: '+esc(u.displayName || '(ยังไม่มีชื่อ)')+'</h3>'+

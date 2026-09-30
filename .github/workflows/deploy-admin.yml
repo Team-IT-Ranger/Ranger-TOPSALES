@@ -1,10 +1,16 @@
 name: Deploy Admin App to GitHub Pages
 
-# Pages รองรับได้แค่ 1 การ deploy ต่อ repo (ไม่มี multi-branch preview แบบแยก URL ต่อ branch)
-# เลยรวมเป็น workflow เดียว เช็คเอาต์ทั้ง main (prod) และ UAT มาประกอบเป็นเว็บเดียว
-# แยกกันด้วย path: /admin/ = prod (main), /admin-uat/ = UAT
-# แอปมือถือ (LINE LIFF) แพทเทิร์นเดียวกัน: /mobile/ = prod (main), /mobile-uat/ = UAT
-# (ใช้เป็น Endpoint URL ของ LIFF app แต่ละตัวใน LINE Developers Console)
+# ★ 2026-09-30 แอปแอดมินย้ายไป Cloudflare Pages หมดแล้ว — ที่นี่เหลือแค่ "หน้าแจ้งย้าย"
+#
+# ทำไมต้องปิด ไม่ใช่แค่ปล่อยไว้เฉยๆ: ตั้งแต่ config.js เปลี่ยนไปตัดสิน env จาก **hostname** (2026-09-29)
+# โดเมน GitHub Pages ไม่มีคำว่า "uat" อยู่เลย ทั้ง /admin/ และ /admin-uat/ จึงถูกตัดสินเป็น 'prod'
+# เหมือนกันทั้งคู่ = ใครเปิดลิงก์ "UAT" เก่าที่ค้างในเครื่องจะไป **เขียนข้อมูล production** โดยไม่รู้ตัว
+# หน้าแจ้งย้ายไม่โหลด config.js และไม่โหลดตัวแอปเลย จึงแตะ backend ไม่ได้ไม่ว่ากรณีใด
+#
+# แอปมือถือ (LINE LIFF) ยังเสิร์ฟจากที่นี่ต่อไปก่อน — Endpoint URL ของ LIFF app ตั้งไว้ใน
+# LINE Developers Console ซึ่งอยู่นอก repo ตรวจจากที่นี่ไม่ได้ ถ้ายังชี้มาที่ /mobile/ แล้วปิดทิ้ง
+# แอปของพนักงานขายจะเปิดไม่ขึ้นทันที · ปิดได้เมื่อยืนยันแล้วว่า Endpoint ทั้งสองตัวชี้ไป
+# ranger-topsales-mobile.pages.dev / uat.ranger-topsales-mobile.pages.dev แล้วจริง
 on:
   push:
     branches: [main, UAT]
@@ -42,8 +48,37 @@ jobs:
       - name: Assemble combined site (prod + uat คนละ path)
         run: |
           mkdir -p site/admin site/admin-uat
-          cp -r src-main/frontend-admin/. site/admin/
-          cp -r src-uat/frontend-admin/. site/admin-uat/
+          # แอดมิน: ไม่คัดลอกตัวแอปมาแล้ว — วางหน้าแจ้งย้ายแทน (เหตุผลอยู่หัวไฟล์)
+          moved() {   # $1 = โฟลเดอร์ปลายทาง · $2 = URL ใหม่ · $3 = ป้ายสภาพแวดล้อม
+            cat > "$1/index.html" <<HTML
+          <!doctype html><html lang="th"><meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>ย้ายที่อยู่แล้ว — Ranger TOPSALES</title>
+          <meta http-equiv="refresh" content="3; url=$2">
+          <style>
+            body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#F6F8FC;color:#1B2C33;
+                 margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+            .card{background:#fff;border:1px solid #E4E9F1;border-radius:14px;padding:28px;max-width:520px;
+                  box-shadow:0 6px 24px rgba(27,44,51,.07)}
+            h1{font-size:19px;margin:0 0 10px} p{line-height:1.7;margin:0 0 12px;font-size:14px}
+            .env{display:inline-block;background:#EEF3FF;color:#2B63D9;border-radius:999px;
+                 padding:2px 10px;font-size:12px;font-weight:700;margin-bottom:12px}
+            a.go{display:inline-block;background:#2B63D9;color:#fff;text-decoration:none;font-weight:700;
+                 padding:11px 18px;border-radius:9px;margin-top:6px}
+            .muted{color:#6B7A85;font-size:12.5px;margin-top:16px}
+          </style>
+          <div class="card">
+            <div class="env">$3</div>
+            <h1>แอปย้ายที่อยู่แล้ว</h1>
+            <p>ลิงก์เดิมบน GitHub Pages เลิกใช้แล้ว กำลังพาไปที่อยู่ใหม่ใน 3 วินาที…</p>
+            <p><a class="go" href="$2">ไปที่แอป &rarr;</a></p>
+            <p class="muted"><b>โปรดเปลี่ยนบุ๊กมาร์กเป็นที่อยู่ใหม่</b> — ลิงก์เดิมแยกไม่ออกว่าเป็น UAT
+            หรือ Production จึงเข้าฐานข้อมูลจริงทั้งคู่ เลยปิดไว้เพื่อไม่ให้แก้ข้อมูลจริงโดยไม่ตั้งใจ</p>
+          </div>
+          HTML
+          }
+          moved site/admin      "https://ranger-topsales-admin.pages.dev/"     "Production"
+          moved site/admin-uat  "https://uat.ranger-topsales-admin.pages.dev/" "UAT — สภาพแวดล้อมทดสอบ"
           # แอปมือถือ: ขึ้นเฉพาะ branch ที่มี frontend-mobile/index.html แล้ว (main ก่อน merge มีแค่โฟลเดอร์ _legacy-*)
           # ไม่เอา _legacy-* / README ขึ้นเว็บ — เป็นไฟล์อ้างอิงใน repo เท่านั้น
           for pair in "src-main:mobile" "src-uat:mobile-uat"; do
@@ -54,10 +89,12 @@ jobs:
             fi
           done
           cat > site/index.html <<'HTML'
-          <!doctype html><meta charset="utf-8">
-          <p><a href="./admin/">Admin — Production (main)</a></p>
-          <p><a href="./admin-uat/">Admin — UAT</a></p>
-          <p><a href="./mobile-uat/">Mobile (LIFF) — UAT</a></p>
+          <!doctype html><html lang="th"><meta charset="utf-8">
+          <title>Ranger TOPSALES — ย้ายที่อยู่แล้ว</title>
+          <p>แอปแอดมินย้ายไป Cloudflare Pages แล้ว:</p>
+          <p><a href="https://ranger-topsales-admin.pages.dev/">Admin — Production</a></p>
+          <p><a href="https://uat.ranger-topsales-admin.pages.dev/">Admin — UAT</a></p>
+          <p>แอปมือถือ (LIFF) เปิดผ่าน LINE เท่านั้น ไม่ต้องเปิดจากลิงก์นี้</p>
           HTML
           # ไม่มีไฟล์นี้ GitHub Pages จะรัน Jekyll ทับ index.html ของเราด้วยหน้า
           # default ที่สร้างจาก README.md เอง (อาการที่เจอ: root ขึ้นหน้า Jekyll

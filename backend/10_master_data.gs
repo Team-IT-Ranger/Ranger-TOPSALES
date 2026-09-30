@@ -88,7 +88,12 @@ function updateStaffAdmin(session, payload) {
   if (payload.newTenantId !== undefined) {
     if (effTenantId) return { success: false, message: 'ไม่มีสิทธิ์เปลี่ยนสังกัดของพนักงาน (แก้ได้เฉพาะฝั่งบริษัท)' };
     newTenantId = String(payload.newTenantId || '').trim();
-    if (newTenantId && !_activeTenantRow(newTenantId)) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
+    if (newTenantId) {
+      var ntRow = _activeTenantRow(newTenantId);
+      if (!ntRow) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
+      // ★ เหตุผลเดียวกับ updateAdminUser — HOUSE เป็นสมุดขายตรงของบริษัท ไม่ใช่สังกัดของคน
+      if (isFlagOn(ntRow.is_house)) return { success: false, message: 'ตั้งสังกัดเป็นตัวแทนบ้านของบริษัทไม่ได้ — เลือก "บริษัท" หรือตัวแทนจำหน่ายรายใดรายหนึ่ง' };
+    }
   }
   var sh = centralSheet('liff_users');
   var data = sh.getDataRange().getValues();

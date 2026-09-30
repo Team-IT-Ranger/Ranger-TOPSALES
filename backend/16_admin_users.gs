@@ -88,7 +88,23 @@ function updateAdminUser(session, payload) {
     if (!newRole) return { success: false, message: 'เลือกบทบาทไม่ถูกต้อง' };
     ownerFields.role_code = newRole;
   }
-  if (payload.tenantId !== undefined) ownerFields.tenant_id = payload.tenantId;
+  /* ★ ย้ายสังกัดใช้ชื่อ `newTenantId` ไม่ใช่ `tenantId` — ชื่อหลังถูก _effectiveTenantId() จองความหมายไว้แล้วว่า
+     "กำลังทำงานในนามตัวแทนรายไหน" (callApi ฝั่งหน้าเว็บแนบให้เองเมื่อ Ultra Admin เลือกตัวแทน)
+     โค้ดเดิมที่นี่อ่าน payload.tenantId ตรงๆ จึงใช้ไม่ได้จริง: ส่งรหัสตัวแทนมา = ถูกตีเป็นการสวมสิทธิ์
+     แล้วหลุดไปสาขาของตัวแทนด้านบนตั้งแต่ต้น มาไม่ถึงบรรทัดนี้ · ที่มาถึงได้มีแต่ค่าว่าง
+     = ย้ายเข้าบริษัทได้อย่างเดียว ย้ายไปตัวแทนไม่ได้เลย และไม่มี error ให้เห็น
+     (updateStaffAdmin เจอกับดักเดียวกันมาก่อนแล้วแก้ด้วยชื่อนี้ — ใช้ชื่อให้ตรงกันทั้งสองที่)
+     ★ ห้ามตั้งสังกัดเป็นตัวแทนบ้าน (HOUSE) — เป็นสมุดขายตรงของบริษัทเอง ไม่ใช่ตัวแทนที่คนจะสังกัด
+       คนสังกัดได้แค่ "บริษัท" (ค่าว่าง) หรือตัวแทนจำหน่ายจริง · กันที่นี่ด้วย ไม่ใช่กันแค่ที่หน้าจอ */
+  if (payload.newTenantId !== undefined) {
+    var nt = String(payload.newTenantId || '').trim();
+    if (nt) {
+      var ntRow = _activeTenantRow(nt);
+      if (!ntRow) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
+      if (isFlagOn(ntRow.is_house)) return { success: false, message: 'ตั้งสังกัดเป็นตัวแทนบ้านของบริษัทไม่ได้ — เลือก "บริษัท" หรือตัวแทนจำหน่ายรายใดรายหนึ่ง' };
+    }
+    ownerFields.tenant_id = nt;
+  }
   centralUpdate('admin_users', payload.id, ownerFields);
   return { success: true };
 }
