@@ -2,10 +2,27 @@
 # ตัวช่วยของ .dev/xlsx.full.min.js (ดู docstring ในไฟล์นั้น) — อ่านไฟล์ .xlsx ด้วย openpyxl แล้วทิ้งเป็น JSON
 # รูปร่างที่พอให้ shim ฝั่ง Node ประกอบเป็นอ็อบเจกต์แบบ SheetJS (workbook.Sheets[name][addr] = {v: ...}) ได้
 #   python xlsx_shim_dump.py <input.xlsx> <output.json>
+import datetime
 import json
 import sys
 import openpyxl
 from openpyxl.utils import get_column_letter
+
+
+def _json_default(o):
+    """openpyxl คืนช่องวันที่เป็น datetime ซึ่ง json.dump ไม่รู้จัก — แฟ้มใบราคาไม่มีช่องวันที่ จึงไม่เคยเจอ
+    แต่ทะเบียนลูกค้ามี (วันที่ซื้อล่าสุด/วันที่สร้าง) พอเจอแล้ว dump ทั้งไฟล์ล้มทันที
+
+    ★ ต้องเป็น 'YYYY-MM-DD' เท่านั้น ห้ามเป็น ISO เต็มที่มีเวลาต่อท้าย — ฝั่งที่รับคือ yyyymmdd() ใน
+    import-customers.js ซึ่งดึงเฉพาะตัวเลขออกมาแล้วรับเฉพาะกรณียาว 8 หลัก ถ้าส่งเวลาไปด้วยจะได้ 14 หลัก
+    แล้วมันคืนค่าว่าง = วันที่หายเงียบๆ ทั้งแฟ้มโดยไม่มีอะไรฟ้อง"""
+    if isinstance(o, datetime.datetime):
+        return o.strftime('%Y-%m-%d')
+    if isinstance(o, datetime.date):
+        return o.strftime('%Y-%m-%d')
+    if isinstance(o, datetime.time):
+        return o.strftime('%H:%M:%S')
+    return str(o)
 
 
 def dump(in_path, out_path):
@@ -36,7 +53,7 @@ def dump(in_path, out_path):
         sheets_json[name] = cell_map
     out = {"SheetNames": wb.sheetnames, "WorkbookSheetsMeta": wb_sheets_meta, "Sheets": sheets_json}
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(out, f, ensure_ascii=False)
+        json.dump(out, f, ensure_ascii=False, default=_json_default)
 
 
 if __name__ == "__main__":
