@@ -36,8 +36,14 @@ function _issueAdminSession(found) {
     tenant_id: found.tenant_id || ''
   };
   CacheService.getScriptCache().put('admin_session_' + token, JSON.stringify(session), cfg.ADMIN_SESSION_TTL_SEC);
+  /* ★ ส่ง tenantId กลับเป็น '' ให้ฝั่งบริษัท — หน้าเว็บใช้ค่านี้ตั้ง SCOPE ('owner' เมื่อว่าง / 'tenant' เมื่อมีค่า)
+     ตั้งแต่ฝั่งบริษัทเก็บสังกัดเป็น TNKI (30 ก.ย. 2026) ถ้าส่งค่าดิบไป **ทั้งแอปจะเข้าโหมดตัวแทน**:
+     แถบบนขึ้น "TNKI · แอดมินตัวแทน" เมนูฝั่งบริษัทหายไป และ callApi แนบ tenantId ไปทุกคำขอ
+     (เจอจริงตอนกดทดสอบหน้าผู้ใช้งาน — บัญชี super_admin กลายเป็นแอดมินตัวแทนทั้งหน้าจอ)
+     session ฝั่งเซิร์ฟเวอร์ยังเก็บ TNKI ตามจริง เพราะ _effectiveTenantId() แปลงให้อยู่แล้ว
+     แปลงเฉพาะค่าที่ส่งออกไปให้หน้าเว็บ — จุดเดียวกับที่ getMyPermissions ทำ */
   return { success: true, token: token, displayName: found.display_name, roleCode: found.role_code,
-    tenantId: found.tenant_id || '', lineUserId: found.line_user_id || '' };
+    tenantId: _isCompanySide(session) ? '' : (found.tenant_id || ''), lineUserId: found.line_user_id || '' };
 }
 
 /** ตรวจสถานะบัญชีก่อนปล่อยเข้า — ใช้ข้อความชุดเดียวกับ adminLogin */
