@@ -5057,26 +5057,43 @@ function udStatus(kind, raw){
   }
   return { statusOk:true, statusLabel:'ใช้งาน', statusPill:'ok' };   // ตารางหลักมีแต่ staff ที่ status='Yes' แล้ว
 }
-// ตารางหลัก = คนที่ตัดสินใจแล้วเท่านั้น (admin_users ทุกแถว + liff_users status='Yes')
+/* ตารางหลัก = คนที่ตัดสินใจแล้วเท่านั้น (admin_users ทุกแถว + liff_users status='Yes')
+   ★ คนหนึ่งคนอยู่ได้ทั้งสองตาราง (กติกาเจ้าของระบบ 30 ก.ย. 2026): `liff_users` เก็บ **ผู้ใช้งานทุกคน**
+   ไม่ว่าจะ role ไหน · พอได้รับมอบหมายให้เป็นแอดมินบริษัท/แอดมินตัวแทน จึง **เพิ่ม** แถวใน `admin_users`
+   อีกใบ — ไม่ได้ย้ายออกจาก liff_users · ของเดิมเอาสองตารางมา concat กันตรงๆ คนคนเดียวจึงโผล่สองบรรทัด
+   ★ ยุบด้วย **LINE user id** เพราะเป็นตัวตนกลางของทั้งระบบ (ดู CLAUDE.md หัวข้อ "ตัวตนกลาง")
+     แถวที่ชนะคือฝั่งแอดมิน = สิทธิ์สูงกว่า · แต่เก็บ staffRaw ไว้ด้วย เพราะเวลาแก้สังกัด
+     ต้องแก้ทั้งสองตารางให้ตรงกัน ไม่งั้นข้อมูลสองใบจะเริ่มขัดกันเงียบๆ
+   ★ บัญชีแอดมินเก่าที่ยังไม่ผูก LINE ไม่มีคีย์ให้จับคู่ — คีย์ด้วย id ของตัวเองไปก่อน ไม่ยุบกับใคร */
 function udDecorate(){
-  const admins = userDirRaw.admin.map(u => {
-    const st = udStatus('admin', u.status);
-    return Object.assign({ kind:'admin', id:u.id, name:u.displayName || u.username, org:u.tenantId || 'บริษัท',
-      role: roleLabelOf(u.roleCode), last:'-', raw:u }, st);
-  });
-  const staff = userDirRaw.staff.filter(u => u.status === 'Yes').map(u => {
+  const rows = new Map();
+  userDirRaw.staff.filter(u => u.status === 'Yes').forEach(u => {
     const st = udStatus('staff', u.status);
-    return Object.assign({ kind:'staff', id:u.lineUserId, name:u.displayName || '(ยังไม่มีชื่อ)',
-      org:u.tenantId || 'บริษัท', role:u.role || '-', last:u.lastLogin || '-', raw:u }, st);
+    rows.set('L:' + u.lineUserId, Object.assign({
+      kind:'staff', id:u.lineUserId, lineUserId:u.lineUserId, name:u.displayName || '(ยังไม่มีชื่อ)',
+      org:u.tenantId || 'บริษัท', role:u.role || '-', last:u.lastLogin || '-',
+      raw:u, staffRaw:u, adminRaw:null }, st));
   });
-  userDirCache = admins.concat(staff);
+  userDirRaw.admin.forEach(u => {
+    const st = udStatus('admin', u.status);
+    const key = u.lineUserId ? ('L:' + u.lineUserId) : ('A:' + u.id);
+    const prev = rows.get(key);
+    rows.set(key, Object.assign({
+      kind:'admin', id:u.id, lineUserId:u.lineUserId || '', name:u.displayName || u.username,
+      org:u.tenantId || 'บริษัท', role: roleLabelOf(u.roleCode),
+      last: prev ? prev.last : '-',              // เวลาเข้าล่าสุดมีแต่ฝั่ง liff_users
+      raw:u, adminRaw:u, staffRaw: prev ? prev.staffRaw : null }, st));
+  });
+  userDirCache = [...rows.values()];
 }
+/* คนที่เป็นทั้งสองอย่างต้องขึ้นในตัวกรอง "พนักงานขาย" ด้วย — เขาเป็นพนักงานขายจริงๆ แค่บังเอิญเป็นแอดมินด้วย */
+function udIsKind(u, k){ return k === 'all' || u.kind === k || (k === 'staff' && !!u.staffRaw); }
 function udFilteredRows(){
-  return userDirCache.filter(u => userDirFilter === 'all' || u.kind === userDirFilter);
+  return userDirCache.filter(u => udIsKind(u, userDirFilter));
 }
 function renderUdFilters(){
   const box = document.getElementById('ud-filters'); if (!box) return;
-  const count = k => userDirCache.filter(u => k === 'all' || u.kind === k).length;
+  const count = k => userDirCache.filter(u => udIsKind(u, k)).length;
   const chip = (key, label) => '<button class="btn '+(userDirFilter===key?'btn-primary':'')+'" style="border-radius:999px" onclick="udSetFilter(\''+key+'\')">'+label+' ('+count(key)+')</button>';
   box.innerHTML = chip('all','ทั้งหมด') + chip('admin','แอดมิน') + chip('staff','พนักงานขาย');
 }
@@ -5086,7 +5103,9 @@ function renderUserDirTable(){
   const rows = udFilteredRows();
   if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">ไม่มีผู้ใช้งานในกลุ่มนี้</td></tr>'; return; }
   body.innerHTML = rows.map(u =>
-    '<tr><td>'+esc(u.name)+'</td><td>'+udTag(u.kind)+'</td><td>'+esc(u.org)+'</td><td>'+esc(u.role)+'</td>' +
+    '<tr><td>'+esc(u.name)+'</td><td>'+udTag(u.kind) +
+      (u.adminRaw && u.staffRaw ? ' ' + udTag('staff') : '') +   // เป็นทั้งแอดมินและพนักงานขาย
+      '</td><td>'+esc(u.org)+'</td><td>'+esc(u.role)+'</td>' +
     '<td><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span></td>' +
     '<td class="mono-data">'+esc(u.last)+'</td>' +
     '<td style="text-align:right"><button class="btn btn-sm" onclick="openUserManageModal(\''+u.kind+'\',\''+esc(String(u.id))+'\')">จัดการ</button></td></tr>'
@@ -5125,10 +5144,13 @@ function openUserManageModal(kind, id){
     '<div class="field"><label>ประเภท</label><div>'+udTag(kind)+'</div></div>' +
     orgField +
     roleField +
-    '<div class="field"><label>สถานะ</label><div><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span></div></div>' +
+    '<div class="field"><label>สถานะ</label><div><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span>' +
+      (u.adminRaw && u.staffRaw ? ' <span class="form-hint" style="display:inline">· เป็นทั้งแอดมินและพนักงานขาย แก้สังกัดแล้วจะปรับให้ตรงกันทั้งสองที่</span>' : '') +
+      '</div></div>' +
     '<div class="field"><label>LINE user id</label><div class="mono-data">'+esc(lineIdShown)+'</div></div>' +
     '<div class="field"><label>เข้าใช้ล่าสุด</label><div>'+esc(u.last)+'</div></div>' +
-    (isSuperAdmin ? '' : '<div class="form-actions" style="justify-content:flex-start;margin:4px 0 0"><button class="btn" onclick="udToggleTarget()">ระงับการใช้งาน</button></div>') +
+    (isSuperAdmin ? '' : '<div class="form-actions" style="justify-content:flex-start;margin:4px 0 0"><button class="btn" onclick="udToggleTarget()">' +
+      (u.statusOk ? 'ระงับการใช้งาน' : 'เปิดใช้งานอีกครั้ง') + '</button></div>') +
     plModalActions('saveUserManage()', 'บันทึก')
   );
 }
@@ -5141,15 +5163,18 @@ async function saveUserManage(){
        `tenantId` ถูกจองความหมายไว้แล้วว่า "กำลังทำงานในนามตัวแทนรายไหน" (callApi แนบให้เองเมื่อ
        Ultra Admin เลือกตัวแทน) ส่งไปจะกลายเป็นสวมสิทธิ์แทนที่จะย้ายสังกัด */
     const orgChanged = tenantSel && tenantSel.value !== (u.raw.tenantId || '');
-    let r;
-    if (u.kind === 'admin') {
-      const payload = { id: u.id };
-      if (roleSel) payload.roleCode = roleSel.value;
+    let r = { success: true };
+    /* ★ คนที่เป็นทั้งแอดมินและพนักงานขายมีสองแถวในสองตาราง — ย้ายสังกัดต้องย้ายทั้งคู่
+       แก้ใบเดียวแล้วจบ = ข้อมูลสองใบขัดกันเงียบๆ แล้วสิทธิ์จะขึ้นกับว่าโค้ดตรงนั้นอ่านตารางไหน */
+    if (u.adminRaw) {
+      const payload = { id: u.adminRaw.id };
+      if (roleSel && u.kind === 'admin') payload.roleCode = roleSel.value;
       if (orgChanged) payload.newTenantId = tenantSel.value;
       r = await callApi('updateAdminUser', payload);
-    } else {
-      const payload = { lineUserId: u.id };
-      if (roleSel) payload.role = roleSel.value;
+    }
+    if (r.success && u.staffRaw) {
+      const payload = { lineUserId: u.staffRaw.lineUserId };
+      if (roleSel && u.kind === 'staff') payload.role = roleSel.value;
       if (orgChanged) payload.newTenantId = tenantSel.value;
       r = await callApi('updateStaffAdmin', payload);
     }
@@ -5159,16 +5184,20 @@ async function saveUserManage(){
     loadUserDirectory();
   });
 }
-// ตารางหลักมีแต่คนที่อนุมัติแล้ว (statusOk เสมอ) — ปุ่มนี้จึงมีความหมายเดียวคือ "ระงับ" ไม่ใช่ toggle สองทาง
+/* สองทางแล้ว — บัญชีแอดมินที่ถูกระงับยังอยู่ในตารางนี้ (admin_users โชว์ทุกแถว) ถ้าปุ่มมีแต่ "ระงับ"
+   ก็ปลดระงับผ่านหน้าจอไม่ได้เลย ต้องไปแก้ในชีต (เจ้าของระบบสั่งให้แก้สถานะได้ 30 ก.ย. 2026) */
 async function udToggleTarget(){
   const u = udManageTarget; if (!u) return;
-  const r = u.kind === 'admin'
-    ? await callApi('updateAdminUser', { id: u.id, status: 'suspended' })
-    : await callApi('updateStaffAdmin', { lineUserId: u.id, status: 'No' });
-  if (!r.success) { toast(r.message, true); return; }
-  plModalClose();
-  toast('ระงับการใช้งานแล้ว');
-  loadUserDirectory();
+  const on = !u.statusOk;   // true = กำลังจะเปิดใช้งานอีกครั้ง
+  await plBusy(async () => {
+    let r = { success: true };
+    if (u.adminRaw) r = await callApi('updateAdminUser', { id: u.adminRaw.id, status: on ? 'active' : 'suspended' });
+    if (r.success && u.staffRaw) r = await callApi('updateStaffAdmin', { lineUserId: u.staffRaw.lineUserId, status: on ? 'Yes' : 'No' });
+    if (!r.success) { plModalErr(r.message); return; }
+    plModalClose();
+    toast(on ? 'เปิดใช้งานอีกครั้งแล้ว' : 'ระงับการใช้งานแล้ว');
+    loadUserDirectory();
+  });
 }
 
 /* ── คิวรออนุมัติ (รวมทุกช่องทางจาก liff_users ที่ status ยังไม่ 'Yes') ── */
