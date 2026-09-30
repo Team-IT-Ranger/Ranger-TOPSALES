@@ -155,7 +155,9 @@ var ADMIN_ACTION_MAP = {
   getDatabaseLayout:      getDatabaseLayout,
   organizeDatabaseFiles:  organizeDatabaseFiles,
   syncTenantSheets:       syncTenantSheets,
-  migrateOwnerTenantCode: migrateOwnerTenantCode,   // ย้ายรหัสตัวแทนบ้าน HOUSE → TNKI (13_tenants.gs)        // เติม tab/คอลัมน์ที่ขาดให้ไฟล์ตัวแทนทุกราย (13_tenants.gs)
+  migrateOwnerTenantCode: migrateOwnerTenantCode,   // ย้ายรหัสตัวแทนบ้าน HOUSE → TNKI (13_tenants.gs)
+  previewTestTenantCleanup: previewTestTenantCleanup,   // ดู/ลบตัวแทนทดสอบที่ e2e ทิ้งไว้ (13_tenants.gs)
+  deleteTestTenants:      deleteTestTenants,        // เติม tab/คอลัมน์ที่ขาดให้ไฟล์ตัวแทนทุกราย (13_tenants.gs)
   listTenants:            listTenants,
   updateTenantStatus:     updateTenantStatus,
 

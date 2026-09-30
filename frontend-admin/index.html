@@ -1293,6 +1293,18 @@
               (เช่น สถานะการเงินของบิลขาย และตารางประวัติสถานะ) — ข้อมูลเดิมไม่ถูกแตะ รันซ้ำได้ ปกติระบบเติมให้เองอยู่แล้วตอนบันทึกบิล
               ปุ่มนี้ไว้สั่งให้ครบทุกรายทันทีโดยไม่ต้องรอ</p>
           </div>
+          <div class="form-card">
+            <h3>ล้างตัวแทนทดสอบ</h3>
+            <p class="form-hint">สคริปต์ทดสอบอัตโนมัติ (<span class="mono-data">.dev/uat-*-e2e.js</span>) สร้างตัวแทนชื่อ
+              "ตัวแทนทดสอบราคา" รหัส <span class="mono-data">UATP…</span> ทิ้งไว้ทุกครั้งที่รัน สะสมแล้วรกหน้าจอ ·
+              <b>ลบได้เฉพาะตัวแทนที่ปิดใช้งานแล้วและเข้าเกณฑ์ของทดสอบเท่านั้น</b> ตัวแทนที่ยังใช้งานอยู่และบริษัทเจ้าของสินค้าไม่ถูกแตะ
+              · ไฟล์ Google Sheet ของตัวแทนเหล่านั้นยังอยู่บน Drive (ลบเองได้ทีหลังถ้าต้องการ)</p>
+            <div id="ttc-result"></div>
+            <div class="form-actions">
+              <button class="btn" onclick="previewTestTenants()">ดูว่าจะลบอะไรบ้าง</button>
+              <button class="btn btn-primary" id="ttc-go" onclick="confirmDeleteTestTenants()" disabled>ลบตัวแทนทดสอบ</button>
+            </div>
+          </div>
         </section>
 
         <!-- ═══ SOON ═══ -->
@@ -1569,7 +1581,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'addCustomerAdmin','updateCustomerAdmin','addCustomerGroup','addProduct','updateProduct','uploadProductImage',
   'createPriceList','clonePriceList','savePriceListLine','deletePriceListLine','savePriceListBillPromos',
   'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
-  'createTenant','updateTenantStatus','saveCompanyProfile','updateTenantProfile','saveRole','deleteRole',
+  'createTenant','updateTenantStatus','deleteTestTenants','migrateOwnerTenantCode','saveCompanyProfile','updateTenantProfile','saveRole','deleteRole',
   'createAdminUser','updateAdminUser','approveAdminUser','rejectAdminUser','promoteToAdmin','linkAdminLineId','changeMyPassword',
   'updateStaffAdmin','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
@@ -1852,7 +1864,10 @@ async function showCompanyPicker(){
 }
 function renderPickerTenants(rows){
   const list = document.getElementById('picker-tenants');
-  const pickable = (rows || []).filter(t => !t.isHouse);
+  /* ★ ซ่อนตัวแทนที่ปิดใช้งานด้วย (เจ้าของระบบสั่ง 30 ก.ย. 2026) — เลือกเข้าไปแล้วก็ทำอะไรไม่ได้
+     เพราะ backend กั้นไว้อยู่แล้ว มีแต่ทำให้รายการรกและชวนกดผิด
+     (ตัวแทนบ้านซ่อนอยู่แล้วเพราะเลือกจากปุ่มบริษัทด้านบน) */
+  const pickable = (rows || []).filter(t => !t.isHouse && isOn(t.isActive));
   list.innerHTML = pickable.length ? pickable.map(t =>
     '<button class="picker-row" onclick="pickTenantContext(\''+esc(t.tenantId)+'\')">' +
       '<span class="mark" style="background:var(--green)">'+esc(String(t.tenantId).slice(0,2))+'</span>' +
@@ -4968,6 +4983,39 @@ async function loadDbLayout(){
       (x.url ? ' <a href="'+esc(x.url)+'" target="_blank" rel="noopener">เปิด ↗</a>' : '') + '</span></div>';
   }).join('') : '<p class="form-hint">ยังไม่มีไฟล์ฐานข้อมูล</p>';
 }
+/* ── ล้างตัวแทนทดสอบ ──
+   กติกาเดียวกับ "จัดกลุ่มลูกค้าเป็นชุด": ต้องกดดูก่อน แล้วยืนยันด้วยจำนวนที่เห็น
+   ปุ่มลบถูกปิดไว้จนกว่าจะกดดู และถูกปิดอีกครั้งทุกครั้งที่ลบเสร็จ — กันกดซ้ำบนตัวเลขเก่า */
+let ttcCount = null;
+async function previewTestTenants(){
+  const box = document.getElementById('ttc-result');
+  box.innerHTML = '<p class="form-hint">กำลังตรวจ...</p>';
+  document.getElementById('ttc-go').disabled = true; ttcCount = null;
+  const r = await callApi('previewTestTenantCleanup', {});
+  if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
+  if (!r.count) { box.innerHTML = '<p class="form-hint">ไม่มีตัวแทนทดสอบที่เข้าเกณฑ์ — สะอาดอยู่แล้ว</p>'; return; }
+  ttcCount = r.count;
+  const rel = Object.keys(r.related || {}).map(k => k + ' ' + r.related[k]).join(' · ');
+  box.innerHTML = '<div class="card" style="background:#FDF3E2;border-color:#F0DCB4;color:#8A5A12;padding:11px 14px;margin-bottom:10px">' +
+    '<b>จะลบตัวแทน ' + r.count + ' ราย</b>' + (rel ? ' พร้อมข้อมูลพ่วง: ' + esc(rel) : ' (ไม่มีข้อมูลพ่วง)') + '</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>ชื่อ</th><th>ไฟล์ข้อมูล</th></tr></thead><tbody>' +
+    r.tenants.map(t => '<tr><td class="mono-data">'+esc(t.tenantId)+'</td><td>'+esc(t.name)+'</td>' +
+      '<td>'+(t.sheetUrl ? '<a href="'+esc(t.sheetUrl)+'" target="_blank" rel="noopener">เปิด Sheet ↗</a>' : '—')+'</td></tr>').join('') +
+    '</tbody></table></div>';
+  document.getElementById('ttc-go').disabled = false;
+}
+async function confirmDeleteTestTenants(){
+  if (ttcCount == null) { toast('กดดูรายการก่อน', true); return; }
+  if (!confirm('ลบตัวแทนทดสอบ ' + ttcCount + ' ราย พร้อมข้อมูลพ่วงทั้งหมด — ย้อนกลับไม่ได้ ยืนยันหรือไม่?')) return;
+  const r = await callApi('deleteTestTenants', { confirmCount: ttcCount });
+  if (!r.success) { toast(r.message, true); return; }
+  ttcCount = null;
+  document.getElementById('ttc-go').disabled = true;
+  document.getElementById('ttc-result').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>';
+  toast('ลบตัวแทนทดสอบแล้ว');
+  tenantsCache = []; listSnapDrop('tenants'); loadTenants();
+}
+
 async function organizeDbFiles(){
   if (!confirm('ย้ายไฟล์ฐานข้อมูลทั้งหมดเข้าโฟลเดอร์ตามโครงสร้าง?\n(ข้อมูลในไฟล์ไม่เปลี่ยน แต่ตำแหน่งไฟล์และสิทธิ์ที่สืบทอดจากโฟลเดอร์จะเปลี่ยน)')) return;
   const btn = document.getElementById('dbl-fix');

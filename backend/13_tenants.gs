@@ -209,6 +209,78 @@ function migrateOwnerTenantCode(session) {
                    : ('ไม่มีแถวไหนใช้รหัส ' + OLD + ' อยู่แล้ว — ระบบใช้ ' + NEW + ' อยู่แล้วทั้งหมด') };
 }
 
+/* ═══════════ ลบตัวแทนทดสอบที่สคริปต์ e2e ทิ้งไว้ (เจ้าของระบบสั่ง 30 ก.ย. 2026) ═══════════
+   `.dev/uat-*-e2e.js` สร้างตัวแทนชื่อ "ตัวแทนทดสอบราคา" รหัส UATP… ทิ้งไว้ทุกครั้งที่รัน
+   สะสมจนรกหน้าจอจ่ายชุดราคาและกล่องเลือกตัวแทน · ลบเองไม่ได้เพราะไฟล์ถูกสร้างโดยบัญชีที่รันสคริปต์
+
+   ★ ลบแล้วเอาคืนไม่ได้ จึงกันสามชั้นแบบเดียวกับ applyCustomerBulkAssign:
+     1) super_admin เท่านั้น
+     2) เข้าเกณฑ์ "ของทดสอบ" จริงเท่านั้น — และต้อง **ปิดใช้งานอยู่แล้ว** ด้วย
+        (ตัวแทนที่ยังเปิดใช้งาน = มีคนใช้อยู่ ไม่ว่าชื่อจะเป็นอะไร) · ตัวแทนบ้านห้ามแตะเด็ดขาด
+     3) ต้องส่ง confirmCount ที่หน้าจอแสดงไว้ ไม่ตรงกับที่นับได้จริง = ปฏิเสธ
+   ★ **ไม่ลบไฟล์ Google Sheet ของตัวแทนทิ้ง** — ลบไฟล์เอาคืนยากกว่าลบแถวมาก และไม่ใช่สิ่งที่จำเป็น
+     ต้องทำเพื่อให้หน้าจอสะอาด · คืน URL กลับไปให้เจ้าของระบบไปลบเองใน Drive ถ้าต้องการ */
+var TEST_TENANT_PREFIX = 'UATP';
+
+function _testTenantRows() {
+  return centralObjects('tenants').filter(function(t) {
+    if (isFlagOn(t.is_house)) return false;                 // ตัวแทนบ้านของบริษัท ห้ามแตะ
+    if (isNotOff(t.is_active)) return false;                // ยังเปิดใช้งานอยู่ = มีคนใช้ ไม่ใช่ของทดสอบทิ้ง
+    var id = String(t.tenant_id || ''), nm = String(t.name || '');
+    return id.indexOf(TEST_TENANT_PREFIX) === 0 || nm.indexOf('ทดสอบ') !== -1;
+  });
+}
+
+/** ดูก่อนลบ — บอกว่าจะลบตัวแทนไหนบ้าง และมีข้อมูลพ่วงกี่แถว */
+function previewTestTenantCleanup(session) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  var rows = _testTenantRows();
+  var ids = {}; rows.forEach(function(t) { ids[String(t.tenant_id)] = true; });
+  var related = {};
+  Object.keys(CENTRAL_SHEETS).forEach(function(name) {
+    if (name === 'tenants' || CENTRAL_SHEETS[name].indexOf('tenant_id') === -1) return;
+    var n = 0;
+    try { centralObjects(name).forEach(function(r) { if (ids[String(r.tenant_id)]) n++; }); } catch (e) { return; }
+    if (n) related[name] = n;
+  });
+  return { success: true, count: rows.length,
+    tenants: rows.map(function(t) {
+      return { tenantId: t.tenant_id, name: t.name,
+        sheetUrl: t.sheet_file_id ? ('https://docs.google.com/spreadsheets/d/' + t.sheet_file_id) : '' };
+    }),
+    related: related };
+}
+
+/** ลบจริง — ต้องส่ง confirmCount ให้ตรงกับที่ previewTestTenantCleanup นับได้ */
+function deleteTestTenants(session, payload) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  payload = payload || {};
+  var rows = _testTenantRows();
+  if (!rows.length) return { success: false, message: 'ไม่มีตัวแทนทดสอบที่เข้าเกณฑ์ให้ลบ' };
+  if (Number(payload.confirmCount) !== rows.length) {
+    return { success: false, message: 'จำนวนไม่ตรงกับที่แสดงไว้ (' + payload.confirmCount + ' vs ' + rows.length +
+      ') — กดดูรายการใหม่อีกครั้งก่อนยืนยัน' };
+  }
+  var ids = rows.map(function(t) { return String(t.tenant_id); });
+  var deleted = {}, files = [];
+  rows.forEach(function(t) { if (t.sheet_file_id) files.push('https://docs.google.com/spreadsheets/d/' + t.sheet_file_id); });
+
+  Object.keys(CENTRAL_SHEETS).forEach(function(name) {
+    if (CENTRAL_SHEETS[name].indexOf('tenant_id') === -1) return;
+    var sh;
+    try { sh = centralSheet(name); } catch (e) { return; }
+    var n = 0;
+    ids.forEach(function(id) { n += deleteRowsWhere(sh, 'tenant_id', id); });
+    if (n) deleted[name] = n;
+    centralInvalidate(name);
+  });
+
+  return { success: true, removedTenants: ids.length, deleted: deleted, sheetFiles: files,
+    message: 'ลบตัวแทนทดสอบ ' + ids.length + ' ราย (' + ids.join(', ') + ') พร้อมข้อมูลพ่วง ' +
+      Object.keys(deleted).map(function(k) { return k + ' ' + deleted[k]; }).join(' · ') +
+      ' — ไฟล์ Google Sheet ของตัวแทนเหล่านี้ยังอยู่บน Drive ลบเองได้ถ้าต้องการ' };
+}
+
 function listTenants(session) {
   var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
   return { success: true, data: centralObjects('tenants').map(function(t) {
