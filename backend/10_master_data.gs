@@ -88,11 +88,13 @@ function updateStaffAdmin(session, payload) {
   if (payload.newTenantId !== undefined) {
     if (effTenantId) return { success: false, message: 'ไม่มีสิทธิ์เปลี่ยนสังกัดของพนักงาน (แก้ได้เฉพาะฝั่งบริษัท)' };
     newTenantId = String(payload.newTenantId || '').trim();
-    if (newTenantId) {
+    if (newTenantId && newTenantId !== OWNER_TENANT_ID) {
+      /* ★ รหัสบริษัท (OWNER_TENANT_ID) เป็นสังกัดที่ถูกต้องเสมอ ไม่ต้องเช็ค — มันคือ "บริษัท" ไม่ใช่ตัวแทนรายหนึ่ง
+         และแถวของมันอาจ is_active=FALSE อยู่ (ธงนั้นคุมเรื่องสมุดขายตรง ไม่ได้แปลว่าบริษัทไม่มีตัวตน)
+         เดิมตรงนี้ "ปฏิเสธ" ตัวแทนบ้าน ซึ่งเขียนไว้ตอน HOUSE ยังไม่ใช่รหัสบริษัท — ตอนนี้กลับด้านแล้ว */
       var ntRow = _activeTenantRow(newTenantId);
       if (!ntRow) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
-      // ★ เหตุผลเดียวกับ updateAdminUser — HOUSE เป็นสมุดขายตรงของบริษัท ไม่ใช่สังกัดของคน
-      if (isFlagOn(ntRow.is_house)) return { success: false, message: 'ตั้งสังกัดเป็นตัวแทนบ้านของบริษัทไม่ได้ — เลือก "บริษัท" หรือตัวแทนจำหน่ายรายใดรายหนึ่ง' };
+      if (isFlagOn(ntRow.is_house)) return { success: false, message: 'สังกัดนี้ใช้ไม่ได้ — เลือก "บริษัท" หรือตัวแทนจำหน่ายรายใดรายหนึ่ง' };
     }
   }
   var sh = centralSheet('liff_users');

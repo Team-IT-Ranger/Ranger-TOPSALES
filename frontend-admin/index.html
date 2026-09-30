@@ -4953,15 +4953,26 @@ async function uploadLogoUI(){
 
    ★ ถ้าค่าปัจจุบันของคนคนนั้นไม่อยู่ในลิสต์ (เช่นเคยถูกตั้งเป็น HOUSE ไว้ก่อนกติกานี้) ต้องใส่กลับเข้าไป
      ไม่งั้น select จะเด้งไปตัวแรกเอง แล้วกดบันทึกทีเดียว "ย้ายสังกัดเขาทิ้งโดยไม่มีใครตั้งใจ" */
+/* ★ ตัวเลือก "บริษัท" ส่ง **รหัสบริษัทจริง** (TNKI) ไม่ใช่ค่าว่าง — เจ้าของระบบสั่งให้พนักงานบริษัท
+   มีรหัสสังกัดคู่ขนานกับ BDC · backend มองค่าว่างกับ TNKI เป็นอย่างเดียวกันอยู่แล้ว (_effectiveTenantId)
+   แถวเก่าที่ยังเป็นค่าว่างจึงใช้งานได้ปกติ แค่ของใหม่จะถูกเขียนเป็น TNKI
+   ★ ตอนเทียบว่าเลือกอะไรอยู่ ต้องถือว่า '' กับ TNKI คือค่าเดียวกัน ไม่งั้นคนที่เก็บเป็นค่าว่าง
+     จะเห็น dropdown เด้งไปตัวแทนตัวแรกแทนที่จะเป็น "บริษัท" */
+const ownerTenantCode = () => (tenantsCache || []).find(t => t.isHouse)?.tenantId || 'TNKI';
+const ownerTenantName = () => (tenantsCache || []).find(t => t.isHouse)?.name || 'บริษัทเจ้าของสินค้า';
 function tenantOptions(selected, blankLabel){
-  const cur = String(selected || '');
+  const owner = ownerTenantCode();
+  let cur = String(selected || '');
+  if (!cur) cur = owner;                                   // ค่าว่าง = บริษัท (ข้อมูลก่อนเปลี่ยนรหัส)
   const list = (tenantsCache || []).filter(t => !t.isHouse);
   const html = list.map(t => '<option value="'+esc(t.tenantId)+'"'+(String(t.tenantId) === cur ? ' selected' : '')+'>' +
     esc(t.tenantId)+' — '+esc(t.name)+'</option>').join('');
-  const orphan = (cur && !list.some(t => String(t.tenantId) === cur))
+  const orphan = (cur !== owner && !list.some(t => String(t.tenantId) === cur))
     ? '<option value="'+esc(cur)+'" selected>'+esc(cur)+' — (สังกัดเดิม ไม่อยู่ในรายชื่อแล้ว)</option>' : '';
-  const blank = blankLabel ? '<option value=""'+(cur ? '' : ' selected')+'>'+esc(blankLabel)+'</option>' : '';
-  return blank + orphan + html;
+  const companyOpt = blankLabel
+    ? '<option value="'+esc(owner)+'"'+(cur === owner ? ' selected' : '')+'>'+esc(owner)+' — '+esc(ownerTenantName())+'</option>'
+    : '';
+  return companyOpt + orphan + html;
 }
 async function ensureTenantsForDropdown(){
   if (!tenantsCache.length) await loadTenantsQuiet();
@@ -5210,7 +5221,9 @@ async function saveUserManage(){
     /* ★ ส่งเฉพาะตอนค่าเปลี่ยนจริง และต้องชื่อ newTenantId ไม่ใช่ tenantId —
        `tenantId` ถูกจองความหมายไว้แล้วว่า "กำลังทำงานในนามตัวแทนรายไหน" (callApi แนบให้เองเมื่อ
        Ultra Admin เลือกตัวแทน) ส่งไปจะกลายเป็นสวมสิทธิ์แทนที่จะย้ายสังกัด */
-    const orgChanged = tenantSel && tenantSel.value !== (u.raw.tenantId || '');
+    // '' กับรหัสบริษัทคือค่าเดียวกัน — ไม่งั้นแค่เปิดโมดัลแล้วกดบันทึกจะนับว่า "ย้ายสังกัด" ทุกครั้ง
+    const sameOrg = (a, b) => (String(a || ownerTenantCode()) === String(b || ownerTenantCode()));
+    const orgChanged = tenantSel && !sameOrg(tenantSel.value, u.raw.tenantId);
     let r = { success: true };
     /* ★ คนที่เป็นทั้งแอดมินและพนักงานขายมีสองแถวในสองตาราง — ย้ายสังกัดต้องย้ายทั้งคู่
        แก้ใบเดียวแล้วจบ = ข้อมูลสองใบขัดกันเงียบๆ แล้วสิทธิ์จะขึ้นกับว่าโค้ดตรงนั้นอ่านตารางไหน */
