@@ -1064,17 +1064,19 @@ Express, 1,106 ราย, 38 คอลัมน์, เข้ารหัส TIS
   2) Endpoint URL ของ LIFF app ทั้ง 2 ตัวใน LINE Developers Console (ไม่งั้นแอปมือถือเปิดไม่ขึ้น)
   3) Callback URL ของ LINE Login channel สำหรับหน้าแอดมิน (ไม่งั้นปุ่ม "เข้าสู่ระบบด้วย LINE" ตอบ 400)
   4) ลิงก์ที่แจกให้ทีมใช้งาน
-- **Clones — see "ทำงานสองคน" above for the rules; this is just where they are.**
-  `G:\Shared drives\AppSpace\Ranger-TOPSALES` (Google Shared Drive — folder renamed from
-  `salesranger-TOPSHOP` on 2026-09-23, older notes use the old name) and
-  `C:\Users\dev-administrator\appdev\salesranger-TOPSHOP` (local, still under the old name).
+- **Clones — เหลือที่ทำงานที่เดียว (จัดระเบียบ 2026-09-30)**
+  **`C:\Users\dev-administrator\appdev\Ranger-TOPSALES` = ที่ทำงานจริงเพียงที่เดียว**
+  (clone ใหม่ 30 ก.ย. หลังโฟลเดอร์บนไดรฟ์พัง — ดูหัวข้อ "ทำงานสองคน" ด้านบน)
+  · `C:\Users\dev-administrator\appdev\salesranger-TOPSHOP` (clone เก่าชื่อเดิม ค้างที่ `5861bc1`
+    ตั้งแต่ 22 ก.ย.) **เจ้าของระบบลบทิ้งแล้ว 30 ก.ย.** — ตรวจก่อนลบแล้วว่าไม่มี commit/stash/tag
+    ที่ origin ยังไม่มีเลยสักอัน มีแต่ไฟล์นอก git ไฟล์เดียว (`RangerTOPSHOP menu structure.xlsx`)
+    ซึ่งคัดลอกไปเก็บที่ `reference/` บนไดรฟ์แล้ว (เทียบตรงกันทุกไบต์)
+  · `G:\Shared drives\AppSpace\Ranger-TOPSALES` (ไดรฟ์ — เปลี่ยนชื่อจาก `salesranger-TOPSHOP`
+    23 ก.ย. บันทึกเก่าใช้ชื่อเดิม) **เหลือบทบาทเป็นที่เก็บ `reference/` เท่านั้น ห้ามรัน git ในนั้น**
+    ใบราคาจริงและไฟล์อ้างอิงอยู่ที่นี่ที่เดียว ไม่ขึ้น GitHub
   **GitHub is the single source of truth** — sync only by push/pull, never by copying `.git`.
   Before starting work, compare `git fetch && git log origin/UAT --oneline -1` with
-  `git log --oneline -1`. The Drive copy is now reference storage rather than a second workspace:
-  `reference/` (ใบราคาจริง) lives there and nowhere else, per README. Anyone still running git in
-  it must keep the folder "Available offline" and let Drive finish syncing first — a half-synced
-  `.git` is how that copy gets corrupted (files named `index (1)` inside `.git`, or
-  `07_sales (1).gs`, mean a Drive collision: re-clone from GitHub rather than trying to repair).
+  `git log --oneline -1`.
 - Mascot source art (~2 MB PNGs) is kept outside the repo at `G:\Shared drives\AppSpace\mascot-source\`.
   Only the web-sized export `frontend-admin/mascot-sr1.png` (344 KB, displayed at 236×236 on the
   login screen and 60×60 in the sidebar) is committed; bump its `?v=` query in `index.html` when
