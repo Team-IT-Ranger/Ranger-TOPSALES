@@ -359,9 +359,23 @@ function listTenants(session) {
  * ตัวแทนแก้ข้อมูลของตัวเองได้ (module 'tenants' scope เดียวกับที่ตัวแทนมองเห็นตัวเอง)
  * บริษัทเจ้าของสินค้า (ไม่มี session.tenant_id) ต้องระบุ payload.tenantId ว่าจะดู/แก้ของใคร
  */
+/* ★ "จะแตะแถวไหน" เป็นคนละคำถามกับ "สิทธิ์ของใคร"
+   _effectiveTenantId() แปลง TNKI เป็น null เพราะเชิงสิทธิ์ TNKI คือ "บริษัท" ไม่ใช่ตัวแทนรายหนึ่ง —
+   ถูกต้องสำหรับการกั้นสิทธิ์ แต่สามฟังก์ชันด้านล่างต้องการ "รหัสแถว" จริงไปหาใน tenants
+   ไม่งั้นแถวของบริษัทเองจะแก้ไม่ได้เลย (ตอบ "กรุณาระบุตัวแทนจำหน่าย" ทั้งที่ระบุมาแล้ว
+   — เจอตอนจะแก้ชื่อแถว TNKI ให้เป็นชื่อบริษัทจริง)
+   ฝั่งบริษัทจึงใช้ payload.tenantId ดิบ · ตัวแทนยังถูกล็อกที่ตัวเองเหมือนเดิม อ่านจาก session เท่านั้น */
+function _tenantRowIdFor(session, payload) {
+  if (_isCompanySide(session)) {
+    var raw = (payload && payload.tenantId) ? String(payload.tenantId).trim() : '';
+    return raw || null;
+  }
+  return _effectiveTenantId(session, payload);
+}
+
 function getTenantProfile(session, payload) {
   var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _tenantRowIdFor(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var rows = centralObjects('tenants');
@@ -382,7 +396,7 @@ function getTenantProfile(session, payload) {
 
 function updateTenantProfile(session, payload) {
   var err = _requirePermission(session, 'tenants', 'edit'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _tenantRowIdFor(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var rows = centralObjects('tenants');
@@ -412,7 +426,7 @@ function updateTenantProfile(session, payload) {
 // payload: { tenantId?, base64, mimeType, fileName }  base64 ไม่ต้องมี prefix "data:...;base64,"
 function uploadTenantLogo(session, payload) {
   var err = _requirePermission(session, 'tenants', 'edit'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _tenantRowIdFor(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   if (!payload.base64) return { success: false, message: 'ไม่พบไฟล์รูปภาพ' };
 
