@@ -190,8 +190,9 @@ function migrateOwnerTenantCode(session) {
     var sh;
     try { sh = centralSheet(name); } catch (e) { return; }   // ชีตยังไม่ถูกสร้าง = ไม่มีอะไรให้ย้าย
     // updateColumnsWhere คืน {matched, changed, columns} ไม่ใช่ตัวเลข — และล้างแคชให้เองอยู่แล้ว
+    // .matched = จำนวนแถวที่เข้าเงื่อนไข (.changed นับ "คอลัมน์" ไม่ใช่แถว — รายงานเป็นจำนวนคนจะต่ำกว่าจริง)
     var n = updateColumnsWhere(sh, function(row) { return String(row.tenant_id) === OLD; }, { tenant_id: NEW });
-    if (n.changed) { report.push(name + ': ' + n.changed); total += n.changed; }
+    if (n.matched) { report.push(name + ': ' + n.matched); total += n.matched; }
   });
 
   // ตัวนับเลขที่เอกสารคีย์เป็น 'PO@HOUSE' ฯลฯ — ไม่ย้ายด้วยแล้วเล่มใหม่จะเริ่มนับหนึ่งใหม่ทับเลขเดิม
@@ -201,7 +202,7 @@ function migrateOwnerTenantCode(session) {
     var m = updateColumnsWhere(cs,
       function(row) { return String(row.doc_type).indexOf('@' + OLD) !== -1; },
       { doc_type: function(row) { return String(row.doc_type).replace('@' + OLD, '@' + NEW); } });
-    if (m.changed) { report.push('central_doc_counters: ' + m.changed); total += m.changed; }
+    if (m.matched) { report.push('central_doc_counters: ' + m.matched); total += m.matched; }
   } catch (e) { /* ยังไม่มีตัวนับ = ยังไม่เคยออกเลขเอกสาร */ }
 
   return { success: true, moved: total,
@@ -322,14 +323,19 @@ function backfillUserAffiliations(session, payload) {
         plan.staffFromAdmin.length + ' คน (ยังไม่ได้เขียน — ส่ง commit:true เพื่อทำจริง)' };
   }
 
+  /* ★ updateColumnsWhere คืน .changed = จำนวน "คอลัมน์" ที่เขียน ไม่ใช่จำนวนแถว
+     เขียนคอลัมน์เดียวให้ 3 แถวจะได้ค่า 1 — เอามารายงานตรงๆ ว่า "3 คน" ไม่ได้
+     รายงานต่ำกว่าความจริงคือเหตุให้คนไปรันซ้ำหรือไม่เชื่อว่ามันทำงาน จึงนับจากแผนที่คำนวณไว้แล้วแทน */
   var n1 = 0, n2 = 0;
   if (plan.adminsToOwner.length) {
-    n1 = updateColumnsWhere(centralSheet('admin_users'),
-      function(row) { return !String(row.tenant_id || '').trim(); }, { tenant_id: OWNER_TENANT_ID }).changed;
+    updateColumnsWhere(centralSheet('admin_users'),
+      function(row) { return !String(row.tenant_id || '').trim(); }, { tenant_id: OWNER_TENANT_ID });
+    n1 = plan.adminsToOwner.length;
   }
   plan.staffFromAdmin.forEach(function(p) {
-    n2 += updateColumnsWhere(centralSheet('liff_users'),
-      function(row) { return String(row.line_user_id) === p.lineUserId; }, { tenant_id: p.to }).changed;
+    updateColumnsWhere(centralSheet('liff_users'),
+      function(row) { return String(row.line_user_id) === p.lineUserId; }, { tenant_id: p.to });
+    n2++;
   });
   centralInvalidate('admin_users'); centralInvalidate('liff_users');
   return { success: true, adminsFixed: n1, staffFixed: n2, plan: plan,
