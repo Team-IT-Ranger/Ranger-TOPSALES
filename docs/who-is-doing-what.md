@@ -282,6 +282,14 @@
 
 ---
 
+## รอ deploy (30 ก.ย. 2026)
+
+**`clasp push` ขึ้น UAT แล้ว (โปรเจกต์ `1SDBJgSN…`) — ยังไม่ได้ Deploy → New version**
+ดึงโค้ดกลับมาตรวจแล้วว่าโปรเจกต์ UAT ถือของใหม่จริง (`newTenantId` + กัน HOUSE ครบ, ไม่เหลือ
+`payload.tenantId` แบบเก่า) · **จนกว่าจะ Deploy ใหม่ deployment เดิมยังรันโค้ดเก่า**
+หน้าเว็บที่แก้สังกัดจะยิงไปแล้ว backend ตอบแบบเดิม (ฝั่ง staff ใช้ได้อยู่แล้ว ฝั่ง admin จะยังย้ายไปตัวแทนไม่ได้)
+· ไฟล์ที่เปลี่ยน: `16_admin_users.gs` (updateAdminUser รับ `newTenantId`) · `10_master_data.gs` (กัน HOUSE)
+
 ## คิวงานถัดไป
 
 รายการเต็มอยู่ที่ CLAUDE.md หัวข้อ "Pending / not started" — ที่นี่เก็บเฉพาะตัวที่**จองไว้แล้วหรือกำลังจะหยิบ**
