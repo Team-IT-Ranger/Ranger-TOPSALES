@@ -281,6 +281,61 @@ function deleteTestTenants(session, payload) {
       ' — ไฟล์ Google Sheet ของตัวแทนเหล่านี้ยังอยู่บน Drive ลบเองได้ถ้าต้องการ' };
 }
 
+/* ═══ เติมสังกัดให้ครบทุกคน (กติกาเจ้าของระบบ 30 ก.ย. 2026) ═══
+   "พนักงานทุกคนต้องมีสังกัดของตนเอง — พนักงานบริษัทสังกัด TNKI พนักงานตัวแทนสังกัดตัวแทนของตน"
+   ของเดิมฝั่งบริษัทเก็บเป็น **ค่าว่าง** ซึ่งอ่านบนหน้าจอเหมือน "ยังไม่มีสังกัด" แยกไม่ออกจากคนที่ยังไม่ถูกจัด
+
+   กติกาที่ใช้เติม:
+   1. `admin_users` สังกัดว่าง → `TNKI` — แอดมินที่ไม่มีตัวแทน **คือ** แอดมินบริษัทตามนิยามเดิมของระบบ
+      (รวม super_admin ด้วย ซึ่ง updateAdminUser แก้ผ่าน API ไม่ได้ จึงต้องมาทางนี้)
+   2. `liff_users` ที่ **เป็นแอดมินอยู่แล้ว** (จับคู่ด้วย line_user_id) → ใช้สังกัดเดียวกับแถวแอดมินของเขา
+      แถวสองใบของคนเดียวกันต้องตรงกัน ไม่งั้นสิทธิ์จะขึ้นกับว่าโค้ดตรงนั้นอ่านตารางไหน
+   ★ **ไม่แตะคนที่ยังรออนุมัติและยังไม่ได้เป็นอะไรเลย** — คนพวกนั้น "ยังไม่มีสังกัด" เป็นความจริง
+     ไม่ใช่ข้อมูลขาด · ยัดบริษัทให้ = กลายเป็นพนักงานบริษัทโดยไม่มีใครตัดสินใจ */
+function backfillUserAffiliations(session, payload) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  var dry = !(payload && payload.commit);
+  var admins = centralObjects('admin_users');
+  var plan = { adminsToOwner: [], staffFromAdmin: [] };
+
+  admins.forEach(function(a) {
+    if (!String(a.tenant_id || '').trim()) plan.adminsToOwner.push({ id: a.record_id, username: a.username });
+  });
+
+  // สังกัดที่ "ควรจะเป็น" ของแต่ละ LINE id หลังเติมข้อ 1 แล้ว
+  var byLine = {};
+  admins.forEach(function(a) {
+    var lid = String(a.line_user_id || '').trim();
+    if (lid) byLine[lid] = String(a.tenant_id || '').trim() || OWNER_TENANT_ID;
+  });
+  centralObjects('liff_users').forEach(function(u) {
+    var lid = String(u.line_user_id || '').trim();
+    var want = byLine[lid];
+    if (!lid || !want) return;                                  // ไม่ได้เป็นแอดมิน = ไม่ยุ่ง
+    if (String(u.tenant_id || '').trim() === want) return;      // ตรงอยู่แล้ว
+    plan.staffFromAdmin.push({ lineUserId: lid, name: u.display_name, from: u.tenant_id || '(ว่าง)', to: want });
+  });
+
+  if (dry) {
+    return { success: true, dryRun: true, plan: plan,
+      message: 'จะเติมสังกัดบริษัทให้แอดมิน ' + plan.adminsToOwner.length + ' คน และปรับแถวพนักงานให้ตรงกับแอดมิน ' +
+        plan.staffFromAdmin.length + ' คน (ยังไม่ได้เขียน — ส่ง commit:true เพื่อทำจริง)' };
+  }
+
+  var n1 = 0, n2 = 0;
+  if (plan.adminsToOwner.length) {
+    n1 = updateColumnsWhere(centralSheet('admin_users'),
+      function(row) { return !String(row.tenant_id || '').trim(); }, { tenant_id: OWNER_TENANT_ID }).changed;
+  }
+  plan.staffFromAdmin.forEach(function(p) {
+    n2 += updateColumnsWhere(centralSheet('liff_users'),
+      function(row) { return String(row.line_user_id) === p.lineUserId; }, { tenant_id: p.to }).changed;
+  });
+  centralInvalidate('admin_users'); centralInvalidate('liff_users');
+  return { success: true, adminsFixed: n1, staffFixed: n2, plan: plan,
+    message: 'เติมสังกัดบริษัทให้แอดมิน ' + n1 + ' คน · ปรับแถวพนักงานให้ตรงกับแอดมิน ' + n2 + ' คน' };
+}
+
 function listTenants(session) {
   var err = _requirePermission(session, 'tenants', 'view'); if (err) return err;
   return { success: true, data: centralObjects('tenants').map(function(t) {
