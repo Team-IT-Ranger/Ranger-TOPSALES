@@ -416,6 +416,10 @@ function updateTenantProfile(session, payload) {
         var col = headers.indexOf(key);
         if (col !== -1) sh.getRange(rowNum, col + 1).setValue(fields[key]);
       });
+      /* ★ เขียนชีตแบบดิบ (getRange().setValue) ต้องล้างแคชเอง — `tenants` อยู่ใน SHEET_CACHE_TABLES
+         อายุ 5 นาที · ไม่ล้าง = ข้อมูลลงชีตจริงแต่ listTenants ยังคืนของเก่า ผู้ใช้เห็นว่า "กดบันทึกแล้วไม่เปลี่ยน"
+         แล้วกดซ้ำ (เจอจริงตอนเปลี่ยนชื่อแถว TNKI 30 ก.ย. 2026) — บั๊กพันธุ์เดียวกับที่เคยแก้ใน updateTenantStatus */
+      centralInvalidate('tenants');
       return { success: true };
     }
   }
@@ -443,6 +447,7 @@ function uploadTenantLogo(session, payload) {
       if (String(rows[i].tenant_id) === String(tenantId)) {
         var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
         sh.getRange(i + 2, headers.indexOf('logo_url') + 1).setValue(url);
+        centralInvalidate('tenants');   // เหตุผลเดียวกับ updateTenantProfile — เขียนดิบต้องล้างแคชเอง
         return { success: true, logoUrl: url };
       }
     }
