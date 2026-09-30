@@ -44,7 +44,9 @@ function getMyPermissions(session) {
   if (!session) return { success: false, message: 'ไม่ได้เข้าสู่ระบบ' };
   var role = _roleByCode(session.role_code);
   return { success: true, roleCode: session.role_code, roleLabel: role ? role.role_label : session.role_code,
-    isSuperAdmin: session.role_code === 'super_admin', tenantId: session.tenant_id || '',
+    // ★ ฝั่งบริษัทส่ง '' กลับไปเหมือนเดิม — หน้าเว็บใช้ค่านี้ตัดสิน SCOPE (owner/tenant) และ routeAfterAuth
+    //   ส่ง 'TNKI' ไปจะกลายเป็นว่าแอดมินบริษัทถูกจัดเป็นฝั่งตัวแทนทั้งหน้าจอ
+    isSuperAdmin: session.role_code === 'super_admin', tenantId: _isCompanySide(session) ? '' : session.tenant_id,
     modules: MODULE_REGISTRY.map(function(m) { return { code: m.code, label: m.label, scope: m.scope }; }),
     permissions: _effectivePermissions(session) };
 }

@@ -146,7 +146,15 @@ function createTenant(session, payload) {
 // โมเดลธุรกิจ: ขายส่วนหนึ่งผ่านตัวแทนจำหน่าย อีกส่วนบริษัทมีพนักงานขายตรงเอง ยอดเข้าบริษัทเอง
 // ไม่ต้องให้ owner_admin ไปเลือกตัวแทนจำหน่ายรายไหนก่อน — ใช้ tenant พิเศษนี้แทนโดยอัตโนมัติ (ดู _salesTenantId ใน 14_permissions.gs)
 // สร้าง Google Sheet ของตัวเองเหมือนตัวแทนทั่วไปทุกอย่าง (sales_orders/van_stock/customers ฯลฯ) เพียงแต่ auto-create ครั้งแรกที่ใช้งาน
-var HOUSE_TENANT_ID = 'HOUSE';
+/* ★ รหัสบริษัทเจ้าของสินค้า = 'TNKI' (เจ้าของระบบสั่ง 30 ก.ย. 2026 — เดิมเป็น 'HOUSE')
+   รหัสเดียวทำสองหน้าที่โดยตั้งใจ:
+     1) **สังกัด** ของพนักงาน/แอดมินฝั่งบริษัท — คู่ขนานกับ 'BDC' ของตัวแทน (เดิมฝั่งบริษัทเก็บเป็นค่าว่าง
+        ซึ่งบนหน้าจอดูเหมือน "ไม่มีสังกัด" ทั้งที่จริงคือสังกัดบริษัท)
+     2) **สมุดขายตรง** ของบริษัท (บทบาทเดิมของ HOUSE) — ยอดขายที่ไม่ผ่านตัวแทนลงเล่มนี้
+   ★ ห้ามลืม: คนที่สังกัด TNKI ต้องยัง "มองข้ามตัวแทนได้" เหมือนเดิม — _effectiveTenantId() ใน
+     14_permissions.gs จึงแปลง TNKI กลับเป็น null ไม่งั้นแอดมินบริษัทจะถูกหุบให้เหลือแค่ข้อมูลของ TNKI
+   ★ TNKI เป็นชื่อเดียวกับโฟลเดอร์ข้อมูลบริษัทบนไดรฟ์อยู่แล้ว (OWNER_FOLDER_NAME ใน 24_drive_layout.gs) */
+var HOUSE_TENANT_ID = OWNER_TENANT_ID;   // ค่าจริงอยู่ที่ 02_helpers.gs — ชื่อเดิมยังมีที่อื่นเรียกอยู่
 function _ensureHouseTenant() {
   var rows = centralObjects('tenants');
   for (var i = 0; i < rows.length; i++) {
@@ -166,6 +174,39 @@ function _ensureHouseTenant() {
     });
     return HOUSE_TENANT_ID;
   } finally { lock.releaseLock(); }
+}
+
+/* ย้ายรหัสตัวแทนบ้านจาก 'HOUSE' เป็น 'TNKI' ทั้งระบบ — รันซ้ำได้ ไม่มีผลถ้าไม่มีอะไรเหลือให้ย้าย
+   ★ ลำดับสำคัญ: **deploy โค้ดใหม่ก่อน แล้วค่อยรัน** (บทเรียนเดียวกับ migrateUnitCodes ใน CLAUDE.md)
+     ถ้าแปลงข้อมูลก่อนที่โค้ดจะรู้จัก TNKI ระบบจะหาสมุดขายตรงไม่เจอและเปิดบิลขายตรงไม่ได้ทันที */
+function migrateOwnerTenantCode(session) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  var OLD = 'HOUSE', NEW = OWNER_TENANT_ID;
+  if (OLD === NEW) return { success: false, message: 'รหัสเดิมกับรหัสใหม่เป็นค่าเดียวกัน ไม่ต้องย้าย' };
+  var report = [], total = 0;
+
+  Object.keys(CENTRAL_SHEETS).forEach(function(name) {
+    if (CENTRAL_SHEETS[name].indexOf('tenant_id') === -1) return;
+    var sh;
+    try { sh = centralSheet(name); } catch (e) { return; }   // ชีตยังไม่ถูกสร้าง = ไม่มีอะไรให้ย้าย
+    // updateColumnsWhere คืน {matched, changed, columns} ไม่ใช่ตัวเลข — และล้างแคชให้เองอยู่แล้ว
+    var n = updateColumnsWhere(sh, function(row) { return String(row.tenant_id) === OLD; }, { tenant_id: NEW });
+    if (n.changed) { report.push(name + ': ' + n.changed); total += n.changed; }
+  });
+
+  // ตัวนับเลขที่เอกสารคีย์เป็น 'PO@HOUSE' ฯลฯ — ไม่ย้ายด้วยแล้วเล่มใหม่จะเริ่มนับหนึ่งใหม่ทับเลขเดิม
+  try {
+    var cs = centralSheet('central_doc_counters');
+    // ค่าใน setObj เป็นฟังก์ชันได้ (รับ row) — ใช้คิดค่าใหม่รายแถวโดยไม่ต้องวนเขียนเอง
+    var m = updateColumnsWhere(cs,
+      function(row) { return String(row.doc_type).indexOf('@' + OLD) !== -1; },
+      { doc_type: function(row) { return String(row.doc_type).replace('@' + OLD, '@' + NEW); } });
+    if (m.changed) { report.push('central_doc_counters: ' + m.changed); total += m.changed; }
+  } catch (e) { /* ยังไม่มีตัวนับ = ยังไม่เคยออกเลขเอกสาร */ }
+
+  return { success: true, moved: total,
+    message: total ? ('ย้าย ' + OLD + ' → ' + NEW + ' แล้ว ' + total + ' แถว (' + report.join(' · ') + ')')
+                   : ('ไม่มีแถวไหนใช้รหัส ' + OLD + ' อยู่แล้ว — ระบบใช้ ' + NEW + ' อยู่แล้วทั้งหมด') };
 }
 
 function listTenants(session) {

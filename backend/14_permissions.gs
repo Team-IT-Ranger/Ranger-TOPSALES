@@ -52,10 +52,17 @@ var MODULE_REGISTRY = [
  *    สิทธิ์รายโมดูลยังถูกตรวจตามบทบาทของเขาตามปกติทุก action
  */
 function _effectiveTenantId(session, payload) {
-  if (session.tenant_id) return session.tenant_id;
-  if (payload && payload.tenantId) return String(payload.tenantId);
-  return null;
+  var t = session.tenant_id ? String(session.tenant_id)
+        : (payload && payload.tenantId ? String(payload.tenantId) : '');
+  /* ★ TNKI = บริษัทเจ้าของสินค้า ไม่ใช่ตัวแทนรายหนึ่ง (ดู OWNER_TENANT_ID ใน 13_tenants.gs)
+     ตั้งแต่ 30 ก.ย. 2026 พนักงาน/แอดมินฝั่งบริษัทเก็บสังกัดเป็น 'TNKI' แทนค่าว่าง เพื่อให้หน้าจอมีรหัส
+     สังกัดคู่ขนานกับตัวแทน — แต่ความหมายเชิงสิทธิ์ต้องเหมือน "ไม่สังกัดตัวแทน" ทุกประการ
+     ไม่แปลงกลับเป็น null ตรงนี้ = แอดมินบริษัทจะถูกหุบให้เห็นแค่ข้อมูลของ TNKI และจ่ายชุดราคาให้ตัวแทนไม่ได้ */
+  if (t === OWNER_TENANT_ID) return null;
+  return t || null;
 }
+
+// _isCompanySide() ย้ายไปอยู่ 02_helpers.gs (ไฟล์ที่ทุกชุดเทสต์โหลด)
 
 // เหมือน _effectiveTenantId() แต่ถ้าไม่มีทั้ง session.tenant_id และ payload.tenantId (บริษัทเจ้าของสินค้า ไม่ได้สวมสิทธิ์
 // ตัวแทนรายไหนอยู่) จะ fallback ไปที่ "ตัวแทนบ้าน" ของบริษัทเอง (auto-create, ดู _ensureHouseTenant ใน 13_tenants.gs)

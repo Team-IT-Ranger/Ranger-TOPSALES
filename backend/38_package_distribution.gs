@@ -63,7 +63,12 @@ function packageAllowedForTenant(idx, type, id, tenantId) {
   if (!idx || !idx.any) return true;
   var set = idx.map[_pkgKey(type, id)];
   if (!set) return false;                       // ไม่ระบุ = ไม่มีใครได้
-  var t = String(tenantId || HOUSE_TENANT_ID);
+  var t = String(tenantId || OWNER_TENANT_ID);
+  /* ★ ช่วงเปลี่ยนรหัสบริษัท HOUSE → TNKI (30 ก.ย. 2026): แถวที่จ่ายชุดไว้ก่อนหน้านี้ยังเขียนว่า 'HOUSE'
+     จนกว่าจะรัน migrateOwnerTenantCode · ถ้าเทียบตรงตัวอย่างเดียว ทันทีที่ deploy โค้ดใหม่แต่ยังไม่ migrate
+     **ลูกค้าขายตรงของบริษัททุกรายจะหาชุดราคาไม่เจอ = เปิดบิลไม่ได้ทั้งหมด โดยไม่มีอะไรฟ้อง**
+     ยอมรับทั้งสองรหัสไว้ก่อน ลำดับ deploy/migrate จึงไม่สำคัญอีกต่อไป — ถอดออกได้เมื่อ migrate ครบทุก env แล้ว */
+  if (t === OWNER_TENANT_ID) return set[t] === 1 || set.HOUSE === 1;
   return set[t] === 1;
 }
 
@@ -116,7 +121,8 @@ function savePackageTenants(session, payload) {
   if (!PKG_TYPES[type]) return { success: false, message: 'ชนิดชุดไม่ถูกต้อง' };
   var err = _requirePermission(session, type === PKG_PROMO ? 'promotions' : 'pricing', 'edit'); if (err) return err;
   // ★ ตัวแทนแก้ไม่ได้เด็ดขาด — ราคาคุมจากส่วนกลาง (กติกาเจ้าของระบบ) แม้บทบาทจะมีสิทธิ์ edit ของตัวเอง
-  if (session.tenant_id) return { success: false, message: 'เฉพาะบริษัทเจ้าของสินค้าเท่านั้นที่กำหนดได้ว่าชุดไหนใช้กับตัวแทนใด' };
+  // ใช้ _isCompanySide ไม่ใช่ session.tenant_id ตรงๆ — ฝั่งบริษัทสังกัด 'TNKI' แล้วตั้งแต่ 30 ก.ย. 2026
+  if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะบริษัทเจ้าของสินค้าเท่านั้นที่กำหนดได้ว่าชุดไหนใช้กับตัวแทนใด' };
 
   var pkgId = String(payload.packageId || '');
   if (!pkgId) return { success: false, message: 'ไม่ได้ระบุชุด' };

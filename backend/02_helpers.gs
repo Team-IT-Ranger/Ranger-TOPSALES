@@ -220,6 +220,18 @@ function _mobileRoleLabel(role) { return MOBILE_ROLE_LABELS[role] || String(role
  * @param setObj   { ชื่อคอลัมน์: ค่าใหม่ } · ค่าใหม่เป็นฟังก์ชันได้ รับ obj เดิมคืนค่าใหม่
  * @return { matched, changed, columns }
  */
+/* ★ รหัสบริษัทเจ้าของสินค้า — อยู่ที่นี่เพราะทั้ง 13_tenants / 14_permissions / 38_package_distribution
+   ต้องใช้ และชุดเทสต์แต่ละตัวโหลดไฟล์ backend ไม่เท่ากัน (ทุกตัวโหลด 02_helpers เสมอ)
+   ความหมายเต็มอยู่ที่ _ensureHouseTenant ใน 13_tenants.gs */
+var OWNER_TENANT_ID = 'TNKI';
+
+/* "อยู่ฝั่งบริษัทไหม" — ดูจาก session เท่านั้น ไม่สนว่ากำลังสวมสิทธิ์ตัวแทนรายไหนอยู่
+   (ต่างจาก _effectiveTenantId ที่รวมการสวมสิทธิ์ด้วย) ใช้กับกติกาแบบ "เฉพาะบริษัททำได้" */
+function _isCompanySide(session) {
+  var t = session && session.tenant_id ? String(session.tenant_id) : '';
+  return !t || t === OWNER_TENANT_ID;
+}
+
 function updateColumnsWhere(sh, matchFn, setObj) {
   var keys = Object.keys(setObj || {});
   if (!keys.length) return { matched: 0, changed: 0, columns: 0 };
