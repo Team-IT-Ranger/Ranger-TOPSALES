@@ -132,8 +132,8 @@ var ADMIN_ACTION_MAP = {
   deactivatePromotion:    deactivatePromotion,
 
   listDocSeries:          listDocSeries,
-  addDocSeries:           addDocSeries,
-  updateDocSeries:        updateDocSeries,
+  // saveDocSeries แทน addDocSeries/updateDocSeries เดิม — บันทึก = ออกเวอร์ชันใหม่ ปิดของเดิม (12_docnum.gs)
+  saveDocSeries:          saveDocSeries,
   previewDocNumber:       previewDocNumberAdmin,
 
   getCompanyProfile:      getCompanyProfile,

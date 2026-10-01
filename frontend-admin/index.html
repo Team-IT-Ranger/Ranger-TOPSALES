@@ -866,13 +866,22 @@
         <!-- ═══ DOCNUM ═══ -->
         <section class="view" id="view-docnum">
           <div class="view-head"><div><h1>เลขที่เอกสาร</h1><p data-book-sub="รูปแบบเลขที่ใบขาย/SO ของ">รูปแบบเลขที่ใบขาย/SO</p></div></div>
+          <!-- ค่าเริ่มต้นแสดงเฉพาะที่ใช้งานอยู่ — รูปแบบเก่าถูกเก็บไว้เป็นประวัติ ไม่ได้ลบทิ้ง -->
+          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+            <select id="dn-filter-status" onchange="renderDocnumTable()">
+              <option value="active">เฉพาะที่ใช้งานอยู่</option>
+              <option value="all">ทั้งหมด (รวมรูปแบบเดิมที่ปิดแล้ว)</option>
+            </select>
+            <span id="dn-count" class="form-hint"></span>
+          </div>
           <div class="table-wrap"><table>
             <thead><tr><th>ประเภท</th><th>Prefix</th><th>รูปแบบวันที่</th><th>หลัก</th><th>รีเซ็ต</th><th>สถานะ</th></tr></thead>
             <tbody id="docnum-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่ม/แก้ไขรูปแบบเลขที่เอกสาร</h3>
-            <p class="form-hint">ยังไม่มี → เพิ่มใหม่ · พิมพ์ประเภทเดิม (เช่น SO) → อัปเดตของเดิม</p>
+            <p class="form-hint">พิมพ์ประเภทเดิม (เช่น SO) = <b>ออกเวอร์ชันใหม่</b> แล้วปิดรูปแบบเดิมให้อัตโนมัติ —
+              เหลือใช้งานอยู่ประเภทละหนึ่งเสมอ · รูปแบบเดิมไม่ถูกลบ เก็บไว้อธิบายเลขที่ออกไปแล้ว (เลือกดูได้จากตัวกรองด้านบน)</p>
             <div class="form-grid g2">
               <div class="field"><label>ประเภทเอกสาร</label><input id="d-type" placeholder="SO" value="SO"></div>
               <div class="field"><label>Prefix</label><input id="d-prefix" placeholder="SO" value="SO"></div>
@@ -1599,7 +1608,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
   'createTenant','updateTenantStatus','deleteTestTenants','migrateOwnerTenantCode','saveCompanyProfile','updateTenantProfile','saveRole','deleteRole',
   'createAdminUser','updateAdminUser','approveAdminUser','rejectAdminUser','promoteToAdmin','linkAdminLineId','changeMyPassword',
-  'updateStaffAdmin','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
+  'updateStaffAdmin','saveDocSeries','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
   'createArInvoice','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
@@ -2741,16 +2750,36 @@ async function addPaymentTypeUI(){
 }
 
 /* ══════════════ DOCNUM ══════════════ */
+/* รูปแบบเลขที่เอกสารเก็บเป็น "เวอร์ชัน" — ของเดิมถูกปิดไว้ ไม่ได้ลบ (ดู saveDocSeries ใน 12_docnum.gs)
+   ตารางจึงต้องกรอง ไม่งั้นยิ่งแก้ยิ่งรก และคนอ่านแยกไม่ออกว่าตัวไหนคือตัวที่ใช้อยู่จริง */
+let docnumCache = [];
 async function loadDocnum(){
   const body = document.getElementById('docnum-body');
   tblLoading(body, 6);
   const r = await callApi('listDocSeries', {});
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
-  if (!r.data.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">ยังไม่มีการตั้งค่า — ใช้ค่าเริ่มต้นอัตโนมัติ</td></tr>'; return; }
-  body.innerHTML = r.data.map(d =>
-    '<tr><td>'+esc(d.doc_type)+'</td><td class="mono-data">'+esc(d.prefix)+'</td><td class="mono-data">'+esc(d.date_format||'-')+'</td>' +
+  if (!r.success) { docnumCache = []; body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  docnumCache = r.data || [];
+  renderDocnumTable();
+}
+function renderDocnumTable(){
+  const body = document.getElementById('docnum-body'); if (!body) return;
+  const mode = (document.getElementById('dn-filter-status') || {}).value || 'active';
+  const rows = mode === 'all' ? docnumCache : docnumCache.filter(d => isOn(d.is_active));
+  const cnt = document.getElementById('dn-count');
+  const offCount = docnumCache.filter(d => !isOn(d.is_active)).length;
+  if (cnt) cnt.textContent = mode === 'all'
+    ? ('ทั้งหมด ' + docnumCache.length + ' รายการ')
+    : (offCount ? ('ซ่อนรูปแบบเดิมที่ปิดแล้ว ' + offCount + ' รายการ') : '');
+  if (!rows.length) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="6">' +
+      (docnumCache.length ? 'ไม่มีรูปแบบที่ใช้งานอยู่ — เลือก "ทั้งหมด" เพื่อดูรูปแบบเดิม'
+                          : 'ยังไม่มีการตั้งค่า — ใช้ค่าเริ่มต้นอัตโนมัติ') + '</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(d =>
+    '<tr'+(isOn(d.is_active) ? '' : ' style="opacity:.6"')+'><td>'+esc(d.doc_type)+'</td><td class="mono-data">'+esc(d.prefix)+'</td><td class="mono-data">'+esc(d.date_format||'-')+'</td>' +
     '<td>'+esc(d.running_digits)+'</td><td>'+esc(d.reset_cycle)+'</td>' +
-    '<td><span class="pill '+(String(d.is_active)==='TRUE'?'ok':'off')+'">'+(String(d.is_active)==='TRUE'?'ใช้งาน':'ปิด')+'</span></td></tr>'
+    '<td><span class="pill '+(isOn(d.is_active)?'ok':'off')+'">'+(isOn(d.is_active)?'ใช้งาน':'ปิดแล้ว')+'</span></td></tr>'
   ).join('');
 }
 async function saveDocSeriesUI(){
@@ -2763,9 +2792,9 @@ async function saveDocSeriesUI(){
     resetCycle: document.getElementById('d-reset').value,
     separator: document.getElementById('d-sep').value
   };
-  const r = await callApi('addDocSeries', payload);
+  const r = await callApi('saveDocSeries', payload);
   if (!r.success) { toast(r.message, true); return; }
-  toast('บันทึกสำเร็จ'); loadDocnum();
+  toast(r.message || 'บันทึกสำเร็จ'); loadDocnum();
 }
 
 /* ══════════════ งานขาย (19_sales_admin.gs) — เปิด/ดู/ยกเลิกบิลขายเองจากแอดมิน ══════════════

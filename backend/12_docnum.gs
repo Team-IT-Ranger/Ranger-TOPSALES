@@ -10,11 +10,21 @@
  * ถ้าแค่โชว์ preview ใน UI ให้ใช้ previewNextDocNumber() แทน (ไม่ขยับตัวนับ)
  */
 
+/* รูปแบบที่ "ใช้อยู่จริง" ของเอกสารประเภทนี้
+   ★ 1 ต.ค. 2026 — ต้องเลือก **เวอร์ชันใหม่สุด** ไม่ใช่แถวแรกที่เจอ
+   ของเดิมคืนแถวแรกที่ active ซึ่งแปลว่า "ขึ้นกับลำดับแถวในชีต" · ถ้ามี SO สองแถว active พร้อมกัน
+   (เกิดขึ้นจริงกับ BDC เพราะปุ่มบันทึกเคย append ใหม่ทุกครั้ง) เลขที่เอกสารจะมาจากแถวไหนก็เดาไม่ได้
+   และอาจสลับไปมาระหว่างคำขอ — บั๊กแบบเดียวกับที่เคยเจอในกฎสิทธิ์ชุดราคา (ดู 36_price_rules.gs)
+   ตอนนี้ `saveDocSeries` ปิดของเก่าให้เหลือ active ตัวเดียวอยู่แล้ว ตัวนี้เป็นกันชนอีกชั้น
+   สำหรับข้อมูลเก่าที่ยังซ้ำอยู่และยังไม่มีใครกดบันทึกทับ */
 function _docSeriesConfig(tenantId, docType) {
   var rows = tenantObjects(tenantId, 'doc_number_series');
+  var best = null;
   for (var i = 0; i < rows.length; i++) {
-    if (String(rows[i].doc_type) === String(docType) && isFlagOn(rows[i].is_active)) return rows[i];
+    if (String(rows[i].doc_type) !== String(docType) || !isFlagOn(rows[i].is_active)) continue;
+    if (!best || (parseInt(rows[i].record_id, 10) || 0) > (parseInt(best.record_id, 10) || 0)) best = rows[i];
   }
+  if (best) return best;
   // ไม่มีตั้งค่าไว้ → ใช้ค่า default กลาง
   return { doc_type: docType, prefix: docType, date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' };
 }
@@ -84,33 +94,49 @@ function previewDocNumberAdmin(session, payload) {
    (เจ้าของระบบแจ้ง 1 ต.ค. 2026: "แอพรู้อยู่แล้วว่าอยู่ตัวแทนไหน ไม่ควรต้องถาม")
    ตอนนี้: สังกัดตัวแทน → สมุดของตัวแทนตัวเอง · ฝั่งบริษัท → สมุดของบริษัท (ตัวแทนบ้าน)
    · ฝั่งบริษัทที่สวมสิทธิ์ตัวแทนอยู่ → สมุดของตัวแทนรายนั้น — ไม่มีเส้นทางไหนต้องให้เลือกเอง */
+// แถวใหม่สุดขึ้นก่อน — เวอร์ชันที่ใช้อยู่จริงของแต่ละประเภทจะอยู่บนสุดเสมอ
 function listDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'view'); if (err) return err;
   var tenantId = _salesTenantId(session, payload || {});
   if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
-  return { success: true, data: tenantObjects(tenantId, 'doc_number_series') };
+  var rows = tenantObjects(tenantId, 'doc_number_series').slice();
+  rows.sort(function(a, b) { return (parseInt(b.record_id, 10) || 0) - (parseInt(a.record_id, 10) || 0); });
+  return { success: true, data: rows };
 }
 
-function addDocSeries(session, payload) {
+/* บันทึกรูปแบบเลขที่เอกสาร = **ออกเวอร์ชันใหม่ แล้วปิดของเดิม** (เจ้าของระบบสั่ง 1 ต.ค. 2026)
+   อาการเดิม: BDC มี SO อยู่แล้ว กดแก้ไข → ได้ SO เพิ่มมาอีกแถว active ทั้งคู่ เพราะ `addDocSeries`
+   append อย่างเดียวไม่เคยดูของเดิมเลย (ปุ่มเดียวในหน้าจอเรียก action ชื่อ "add" ทั้งที่ข้อความใต้หัวข้อ
+   เขียนว่า "พิมพ์ประเภทเดิม → อัปเดตของเดิม" — โค้ดไม่เคยทำตามคำโฆษณานั้น)
+
+   ★ ทำไมไม่ทับแถวเดิมไปเลย: เอกสารที่ออกไปแล้วใช้รูปแบบเก่า แถวเก่าจึงเป็น**บันทึกว่าช่วงนั้นเลขหน้าตาแบบไหน**
+     ทับทิ้ง = อธิบายเลขเก่าไม่ได้อีกเลย · เก็บไว้แต่ `is_active = FALSE` แล้วให้หน้าจอซ่อนเป็นค่าเริ่มต้น
+   ★ ปิด "ทุกแถว" ของประเภทนั้น ไม่ใช่แค่แถวล่าสุด — ข้อมูลที่ซ้ำอยู่แล้วจะได้หายเองเมื่อกดบันทึกครั้งถัดไป
+     (self-heal) ไม่ต้องมีสคริปต์ล้างแยก */
+function saveDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'edit'); if (err) return err;
   var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
+  payload = payload || {};
+  var docType = String(payload.docType || '').trim().toUpperCase();
+  if (!docType) return { success: false, message: 'กรุณาระบุประเภทเอกสาร' };
+
+  var rows = tenantObjects(tenantId, 'doc_number_series');
+  var superseded = 0;
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].doc_type) !== docType || !isFlagOn(rows[i].is_active)) continue;
+    tenantUpdate(tenantId, 'doc_number_series', rows[i].record_id, { is_active: 'FALSE' });
+    superseded++;
+  }
   tenantAppend(tenantId, 'doc_number_series', {
     record_id: tenantNextId(tenantId, 'doc_number_series'),
-    doc_type: payload.docType, prefix: payload.prefix || payload.docType,
+    doc_type: docType, prefix: payload.prefix || docType,
     date_format: payload.dateFormat || 'yyyyMMdd', running_digits: payload.runningDigits || 4,
     reset_cycle: payload.resetCycle || 'daily', separator: payload.separator || '-', is_active: 'TRUE'
   });
-  return { success: true };
-}
-
-function updateDocSeries(session, payload) {
-  var err = _requirePermission(session, 'docnum', 'edit'); if (err) return err;
-  var tenantId = _salesTenantId(session, payload);
-  if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
-  tenantUpdate(tenantId, 'doc_number_series', payload.id, {
-    prefix: payload.prefix, date_format: payload.dateFormat, running_digits: payload.runningDigits,
-    reset_cycle: payload.resetCycle, separator: payload.separator, is_active: payload.isActive
-  });
-  return { success: true };
+  /* ★ ไม่แตะ `doc_number_counters` — ตัวนับผูกกับ doc_type + period_key ไม่ได้ผูกกับแถวรูปแบบ
+     รีเซ็ตตัวนับตอนเปลี่ยนรูปแบบ = เลขรันซ้ำกับเอกสารที่ออกไปแล้วในงวดเดียวกัน */
+  return { success: true, superseded: superseded,
+    message: superseded ? 'บันทึกเป็นเวอร์ชันใหม่แล้ว · ปิดใช้งานรูปแบบเดิม ' + superseded + ' รายการ'
+                        : 'บันทึกรูปแบบใหม่แล้ว' };
 }
