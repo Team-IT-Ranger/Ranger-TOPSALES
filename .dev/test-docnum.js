@@ -105,5 +105,31 @@ eq('ไม่มีรูปแบบเลย → ใช้ค่าเริ�
 eq('รายการเรียงใหม่สุดขึ้นก่อน', ctx.listDocSeries(SESSION, {}).data[0].record_id,
   series.reduce((m, o) => Math.max(m, o.record_id), 0));
 
+/* ── ประเภทเอกสารต้องเลือกจากของที่มีจริง (1 ต.ค. 2026) ──
+   ช่องนี้เคยเป็นช่องพิมพ์อิสระ พิมพ์ PO ลงไปก็บันทึกผ่าน แล้วได้แถวที่ไม่มีโค้ดไหนอ่าน
+   "บันทึกสำเร็จแต่ไม่มีผล" แย่กว่าปฏิเสธ เพราะคนตั้งค่าไม่มีทางรู้ */
+console.log('\n-- ประเภทเอกสารที่ตั้งได้ --');
+series = [];
+eq('ลิสต์ประเภทที่ตั้งได้ = ที่ระบบออกเลขให้จริง', ctx.listDocSeries(SESSION, {}).types.map(t => t.code), ['SO']);
+eq('  บอกประเภทที่ใช้เลขกลางด้วย (ไว้แสดงให้ผู้ใช้รู้ว่ามีอยู่)',
+  ctx.listDocSeries(SESSION, {}).fixedTypes.map(t => t.code), ['PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
+
+r = ctx.saveDocSeries(SESSION, { docType: 'PO', prefix: 'PO' });
+eq('★ ตั้ง PO ไม่ได้ (ใช้เลขกลาง)', r.success, false);
+eq('  บอกเหตุผลว่าเป็นเลขกลาง ไม่ใช่แค่ "ไม่รู้จัก"', /เลขที่ของส่วนกลาง/.test(r.message), true);
+eq('  เอ่ยชื่อเอกสารเป็นภาษาคน', /ใบสั่งซื้อ/.test(r.message), true);
+r = ctx.saveDocSeries(SESSION, { docType: 'ZZZ', prefix: 'Z' });
+eq('★ ตั้งประเภทมั่วไม่ได้', r.success, false);
+eq('  บอกว่าตั้งได้เฉพาะอะไร', /SO/.test(r.message), true);
+eq('  ไม่มีแถวไหนถูกเขียนลงไป', series.length, 0);
+
+console.log('\n-- ของเก่าที่เคยพิมพ์มือไว้ ต้องยังแก้/ปิดได้ --');
+series = [{ record_id: 1, doc_type: 'QT', prefix: 'QT', date_format: '', running_digits: 4, reset_cycle: 'none', separator: '-', is_active: 'TRUE' }];
+eq('ประเภทที่มีในข้อมูลแล้วโผล่ในลิสต์ด้วย', ctx.listDocSeries(SESSION, {}).types.map(t => t.code), ['SO', 'QT']);
+eq('  ติดธงว่าเป็นของเดิม', ctx.listDocSeries(SESSION, {}).types.find(t => t.code === 'QT').legacy, true);
+r = ctx.saveDocSeries(SESSION, { docType: 'QT', prefix: 'QT2' });
+eq('  แก้ของเดิมได้ (ไม่งั้นค้างถาวร แก้ไม่ได้ ปิดไม่ได้)', r.success, true);
+eq('  และยังปิดแถวเดิมตามกติกา', series.filter(s => s.doc_type === 'QT' && String(s.is_active) === 'TRUE').length, 1);
+
 console.log('\n' + (fail ? fail + ' FAILED' : 'ALL PASSED'));
 process.exit(fail ? 1 : 0);

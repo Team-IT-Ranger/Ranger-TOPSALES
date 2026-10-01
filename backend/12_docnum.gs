@@ -10,6 +10,25 @@
  * ถ้าแค่โชว์ preview ใน UI ให้ใช้ previewNextDocNumber() แทน (ไม่ขยับตัวนับ)
  */
 
+/* ประเภทเอกสารที่ "ตั้งรูปแบบได้จริง" จากหน้าจอนี้ (1 ต.ค. 2026)
+   ★ ต้องตรงกับของที่เรียก `getNextDocNumber()` จริงๆ เท่านั้น — เจ้าของระบบถามว่า "จะรู้ได้ยังไงว่า
+     ระบบมีประเภทอะไรให้ตั้ง" เพราะช่องนี้เคยเป็น**ช่องพิมพ์อิสระ** พิมพ์ PO ลงไปก็บันทึกได้
+     แล้วได้แถวที่ไม่มีโค้ดไหนอ่านเลย ไม่มีอะไรฟ้อง — เงียบจนกว่าจะมีคนสงสัยว่าทำไมตั้งแล้วไม่เปลี่ยน
+   **เพิ่มเอกสารที่ออกเลขด้วย `getNextDocNumber()` เมื่อไหร่ ต้องมาเพิ่มที่นี่ด้วย** ไม่งั้นตั้งค่าไม่ได้ */
+var DOC_SERIES_TYPES = [
+  { code: 'SO', label: 'ใบขาย / ใบสั่งขาย', note: 'ใช้กับบิลขายทั้งจากแอปมือถือและแอดมิน' }
+];
+
+/* เอกสารที่ออกเลขจาก **ชุดเลขกลาง** (`_nextCentralDocNo` ใน 20_purchasing_master.gs) — รูปแบบตายตัว
+   `<PREFIX>-<yyyyMM>-<รัน 4 หลัก>` (ของตัวแทนแทรกรหัสตัวแทนด้วย เช่น PO-TNKN-202610-0001) รีเซ็ตรายเดือน
+   ตั้งค่าจากหน้านี้ไม่ได้ แต่ต้อง**บอกให้ผู้ใช้รู้ว่ามีอยู่** ไม่งั้นจะนั่งหาว่าทำไมตั้งเลขใบสั่งซื้อไม่ได้ */
+var DOC_FIXED_TYPES = [
+  { code: 'PR',  label: 'ใบขอซื้อ' },        { code: 'PO',  label: 'ใบสั่งซื้อ' },
+  { code: 'GR',  label: 'ใบรับของ' },        { code: 'AP',  label: 'ตั้งหนี้เจ้าหนี้' },
+  { code: 'PV',  label: 'ใบสำคัญจ่าย' },     { code: 'INV', label: 'ใบแจ้งหนี้ลูกค้า' },
+  { code: 'RV',  label: 'ใบสำคัญรับ' },      { code: 'JV',  label: 'ใบสำคัญทั่วไป' }
+];
+
 /* รูปแบบที่ "ใช้อยู่จริง" ของเอกสารประเภทนี้
    ★ 1 ต.ค. 2026 — ต้องเลือก **เวอร์ชันใหม่สุด** ไม่ใช่แถวแรกที่เจอ
    ของเดิมคืนแถวแรกที่ active ซึ่งแปลว่า "ขึ้นกับลำดับแถวในชีต" · ถ้ามี SO สองแถว active พร้อมกัน
@@ -101,7 +120,18 @@ function listDocSeries(session, payload) {
   if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
   var rows = tenantObjects(tenantId, 'doc_number_series').slice();
   rows.sort(function(a, b) { return (parseInt(b.record_id, 10) || 0) - (parseInt(a.record_id, 10) || 0); });
-  return { success: true, data: rows };
+  /* ส่งรายการประเภทที่ตั้งได้ไปด้วย เพื่อให้หน้าจอทำเป็นตัวเลือก ไม่ใช่ช่องพิมพ์อิสระ
+     ★ แถมประเภทที่ "มีอยู่ในข้อมูลแล้วแต่ไม่อยู่ในลิสต์" เข้าไปด้วย (เช่นของที่เคยพิมพ์มือไว้ก่อนหน้านี้)
+       ไม่งั้นแถวนั้นจะแก้ไม่ได้อีกเลยเพราะเลือกประเภทของมันไม่ได้ */
+  var known = {};
+  var types = DOC_SERIES_TYPES.map(function(t) { known[t.code] = 1; return t; });
+  rows.forEach(function(r) {
+    var c = String(r.doc_type || '').trim();
+    if (!c || known[c]) return;
+    known[c] = 1;
+    types.push({ code: c, label: c, legacy: true, note: 'ตั้งไว้เดิม — ยังไม่มีเอกสารไหนในระบบใช้รูปแบบนี้' });
+  });
+  return { success: true, data: rows, types: types, fixedTypes: DOC_FIXED_TYPES };
 }
 
 /* บันทึกรูปแบบเลขที่เอกสาร = **ออกเวอร์ชันใหม่ แล้วปิดของเดิม** (เจ้าของระบบสั่ง 1 ต.ค. 2026)
@@ -122,6 +152,23 @@ function saveDocSeries(session, payload) {
   if (!docType) return { success: false, message: 'กรุณาระบุประเภทเอกสาร' };
 
   var rows = tenantObjects(tenantId, 'doc_number_series');
+  /* ★ ปฏิเสธประเภทที่ไม่มีโค้ดไหนอ่าน — บันทึกได้แต่ไม่มีผลคือสิ่งที่แย่ที่สุด เพราะดูเหมือนสำเร็จ
+     ยอมเฉพาะ: ประเภทที่ระบบออกเลขให้จริง (DOC_SERIES_TYPES) หรือประเภทที่มีอยู่ในข้อมูลแล้ว
+     (ของเก่าที่เคยพิมพ์มือไว้ — ต้องแก้/ปิดได้ ไม่งั้นค้างถาวร)
+     ตัวที่ใช้ชุดเลขกลาง (PO/PR/GR/…) บอกให้ชัดว่าทำไมตั้งไม่ได้ ไม่ใช่แค่ "ไม่รู้จัก" */
+  var allowed = {};
+  DOC_SERIES_TYPES.forEach(function(t) { allowed[t.code] = 1; });
+  rows.forEach(function(r) { var c = String(r.doc_type || '').trim(); if (c) allowed[c] = 1; });
+  if (!allowed[docType]) {
+    var fixed = null;
+    DOC_FIXED_TYPES.forEach(function(t) { if (t.code === docType) fixed = t; });
+    if (fixed) {
+      return { success: false, message: 'เอกสาร "' + fixed.label + '" (' + docType + ') ใช้เลขที่ของส่วนกลาง ' +
+        'รูปแบบตายตัว ' + docType + '-ปีเดือน-เลขรัน ตั้งค่าที่นี่ไม่ได้' };
+    }
+    return { success: false, message: 'ยังไม่มีเอกสารประเภท ' + docType + ' ในระบบ — ตั้งรูปแบบไว้ก็จะไม่มีผล ' +
+      '(ตั้งได้เฉพาะ: ' + DOC_SERIES_TYPES.map(function(t) { return t.code; }).join(', ') + ')' };
+  }
   var superseded = 0;
   for (var i = 0; i < rows.length; i++) {
     if (String(rows[i].doc_type) !== docType || !isFlagOn(rows[i].is_active)) continue;

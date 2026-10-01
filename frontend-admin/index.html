@@ -880,10 +880,14 @@
           </table></div>
           <div class="form-card">
             <h3>เพิ่ม/แก้ไขรูปแบบเลขที่เอกสาร</h3>
-            <p class="form-hint">พิมพ์ประเภทเดิม (เช่น SO) = <b>ออกเวอร์ชันใหม่</b> แล้วปิดรูปแบบเดิมให้อัตโนมัติ —
+            <p class="form-hint">เลือกประเภทเดิมแล้วกดบันทึก = <b>ออกเวอร์ชันใหม่</b> แล้วปิดรูปแบบเดิมให้อัตโนมัติ —
               เหลือใช้งานอยู่ประเภทละหนึ่งเสมอ · รูปแบบเดิมไม่ถูกลบ เก็บไว้อธิบายเลขที่ออกไปแล้ว (เลือกดูได้จากตัวกรองด้านบน)</p>
+            <p class="form-hint" id="d-fixed-note"></p>
             <div class="form-grid g2">
-              <div class="field"><label>ประเภทเอกสาร</label><input id="d-type" placeholder="SO" value="SO"></div>
+              <div class="field"><label>ประเภทเอกสาร</label>
+                <select id="d-type" onchange="docnumTypePicked()"></select>
+                <p class="form-hint" id="d-type-note"></p>
+              </div>
               <div class="field"><label>Prefix</label><input id="d-prefix" placeholder="SO" value="SO"></div>
               <div class="field"><label>รูปแบบวันที่</label>
                 <select id="d-dateformat"><option value="yyyyMMdd">yyyyMMdd</option><option value="yyMM">yyMM</option><option value="">ไม่ใส่วันที่</option></select>
@@ -2752,14 +2756,51 @@ async function addPaymentTypeUI(){
 /* ══════════════ DOCNUM ══════════════ */
 /* รูปแบบเลขที่เอกสารเก็บเป็น "เวอร์ชัน" — ของเดิมถูกปิดไว้ ไม่ได้ลบ (ดู saveDocSeries ใน 12_docnum.gs)
    ตารางจึงต้องกรอง ไม่งั้นยิ่งแก้ยิ่งรก และคนอ่านแยกไม่ออกว่าตัวไหนคือตัวที่ใช้อยู่จริง */
-let docnumCache = [];
+let docnumCache = [], docnumTypes = [];
 async function loadDocnum(){
   const body = document.getElementById('docnum-body');
   tblLoading(body, 6);
   const r = await callApi('listDocSeries', {});
   if (!r.success) { docnumCache = []; body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   docnumCache = r.data || [];
+  docnumTypes = r.types || [];
+  renderDocnumTypeOptions(r.fixedTypes || []);
   renderDocnumTable();
+}
+
+/* ประเภทเอกสารต้องเลือกจากรายการ ไม่ใช่พิมพ์เอง (เจ้าของระบบถาม 1 ต.ค. 2026 ว่าจะรู้ได้ยังไงว่ามีอะไรให้ตั้ง)
+   รายการมาจาก backend เพราะที่นั่นรู้ว่าเอกสารไหนออกเลขด้วย getNextDocNumber() จริง —
+   เขียนลิสต์ไว้ในหน้าเว็บจะเพี้ยนจากของจริงทันทีที่ backend เพิ่มเอกสารใหม่ */
+function renderDocnumTypeOptions(fixed){
+  const sel = document.getElementById('d-type'); if (!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = docnumTypes.map(t =>
+    '<option value="'+esc(t.code)+'">'+esc(t.code + ' — ' + t.label)+'</option>').join('');
+  if (keep && docnumTypes.some(t => t.code === keep)) sel.value = keep;
+  const note = document.getElementById('d-fixed-note');
+  if (note) note.innerHTML = fixed.length
+    ? 'เอกสารงานซื้อและบัญชีออกเลขจากส่วนกลาง รูปแบบตายตัว <span class="mono-data">รหัส-ปีเดือน-เลขรัน</span> ' +
+      'ตั้งที่นี่ไม่ได้: ' + fixed.map(t => esc(t.code + ' ' + t.label)).join(' · ')
+    : '';
+  docnumTypePicked();
+}
+
+/* เลือกประเภทแล้วดึงค่าที่ใช้อยู่จริงมาใส่ฟอร์ม — ไม่งั้นฟอร์มขึ้นค่าเริ่มต้นเสมอ
+   แล้วคนที่ตั้งใจแก้แค่ "จำนวนหลัก" จะกดบันทึกทับรูปแบบที่ใช้อยู่ด้วยค่าเริ่มต้นโดยไม่รู้ตัว */
+function docnumTypePicked(){
+  const sel = document.getElementById('d-type'); if (!sel || !sel.value) return;
+  const code = sel.value;
+  const cur = docnumCache.filter(d => d.doc_type === code && isOn(d.is_active))
+    .sort((a, b) => (parseInt(b.record_id,10)||0) - (parseInt(a.record_id,10)||0))[0];
+  const meta = docnumTypes.find(t => t.code === code) || {};
+  const note = document.getElementById('d-type-note');
+  if (note) note.textContent = cur ? (meta.note || '') : ((meta.note ? meta.note + ' · ' : '') + 'ยังไม่ได้ตั้งรูปแบบ — ใช้ค่าเริ่มต้นอัตโนมัติอยู่');
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('d-prefix', cur ? (cur.prefix || code) : code);
+  set('d-dateformat', cur ? (cur.date_format || '') : 'yyyyMMdd');
+  set('d-digits', cur ? (parseInt(cur.running_digits,10) || 4) : 4);
+  set('d-sep', cur ? (cur.separator || '-') : '-');
+  set('d-reset', cur ? (cur.reset_cycle || 'daily') : 'daily');
 }
 function renderDocnumTable(){
   const body = document.getElementById('docnum-body'); if (!body) return;
