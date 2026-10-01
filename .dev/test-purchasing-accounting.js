@@ -34,8 +34,20 @@ const append = (sh, o) => sh.rows.push(sh.rows[0].map(h => (o[h] !== undefined ?
 const pad = (n, w) => String(n).padStart(w, '0');
 let CLOCK = new Date('2026-09-23T10:00:00Z'), lockHeld = false;
 
+/* ★ นาฬิกาในกล่องทดสอบต้องหยุดนิ่งที่ CLOCK (1 ต.ค. 2026)
+   เดิมส่ง `Date` ตัวจริงเข้า vm แล้ว `nowStr()` เท่านั้นที่ใช้ CLOCK — แต่ `_nextCentralDocNo()`
+   (`20_purchasing_master.gs`) เรียก `new Date()` เอาเดือน**ปัจจุบันจริง** มาทำเลขที่เอกสาร
+   เทสต์จึงคาด `PR-202609-0001` ไว้ตายตัว แล้ว **พังเองตอนเที่ยงคืนวันขึ้นเดือนใหม่** (ได้ 202610)
+   ไม่ใช่โค้ดผลิตพัง — เป็นเทสต์ที่ผูกกับวันที่รันโดยไม่ได้ตั้งใจ และจะพังซ้ำทุกเดือนถ้าไม่หยุดนาฬิกา
+   `new Date(x)` ที่ส่งค่ามาด้วยยังทำงานตามปกติ (formatDate ใช้ทางนั้น) */
+const RealDate = Date;
+class FrozenDate extends RealDate {
+  constructor() { super(...(arguments.length ? arguments : [CLOCK.getTime()])); }
+  static now() { return CLOCK.getTime(); }
+}
+
 const ctx = {
-  console, JSON, Math, String, Number, Object, Array, Date, isFinite, parseInt, parseFloat, RegExp,
+  console, JSON, Math, String, Number, Object, Array, Date: FrozenDate, isFinite, parseInt, parseFloat, RegExp,
   Session: { getScriptTimeZone: () => 'Asia/Bangkok' },
   Utilities: {
     formatDate: (d, tz, fmt) => {
@@ -473,7 +485,9 @@ fails('วันที่กลับด้าน → ปฏิเสธ', ctx.s
 console.log('\n  -- 1.8.2 แยกลูกค้า + ร้านที่หายไป --');
 r = ctx.salesReportByCustomer(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16' });
 eq('จัดอันดับร้าน 500 มาก่อน 501 (1,500 > 2,000? ไม่ — 501 มากกว่า จึงมาก่อน)', r.data.map(x => [x.customerId, x.revenue]), [['501', 2000], ['500', 1500]]);
-const todayStr = new Date().toISOString().slice(0, 10);
+// ★ อ้าง CLOCK ไม่ใช่วันจริง — ฝั่งโค้ดที่ทดสอบใช้นาฬิกาในกล่อง (FrozenDate) ถ้าที่นี่ใช้ `new Date()`
+// ตัวจริง สองฝั่งจะคนละวันกันทุกวันที่ไม่ใช่ 23 ก.ย. 2026 (เจอ 1 ต.ค. 2026: คาด 273 ได้ 265)
+const todayStr = CLOCK.toISOString().slice(0, 10);
 r = ctx.salesReportByCustomer(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16', lostDays: 60 });
 eq('เฉพาะร้าน 502 (ซื้อครั้งสุดท้าย 2026-01-01) ติดร้านที่หายไป — 500/501 เพิ่งซื้อไม่เกิน 60 วัน ไม่ติด', r.lostCustomers.map(x => x.customerId), ['502']);
 eq('  คำนวณจำนวนวันถูกต้อง', r.lostCustomers[0].daysSinceLastSale, ctx._daysBetween('2026-01-01', todayStr));
