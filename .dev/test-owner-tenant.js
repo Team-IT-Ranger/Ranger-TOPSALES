@@ -89,6 +89,17 @@ eq('สังกัด TNKI = ฝั่งบริษัท (มองข้า
 eq('สังกัดว่าง = ฝั่งบริษัทเหมือนเดิม', ctx._effectiveTenantId({ tenant_id: '' }, {}), null);
 eq('สังกัด BDC = ตัวแทนจริง ถูกหุบตามเดิม', ctx._effectiveTenantId({ tenant_id: 'BDC' }, {}), 'BDC');
 eq('บริษัทสวมสิทธิ์ตัวแทนได้ตามเดิม', ctx._effectiveTenantId({ tenant_id: '' }, { tenantId: 'BDC' }), 'BDC');
+/* ★★ เคสที่ "ขาดไป" จนปล่อยบั๊กใหญ่หลุดไปถึงมือเจ้าของระบบ (1 ต.ค. 2026)
+   เทสต์เดิมมีแต่ `tenant_id: ''` คู่กับ payload — ซึ่งเป็นสภาพ **ก่อน** migrate เป็น TNKI
+   แต่หลัง migrate แอดมินบริษัททุกคนมี `tenant_id: 'TNKI'` ซึ่ง truthy นิพจน์เดิมจึงข้าม payload ทิ้ง
+   ผล: ฝั่งบริษัท "เข้าไปดูแลตัวแทน" ไม่ได้เลยทั้งระบบ และไม่มีเทสต์ไหนจับได้
+   บทเรียน: **เปลี่ยนค่าที่เคยเป็นค่าว่างให้มีค่า ต้องไล่เทสต์ทุกจุดที่เคยพึ่ง "ความว่าง" นั้น** */
+eq('★ บริษัท (สังกัด TNKI) สวมสิทธิ์ตัวแทนได้ — เคสจริงหลัง migrate',
+  ctx._effectiveTenantId({ tenant_id: 'TNKI' }, { tenantId: 'BDC' }), 'BDC');
+eq('★ และ _salesTenantId ก็ต้องตามไปที่สมุดของตัวแทนนั้น',
+  ctx._salesTenantId({ tenant_id: 'TNKI', role_code: 'super_admin' }, { tenantId: 'BDC' }), 'BDC');
+eq('บัญชีที่สังกัดตัวแทน ส่ง payload ของรายอื่นมา → ยังถูกล็อกที่ของตัวเอง',
+  ctx._effectiveTenantId({ tenant_id: 'BDC' }, { tenantId: 'XYZ' }), 'BDC');
 eq('สวมสิทธิ์เป็น TNKI = กลับเป็นบริษัท ไม่ใช่ตัวแทน', ctx._effectiveTenantId({ tenant_id: '' }, { tenantId: 'TNKI' }), null);
 
 console.log('\n-- _isCompanySide: ดู session อย่างเดียว ไม่สนการสวมสิทธิ์ --');
