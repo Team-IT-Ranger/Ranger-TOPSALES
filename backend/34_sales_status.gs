@@ -409,6 +409,10 @@ function confirmSalesOrder(user, payload) {
     tenantUpdate(user.tenantId, 'sales_orders', order.record_id, { status: SO_CONFIRMED, updated_at: nowStr(), updated_by: user.lineUserId });
     logOrderStatus(user.tenantId, order.record_id, from, SO_CONFIRMED, '', '', 'พนักงานยืนยันความถูกต้องจากแอปมือถือ',
       user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
+    /* ★ ยอดขายรายวันเริ่มนับตรงนี้ ไม่ใช่ตอนเปิดบิล — ใบร่างยังไม่ใช่การขาย (ตกลงกับเจ้าของระบบ 1 ต.ค. 2026)
+       นับเป็นวันที่ "เปิดบิล" ไม่ใช่วันที่ยืนยัน เพื่อให้ยอดของใบเดียวกันอยู่วันเดียวตลอดสายงาน
+       (ยกเลิกทีหลังก็หักคืนที่วันเดียวกัน ไม่งั้นยอดสองวันเพี้ยนพร้อมกัน) */
+    bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), 1, parseFloat(order.total) || 0);
     return { success: true, status: SO_CONFIRMED, statusLabel: SO_STATUS_LABELS[SO_CONFIRMED],
       message: 'ยืนยันแล้ว — ส่งให้ศูนย์รับงานเรียบร้อย' };
   });
@@ -433,8 +437,11 @@ function cancelMySalesOrder(user, payload) {
     logOrderStatus(user.tenantId, order.record_id, from, SO_CANCELLED, '', '',
       'พนักงานยกเลิกเองจากแอปมือถือ' + ((payload || {}).reason ? ' — ' + payload.reason : ''),
       user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
-    // ยอดขายรายวันนับตั้งแต่เปิดบิล ยกเลิกแล้วต้องหักคืน (หลักเดียวกับ cancelSalesOrderAdmin)
-    bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), -1, -(parseFloat(order.total) || 0));
+    /* หักคืนยอดขาย **เฉพาะใบที่เคยถูกนับแล้ว** — ใบร่างไม่เคยนับ (ไปนับตอนกดยืนยัน)
+       หักคืนใบร่างด้วยจะทำให้ยอดรายวันติดลบสะสมไปเรื่อยๆ ทุกครั้งที่มีคนทิ้งร่าง */
+    if (from !== SO_DRAFT) {
+      bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), -1, -(parseFloat(order.total) || 0));
+    }
     return { success: true, status: SO_CANCELLED, statusLabel: SO_STATUS_LABELS[SO_CANCELLED], message: 'ยกเลิกใบสั่งขายแล้ว' };
   });
 }

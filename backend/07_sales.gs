@@ -237,10 +237,11 @@ function recordSale(user, payload) {
 
   /* ยอดสรุปรายวัน: เปิดใบใหม่ = +1 ใบ +ยอด · แก้ใบเดิม = จำนวนใบเท่าเดิม ขยับเฉพาะส่วนต่างของยอด
      (ถ้าบวกเต็มจำนวนอีกครั้งตอนแก้ ยอดขายรายวันจะโตขึ้นทุกครั้งที่มีคนกดแก้ไข) */
-  if (editing) {
-    var deltaTotal = calc.total - (parseFloat(editing.total) || 0);
-    if (deltaTotal) bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 0, deltaTotal);
-  } else {
+  /* ★ ใบร่างยังไม่นับเข้ายอดขาย (เจ้าของระบบตกลงไว้ 1 ต.ค. 2026) — มันยังไม่ใช่การขาย
+     พนักงานยังแก้/ทิ้งได้ และศูนย์ยังไม่เห็นด้วยซ้ำ · ไปนับตอนกด "ยืนยัน" แทน (confirmSalesOrder)
+     ขายจากรถนับทันทีเหมือนเดิม เพราะของถึงมือลูกค้าไปแล้วตั้งแต่กดบันทึก
+     แก้ใบร่าง = ไม่ต้องขยับอะไร เพราะยังไม่เคยถูกนับ */
+  if (!editing && fulfillmentType === 'immediate') {
     bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);
   }
   touchCustomerLastSale(payload.customerId, createdAt);                       // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
