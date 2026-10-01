@@ -191,12 +191,30 @@ function recordSale(user, payload) {
     stockCheck = checkOfficeDeliveryStock(user.tenantId, need);
   }
 
-  var orderCode = getNextDocNumber(user.tenantId, 'SO');
-  var orderId = tenantNextId(user.tenantId, 'sales_orders');
-  var createdAt = nowStr();
+  /* ★ แก้ไขใบร่าง = **เขียนทับใบเดิม ไม่ยกเลิก ไม่ออกเลขใหม่** (เจ้าของระบบสั่ง 2 ต.ค. 2026)
+     ของเดิมใช้วิธียกเลิกแล้วเปิดใบใหม่ ซึ่งเสียทั้งเลขที่เอกสาร (เดินทิ้งไปใบละเลข) และเวลา
+     (ยิงเพิ่ม 2 คำขอ × ~2 วินาที) ทั้งที่ใบร่างยังไม่มีใครเห็นและยังไม่กันของ จึงไม่มีเหตุต้องยกเลิกเลย
+     เดินผ่าน recordSale ตัวเดิมทั้งเส้น จะได้ใช้การคิดราคา/ของแถม/ตรวจสิทธิ์ชุดเดียวกัน ไม่มีตรรกะที่สอง */
+  var editing = null;
+  if (payload.editOrderCode) {
+    tenantObjects(user.tenantId, 'sales_orders').forEach(function(o) {
+      if (String(o.order_code) === String(payload.editOrderCode) && String(o.sale_by) === String(user.lineUserId)) editing = o;
+    });
+    if (!editing) return { success: false, message: 'ไม่พบใบสั่งขายที่จะแก้ หรือไม่ใช่บิลของท่าน' };
+    if (SO_MOBILE_EDITABLE.indexOf(_soStatusOf(editing)) === -1) {
+      return { success: false, message: 'ใบนี้อยู่ขั้น "' + SO_STATUS_LABELS[_soStatusOf(editing)] + '" แล้ว แก้ไขเองไม่ได้' };
+    }
+  }
+  var orderCode = editing ? editing.order_code : getNextDocNumber(user.tenantId, 'SO');
+  var orderId = editing ? editing.record_id : tenantNextId(user.tenantId, 'sales_orders');
+  var createdAt = editing ? safeDateStr(editing.created_at) : nowStr();
 
   var vatSplit = calc.vat;   // แยกภาษีจากรายการจริง รองรับของยกเว้นภาษีปนในบิล (18_pricing_engine.gs)
-  tenantAppend(user.tenantId, 'sales_orders', {
+  // แก้ไขใบร่าง = เขียนทับแถวเดิม (เลขที่เอกสารและวันที่เปิดบิลคงเดิม) · เปิดใบใหม่ = ต่อท้ายตามปกติ
+  var writeOrder = editing
+    ? function(row) { tenantUpdate(user.tenantId, 'sales_orders', orderId, row); }
+    : function(row) { tenantAppend(user.tenantId, 'sales_orders', row); };
+  writeOrder({
     record_id: orderId, order_code: orderCode, customer_id: payload.customerId || 0,
     subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
     apply_vat: vatSplit.applyVat ? 'TRUE' : 'FALSE', vat_type: vatSplit.vatType,
@@ -212,12 +230,23 @@ function recordSale(user, payload) {
     requested_delivery_date: (fulfillmentType === 'office_delivery' && /^\d{4}-\d{2}-\d{2}$/.test(String(payload.requestedDeliveryDate || '')))
       ? String(payload.requestedDeliveryDate) : ''
   });
-  logOrderStatus(user.tenantId, orderId, '', fulfillmentType === 'immediate' ? SO_COMPLETED : SO_DRAFT,
-    '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอปมือถือ',
+  logOrderStatus(user.tenantId, orderId, editing ? SO_DRAFT : '', fulfillmentType === 'immediate' ? SO_COMPLETED : SO_DRAFT,
+    '', initialPaymentStatus(payload.paymentType, fulfillmentType),
+    editing ? 'แก้ไขรายการในใบร่างจากแอปมือถือ' : 'เปิดบิลจากแอปมือถือ',
     user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
 
-  bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
+  /* ยอดสรุปรายวัน: เปิดใบใหม่ = +1 ใบ +ยอด · แก้ใบเดิม = จำนวนใบเท่าเดิม ขยับเฉพาะส่วนต่างของยอด
+     (ถ้าบวกเต็มจำนวนอีกครั้งตอนแก้ ยอดขายรายวันจะโตขึ้นทุกครั้งที่มีคนกดแก้ไข) */
+  if (editing) {
+    var deltaTotal = calc.total - (parseFloat(editing.total) || 0);
+    if (deltaTotal) bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 0, deltaTotal);
+  } else {
+    bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);
+  }
   touchCustomerLastSale(payload.customerId, createdAt);                       // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
+
+  // แก้ใบร่าง: ล้างบรรทัดเดิมทิ้งก่อนเขียนชุดใหม่ (ไม่งั้นของเก่ากับของใหม่ปนกันอยู่ในใบเดียว)
+  if (editing) deleteRowsWhere(tenantSheet(user.tenantId, 'order_items'), 'order_id', orderId);
 
   items.forEach(function(it) {
     tenantAppend(user.tenantId, 'order_items', {

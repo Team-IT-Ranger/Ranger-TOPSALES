@@ -217,8 +217,7 @@ function getSaleDetail(user, payload) {
       customerId: order.customer_id,   // ใช้ตอน "แก้ไขร่าง" เพื่อเลือกร้านเดิมกลับให้ในหน้าขาย
       requestedDeliveryDate: safeDateStr(order.requested_delivery_date).substring(0, 10),
       customerAddress: cust ? (cust.address || '') : '',   // พิมพ์ลงใบที่ให้ลูกค้าถือไว้
-      status: _soStatusOf(order), statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
-      fulfillmentType: order.fulfillment_type || '',
+      statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
       canConfirm: _soStatusOf(order) === SO_DRAFT,
       canCancel: String(order.fulfillment_type) !== 'immediate' && SO_MOBILE_CANCELLABLE.indexOf(_soStatusOf(order)) !== -1,
       subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
@@ -226,7 +225,9 @@ function getSaleDetail(user, payload) {
       subtotalExVat: vat.exVat, exemptAmount: vat.exemptAmount, taxableExVat: vat.taxableExVat, vatMixed: vat.mixed,
       // ★ (2) ราคาก่อนภาษีเป็นตัวตั้งต้น — ยอดสรุปบิลฝั่งไม่รวม VAT ก่อนบวก VAT ทีเดียวตอนท้าย
       subtotalAfterProductDiscountExVat: preDiscountExVat, billDiscountExVat: _round2(preDiscountExVat - vat.exVat),
-      paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: order.status,
+      // ★ ผ่าน _soStatusOf() เพื่อกันค่าแปลกปลอม/ว่างในบิลเก่า (คืนค่าที่รู้จักเสมอ)
+      //   ชื่อเดิม `pending_delivery` ยังส่งไปตามจริง — หน้าจอรู้จักทั้งสองชื่อและแปลเป็นป้ายเดียวกันอยู่แล้ว
+      paymentMethod: order.payment_method, fulfillmentType: order.fulfillment_type, status: _soStatusOf(order),
       createdAt: safeDateStr(order.created_at)
     },
     items: items

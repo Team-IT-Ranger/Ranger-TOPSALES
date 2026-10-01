@@ -618,6 +618,7 @@ async function openSaleDetail(code){
   try {
     const r = await api('getSaleDetail', { orderCode: code });
     if (!r.success) { $('sd-body').innerHTML = '<div class="empty">' + esc(r.message) + '</div>'; return; }
+    LAST_SALE_DETAIL = r;   // เก็บไว้ให้ปุ่มแก้ไขใช้ ไม่ต้องยิงขอใหม่
     renderSaleDetail(r);
   } catch (e) { $('sd-body').innerHTML = '<div class="empty">โหลดไม่ได้ (' + esc(e.message) + ')</div>'; }
 }
@@ -695,21 +696,26 @@ async function confirmThisSale(code){
      ยกเลิกทิ้งจึงไม่กระทบอะไรเลย · ได้ผลเหมือนแก้ไข แต่เส้นทางบันทึกยังเป็นเส้นเดียวกับการขายปกติ
      (ราคา/ส่วนลด/ของแถม คิดใหม่ทั้งหมดจาก quoteSale ตามจริง ไม่ต้องมีตรรกะคิดราคาชุดที่สอง)
    ของแถมไม่ยกกลับ — ระบบคิดให้เองตอนคิดราคาใหม่ */
-async function editThisDraft(code){
-  if (!navigator.onLine) { toast('ต้องออนไลน์ถึงจะแก้ไขได้', true); return; }
-  if (!confirm('แก้ไขใบสั่งขาย ' + code + '?\nระบบจะยกเลิกใบนี้แล้วนำรายการกลับเข้าตะกร้าให้แก้ต่อ')) return;
-  const d = await api('getSaleDetail', { orderCode: code });
-  if (!d.success) { toast(d.message, true); return; }
-  const r = await api('cancelMySalesOrder', { orderCode: code, reason: 'แก้ไขรายการ — เปิดใบใหม่แทน' });
-  if (!r.success) { toast(r.message, true); return; }
+/* แก้ไขใบร่าง — **เปิดใบเดิมมาแก้ ไม่ยกเลิก ไม่ออกเลขใหม่** (เจ้าของระบบสั่ง 2 ต.ค. 2026)
+   ของเดิมยกเลิกแล้วเปิดใบใหม่ เปลืองทั้งเลขที่เอกสารและเวลา — ยิงเพิ่ม 2 คำขอ (~2 วินาที/คำขอ)
+   ทั้งที่ข้อมูลที่ต้องใช้อยู่บนจอแล้ว · ตอนนี้กดแก้ไข = ไม่ยิงอะไรเลย ยิงครั้งเดียวตอนกดบันทึก */
+let EDIT_ORDER_CODE = null;   // มีค่า = กำลังแก้ใบร่างนี้อยู่ (ส่งเป็น editOrderCode ไปกับ recordSale)
+function editThisDraft(code){
+  const d = LAST_SALE_DETAIL;
+  if (!d || !d.order || d.order.code !== code) { toast('เปิดใบนี้ใหม่อีกครั้งแล้วค่อยกดแก้ไข', true); return; }
+  EDIT_ORDER_CODE = code;
   CART = (d.items || []).filter(it => !it.isFree)
     .map(it => ({ productId: it.productId, unitCode: it.unitCode, qty: it.qty }));
   QUOTE = null; FREE_OFF = new Set();
   closeSaleDetail();
   gotoTab('sell');
-  const sel = $('s-cust'); if (sel && d.order && d.order.customerId) sel.value = d.order.customerId;
+  const sel = $('s-cust'); if (sel && d.order.customerId) sel.value = d.order.customerId;
+  if (d.order.paymentMethod) setPay(d.order.paymentMethod);
+  $('s-office').checked = d.order.fulfillmentType === 'office_delivery';
+  syncDelivField();
+  const dv = $('s-deliv'); if (dv) dv.value = d.order.requestedDeliveryDate || '';
   renderProducts(); cartChanged();
-  toast('ยกเลิกใบเดิมแล้ว — แก้ไขในตะกร้าได้เลย');
+  toast('กำลังแก้ไข ' + code + ' — กดบันทึกเพื่อทับใบเดิม');
 }
 async function cancelThisSale(code){
   if (!navigator.onLine) { toast('ต้องออนไลน์ถึงจะยกเลิกได้', true); return; }
@@ -957,6 +963,7 @@ async function submitSale(){
       : undefined;
     const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: $('s-office').checked ? 'office_delivery' : 'immediate',
       requestedDeliveryDate: $('s-office').checked ? ($('s-deliv').value || '') : '',
+      editOrderCode: EDIT_ORDER_CODE || '',
       items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })), freeGoods,
       latitude: gps.lat, longitude: gps.lng, googleMap: gps.map, savedAt: new Date().toISOString(),
       // สร้างครั้งเดียวต่อ "ความตั้งใจจะบันทึกหนึ่งบิล" — ส่งใหม่/ส่งจากคิวใช้ค่าเดิม เซิร์ฟเวอร์จึงบันทึกใบเดียว
@@ -991,11 +998,13 @@ function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
   if (!$('s-office').checked) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
   lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
+  EDIT_ORDER_CODE = null;   // ออกจากโหมดแก้ไขเมื่อบันทึกเสร็จ
   const dv = $('s-deliv'); if (dv) dv.value = '';   // ไม่ให้บิลถัดไปติดวันนัดส่งของบิลก่อนมา
   CART = []; QUOTE = null; FREE_OFF = new Set(); SELL_MODE = 'pick'; renderProducts(); renderCartBar();
 }
 
 /* ══════════════ สต็อก ══════════════ */
+let LAST_SALE_DETAIL = null;
 let STOCK_MODE = 'restock', STOCK_QTY = {};
 function setStockMode(m){ STOCK_MODE = m; STOCK_QTY = {}; $('st-seg-restock').classList.toggle('on', m === 'restock'); $('st-seg-count').classList.toggle('on', m === 'count'); renderStock(); }
 function renderStock(){
