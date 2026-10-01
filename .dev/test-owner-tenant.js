@@ -80,6 +80,9 @@ vm.createContext(ctx);
 ['02_helpers.gs', '14_permissions.gs', '38_package_distribution.gs', '13_tenants.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 Object.assign(ctx, MOCKS);   // ★ ทับ mock อีกรอบหลังโหลด (เหตุผลอยู่ที่นิยาม MOCKS)
+/* บน Apps Script ทุกไฟล์ .gs อยู่ scope เดียวกัน `_isTrue` (นิยามใน 17_pricing.gs) จึงเรียกได้จากทุกที่
+   เทสต์ชุดนี้โหลดแค่ 4 ไฟล์ ต้องต่อนามแฝงให้เองไม่งั้น _ensureHouseTenant() ล้มด้วย ReferenceError */
+ctx._isTrue = ctx.isFlagOn;
 
 console.log('\n-- รหัสบริษัทต้องไม่ถูกมองเป็นตัวแทนรายหนึ่ง --');
 eq('สังกัด TNKI = ฝั่งบริษัท (มองข้ามตัวแทนได้)', ctx._effectiveTenantId({ tenant_id: 'TNKI' }, {}), null);
@@ -114,6 +117,28 @@ eq('ตัวนับเลขที่เอกสารย้ายด้ว�
 const r2 = ctx.migrateOwnerTenantCode({ role_code: 'super_admin' });
 eq('รันซ้ำแล้วไม่มีอะไรเปลี่ยนอีก', r2.moved, 0);
 eq('คนที่ไม่ใช่ Ultra Admin รันไม่ได้', ctx.migrateOwnerTenantCode({ role_code: 'owner_admin' }).success, false);
+
+/* ── สมุดที่ทำงานอยู่: ไม่มีเส้นทางไหนที่ต้องให้ผู้ใช้เลือกตัวแทนเอง (1 ต.ค. 2026) ──
+   เจ้าของระบบแจ้ง: เปิดหน้า "เลขที่เอกสาร" แล้วเจอ "กรุณาเลือกตัวแทนจำหน่ายก่อน" ทั้งที่แอปรู้อยู่แล้ว
+   ว่าอยู่ตัวแทนไหน · `_salesTenantId()` คือตัวที่ตอบคำถาม "คำขอนี้ทำงานบนสมุดของใคร"
+   ★ ของเดิมเช็ค **ชื่อบทบาท** (super_admin/owner_admin) ซึ่งพังทันทีที่บริษัทสร้างบทบาทเอง (26_roles.gs) */
+// ☝ หมวดนี้รัน **หลัง** migrateOwnerTenantCode ข้างบน แถวสมุดของบริษัทจึงเป็น 'TNKI' แล้ว (เดิม 'HOUSE')
+// ตั้งใจวางไว้ท้ายสุดเพื่อให้ทดสอบบนสภาพ "หลัง migrate" ซึ่งเป็นสภาพจริงของทุก env ตั้งแต่ 30 ก.ย. 2026
+console.log('\n-- สมุดที่ทำงานอยู่ (_salesTenantId) --');
+const BOOK = 'TNKI';   // สมุดขายตรงของบริษัท หลัง migrate
+eq('สังกัดตัวแทน → สมุดของตัวแทนตัวเอง', ctx._salesTenantId({ tenant_id: 'BDC', role_code: 'tenant_admin' }, {}), 'BDC');
+eq('Ultra Admin ไม่ได้สวมสิทธิ์ใคร → สมุดของบริษัท', ctx._salesTenantId({ tenant_id: '', role_code: 'super_admin' }, {}), BOOK);
+eq('owner_admin → สมุดของบริษัท', ctx._salesTenantId({ tenant_id: '', role_code: 'owner_admin' }, {}), BOOK);
+eq('★ บทบาทที่บริษัทสร้างเอง → สมุดของบริษัท (เดิมได้ null แล้วหน้าจอฟ้องให้เลือกตัวแทน)',
+  ctx._salesTenantId({ tenant_id: '', role_code: 'acct_staff' }, {}), BOOK);
+eq('★ บทบาทที่บริษัทสร้างเอง + สังกัด TNKI → สมุดของบริษัทเหมือนกัน',
+  ctx._salesTenantId({ tenant_id: 'TNKI', role_code: 'acct_staff' }, {}), BOOK);
+eq('บริษัทสวมสิทธิ์ตัวแทน → สมุดของตัวแทนรายนั้น',
+  ctx._salesTenantId({ tenant_id: '', role_code: 'super_admin' }, { tenantId: 'BDC' }), 'BDC');
+eq('สวมสิทธิ์เป็น TNKI → ยังเป็นสมุดของบริษัท ไม่ใช่ตัวแทนชื่อ TNKI',
+  ctx._salesTenantId({ tenant_id: '', role_code: 'super_admin' }, { tenantId: 'TNKI' }), BOOK);
+eq('บัญชีของตัวแทนส่ง tenantId ของคนอื่นมา → ยังถูกล็อกที่ของตัวเอง (กันข้ามตัวแทน)',
+  ctx._salesTenantId({ tenant_id: 'BDC', role_code: 'tenant_admin' }, { tenantId: 'TNKI' }), 'BDC');
 
 console.log('\n' + (fail ? fail + ' FAILED' : 'ALL PASSED'));
 process.exit(fail ? 1 : 0);

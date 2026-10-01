@@ -72,22 +72,28 @@ function previewNextDocNumber(tenantId, docType) {
 // preview เลขเอกสารถัดไปให้ Admin App โชว์ก่อนสร้างเอกสารจริง
 function previewDocNumberAdmin(session, payload) {
   var err = _requirePermission(session, 'docnum', 'view'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
   return { success: true, docNumber: previewNextDocNumber(tenantId, payload.docType) };
 }
 
-// ── Admin CRUD (ตัวแทน หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทน จัดการรูปแบบเลขเอกสาร) ──
+/* ── Admin CRUD: จัดการรูปแบบเลขที่เอกสารของ "สมุดที่กำลังทำงานอยู่" ──
+   ★ 1 ต.ค. 2026 เปลี่ยนจาก `_effectiveTenantId` เป็น `_salesTenantId` ทั้งไฟล์
+   ของเดิมฝั่งบริษัทได้ null เสมอ แล้วตอบ "กรุณาเลือกตัวแทนจำหน่ายก่อน" — ทั้งที่
+   `docnum` อยู่ใน `OWNER_MODULES` เพราะ**บริษัทออกบิลขายตรงเองจึงต้องตั้งเลขที่ได้**
+   (เจ้าของระบบแจ้ง 1 ต.ค. 2026: "แอพรู้อยู่แล้วว่าอยู่ตัวแทนไหน ไม่ควรต้องถาม")
+   ตอนนี้: สังกัดตัวแทน → สมุดของตัวแทนตัวเอง · ฝั่งบริษัท → สมุดของบริษัท (ตัวแทนบ้าน)
+   · ฝั่งบริษัทที่สวมสิทธิ์ตัวแทนอยู่ → สมุดของตัวแทนรายนั้น — ไม่มีเส้นทางไหนต้องให้เลือกเอง */
 function listDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'view'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload || {});
+  var tenantId = _salesTenantId(session, payload || {});
   if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
   return { success: true, data: tenantObjects(tenantId, 'doc_number_series') };
 }
 
 function addDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'edit'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
   tenantAppend(tenantId, 'doc_number_series', {
     record_id: tenantNextId(tenantId, 'doc_number_series'),
@@ -100,7 +106,7 @@ function addDocSeries(session, payload) {
 
 function updateDocSeries(session, payload) {
   var err = _requirePermission(session, 'docnum', 'edit'); if (err) return err;
-  var tenantId = _effectiveTenantId(session, payload);
+  var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
   tenantUpdate(tenantId, 'doc_number_series', payload.id, {
     prefix: payload.prefix, date_format: payload.dateFormat, running_digits: payload.runningDigits,

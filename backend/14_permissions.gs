@@ -64,14 +64,21 @@ function _effectiveTenantId(session, payload) {
 
 // _isCompanySide() ย้ายไปอยู่ 02_helpers.gs (ไฟล์ที่ทุกชุดเทสต์โหลด)
 
-// เหมือน _effectiveTenantId() แต่ถ้าไม่มีทั้ง session.tenant_id และ payload.tenantId (บริษัทเจ้าของสินค้า ไม่ได้สวมสิทธิ์
-// ตัวแทนรายไหนอยู่) จะ fallback ไปที่ "ตัวแทนบ้าน" ของบริษัทเอง (auto-create, ดู _ensureHouseTenant ใน 13_tenants.gs)
-// แทนที่จะคืน null — เพราะบริษัทเองก็มีพนักงานขายตรง ยอดเข้าบริษัทเอง ไม่ต้องเลือกตัวแทนก่อนใช้งาน
-// ใช้เฉพาะกับโมดูลที่เกี่ยวกับ "งานขาย" (19_sales_admin.gs + customers/staff lookup ที่หน้าเปิดบิลขายต้องใช้)
+/* เหมือน _effectiveTenantId() แต่ถ้าไม่มีทั้ง session.tenant_id และ payload.tenantId (บริษัทเจ้าของสินค้า ไม่ได้สวมสิทธิ์
+   ตัวแทนรายไหนอยู่) จะ fallback ไปที่ "ตัวแทนบ้าน" ของบริษัทเอง (auto-create, ดู _ensureHouseTenant ใน 13_tenants.gs)
+   แทนที่จะคืน null — เพราะบริษัทเองก็มีพนักงานขายตรง ยอดเข้าบริษัทเอง ไม่ต้องเลือกตัวแทนก่อนใช้งาน
+   ใช้กับโมดูลที่ทำงานบน "สมุดของตัวแทนรายหนึ่ง" ซึ่งบริษัทก็มีสมุดของตัวเอง — งานขาย (19_sales_admin.gs),
+   ลูกค้า/พนักงานที่หน้าเปิดบิลต้องใช้, เลขที่เอกสาร (12_docnum.gs), นำเข้า/ส่งออก Express (15_*)
+
+   ★ 1 ต.ค. 2026 — เลิกเช็คว่าเป็น super_admin/owner_admin แล้วใช้ `_isCompanySide()` แทน
+   ของเดิมผูกกับ **ชื่อบทบาท** ซึ่งพังทันทีที่บริษัทสร้างบทบาทของตัวเอง (ระบบเปิดให้สร้างได้ ดู 26_roles.gs):
+   แอดมินบริษัทบทบาทใหม่จะได้ null แล้วเจอ "กรุณาระบุตัวแทนจำหน่าย" ทั้งที่เขาไม่มีตัวแทนให้เลือก
+   และไม่ควรต้องเลือก — เขาทำงานในนามบริษัท · เกณฑ์ที่ถูกคือ "สังกัดบริษัทหรือเปล่า" ไม่ใช่ "ชื่อบทบาทอะไร"
+   (บัญชีที่สังกัดตัวแทนไม่เข้าเงื่อนไขนี้อยู่แล้ว เพราะ _effectiveTenantId คืนตัวแทนของเขาไปตั้งแต่บรรทัดบน) */
 function _salesTenantId(session, payload) {
   var t = _effectiveTenantId(session, payload);
   if (t) return t;
-  if (session.role_code === 'super_admin' || session.role_code === 'owner_admin') return _ensureHouseTenant();
+  if (_isCompanySide(session)) return _ensureHouseTenant();
   return null;
 }
 
