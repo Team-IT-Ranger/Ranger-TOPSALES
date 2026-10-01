@@ -265,6 +265,8 @@
   th.is-sorted{ color:var(--blue); }
   tr.clickable-row{ cursor:pointer; }
   tr.clickable-row:hover td{ background:var(--blue-pale); }
+  /* แถวที่กำลังถูกแก้อยู่ในฟอร์มด้านล่าง — ต้องเห็นชัดกว่า hover ไม่งั้นพอเมาส์เลื่อนไปที่อื่นแล้วไม่รู้ว่าแก้ตัวไหนอยู่ */
+  tr.row-editing td{ background:var(--blue-pale); box-shadow:inset 3px 0 0 var(--blue); }
   td{ padding:9px 12px; border-top:1px solid var(--border); white-space:nowrap; }
   td.wrap{ white-space:normal; }
   .empty-row td{ color:var(--ink-soft); text-align:center; padding:18px; }
@@ -892,6 +894,8 @@
           </table></div>
           <div class="form-card">
             <h3>เพิ่ม/แก้ไขรูปแบบเลขที่เอกสาร</h3>
+            <p class="form-hint"><b>คลิกแถวในตารางด้านบน</b> เพื่อยกค่าของแถวนั้นมาใส่ในฟอร์มนี้แล้วแก้ต่อได้เลย
+              (คลิกรูปแบบเดิมที่ปิดไปแล้วก็ได้ — กดบันทึกจะเป็นการนำกลับมาใช้)</p>
             <p class="form-hint">เลือกประเภทเดิมแล้วกดบันทึก = <b>ออกเวอร์ชันใหม่</b> แล้วปิดรูปแบบเดิมให้อัตโนมัติ —
               เหลือใช้งานอยู่ประเภทละหนึ่งเสมอ · รูปแบบเดิมไม่ถูกลบ เก็บไว้อธิบายเลขที่ออกไปแล้ว (เลือกดูได้จากตัวกรองด้านบน)</p>
             <p class="form-hint" id="d-fixed-note"></p>
@@ -900,7 +904,16 @@
                 <select id="d-type" onchange="docnumTypePicked()"></select></div>
               <div class="field"><label>Prefix</label><input id="d-prefix" placeholder="SO" value="SO"></div>
               <div class="field"><label>รูปแบบวันที่</label>
-                <select id="d-dateformat"><option value="yyyyMMdd">yyyyMMdd</option><option value="yyMM">yyMM</option><option value="">ไม่ใส่วันที่</option></select>
+                <!-- ★ ต้องมี yyyyMM ด้วย — เป็นค่าเริ่มต้นของหมวดงานซื้อ/บัญชีทั้ง 8 ตัว ขาดไปแล้วเลือกคืนไม่ได้
+                     และ yyyy สำหรับรีเซ็ตรายปี · ดู _dateFormatCoversCycle ที่บังคับให้ละเอียดพอกับรอบรีเซ็ต -->
+                <select id="d-dateformat">
+                  <option value="yyyyMMdd">yyyyMMdd — ปี เดือน วัน (20261001)</option>
+                  <option value="yyMMdd">yyMMdd — ปีสองหลัก เดือน วัน (261001)</option>
+                  <option value="yyyyMM">yyyyMM — ปี เดือน (202610)</option>
+                  <option value="yyMM">yyMM — ปีสองหลัก เดือน (2610)</option>
+                  <option value="yyyy">yyyy — เฉพาะปี (2026)</option>
+                  <option value="">ไม่ใส่วันที่</option>
+                </select>
               </div>
               <div class="field"><label>จำนวนหลักเลขรัน</label><input id="d-digits" type="number" value="4"></div>
               <div class="field"><label>ตัวคั่น</label><input id="d-sep" value="-"></div>
@@ -2803,17 +2816,20 @@ function renderDocnumTypeOptions(){
 function docnumTypePicked(){
   const sel = document.getElementById('d-type'); if (!sel || !sel.value) return;
   const code = sel.value;
-  const cur = docnumCache.filter(d => d.doc_type === code && isOn(d.is_active))
-    .sort((a, b) => (parseInt(b.record_id,10)||0) - (parseInt(a.record_id,10)||0))[0];
-  const meta = docnumTypes.find(t => t.code === code) || {};
-  const note = document.getElementById('d-type-note');
-  if (note) note.textContent = cur ? (meta.note || '') : ((meta.note ? meta.note + ' · ' : '') + 'ยังไม่ได้ตั้งรูปแบบ — ใช้ค่าเริ่มต้นอัตโนมัติอยู่');
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  set('d-prefix', cur ? (cur.prefix || code) : code);
-  set('d-dateformat', cur ? (cur.date_format || '') : 'yyyyMMdd');
-  set('d-digits', cur ? (parseInt(cur.running_digits,10) || 4) : 4);
-  set('d-sep', cur ? (cur.separator || '-') : '-');
-  set('d-reset', cur ? (cur.reset_cycle || 'daily') : 'daily');
+  // เลือกประเภทจาก dropdown = เลิกยึดแถวที่คลิกไว้ แล้วกลับไปเอา "ตัวที่ใช้งานอยู่" ของประเภทนั้น
+  const picked = docnumCache.find(d => String(d.record_id) === String(docnumEditingId));
+  if (!picked || picked.doc_type !== code) {
+    docnumEditingId = null;
+    const cur = docnumCache.filter(d => d.doc_type === code && isOn(d.is_active))
+      .sort((a, b) => (parseInt(b.record_id,10)||0) - (parseInt(a.record_id,10)||0))[0];
+    if (cur) docnumEditingId = cur.record_id;
+    const meta = docnumTypes.find(t => t.code === code) || {};
+    const note = document.getElementById('d-type-note');
+    if (note) note.textContent = cur ? (meta.note || '')
+      : ((meta.note ? meta.note + ' · ' : '') + 'ยังไม่ได้ตั้งรูปแบบ — ใช้ค่าเริ่มต้นอัตโนมัติอยู่');
+    docnumFillForm(cur || { doc_type: code, prefix: code, date_format: 'yyyyMMdd', running_digits: 4, separator: '-', reset_cycle: 'daily' });
+    if (document.getElementById('docnum-body')) renderDocnumTable();
+  }
 }
 function renderDocnumTable(){
   const body = document.getElementById('docnum-body'); if (!body) return;
@@ -2831,10 +2847,51 @@ function renderDocnumTable(){
     return;
   }
   body.innerHTML = rows.map(d =>
-    '<tr'+(isOn(d.is_active) ? '' : ' style="opacity:.6"')+'><td>'+esc(d.doc_type)+'</td><td class="mono-data">'+esc(d.prefix)+'</td><td class="mono-data">'+esc(d.date_format||'-')+'</td>' +
+    '<tr class="clickable-row'+(String(d.record_id) === String(docnumEditingId) ? ' row-editing' : '')+'"' +
+      ' onclick="docnumPickRow('+d.record_id+')" title="คลิกเพื่อนำค่าของแถวนี้ไปใส่ในฟอร์มด้านล่าง"' +
+      (isOn(d.is_active) ? '' : ' style="opacity:.6"') + '>' +
+    '<td>'+esc(d.doc_type)+'</td><td class="mono-data">'+esc(d.prefix)+'</td><td class="mono-data">'+esc(d.date_format||'-')+'</td>' +
     '<td>'+esc(d.running_digits)+'</td><td>'+esc(d.reset_cycle)+'</td>' +
     '<td><span class="pill '+(isOn(d.is_active)?'ok':'off')+'">'+(isOn(d.is_active)?'ใช้งาน':'ปิดแล้ว')+'</span></td></tr>'
   ).join('');
+}
+
+/* คลิกแถวในตาราง → ยกค่าของ "แถวนั้น" ลงฟอร์มด้านล่าง (เจ้าของระบบสั่ง 1 ต.ค. 2026)
+   ★ ยกจากแถวที่คลิกจริงๆ ไม่ใช่จากแถวที่ active ของประเภทนั้น — คลิกรูปแบบเก่าที่ปิดไปแล้วก็ได้
+     ซึ่งเป็นวิธีเอาของเดิมกลับมาใช้: คลิก → กดบันทึก → กลายเป็นเวอร์ชันใหม่ที่ active */
+let docnumEditingId = null;
+function docnumPickRow(id){
+  const d = docnumCache.find(x => String(x.record_id) === String(id));
+  if (!d) return;
+  docnumEditingId = d.record_id;
+  const sel = document.getElementById('d-type');
+  if (sel && [...sel.options].some(o => o.value === d.doc_type)) sel.value = d.doc_type;
+  docnumFillForm(d);
+  renderDocnumTable();                       // วาดใหม่เพื่อย้ายไฮไลต์มาที่แถวนี้
+  const note = document.getElementById('d-type-note');
+  if (note) note.textContent = isOn(d.is_active)
+    ? 'กำลังแก้จากรูปแบบที่ใช้งานอยู่ของ ' + d.doc_type + ' — กดบันทึกแล้วจะกลายเป็นเวอร์ชันใหม่'
+    : 'ยกค่ามาจากรูปแบบเดิมที่ปิดไปแล้วของ ' + d.doc_type + ' — กดบันทึกแล้วจะนำกลับมาใช้เป็นเวอร์ชันใหม่';
+  document.getElementById('d-prefix').focus();
+}
+/* ใส่ค่าชุดหนึ่งลงฟอร์ม (ใช้ทั้งตอนคลิกแถว และตอนเลือกประเภทจาก dropdown)
+   ★ ค่าที่ไม่มีใน <select> ต้องเติมเป็นตัวเลือกให้ ไม่ใช่ปล่อยให้หล่น — เบราว์เซอร์จะเงียบและเด้งไป
+     ตัวเลือกแรกแทน แล้วพอผู้ใช้กดบันทึก รูปแบบจะถูกเปลี่ยนโดยไม่มีใครตั้งใจ
+     (เจอจริง 1 ต.ค. 2026: คลิกแถว PO ที่เป็น `yyyyMM` แล้วช่องว่างเปล่า เพราะลิสต์ไม่มีตัวเลือกนั้น) */
+function docnumFillForm(d){
+  const setSel = (id, v) => {
+    const el = document.getElementById(id); if (!el) return;
+    v = v === undefined || v === null ? '' : String(v);
+    if (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === v)) {
+      el.insertAdjacentHTML('beforeend', '<option value="'+esc(v)+'">'+esc(v || '(ว่าง)')+' — ตั้งไว้เดิม</option>');
+    }
+    el.value = v;
+  };
+  setSel('d-prefix', d.prefix || d.doc_type || '');
+  setSel('d-dateformat', d.date_format || '');
+  setSel('d-digits', parseInt(d.running_digits, 10) || 4);
+  setSel('d-sep', d.separator || '-');
+  setSel('d-reset', d.reset_cycle || 'daily');
 }
 async function saveDocSeriesUI(){
   const docType = document.getElementById('d-type').value.trim().toUpperCase();
@@ -2848,6 +2905,8 @@ async function saveDocSeriesUI(){
   };
   const r = await callApi('saveDocSeries', payload);
   if (!r.success) { toast(r.message, true); return; }
+  // แถวที่เพิ่งแก้ถูกปิดไปแล้ว (กลายเป็นประวัติ) — ปล่อยการยึดแถวเดิม ให้ไปจับเวอร์ชันใหม่ที่เพิ่งเกิดแทน
+  docnumEditingId = null;
   toast(r.message || 'บันทึกสำเร็จ'); loadDocnum();
 }
 
