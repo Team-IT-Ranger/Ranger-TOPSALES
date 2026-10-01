@@ -440,10 +440,21 @@
   /* ── ช่องกรอกในแถวเดียวกันต้องอยู่ระดับเดียวกัน ──
      ป้ายกำกับบางช่องมีคำอธิบายต่อท้ายจนตกบรรทัดที่สอง ช่องกรอกของช่องนั้นเลยต่ำกว่าเพื่อนทั้งแถว
      ทำ .field เป็นคอลัมน์ยืดเต็มความสูงของแถว แล้วให้ป้ายกินที่ว่างที่เหลือ ช่องกรอกจึงถูกดันไปชิดล่างเสมอ
-     (grid ให้ลูกทุกตัวในแถวสูงเท่ากันอยู่แล้ว จึงได้เส้นฐานเดียวกันทั้งแถว) */
+     (grid ให้ลูกทุกตัวในแถวสูงเท่ากันอยู่แล้ว จึงได้เส้นฐานเดียวกันทั้งแถว)
+
+     ★★ กติกาที่มาคู่กัน: **ห้ามวาง `<p class="form-hint">` ไว้ใน `.field`** ให้วางใต้ `.form-grid` แทน
+     กลไกข้างบนยืนอยู่บนข้อสมมติว่า "ช่องกรอกเป็นลูกตัวสุดท้ายของ .field" — มีอะไรต่อท้ายเมื่อไหร่
+     ช่องกรอกจะลอยสูงขึ้นเท่าความสูงของสิ่งนั้น แล้วเหลื่อมกับเพื่อนในแถวทันที
+     (1 ต.ค. 2026 เจ้าของระบบแจ้งว่าฟอร์ม "เลอะเทอะ" — วัดแล้วหน้าเลขที่เอกสารเหลื่อม 48px
+      หน้าข้อมูลบริษัท 16px เพราะคำอธิบายสองช่องสูงไม่เท่ากัน · ย้ายคำอธิบายออกมาใต้กริดแล้วทั้งหมด)
+     ถ้าต้องอธิบายเฉพาะช่อง ให้ขึ้นต้นด้วยชื่อช่องตัวหนา เช่น <b>อัตราภาษีมูลค่าเพิ่ม</b> — … */
   .form-grid > .field{ display:flex; flex-direction:column; margin-bottom:0; }
   .form-grid > .field > label{ flex:1 0 auto; }
   .form-grid{ align-items:stretch; }
+  /* ตัวเลือกแบบสวิตช์สูงไม่เท่า input/select ธรรมดา พอวางข้างกันในแถวเดียวจะเหลื่อม
+     · margin-bottom:0 ด้วย เพราะ `.field label{margin-bottom:5px}` กินถึง `label.toggle-row` ที่ซ้อนอยู่ข้างใน
+       (ตัวมันเองเป็น <label> เหมือนกัน) ระยะนั้นดันสวิตช์ลอยสูงกว่าเพื่อน 5px */
+  .form-grid > .field > .toggle-row{ min-height:40px; display:flex; align-items:center; margin-bottom:0; }
   /* <select> กับ <input> สูงไม่เท่ากันเองโดยธรรมชาติ (เบราว์เซอร์คิด line-height คนละแบบ) ต่างกัน 2-3px
      พอเอามาเรียงข้างกันจะเห็นว่าเหลื่อม — บังคับความสูงให้เท่ากันทุกตัวไปเลย */
   .form-grid > .field > input:not([type=checkbox]):not([type=radio]):not([type=file]),
@@ -697,16 +708,17 @@
                 <div class="field"><label>เบอร์โทร</label><input id="cp-phone"></div>
                 <div class="field"><label>อีเมล</label><input id="cp-email" type="email"></div>
                 <div class="field"><label>อัตราภาษีมูลค่าเพิ่ม (%)</label>
-                  <input id="cp-vatrate" type="number" min="0" max="100" step="0.01" placeholder="7">
-                  <p class="form-hint">กรอกเป็นเปอร์เซ็นต์ เช่น 7 · ใช้กับทั้งฝั่งขายและฝั่งซื้อ ·
-                    <b>บิลที่ออกไปแล้วไม่เปลี่ยนตาม</b> (แต่ละใบเก็บอัตรา ณ วันที่ออกไว้ในตัวเอง)</p></div>
+                  <input id="cp-vatrate" type="number" min="0" max="100" step="0.01" placeholder="7"></div>
                 <div class="field"><label>ราคาที่กรอกในระบบ</label>
                   <select id="cp-vattype">
                     <option value="inclusive">รวม VAT แล้ว (ราคาที่ลูกค้าจ่ายจริง)</option>
                     <option value="exclusive">ยังไม่รวม VAT (ต้องบวกเพิ่ม)</option>
-                  </select>
-                  <p class="form-hint">ใบราคาของบริษัทพิมพ์ราคารวมภาษีมาตลอด ปกติจึงเป็น "รวม VAT แล้ว"</p></div>
+                  </select></div>
               </div>
+              <!-- คำอธิบายอยู่ "ใต้กริด" ไม่ใช่ในช่อง — ดูกติกาที่ CSS .form-grid (ใส่ในช่องแล้วกล่องกรอกเสียแนวทั้งแถว) -->
+              <p class="form-hint"><b>อัตราภาษีมูลค่าเพิ่ม</b> — กรอกเป็นเปอร์เซ็นต์ เช่น 7 · ใช้กับทั้งฝั่งขายและฝั่งซื้อ ·
+                <b>บิลที่ออกไปแล้วไม่เปลี่ยนตาม</b> (แต่ละใบเก็บอัตรา ณ วันที่ออกไว้ในตัวเอง)</p>
+              <p class="form-hint"><b>ราคาที่กรอกในระบบ</b> — ใบราคาของบริษัทพิมพ์ราคารวมภาษีมาตลอด ปกติจึงเป็น "รวม VAT แล้ว"</p>
             </div>
             <fieldset class="fieldset" style="margin-top:16px">
               <legend>บัญชีธนาคาร (สำหรับอ้างอิงการโอนเงิน)</legend>
@@ -885,9 +897,7 @@
             <p class="form-hint" id="d-fixed-note"></p>
             <div class="form-grid g2">
               <div class="field"><label>ประเภทเอกสาร</label>
-                <select id="d-type" onchange="docnumTypePicked()"></select>
-                <p class="form-hint" id="d-type-note"></p>
-              </div>
+                <select id="d-type" onchange="docnumTypePicked()"></select></div>
               <div class="field"><label>Prefix</label><input id="d-prefix" placeholder="SO" value="SO"></div>
               <div class="field"><label>รูปแบบวันที่</label>
                 <select id="d-dateformat"><option value="yyyyMMdd">yyyyMMdd</option><option value="yyMM">yyMM</option><option value="">ไม่ใส่วันที่</option></select>
@@ -898,6 +908,7 @@
                 <select id="d-reset"><option value="daily">ทุกวัน</option><option value="monthly">ทุกเดือน</option><option value="yearly">ทุกปี</option><option value="none">ไม่รีเซ็ต</option></select>
               </div>
             </div>
+            <p class="form-hint" id="d-type-note"></p>
             <div class="form-actions"><button class="btn btn-primary" onclick="saveDocSeriesUI()">บันทึก</button></div>
           </div>
         </section>
@@ -2764,23 +2775,25 @@ async function loadDocnum(){
   if (!r.success) { docnumCache = []; body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
   docnumCache = r.data || [];
   docnumTypes = r.types || [];
-  renderDocnumTypeOptions(r.fixedTypes || []);
+  renderDocnumTypeOptions();
   renderDocnumTable();
 }
 
 /* ประเภทเอกสารต้องเลือกจากรายการ ไม่ใช่พิมพ์เอง (เจ้าของระบบถาม 1 ต.ค. 2026 ว่าจะรู้ได้ยังไงว่ามีอะไรให้ตั้ง)
    รายการมาจาก backend เพราะที่นั่นรู้ว่าเอกสารไหนออกเลขด้วย getNextDocNumber() จริง —
    เขียนลิสต์ไว้ในหน้าเว็บจะเพี้ยนจากของจริงทันทีที่ backend เพิ่มเอกสารใหม่ */
-function renderDocnumTypeOptions(fixed){
+function renderDocnumTypeOptions(){
   const sel = document.getElementById('d-type'); if (!sel) return;
   const keep = sel.value;
   sel.innerHTML = docnumTypes.map(t =>
     '<option value="'+esc(t.code)+'">'+esc(t.code + ' — ' + t.label)+'</option>').join('');
   if (keep && docnumTypes.some(t => t.code === keep)) sel.value = keep;
+  // หมวดงานซื้อ/บัญชีใช้ตัวนับกลาง เลขจึงมีรหัสตัวแทนคั่นอยู่ด้วยเมื่อเป็นเอกสารของตัวแทน — บอกไว้กันงง
+  const central = docnumTypes.filter(t => t.central);
   const note = document.getElementById('d-fixed-note');
-  if (note) note.innerHTML = fixed.length
-    ? 'เอกสารงานซื้อและบัญชีออกเลขจากส่วนกลาง รูปแบบตายตัว <span class="mono-data">รหัส-ปีเดือน-เลขรัน</span> ' +
-      'ตั้งที่นี่ไม่ได้: ' + fixed.map(t => esc(t.code + ' ' + t.label)).join(' · ')
+  if (note) note.innerHTML = central.length
+    ? 'หมวดงานซื้อและบัญชี (' + central.map(t => esc(t.code)).join(' · ') + ') ใช้ตัวนับของส่วนกลาง ' +
+      'เอกสารของตัวแทนจะมีรหัสตัวแทนคั่นให้อัตโนมัติ เช่น <span class="mono-data">PO-BDC-202610-0001</span>'
     : '';
   docnumTypePicked();
 }

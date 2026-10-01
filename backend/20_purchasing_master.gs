@@ -23,27 +23,44 @@ function _withDocLock(fn) {
 }
 
 /**
- * เลขที่เอกสารระดับบริษัท: <PREFIX>-<yyyyMM>-<running 4 หลัก> รีเซ็ตรายเดือน
- * (เอกสารของตัวแทนใช้ doc_number_series/doc_number_counters ใน tenant sheet — ดู 12_docnum.gs)
+ * เลขที่เอกสารระดับบริษัท — ค่าเริ่มต้น <PREFIX>-<yyyyMM>-<running 4 หลัก> รีเซ็ตรายเดือน
+ * ★ 1 ต.ค. 2026 — **ดึงรูปแบบจากแถวที่ active ในหน้า "เลขที่เอกสาร" เสมอ** (เจ้าของระบบสั่ง)
+ *   ของเดิมฮาร์ดโค้ดไว้หมด ตั้งค่าอะไรก็ไม่มีผล · ยังไม่เคยตั้ง = ได้ผลเหมือนเดิมเป๊ะ (ดู DOC_SERIES_TYPES)
+ *   ค่าตั้งอยู่ใน `doc_number_series` ของ **สมุดที่เอกสารนั้นสังกัด**: ตัวแทน = ไฟล์ของตัวแทน ·
+ *   บริษัท (scope ว่าง) = ไฟล์ของบริษัทเอง ซึ่งเป็นสมุดเดียวกับที่หน้าจอแก้อยู่
+ * ★ รหัสตัวแทนยังแทรกหลัง prefix เหมือนเดิม (PO-TNKN-202610-0001) — ตัวนับแยกเล่มต่อตัวแทน
  * ต้องเรียกใต้ _withDocLock เท่านั้น เพราะขยับตัวนับ
  */
+var _centralDocCfgMemo = {};   // ต่อ execution — ตั้งหนี้แล้วลง JV ต่อ จะได้ไม่เปิดไฟล์ตัวแทนซ้ำสองรอบ
+function _centralDocConfig(docType, scope) {
+  var book = scope || _ensureHouseTenant();
+  var k = docType + '@' + book;
+  if (!_centralDocCfgMemo[k]) _centralDocCfgMemo[k] = _docSeriesConfig(book, docType);
+  return _centralDocCfgMemo[k];
+}
 function _nextCentralDocNo(docType, scope) {
-  var period = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMM');
-  // ตัวแทนแต่ละรายมีเลขรันของตัวเอง: คีย์ตัวนับ 'PO@TNKN' และเลขที่ออกมาเป็น PO-TNKN-202609-0001
+  var cfg = _centralDocConfig(docType, scope);
+  var sep = cfg.separator || '-';
+  var period = _periodKey(cfg.reset_cycle);
+  // ตัวแทนแต่ละรายมีเลขรันของตัวเอง: คีย์ตัวนับ 'PO@TNKN' และเลขที่ออกมาเป็น PO-TNKN-202610-0001
   var key = String(docType) + (scope ? '@' + scope : '');
-  var prefix = String(docType) + (scope ? '-' + scope : '');
+  var parts = [cfg.prefix || String(docType)];
+  if (scope) parts.push(scope);
+  if (cfg.date_format) parts.push(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), cfg.date_format));
+  var digits = parseInt(cfg.running_digits, 10) || 4;
+  var build = function(n) { var s = String(n); while (s.length < digits) s = '0' + s; return parts.concat([s]).join(sep); };
+
   var sh = centralSheet('central_doc_counters');
   var data = sh.getDataRange().getValues();
-  var next = 1;
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]) === key && String(data[i][1]) === period) {
-      next = (parseInt(data[i][2], 10) || 0) + 1;
+      var next = (parseInt(data[i][2], 10) || 0) + 1;
       sh.getRange(i + 1, 3).setValue(next);
-      return prefix + '-' + period + '-' + _pad4(next);
+      return build(next);
     }
   }
   sh.appendRow([key, period, 1]);
-  return prefix + '-' + period + '-' + _pad4(1);
+  return build(1);
 }
 function _pad4(n) { var s = String(n); while (s.length < 4) s = '0' + s; return s; }
 

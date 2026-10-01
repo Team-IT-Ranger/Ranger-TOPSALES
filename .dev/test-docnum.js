@@ -101,7 +101,8 @@ eq('  INV ยังออกเลขได้ตามรูปแบบตั�
 console.log('\n-- กันพลาด --');
 eq('ไม่ระบุประเภท → ปฏิเสธ', ctx.saveDocSeries(SESSION, { prefix: 'X' }).success, false);
 eq('  ประเภทเว้นวรรคล้วน → ปฏิเสธ', ctx.saveDocSeries(SESSION, { docType: '   ' }).success, false);
-eq('ไม่มีรูปแบบเลย → ใช้ค่าเริ่มต้นกลาง', ctx.previewNextDocNumber('BDC', 'PO'), 'PO-20261001-0001');
+// PO ยังไม่ได้ตั้ง → ใช้ค่าเริ่มต้นประจำหมวด (รายเดือน ไม่ใช่รายวันแบบ SO)
+eq('ไม่มีรูปแบบเลย → ใช้ค่าเริ่มต้นประจำหมวด', ctx.previewNextDocNumber('BDC', 'PO'), 'PO-202610-0001');
 eq('รายการเรียงใหม่สุดขึ้นก่อน', ctx.listDocSeries(SESSION, {}).data[0].record_id,
   series.reduce((m, o) => Math.max(m, o.record_id), 0));
 
@@ -110,14 +111,13 @@ eq('รายการเรียงใหม่สุดขึ้นก่อ�
    "บันทึกสำเร็จแต่ไม่มีผล" แย่กว่าปฏิเสธ เพราะคนตั้งค่าไม่มีทางรู้ */
 console.log('\n-- ประเภทเอกสารที่ตั้งได้ --');
 series = [];
-eq('ลิสต์ประเภทที่ตั้งได้ = ที่ระบบออกเลขให้จริง', ctx.listDocSeries(SESSION, {}).types.map(t => t.code), ['SO']);
-eq('  บอกประเภทที่ใช้เลขกลางด้วย (ไว้แสดงให้ผู้ใช้รู้ว่ามีอยู่)',
-  ctx.listDocSeries(SESSION, {}).fixedTypes.map(t => t.code), ['PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
-
+eq('ครบทุกหมวดที่ต้องมีเลขกำกับ', ctx.listDocSeries(SESSION, {}).types.map(t => t.code),
+  ['SO', 'PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
+eq('  หมวดที่ใช้ตัวนับกลางถูกติดธงไว้', ctx.listDocSeries(SESSION, {}).types.filter(t => t.central).map(t => t.code),
+  ['PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
 r = ctx.saveDocSeries(SESSION, { docType: 'PO', prefix: 'PO' });
-eq('★ ตั้ง PO ไม่ได้ (ใช้เลขกลาง)', r.success, false);
-eq('  บอกเหตุผลว่าเป็นเลขกลาง ไม่ใช่แค่ "ไม่รู้จัก"', /เลขที่ของส่วนกลาง/.test(r.message), true);
-eq('  เอ่ยชื่อเอกสารเป็นภาษาคน', /ใบสั่งซื้อ/.test(r.message), true);
+eq('★ ตั้ง PO ได้แล้ว (เดิมฮาร์ดโค้ด แก้ไม่ได้)', r.success, true);
+series = [];
 r = ctx.saveDocSeries(SESSION, { docType: 'ZZZ', prefix: 'Z' });
 eq('★ ตั้งประเภทมั่วไม่ได้', r.success, false);
 eq('  บอกว่าตั้งได้เฉพาะอะไร', /SO/.test(r.message), true);
@@ -125,11 +125,46 @@ eq('  ไม่มีแถวไหนถูกเขียนลงไป', se
 
 console.log('\n-- ของเก่าที่เคยพิมพ์มือไว้ ต้องยังแก้/ปิดได้ --');
 series = [{ record_id: 1, doc_type: 'QT', prefix: 'QT', date_format: '', running_digits: 4, reset_cycle: 'none', separator: '-', is_active: 'TRUE' }];
-eq('ประเภทที่มีในข้อมูลแล้วโผล่ในลิสต์ด้วย', ctx.listDocSeries(SESSION, {}).types.map(t => t.code), ['SO', 'QT']);
+eq('ประเภทที่มีในข้อมูลแล้วโผล่ต่อท้ายลิสต์มาตรฐาน',
+  ctx.listDocSeries(SESSION, {}).types.map(t => t.code).slice(-1), ['QT']);
 eq('  ติดธงว่าเป็นของเดิม', ctx.listDocSeries(SESSION, {}).types.find(t => t.code === 'QT').legacy, true);
 r = ctx.saveDocSeries(SESSION, { docType: 'QT', prefix: 'QT2' });
 eq('  แก้ของเดิมได้ (ไม่งั้นค้างถาวร แก้ไม่ได้ ปิดไม่ได้)', r.success, true);
 eq('  และยังปิดแถวเดิมตามกติกา', series.filter(s => s.doc_type === 'QT' && String(s.is_active) === 'TRUE').length, 1);
+
+/* ── ★ ค่าเริ่มต้นของทุกหมวดต้องให้ผล "เหมือนที่ระบบเคยออก" เป๊ะ (1 ต.ค. 2026) ──
+   ตอนนี้เลขเอกสารกลางอ่านรูปแบบจากค่าตั้งแล้ว ถ้า default เพี้ยนแม้ตัวอักษรเดียว
+   เลขเอกสารทั้งระบบจะเปลี่ยนหน้าตาเองวันที่ deploy โดยไม่มีใครสั่ง */
+console.log('\n-- ค่าเริ่มต้นต้องเหมือนของเดิมทุกหมวด --');
+series = [];
+eq('SO (ตัวนับในไฟล์ตัวแทน) — รายวัน', ctx.previewNextDocNumber('BDC', 'SO'), 'SO-20261001-0001');
+const centralDefaults = { PR: 'PR', PO: 'PO', GR: 'GR', AP: 'AP', PV: 'PV', INV: 'INV', RV: 'RV', JV: 'JV' };
+Object.keys(centralDefaults).forEach(code => {
+  const cfg = ctx._docSeriesConfig('BDC', code);
+  eq('  ' + code + ' — ค่าเริ่มต้น <รหัส>-yyyyMM-0000 รีเซ็ตรายเดือน',
+    [cfg.prefix, cfg.date_format, cfg.running_digits, cfg.reset_cycle, cfg.separator],
+    [centralDefaults[code], 'yyyyMM', 4, 'monthly', '-']);
+});
+
+/* ── รูปแบบวันที่ต้องละเอียดพอกับรอบรีเซ็ต ไม่งั้นเลขซ้ำ ── */
+console.log('\n-- กันเลขซ้ำ: วันที่ต้องแยกงวดได้ --');
+eq('รีเซ็ตรายเดือน + วันที่ yyyy → ปฏิเสธ (พ.ย. จะได้เลขซ้ำ ต.ค.)',
+  ctx.saveDocSeries(SESSION, { docType: 'SO', dateFormat: 'yyyy', resetCycle: 'monthly' }).success, false);
+eq('รีเซ็ตรายวัน + วันที่ yyMM → ปฏิเสธ', ctx.saveDocSeries(SESSION, { docType: 'SO', dateFormat: 'yyMM', resetCycle: 'daily' }).success, false);
+eq('รีเซ็ตรายเดือน + ไม่ใส่วันที่ → ปฏิเสธ', ctx.saveDocSeries(SESSION, { docType: 'SO', dateFormat: '', resetCycle: 'monthly' }).success, false);
+eq('  ข้อความบอกว่าต้องมีอะไร', /ปีและเดือน/.test(ctx.saveDocSeries(SESSION, { docType: 'SO', dateFormat: 'yyyy', resetCycle: 'monthly' }).message), true);
+eq('ไม่รีเซ็ตเลย + ไม่ใส่วันที่ → ผ่าน (เลขรันไม่ซ้ำอยู่แล้ว)',
+  ctx.saveDocSeries(SESSION, { docType: 'SO', prefix: 'SO', dateFormat: '', resetCycle: 'none' }).success, true);
+eq('รีเซ็ตรายเดือน + yyyyMM → ผ่าน', ctx.saveDocSeries(SESSION, { docType: 'SO', prefix: 'SO', dateFormat: 'yyyyMM', resetCycle: 'monthly' }).success, true);
+eq('รีเซ็ตรายวัน + yyyyMMdd → ผ่าน', ctx.saveDocSeries(SESSION, { docType: 'SO', prefix: 'SO', dateFormat: 'yyyyMMdd', resetCycle: 'daily' }).success, true);
+
+console.log('\n-- ตั้งค่าแล้วมีผลจริงกับหมวดกลาง --');
+series = [];
+ctx.saveDocSeries(SESSION, { docType: 'PO', prefix: 'ใบสั่งซื้อ', dateFormat: 'yyyy', runningDigits: 5, resetCycle: 'yearly', separator: '/' });
+let cfg = ctx._docSeriesConfig('BDC', 'PO');
+eq('รูปแบบที่ตั้งถูกอ่านกลับมาใช้', [cfg.prefix, cfg.date_format, cfg.running_digits, cfg.reset_cycle, cfg.separator],
+  ['ใบสั่งซื้อ', 'yyyy', 5, 'yearly', '/']);
+eq('  หมวดอื่นยังเป็นค่าเริ่มต้น', ctx._docSeriesConfig('BDC', 'GR').prefix, 'GR');
 
 console.log('\n' + (fail ? fail + ' FAILED' : 'ALL PASSED'));
 process.exit(fail ? 1 : 0);

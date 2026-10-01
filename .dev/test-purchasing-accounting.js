@@ -25,7 +25,11 @@ const sheets = {}, tenantSheets = {};
 Object.keys(CENTRAL_SHEETS).forEach(n => { sheets[n] = new FakeSheet(CENTRAL_SHEETS[n]); });
 const TENANT_COLS = {
   sales_orders: ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at'],
-  order_items: ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free','tax_status']
+  order_items: ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free','tax_status'],
+  /* ★ 1 ต.ค. 2026 — เลขเอกสารกลางอ่านรูปแบบจาก doc_number_series แล้ว (ดู _nextCentralDocNo)
+     ปล่อยว่างไว้ตั้งใจ: จะได้ทดสอบว่า "ไม่เคยตั้งค่า → เลขออกมาเหมือนเดิมทุกตัวอักษร"
+     ซึ่งเป็นสิ่งที่ต้องไม่พังที่สุดของการเปลี่ยนรอบนี้ */
+  doc_number_series: ['record_id','doc_type','prefix','date_format','running_digits','reset_cycle','separator','is_active']
 };
 Object.keys(TENANT_COLS).forEach(n => { tenantSheets[n] = new FakeSheet(TENANT_COLS[n]); });
 
@@ -65,6 +69,8 @@ const ctx = {
   centralUpdate: (n, id, f) => { const sh = ctx.centralSheet(n), r = sh.rows.find((x, i) => i && String(x[0]) === String(id)); if (!r) return false; Object.keys(f).forEach(k => { const c = sh.rows[0].indexOf(k); if (c >= 0) { while (r.length <= c) r.push(''); r[c] = f[k]; } }); return true; },
   deleteRowsWhere: (sh, col, v) => { const c = sh.rows[0].indexOf(col); let n = 0; for (let i = sh.rows.length - 1; i >= 1; i--) if (String(sh.rows[i][c]) === String(v)) { sh.rows.splice(i, 1); n++; } return n; },
   tenantObjects: (t, n) => objs(tenantSheets[n]),
+  // สมุดของบริษัทเอง — _nextCentralDocNo ใช้หาว่าจะอ่านรูปแบบเลขจากไฟล์ไหนเมื่อเอกสารเป็นของบริษัท
+  _ensureHouseTenant: () => 'TNKI',
   nowStr: () => ctx.Utilities.formatDate(CLOCK, 'tz', 'yyyy-MM-dd HH:mm:ss'),
   safeDateStr: v => String(v || ''),
   _requirePermission: (s, m, a) => (s.perms === 'none' ? { success: false, message: 'ไม่มีสิทธิ์ (' + m + ')' } : (a === 'edit' && s.readOnly ? { success: false, message: 'ไม่มีสิทธิ์แก้ไข' } : null)),
@@ -85,7 +91,8 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // 34_sales_status.gs โหลดมาเพื่อ _reservedQty()/getAvailableQty() ที่ listWarehouseStock (22_purchase_order.gs) เรียกใช้
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
-['00_setup_sheets.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs']
+// 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
