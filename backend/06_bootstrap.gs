@@ -210,6 +210,12 @@ function getSaleDetail(user, payload) {
   return { success: true,
     order: {
       code: order.order_code, customer: cust ? customerFullName(cust) : 'ลูกค้าทั่วไป', customerPhone: cust ? cust.phone : '',
+      /* สถานะ + สิทธิ์ของพนักงานกับใบนี้ (1 ต.ค. 2026) — ให้หน้าจอรู้ว่าจะโชว์ปุ่มยืนยัน/ยกเลิกไหม
+         ตัดสินจากค่าคงที่ฝั่ง backend (34_sales_status.gs) ไม่ให้หน้าจอตั้งกติกาชุดที่สองขึ้นมาเอง */
+      status: _soStatusOf(order), statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
+      fulfillmentType: order.fulfillment_type || '',
+      canConfirm: _soStatusOf(order) === SO_DRAFT,
+      canCancel: String(order.fulfillment_type) !== 'immediate' && SO_MOBILE_CANCELLABLE.indexOf(_soStatusOf(order)) !== -1,
       subtotal: parseFloat(order.subtotal) || 0, discount: parseFloat(order.discount) || 0, total: parseFloat(order.total) || 0,
       applyVat: vat.applyVat && vat.vat > 0, vatRate: vat.rate, vatAmount: vat.vat,
       subtotalExVat: vat.exVat, exemptAmount: vat.exemptAmount, taxableExVat: vat.taxableExVat, vatMixed: vat.mixed,

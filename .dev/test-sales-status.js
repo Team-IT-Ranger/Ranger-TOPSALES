@@ -40,6 +40,9 @@ const ctx = {
   // tab ที่เพิ่มเข้ามาทีหลัง: ไฟล์ตัวแทนเก่ายังไม่มี → ต้องคืน [] ไม่ใช่ throw (ของจริงอยู่ใน 02_helpers.gs)
   tenantObjectsIfExists: (tid, n) => (t[n] ? t[n].map(o => Object.assign({}, o)) : []),
   tenantAppend: (tid, n, o) => sheetOf(n).push(Object.assign({}, o)),
+  // ใช้โดย confirmSalesOrder/cancelMySalesOrder (34_sales_status.gs)
+  tenantUpdate: (tid, n, id, patch) => { const r = sheetOf(n).find(x => String(x.record_id) === String(id));
+    if (r) Object.assign(r, patch); return !!r; },
   tenantNextId: (tid, n) => sheetOf(n).reduce((m, o) => Math.max(m, parseInt(o.record_id) || 0), 0) + 1,
   // ชีตจำลองแบบ getDataRange/getRange เท่าที่ _updateOrderRow ใช้จริง
   tenantSheet: (tid, n) => {
@@ -286,6 +289,35 @@ eq('ถอยกลับมา "รอจัดส่ง" → คืนขอ�
   const active = WH.stock_reservations.filter(r2 => r2.order_id === 20 && r2.status === 'active');
   return [back.success, active.length, active[0] && active[0].qty];
 })(), [true, 1, 20]);
+
+
+/* ── ฝั่งมือถือ: ยืนยัน / ยกเลิกใบของตัวเอง (1 ต.ค. 2026) ── */
+console.log('\n== มือถือยืนยัน/ยกเลิกใบของตัวเอง ==');
+ctx.bumpSalesDaily = ctx.bumpSalesDaily || function(){};
+ctx._mobileRoleLabel = ctx._mobileRoleLabel || function(r){ return String(r || ''); };
+const U1 = { tenantId: 'T1', lineUserId: 'U-SALES-1', displayName: 'เซลส์ เอ', role: 'credit_sales' };
+t.sales_orders.push({ record_id: 30, order_code: 'SO-M-1', customer_id: 1, total: 900, payment_method: 'credit_term',
+  fulfillment_type: 'office_delivery', status: 'draft', payment_status: 'unpaid', paid_amount: 0,
+  sale_by: 'U-SALES-1', created_at: '2026-10-01 09:00:00' });
+t.sales_orders.push({ record_id: 31, order_code: 'SO-M-2', customer_id: 1, total: 500, payment_method: 'credit_term',
+  fulfillment_type: 'office_delivery', status: 'accepted', payment_status: 'unpaid', paid_amount: 0,
+  sale_by: 'U-SALES-1', created_at: '2026-10-01 09:10:00' });
+
+let m = ctx.confirmSalesOrder(U1, { orderCode: 'SO-M-1' });
+eq('ร่าง → กดยืนยันได้', [m.success, row(30).status], [true, 'confirmed']);
+eq('  กดยืนยันซ้ำ ตอบว่าทำไปแล้ว ไม่ใช่ error', ctx.confirmSalesOrder(U1, { orderCode: 'SO-M-1' }).alreadyDone, true);
+fails('ใบที่ศูนย์รับงานแล้ว ยืนยันไม่ได้', ctx.confirmSalesOrder(U1, { orderCode: 'SO-M-2' }), /ยืนยันซ้ำไม่ได้/);
+fails('★ ใบของคนอื่น แตะไม่ได้แม้อยู่ตัวแทนเดียวกัน',
+  ctx.confirmSalesOrder({ tenantId: 'T1', lineUserId: 'U-OTHER' }, { orderCode: 'SO-M-1' }), /ไม่ใช่บิลของท่าน/);
+
+m = ctx.cancelMySalesOrder(U1, { orderCode: 'SO-M-1', reason: 'ลูกค้าเปลี่ยนใจ' });
+eq('ยืนยันแล้วแต่ศูนย์ยังไม่รับงาน → ยกเลิกเองได้', [m.success, row(30).status], [true, 'cancelled']);
+fails('★ ศูนย์รับงานแล้ว ยกเลิกเองไม่ได้ ต้องแจ้งศูนย์',
+  ctx.cancelMySalesOrder(U1, { orderCode: 'SO-M-2' }), /แจ้งศูนย์/);
+t.sales_orders.push({ record_id: 32, order_code: 'SO-M-3', customer_id: 1, total: 100, payment_method: 'cash',
+  fulfillment_type: 'immediate', status: 'completed', sale_by: 'U-SALES-1', created_at: '2026-10-01 09:20:00' });
+fails('บิลขายจากรถยกเลิกเองไม่ได้ (ของออกจากรถไปแล้ว)',
+  ctx.cancelMySalesOrder(U1, { orderCode: 'SO-M-3' }), /แจ้งศูนย์/);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

@@ -2928,8 +2928,14 @@ async function ensurePaymentTypesCache(){
 const payLabel = code => { const p = paymentTypesCache.find(x => x.code === code); return p ? p.name : (code || '-'); };
 
 /* สถานะบิลขายสองแกน — ป้ายต้องตรงกับ backend (34_sales_status.gs) เป๊ะ */
-const SO_LABELS = { pending_delivery:'รอสำนักงานจัดส่ง', delivering:'กำลังจัดส่ง', completed:'ส่งของแล้ว', cancelled:'ยกเลิกแล้ว' };
-const SO_PILL   = { pending_delivery:'wait', delivering:'wait', completed:'ok', cancelled:'off' };
+/* สายงาน 1 ต.ค. 2026 — ต้องตรงกับ SO_STATUS_LABELS ใน 34_sales_status.gs
+   `pending_delivery` = ชื่อเดิมของ `confirmed` (บิลเก่ายังเป็นค่านี้ ห้ามตัดทิ้ง) */
+const SO_LABELS = { draft:'ใหม่ (ร่าง)', confirmed:'ยืนยันแล้ว — รอรับงาน', pending_delivery:'ยืนยันแล้ว — รอรับงาน',
+  accepted:'รับงานแล้ว', ready_to_ship:'พร้อมจัดส่ง', delivering:'กำลังจัดส่ง',
+  completed:'จัดส่งแล้ว', rejected:'ปฏิเสธไม่ขาย', cancelled:'ยกเลิกแล้ว' };
+const SO_PILL   = { draft:'off', confirmed:'wait', pending_delivery:'wait', accepted:'wait', ready_to_ship:'wait',
+  delivering:'wait', completed:'ok', rejected:'off', cancelled:'off' };
+// ปุ่มขั้นถัดไปไม่ได้ตั้งไว้ที่นี่ — backend ส่ง `nextStatuses` มาจาก SO_TRANSITIONS ให้แล้ว (แหล่งเดียว)
 const PAY_LABELS = { unpaid:'ยังไม่ชำระ', partial:'ชำระบางส่วน', paid:'ชำระแล้ว' };
 const PAY_PILL   = { unpaid:'off', partial:'wait', paid:'ok' };
 const soStatusPill = st => '<span class="pill '+(SO_PILL[st]||'')+'">'+(SO_LABELS[st]||esc(st||'-'))+'</span>';
@@ -3077,8 +3083,9 @@ function renderSaleOrderStatusCard(r){
     box.innerHTML = '<div class="form-card"><b>บิลนี้ถูกยกเลิกแล้ว</b> <span class="unit">เปลี่ยนสถานะต่อไม่ได้</span></div>';
     return;
   }
-  const steps = ['pending_delivery','delivering','completed'];
-  const at = steps.indexOf(o.status);
+  // แถบขั้นตอนตามสายงาน 1 ต.ค. 2026 · บิลเก่าที่ยังเป็น pending_delivery ถือว่าอยู่ขั้น "ยืนยันแล้ว"
+  const steps = ['draft','confirmed','accepted','ready_to_ship','delivering','completed'];
+  const at = steps.indexOf(o.status === 'pending_delivery' ? 'confirmed' : o.status);
   const stepBar = steps.map((st, i) =>
     '<span class="pill '+(i <= at ? 'ok' : '')+'" style="'+(i > at ? 'opacity:.45' : '')+'">'+(i+1)+'. '+SO_LABELS[st]+'</span>').join(' <span class="unit">→</span> ');
   const nextBtns = (o.nextStatuses || []).map(n =>

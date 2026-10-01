@@ -37,7 +37,8 @@ const ctx = {
   safeDateStr: v => String(v || ''), nowStr: () => '2026-09-30 12:00:00'
 };
 vm.createContext(ctx);
-['18_pricing_engine.gs', '33_customers.gs', '06_bootstrap.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
+// 34_sales_status.gs โหลดเพิ่ม 1 ต.ค. 2026 — getSaleDetail ส่งสถานะ + สิทธิ์ยืนยัน/ยกเลิกไปให้มือถือ
+['18_pricing_engine.gs', '33_customers.gs', '34_sales_status.gs', '06_bootstrap.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
 const eq = (name, actual, expected) => {

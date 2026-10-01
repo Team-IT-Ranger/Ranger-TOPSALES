@@ -364,7 +364,7 @@ let DATA = { products: [], customers: [] };
      2) action เดียวกันที่ยังค้างอยู่ ถูกบล็อกก่อนถึง network
      3) บิล/สต็อกแนบ requestId ที่สร้าง "ตอนประกอบข้อมูล" ครั้งเดียว — ส่งซ้ำกี่รอบเซิร์ฟเวอร์ก็บันทึกใบเดียว
         สำคัญมากกับคิวออฟไลน์: บิลในคิวพก requestId เดิมติดตัวไปด้วย การส่งซ้ำจึงไม่เกิดใบที่สอง */
-const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor']);
+const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder']);
 const INFLIGHT = new Set();
 const newRequestId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 function pressBusy(btn, on){ if (!btn) return; btn.disabled = on; btn.classList.toggle('is-busy', on); }
@@ -621,6 +621,7 @@ function renderSaleDetail(r){
   $('sd-body').innerHTML =
     '<div class="card stack">' +
       '<div class="row"><b>' + esc(o.code) + '</b><span class="note">' + esc(o.createdAt) + '</span></div>' +
+      (o.statusLabel ? '<div class="row"><span>สถานะ</span><b>' + esc(o.statusLabel) + '</b></div>' : '') +
       '<div class="row"><span>ลูกค้า</span><span>' + esc(o.customer) + '</span></div>' +
       (o.customerPhone ? '<div class="row"><span>โทร</span><span>' + esc(o.customerPhone) + '</span></div>' : '') +
       '<div class="row"><span>ชำระเงิน</span><span>' + (o.paymentMethod === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></div>' +
@@ -653,7 +654,31 @@ function renderSaleDetail(r){
         : '') +
       '<div class="row"><b>ราคารวมภาษีมูลค่าเพิ่ม</b><span class="mono"><b>฿' + baht(o.total) + '</b></span></div>' +
     '</div>' +
+    /* ปุ่มยืนยัน/ยกเลิก — โชว์ตามสิทธิ์ที่ backend คำนวณมาให้ (canConfirm/canCancel)
+       ร่าง = ยืนยันได้+ยกเลิกได้ · ยืนยันแล้ว = ยกเลิกได้ · ศูนย์รับงานแล้ว = ไม่มีปุ่ม ต้องแจ้งศูนย์ */
+    (o.canConfirm ? '<button class="btn btn-primary btn-block no-print" style="margin-top:12px" onclick="confirmThisSale(\'' + esc(o.code) + '\')">✓ ยืนยันใบสั่งขาย — ส่งให้ศูนย์รับงาน</button>' : '') +
+    (o.canCancel ? '<button class="btn btn-block no-print" style="margin-top:8px" onclick="cancelThisSale(\'' + esc(o.code) + '\')">ยกเลิกใบสั่งขายนี้</button>' : '') +
+    (!o.canConfirm && !o.canCancel && o.status && o.status !== 'completed' && o.fulfillmentType !== 'immediate'
+      ? '<div class="note no-print" style="margin-top:12px">ศูนย์รับงานแล้ว — แก้ไขหรือยกเลิกเองไม่ได้ กรุณาแจ้งศูนย์</div>' : '') +
     '<button class="btn btn-primary btn-block no-print" style="margin-top:12px" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>';
+}
+
+/* ยืนยัน/ยกเลิกใบสั่งขายของตัวเอง (1 ต.ค. 2026) — ต้องออนไลน์ ไม่เข้าคิวออฟไลน์
+   เพราะทั้งสองอย่างต้องรู้สถานะล่าสุดจากเซิร์ฟเวอร์ก่อน (ศูนย์อาจรับงานไปแล้วระหว่างที่เน็ตหลุด) */
+async function confirmThisSale(code){
+  if (!navigator.onLine) { toast('ต้องออนไลน์ถึงจะยืนยันได้', true); return; }
+  if (!confirm('ยืนยันว่าใบสั่งขายนี้ถูกต้องครบถ้วน และส่งให้ศูนย์รับงาน?\nยืนยันแล้วจะแก้ไขเองไม่ได้')) return;
+  const r = await api('confirmSalesOrder', { orderCode: code });
+  toast(r.message || (r.success ? 'ยืนยันแล้ว' : 'ยืนยันไม่สำเร็จ'), !r.success);
+  if (r.success) openSaleDetail(code);
+}
+async function cancelThisSale(code){
+  if (!navigator.onLine) { toast('ต้องออนไลน์ถึงจะยกเลิกได้', true); return; }
+  const reason = prompt('ยกเลิกใบสั่งขาย ' + code + '\nเหตุผล (ไม่บังคับ):');
+  if (reason === null) return;
+  const r = await api('cancelMySalesOrder', { orderCode: code, reason: reason });
+  toast(r.message || (r.success ? 'ยกเลิกแล้ว' : 'ยกเลิกไม่สำเร็จ'), !r.success);
+  if (r.success) openSaleDetail(code);
 }
 
 /* ══════════════ คิวบิลออฟไลน์ ══════════════ */

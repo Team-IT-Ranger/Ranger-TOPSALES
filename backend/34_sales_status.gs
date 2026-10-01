@@ -380,3 +380,61 @@ function updateSalesOrderStatus(session, payload) {
       message: changes.length ? changes.join(' · ') : 'บันทึกแล้ว' };
   });
 }
+
+/* ═══════════ ฝั่งแอปมือถือ: ยืนยันใบสั่งขาย / ยกเลิกใบของตัวเอง (1 ต.ค. 2026) ═══════════
+ * กติกาเจ้าของระบบ:
+ *   ร่าง        → แก้ได้ · ยกเลิกเองได้ · กด "ยืนยัน" เพื่อส่งให้ศูนย์
+ *   ยืนยันแล้ว  → แก้ไม่ได้ · ยังยกเลิกเองได้ (ศูนย์ยังไม่รับงาน จึงยังไม่มีใครเสียหาย)
+ *   รับงานแล้ว  → ทำอะไรเองไม่ได้เลย ต้องแจ้งศูนย์ให้ดำเนินการ
+ * ทั้งสอง action ตรวจความเป็นเจ้าของด้วย `sale_by === lineUserId` เหมือน getSaleDetail (06_bootstrap.gs)
+ * — พนักงานคนอื่นแตะใบที่ไม่ใช่ของตัวเองไม่ได้ แม้จะอยู่ตัวแทนเดียวกัน
+ */
+function _mobileOwnOrder(user, orderCode) {
+  var found = null;
+  tenantObjects(user.tenantId, 'sales_orders').forEach(function(o) {
+    if (String(o.order_code) === String(orderCode) && String(o.sale_by) === String(user.lineUserId)) found = o;
+  });
+  return found;
+}
+
+/** มือถือกดยืนยันว่าใบนี้ถูกต้องครบถ้วน → ส่งให้ศูนย์รับงาน */
+function confirmSalesOrder(user, payload) {
+  ensureTenantSheetsCurrent(user.tenantId);
+  return _withDocLock(function() {
+    var order = _mobileOwnOrder(user, (payload || {}).orderCode);
+    if (!order) return { success: false, message: 'ไม่พบบิลนี้ หรือไม่ใช่บิลของท่าน' };
+    var from = _soStatusOf(order);
+    if (from === SO_CONFIRMED || from === SO_PENDING) return { success: true, status: from, alreadyDone: true, message: 'ใบนี้ยืนยันไปแล้ว' };
+    if (from !== SO_DRAFT) return { success: false, message: 'ใบนี้อยู่ขั้น "' + SO_STATUS_LABELS[from] + '" แล้ว ยืนยันซ้ำไม่ได้' };
+    tenantUpdate(user.tenantId, 'sales_orders', order.record_id, { status: SO_CONFIRMED, updated_at: nowStr(), updated_by: user.lineUserId });
+    logOrderStatus(user.tenantId, order.record_id, from, SO_CONFIRMED, '', '', 'พนักงานยืนยันความถูกต้องจากแอปมือถือ',
+      user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
+    return { success: true, status: SO_CONFIRMED, statusLabel: SO_STATUS_LABELS[SO_CONFIRMED],
+      message: 'ยืนยันแล้ว — ส่งให้ศูนย์รับงานเรียบร้อย' };
+  });
+}
+
+/** มือถือยกเลิกใบของตัวเอง (ได้เฉพาะก่อนศูนย์รับงาน) — คืนยอดขายรายวันให้ด้วย
+ *  ใบนัดส่งยังไม่ได้ตัดสต็อกและยังไม่ได้จอง (จองตอนรับงาน) จึงไม่มีอะไรต้องคืนเข้าคลัง */
+function cancelMySalesOrder(user, payload) {
+  ensureTenantSheetsCurrent(user.tenantId);
+  return _withDocLock(function() {
+    var order = _mobileOwnOrder(user, (payload || {}).orderCode);
+    if (!order) return { success: false, message: 'ไม่พบบิลนี้ หรือไม่ใช่บิลของท่าน' };
+    var from = _soStatusOf(order);
+    if (from === SO_CANCELLED) return { success: true, status: from, alreadyDone: true, message: 'ใบนี้ยกเลิกไปแล้ว' };
+    if (SO_MOBILE_CANCELLABLE.indexOf(from) === -1) {
+      return { success: false, message: 'ใบนี้อยู่ขั้น "' + SO_STATUS_LABELS[from] + '" แล้ว ยกเลิกเองไม่ได้ — แจ้งศูนย์ให้ดำเนินการแทน' };
+    }
+    if (String(order.fulfillment_type) === 'immediate') {
+      return { success: false, message: 'บิลขายจากรถยกเลิกเองไม่ได้ (ของออกจากรถไปแล้ว) — แจ้งศูนย์ให้ดำเนินการ' };
+    }
+    tenantUpdate(user.tenantId, 'sales_orders', order.record_id, { status: SO_CANCELLED, updated_at: nowStr(), updated_by: user.lineUserId });
+    logOrderStatus(user.tenantId, order.record_id, from, SO_CANCELLED, '', '',
+      'พนักงานยกเลิกเองจากแอปมือถือ' + ((payload || {}).reason ? ' — ' + payload.reason : ''),
+      user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
+    // ยอดขายรายวันนับตั้งแต่เปิดบิล ยกเลิกแล้วต้องหักคืน (หลักเดียวกับ cancelSalesOrderAdmin)
+    bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), -1, -(parseFloat(order.total) || 0));
+    return { success: true, status: SO_CANCELLED, statusLabel: SO_STATUS_LABELS[SO_CANCELLED], message: 'ยกเลิกใบสั่งขายแล้ว' };
+  });
+}

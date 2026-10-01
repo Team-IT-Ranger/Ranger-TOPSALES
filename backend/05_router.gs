@@ -11,6 +11,9 @@ var ACTION_MAP = {
   getRecentSales: getRecentSales,
   getSaleDetail:  getSaleDetail,
   recordSale:     recordSale,
+  // ยืนยัน/ยกเลิกใบสั่งขายของตัวเองจากแอปมือถือ (34_sales_status.gs)
+  confirmSalesOrder:  confirmSalesOrder,
+  cancelMySalesOrder: cancelMySalesOrder,
   quoteSale:      quoteSale,
   restockVan:     restockVan,
   submitCount:    submitCount,
