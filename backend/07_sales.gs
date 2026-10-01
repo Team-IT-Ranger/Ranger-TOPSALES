@@ -207,7 +207,10 @@ function recordSale(user, payload) {
     paid_amount: initialPaymentStatus(payload.paymentType, fulfillmentType) === 'paid' ? calc.total : 0,
     delivered_at: fulfillmentType === 'immediate' ? createdAt : '', paid_at: '',
     sale_by: user.lineUserId, lat: payload.latitude || '', lng: payload.longitude || '',
-    map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt
+    map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt,
+    // วันนัดส่งโดยประมาณ รับเฉพาะรูปแบบ yyyy-MM-dd และเฉพาะใบนัดส่ง (ขายจากรถส่งของไปแล้ว ไม่มีวันนัด)
+    requested_delivery_date: (fulfillmentType === 'office_delivery' && /^\d{4}-\d{2}-\d{2}$/.test(String(payload.requestedDeliveryDate || '')))
+      ? String(payload.requestedDeliveryDate) : ''
   });
   logOrderStatus(user.tenantId, orderId, '', fulfillmentType === 'immediate' ? SO_COMPLETED : SO_DRAFT,
     '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอปมือถือ',

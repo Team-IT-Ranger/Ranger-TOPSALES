@@ -12,6 +12,9 @@ var TENANT_SHEET_TABS = {
   // เพราะอัตราภาษีเปลี่ยนได้ และใบกำกับภาษีที่พิมพ์ไปแล้วต้องตรงกับตัวเลขในระบบตลอดไป
   sales_orders:        ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at',
     'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by',
+    /* วันนัดส่งโดยประมาณ (1 ต.ค. 2026) — พนักงานกรอกตอนเปิดใบนัดส่ง แล้วพิมพ์ลงใบที่ลูกค้าถือไว้เป็นหลักฐาน
+       เป็น "ประมาณการที่ตกลงกับลูกค้า" คนละช่องกับ `delivered_at` ซึ่งคือวันที่ส่งจริง */
+    'requested_delivery_date',
     // ภาพนิ่งภาษี ณ วันที่ออกบิล — ห้ามคำนวณใหม่ตอนเปิดดู ไม่งั้นวันที่อัตราภาษีเปลี่ยน ใบเก่าทั้งหมดขยับตาม
     // และงบที่ปิดไปแล้วจะเคลื่อน · apply_vat: ใบนี้คิด VAT ไหม · vat_type: inclusive/exclusive ณ ตอนออก
     'apply_vat','vat_type','vat_rate','subtotal_ex_vat','vat_amount','exempt_amount'],

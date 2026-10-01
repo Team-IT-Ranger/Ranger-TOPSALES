@@ -242,7 +242,12 @@
         <button class="on" data-v="cash" onclick="setPay('cash')">เงินสด</button>
         <button data-v="credit_term" onclick="setPay('credit_term')">เครดิต</button>
       </div>
-      <label class="check"><input type="checkbox" id="s-office" onchange="cartChanged()"> ส่งจากสำนักงาน (ไม่ตัดสต็อกบนรถ)</label>
+      <label class="check"><input type="checkbox" id="s-office" onchange="syncDelivField();cartChanged()"> ส่งจากสำนักงาน (ไม่ตัดสต็อกบนรถ)</label>
+      <!-- วันนัดส่งโดยประมาณ — โชว์เฉพาะใบนัดส่ง ไปพิมพ์ลงใบที่ลูกค้าถือไว้เป็นหลักฐาน (เจ้าของระบบสั่ง 1 ต.ค. 2026) -->
+      <div id="s-deliv-wrap" style="display:none;margin-top:8px">
+        <span class="note">วันนัดส่งโดยประมาณ (บอกลูกค้า)</span>
+        <input type="date" id="s-deliv" style="width:100%;padding:8px;margin-top:4px">
+      </div>
     </div>
     <!-- ★ 2026-09-30 เจ้าของระบบสั่ง: แยก "หน้าเลือกสินค้า" ออกจาก "หน้าตะกร้า" ให้ชัดเจนเหมือนฝั่งแอดมิน
          (เดิมรายการสินค้าทั้งหมดกับของที่เลือกไว้ปนกันในลิสต์เดียว หาของที่เลือกไปแล้วไม่เจอ) — ยังแตะ +/− ไวเหมือนเดิม
@@ -511,6 +516,7 @@ function enterApp(){
   // ตั้งครั้งเดียวตอนเข้าแอปต่อเซสชัน ไม่บังคับซ้ำทุกครั้งที่กลับมาแท็บขาย เพราะจะไปแย่งค่าที่ผู้ใช้เปลี่ยนเองไว้
   // ราคาเงินสด/เครดิตเลือกตามค่า PAY นี้อยู่แล้วในตัว (isCreditPayment ที่ quoteSale/recordSale) ไม่ต้องแก้อะไรเพิ่ม
   if (ME.role === 'credit_sales') { setPay('credit_term'); $('s-office').checked = true; }
+  syncDelivField();
   const cached = lsGet('boot_' + ME.lineUserId, null);
   if (cached) DATA = cached.data;
   gotoTab('home');
@@ -626,6 +632,9 @@ function renderSaleDetail(r){
     '<div class="card stack">' +
       '<div class="row"><b>' + esc(o.code) + '</b><span class="note">' + esc(o.createdAt) + '</span></div>' +
       (o.statusLabel ? '<div class="row"><span>สถานะ</span><b>' + esc(o.statusLabel) + '</b></div>' : '') +
+      /* สองบรรทัดนี้มีไว้ให้ลูกค้าถือเป็นหลักฐาน: ของจะมาวันไหน และส่งไปที่ไหน */
+      (o.requestedDeliveryDate ? '<div class="row"><span>นัดส่งโดยประมาณ</span><b>' + esc(o.requestedDeliveryDate) + '</b></div>' : '') +
+      (o.customerAddress ? '<div class="row"><span>ที่อยู่จัดส่ง</span><span style="text-align:right">' + esc(o.customerAddress) + '</span></div>' : '') +
       '<div class="row"><span>ลูกค้า</span><span>' + esc(o.customer) + '</span></div>' +
       (o.customerPhone ? '<div class="row"><span>โทร</span><span>' + esc(o.customerPhone) + '</span></div>' : '') +
       '<div class="row"><span>ชำระเงิน</span><span>' + (o.paymentMethod === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></div>' +
@@ -665,7 +674,11 @@ function renderSaleDetail(r){
     (o.canCancel ? '<button class="btn btn-block no-print" style="margin-top:8px" onclick="cancelThisSale(\'' + esc(o.code) + '\')">ยกเลิกใบสั่งขายนี้</button>' : '') +
     (!o.canConfirm && !o.canCancel && o.status && o.status !== 'completed' && o.fulfillmentType !== 'immediate'
       ? '<div class="note no-print" style="margin-top:12px">ศูนย์รับงานแล้ว — แก้ไขหรือยกเลิกเองไม่ได้ กรุณาแจ้งศูนย์</div>' : '') +
-    '<button class="btn btn-primary btn-block no-print" style="margin-top:12px" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>';
+    /* ★ ปุ่มพิมพ์ให้ลูกค้า — เฉพาะใบที่ยืนยันแล้ว (เจ้าของระบบสั่ง 1 ต.ค. 2026)
+       ใบร่างยังแก้ได้และศูนย์ยังไม่เห็น ยื่นให้ลูกค้าไปคือให้หลักฐานที่ยังเปลี่ยนได้ ซึ่งแย่กว่าไม่ให้เลย */
+    (o.status === 'draft'
+      ? '<div class="note no-print" style="margin-top:12px">ยืนยันใบสั่งขายก่อน จึงจะพิมพ์ให้ลูกค้าเก็บไว้เป็นหลักฐานได้</div>'
+      : '<button class="btn btn-primary btn-block no-print" style="margin-top:12px" onclick="window.print()">🖨️ พิมพ์ใบสั่งขายให้ลูกค้า / บันทึกเป็น PDF</button>');
 }
 
 /* ยืนยัน/ยกเลิกใบสั่งขายของตัวเอง (1 ต.ค. 2026) — ต้องออนไลน์ ไม่เข้าคิวออฟไลน์
@@ -756,10 +769,13 @@ function renderCustSelect(){
 /* ★ 1 ต.ค. 2026 เจ้าของระบบสั่ง: เลือกจ่ายแบบ "เครดิต" เมื่อไหร่ ให้ติ๊ก "ส่งจากสำนักงาน" อัตโนมัติ
    เดิมติ๊กให้เฉพาะบทบาทเครดิตเซลส์ตอนเปิดแอป — หน่วยรถที่เปลี่ยนมาเลือกเครดิตกลางคันจึงยังเป็นบิลขายจากรถ
    คือตัดสต็อกบนรถทันทีทั้งที่ของยังไม่ได้ออกไป · ยังเอาติ๊กออกเองได้ถ้าตั้งใจส่งของจากรถจริงๆ */
+// ช่องวันนัดส่งโผล่เฉพาะตอนติ๊ก 'ส่งจากสำนักงาน' — ขายจากรถส่งของไปแล้ว ไม่มีวันนัด
+function syncDelivField(){ const w=$('s-deliv-wrap'); if(w) w.style.display=$('s-office').checked?'':'none'; }
 function setPay(v){
   PAY = v;
   document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   if (v === 'credit_term' || v === 'credit') { const o = $('s-office'); if (o && !o.checked) o.checked = true; }
+  syncDelivField();
   cartChanged();
 }
 const cartQty = (pid, code) => { const c = CART.find(x => String(x.productId) === String(pid) && x.unitCode === code); return c ? c.qty : 0; };
@@ -940,6 +956,7 @@ async function submitSale(){
       ? QUOTE.freeGoods.map(f => ({ ruleId: f.ruleId, productId: f.productId, applied: !FREE_OFF.has(f.ruleId) }))
       : undefined;
     const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: $('s-office').checked ? 'office_delivery' : 'immediate',
+      requestedDeliveryDate: $('s-office').checked ? ($('s-deliv').value || '') : '',
       items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })), freeGoods,
       latitude: gps.lat, longitude: gps.lng, googleMap: gps.map, savedAt: new Date().toISOString(),
       // สร้างครั้งเดียวต่อ "ความตั้งใจจะบันทึกหนึ่งบิล" — ส่งใหม่/ส่งจากคิวใช้ค่าเดิม เซิร์ฟเวอร์จึงบันทึกใบเดียว
@@ -974,6 +991,7 @@ function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
   if (!$('s-office').checked) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
   lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
+  const dv = $('s-deliv'); if (dv) dv.value = '';   // ไม่ให้บิลถัดไปติดวันนัดส่งของบิลก่อนมา
   CART = []; QUOTE = null; FREE_OFF = new Set(); SELL_MODE = 'pick'; renderProducts(); renderCartBar();
 }
 

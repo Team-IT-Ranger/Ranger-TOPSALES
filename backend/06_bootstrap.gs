@@ -215,6 +215,8 @@ function getSaleDetail(user, payload) {
       /* สถานะ + สิทธิ์ของพนักงานกับใบนี้ (1 ต.ค. 2026) — ให้หน้าจอรู้ว่าจะโชว์ปุ่มยืนยัน/ยกเลิกไหม
          ตัดสินจากค่าคงที่ฝั่ง backend (34_sales_status.gs) ไม่ให้หน้าจอตั้งกติกาชุดที่สองขึ้นมาเอง */
       customerId: order.customer_id,   // ใช้ตอน "แก้ไขร่าง" เพื่อเลือกร้านเดิมกลับให้ในหน้าขาย
+      requestedDeliveryDate: safeDateStr(order.requested_delivery_date).substring(0, 10),
+      customerAddress: cust ? (cust.address || '') : '',   // พิมพ์ลงใบที่ให้ลูกค้าถือไว้
       status: _soStatusOf(order), statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
       fulfillmentType: order.fulfillment_type || '',
       canConfirm: _soStatusOf(order) === SO_DRAFT,
