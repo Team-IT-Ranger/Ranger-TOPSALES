@@ -180,6 +180,25 @@ eq('  แก้ชุดใหม่แล้วต้นฉบับไม่�
 eq('  ชุดใหม่ได้ราคาใหม่', itemsOf(L2).map(i => i.cash_price_incl_vat), [1150, 1150, 1150]);
 eq('clone ต้นทางไม่มีจริง → ปฏิเสธ', ctx.clonePriceList(S, { id: 999, name: 'x', validFrom: '2027-01-01', validTo: '2027-03-31' }).success, false);
 eq('clone ไม่ตั้งชื่อ → ปฏิเสธ', ctx.clonePriceList(S, { id: L1, name: ' ', validFrom: '2027-01-01', validTo: '2027-03-31' }).success, false);
+// ── ราคาต้องลงตัวที่สตางค์ (1 ต.ค. 2026) ──
+// ไฟล์ใบราคาจริงมีเซลล์ที่เป็น **ผลลัพธ์สูตรของ Excel** ไม่ใช่เลขที่คนพิมพ์ เช่น 1146.9972 (ใบราคาหมายถึง 1,147)
+// เก็บดิบไว้ = ขาย 50 ลังได้ 57,349.86 ขณะที่กระดาษบอก 57,350.00 ต่างกัน 14 สตางค์โดยไม่มีอะไรฟ้อง
+r = ctx.savePriceListLine(S, { priceListId: L2, lineId: newLine, productIds: [101, 102, 201], caseFactor: 60,
+  listExVat: 1813.0841121495325, suggestedPack: 64.66666666666667, retailPiece: 12.345678,
+  tiers: [{ min: 1, max: 49, cashInclVat: 1146.9972, creditInclVat: 1161.9986000000001 },
+          { min: 50, max: null, cashInclVat: 1100.005, creditInclVat: 1100.004 }],
+  packs: [{ factor: 5, cashInclVat: 57.943925233644855, listExVat: 54.15, note: 'แพ็ค' }] });
+eq('ราคาเศษจากสูตร Excel → เก็บเป็นสตางค์', r.success, true);
+const rnd = itemsOf(L2), tierAt = q => rnd.find(i => String(i.min_qty) === String(q) && i.van_only !== 'TRUE');
+eq('  ขั้นสด/เชื่อ ปัดเป็น 2 ตำแหน่ง', [tierAt(1).cash_price_incl_vat, tierAt(1).credit_price_incl_vat], [1147, 1162]);
+eq('  ปัดแบบครึ่งขึ้น ไม่ใช่ตัดทิ้ง', [tierAt(50).cash_price_incl_vat, tierAt(50).credit_price_incl_vat], [1100.01, 1100]);
+eq('  ราคาตั้ง/ราคาแนะนำ/ราคาปลีก ก็ลงตัวด้วย',
+  [tierAt(1).list_price_ex_vat, tierAt(1).suggested_price, tierAt(1).retail_price], [1813.08, 64.67, 12.35]);
+eq('  ราคาแพ็คก็ลงตัว', rnd.filter(i => i.van_only === 'TRUE').map(i => i.cash_price_incl_vat)[0], 57.94);
+eq('  ไม่มีช่องเงินไหนเหลือเศษเกินสตางค์',
+  rnd.filter(i => ['cash_price_incl_vat', 'credit_price_incl_vat', 'list_price_ex_vat', 'suggested_price', 'retail_price']
+    .some(k => typeof i[k] === 'number' && Math.abs(i[k] - Math.round(i[k] * 100) / 100) > 1e-9)).length, 0);
+
 eq('lock ถูกปล่อยทุกครั้ง', lockHeld, false);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
