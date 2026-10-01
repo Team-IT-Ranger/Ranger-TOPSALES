@@ -111,14 +111,22 @@ eq('ขายสดแต่ให้ออฟฟิศส่ง = ยังไ�
 eq('บิลเก่าที่ไม่มีคอลัมน์ payment_status → เดาจากวิธีขาย', ctx.orderPaymentStatus(row(3)), 'paid');
 
 console.log('\n── เดินสถานะการส่งของตามลำดับงานจริง ──');
-let r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'delivering' });
-eq('รอจัดส่ง → กำลังจัดส่ง', [r.success, row(1).status], [true, 'delivering']);
+/* ★ 1 ต.ค. 2026 สายงานใหม่: ยืนยัน → รับงาน → พร้อมจัดส่ง → กำลังจัดส่ง → จัดส่งแล้ว
+   บิลเก่าที่เป็น `pending_delivery` ถือว่าอยู่ขั้น "ยืนยันแล้ว" เดินต่อได้โดยไม่ต้อง migrate */
+fails('ยืนยันแล้ว → กำลังจัดส่ง (ข้ามรับงาน/พร้อมส่ง) ไม่ได้',
+  ctx.updateSalesOrderStatus(S, { id: 1, status: 'delivering' }), /ไม่ได้/);
+let r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'accepted' });
+eq('ยืนยันแล้ว → ศูนย์รับงาน', [r.success, row(1).status], [true, 'accepted']);
 eq('  บันทึกประวัติไว้ 1 บรรทัด พร้อมชื่อและตำแหน่งคนเปลี่ยน (guide 1.6)', (() => { const l = logs(1);
   return [l.length, l[0].from_status, l[0].to_status, l[0].changed_by, l[0].changed_by_role]; })(),
-  [1, 'pending_delivery', 'delivering', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
+  [1, 'pending_delivery', 'accepted', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
+r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'ready_to_ship' });
+eq('ศูนย์รับงาน → พร้อมจัดส่ง (จุดตัดสต็อกใหม่)', [r.success, row(1).status], [true, 'ready_to_ship']);
+r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'delivering' });
+eq('พร้อมจัดส่ง → กำลังจัดส่ง', [r.success, row(1).status], [true, 'delivering']);
 r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'completed' });
-eq('กำลังจัดส่ง → ส่งของแล้ว และประทับเวลาส่ง', [r.success, row(1).status, row(1).delivered_at], [true, 'completed', '2026-09-26 12:00:00']);
-eq('  ข้อความที่ตอบกลับบอกสิ่งที่เปลี่ยนจริง', r.message, 'กำลังจัดส่ง → ส่งของแล้ว');
+eq('กำลังจัดส่ง → จัดส่งแล้ว และประทับเวลาส่ง', [r.success, row(1).status, row(1).delivered_at], [true, 'completed', '2026-09-26 12:00:00']);
+eq('  ข้อความที่ตอบกลับบอกสิ่งที่เปลี่ยนจริง', r.message, 'กำลังจัดส่ง → จัดส่งแล้ว');
 r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'delivering' });
 eq('ถอยกลับหนึ่งขั้นได้ (กดผิดเป็นเรื่องปกติ) และล้างเวลาส่งทิ้ง', [r.success, row(1).status, row(1).delivered_at], [true, 'delivering', '']);
 fails('ข้ามขั้นจากกำลังจัดส่งกลับไปหาอะไรที่ไม่มีในสาย ไม่ได้', ctx.updateSalesOrderStatus(S, { id: 1, status: 'ส่งแล้วมั้ง' }), /สถานะไม่ถูกต้อง/);
@@ -152,7 +160,7 @@ eq('  ประวัติบรรทัดเดียวเก็บทั�
   return [logs(1).length - before, l.to_status, l.to_payment, l.note]; })(),
   [1, 'completed', 'unpaid', 'ส่งของแล้วแต่ยังไม่ได้เก็บเงิน']);
 eq('ประวัติที่ส่งให้หน้าเว็บมีป้ายภาษาไทยมาแล้ว พร้อมตำแหน่งคนเปลี่ยน', (() => { const h = ctx.orderStatusLog('T1', 1).slice(-1)[0];
-  return [h.toLabel, h.toPaymentLabel, h.by, h.byRole]; })(), ['ส่งของแล้ว', 'ยังไม่ชำระ', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
+  return [h.toLabel, h.toPaymentLabel, h.by, h.byRole]; })(), ['จัดส่งแล้ว', 'ยังไม่ชำระ', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
 
 console.log('\n── ป้ายและเส้นทางที่ส่งให้หน้าเว็บ ──');
 console.log('\n== จุดตัดสต็อก: office_delivery ตัดตอน "กำลังจัดส่ง" ==');
@@ -164,24 +172,29 @@ t.order_items = [{ record_id: 1, order_id: 10, product_id: 101, base_qty: 12 },
 eq('บิลที่ยังรอจัดส่ง ถือว่ายังไม่ได้ตัดของ', ctx.saleStockTaken(row(10)), false);
 eq('ยังไม่แตะคลังเลยตอนเปิดบิล', [whQty(101), whQty(102)], [50, 4]);
 
-r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'delivering' });
-eq('เข้า "กำลังจัดส่ง" → ตัดของออกจากคลัง', [r.success, whQty(101), whQty(102)], [true, 38, 1]);
+ctx.updateSalesOrderStatus(S, { id: 10, status: 'accepted' });
+eq('ศูนย์รับงาน → กันของไว้ แต่ยังไม่ตัดออกจากคลัง',
+  [ctx.saleStockTaken(row(10)), whQty(101), whQty(102)], [false, 50, 4]);
+r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'ready_to_ship' });
+eq('เข้า "พร้อมจัดส่ง" → ตัดของออกจากคลัง', [r.success, whQty(101), whQty(102)], [true, 38, 1]);
 eq('  บอกในข้อความว่าตัดสต็อกแล้ว', /ตัดสต็อกออกจากคลังแล้ว/.test(r.message), true);
 eq('  เขียนบัญชีคุมการเคลื่อนไหวเป็นยอดติดลบ', LEDGER.filter(l => l.moveType === 'sale_out').map(l => l.qty), [-12, -3]);
 eq('  ตอนนี้ถือว่าของถูกตัดไปแล้ว', ctx.saleStockTaken(row(10)), true);
 
 LEDGER.length = 0;
+ctx.updateSalesOrderStatus(S, { id: 10, status: 'delivering' });
 r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'completed' });
-eq('เดินต่อไป "ส่งของแล้ว" → ★ ห้ามตัดซ้ำ', [r.success, whQty(101), whQty(102), LEDGER.length], [true, 38, 1, 0]);
+eq('เดินต่อไปจนจัดส่งแล้ว → ★ ห้ามตัดซ้ำ', [r.success, whQty(101), whQty(102), LEDGER.length], [true, 38, 1, 0]);
 
 r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'delivering' });
-eq('ถอยจาก "ส่งของแล้ว" กลับมา "กำลังจัดส่ง" ก็ไม่ขยับสต็อก (ยังเลยจุดตัดอยู่)', [whQty(101), whQty(102)], [38, 1]);
-r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'pending_delivery' });
+eq('ถอยจาก "จัดส่งแล้ว" กลับมา "กำลังจัดส่ง" ก็ไม่ขยับสต็อก (ยังเลยจุดตัดอยู่)', [whQty(101), whQty(102)], [38, 1]);
+ctx.updateSalesOrderStatus(S, { id: 10, status: 'ready_to_ship' });   // ยังเลยจุดตัด ยังไม่คืนของ
+r = ctx.updateSalesOrderStatus(S, { id: 10, status: 'accepted' });
 eq('ถอยกลับก่อนจุดตัด → คืนของเข้าคลังครบ', [r.success, whQty(101), whQty(102)], [true, 50, 4]);
 eq('  บอกในข้อความว่าคืนของแล้ว', /คืนของเข้าคลังแล้ว/.test(r.message), true);
 
 console.log('\n== ห้ามข้ามขั้น (ข้ามแล้วของออกโดยไม่มีใครหักยอด) ==');
-fails('รอจัดส่ง → ส่งของแล้ว ตรงๆ ไม่ได้', ctx.updateSalesOrderStatus(S, { id: 10, status: 'completed' }), /ไม่ได้/);
+fails('รับงานแล้ว → จัดส่งแล้ว ตรงๆ ไม่ได้', ctx.updateSalesOrderStatus(S, { id: 10, status: 'completed' }), /ไม่ได้/);
 eq('  และสต็อกไม่ถูกแตะ', [whQty(101), whQty(102)], [50, 4]);
 
 console.log('\n== ของในคลังไม่พอ ==');
@@ -191,10 +204,11 @@ t.sales_orders.push({ record_id: 11, order_code: 'SO-OD-2', customer_id: 1, tota
 t.order_items.push({ record_id: 3, order_id: 11, product_id: 101, base_qty: 5 },
                    { record_id: 4, order_id: 11, product_id: 102, base_qty: 99 });
 LEDGER.length = 0;
-r = ctx.updateSalesOrderStatus(S, { id: 11, status: 'delivering' });
+ctx.updateSalesOrderStatus(S, { id: 11, status: 'accepted' });   // รับงานได้แม้ของไม่พอ (เตือนอย่างเดียว)
+r = ctx.updateSalesOrderStatus(S, { id: 11, status: 'ready_to_ship' });
 eq('ของไม่พอ → ปฏิเสธ พร้อมบอกว่าตัวไหนขาดเท่าไหร่', [r.success, /ผงซักฟอก \(มี 4 ต้องใช้ 99\)/.test(r.message)], [false, true]);
 eq('  ★ ไม่ตัดครึ่งๆ กลางๆ — ตัวที่พอก็ต้องไม่ถูกแตะ', [whQty(101), whQty(102), LEDGER.length], [50, 4, 0]);
-eq('  สถานะไม่เปลี่ยนตาม', row(11).status, 'pending_delivery');
+eq('  สถานะไม่เปลี่ยนตาม (ค้างที่รับงาน ไม่ได้ไปพร้อมจัดส่ง)', row(11).status, 'accepted');
 
 console.log('\n== ขายจากรถยังตัดตอนบันทึกบิลเหมือนเดิม ==');
 eq('บิลขายจากรถถือว่าตัดของแล้วเสมอ ไม่ว่าสถานะอะไร', [
@@ -209,8 +223,13 @@ eq('อ่านประวัติจากไฟล์ที่ยังไ�
   t.order_status_log = keep;
   return out;
 })(), []);
-eq('ป้ายสถานะครบทั้งสี่', Object.keys(ctx.SO_STATUS_LABELS).length, 4);
-eq('จากรอจัดส่ง ไปได้แค่ "กำลังจัดส่ง" หรือยกเลิก (ข้ามจุดตัดสต็อกไม่ได้)', ctx.SO_TRANSITIONS.pending_delivery, ['delivering', 'cancelled']);
+// สายงานใหม่ 1 ต.ค. 2026: ใหม่ · ยืนยัน(+ชื่อเดิม pending_delivery) · รับงาน · พร้อมจัดส่ง · กำลังจัดส่ง · จัดส่งแล้ว · ปฏิเสธ · ยกเลิก
+eq('ป้ายสถานะครบทุกขั้น', Object.keys(ctx.SO_STATUS_LABELS).length, 9);
+eq('ชื่อเดิม pending_delivery ยังอยู่และแปลว่า "ยืนยันแล้ว" เหมือนกัน',
+  ctx.SO_STATUS_LABELS.pending_delivery, ctx.SO_STATUS_LABELS.confirmed);
+eq('จากยืนยันแล้ว ไปได้: รับงาน · ปฏิเสธ · ตีกลับเป็นร่าง · ยกเลิก (ข้ามไปจัดส่งไม่ได้)',
+  ctx.SO_TRANSITIONS.pending_delivery, ['accepted', 'rejected', 'draft', 'cancelled']);
+eq('ร่างไปได้แค่ยืนยันหรือยกเลิก', ctx.SO_TRANSITIONS.draft, ['confirmed', 'cancelled']);
 eq('บิลที่ยกเลิกแล้วไปไหนไม่ได้เลย', ctx.SO_TRANSITIONS.cancelled, []);
 
 console.log('\n── ยอดจอง (reserved) — guide ข้อ 1.3 ──');
@@ -251,13 +270,19 @@ console.log('  -- เดินสถานะจริงผ่าน updateSale
 t.sales_orders.push({ record_id: 20, order_code: 'SO-RES-1', customer_id: 1, total: 100, payment_method: 'cash',
   fulfillment_type: 'office_delivery', status: 'pending_delivery', payment_status: 'unpaid', paid_amount: 0, created_at: '2026-09-28 08:00:00' });
 t.order_items.push({ order_id: 20, product_id: '201', base_qty: 20 });
-ctx.reserveStockForSale('T1', 'W1', { 201: 20 }, 20);   // จำลองสิ่งที่ recordSaleAdmin ทำตอนเปิดบิลใบนี้จริง
+// ★ 1 ต.ค. 2026 การจองย้ายมาเกิดตอน "ศูนย์รับงาน" แล้ว ไม่ใช่ตอนเปิดบิล
+r = ctx.updateSalesOrderStatus(S, { id: 20, status: 'accepted' });
+eq('ศูนย์รับงาน → ระบบกันของให้เอง', [r.success, /กันของในคลังไว้ให้แล้ว/.test(r.message)], [true, true]);
+eq('  มีแถวจองของใบนี้', ctx._scoped('stock_reservations', 'T1').filter(x => String(x.order_id) === '20' && x.status === 'active').length, 1);
+ctx.updateSalesOrderStatus(S, { id: 20, status: 'ready_to_ship' });
 r = ctx.updateSalesOrderStatus(S, { id: 20, status: 'delivering' });
-eq('เข้า "กำลังจัดส่ง" สำเร็จ (ของพอเพราะกันไว้แล้วตั้งแต่ต้น)', r.success, true);
+eq('เข้า "กำลังจัดส่ง" สำเร็จ (ของพอเพราะกันไว้ตั้งแต่รับงาน)', r.success, true);
 eq('การจองของบิลนี้ถูกปลดแล้ว (ของถูกตัดจริงเข้า warehouse_stock แทน ไม่ถูกนับซ้ำสองทาง)',
   WH.stock_reservations.filter(r2 => r2.order_id === 20 && r2.status === 'active').length, 0);
 eq('ถอยกลับมา "รอจัดส่ง" → คืนของเข้าคลัง และจองกันของไว้ใหม่ให้บิลเดิม (ยังเป็นคำมั่นกับลูกค้าอยู่)', (() => {
-  const back = ctx.updateSalesOrderStatus(S, { id: 20, status: 'pending_delivery' });
+  // สายใหม่: ถอยจากกำลังจัดส่งต้องผ่านพร้อมจัดส่งก่อน แล้วค่อยกลับไป "รับงาน" ซึ่งเป็นขั้นที่กันของไว้
+  ctx.updateSalesOrderStatus(S, { id: 20, status: 'ready_to_ship' });
+  const back = ctx.updateSalesOrderStatus(S, { id: 20, status: 'accepted' });
   const active = WH.stock_reservations.filter(r2 => r2.order_id === 20 && r2.status === 'active');
   return [back.success, active.length, active[0] && active[0].qty];
 })(), [true, 1, 20]);

@@ -202,14 +202,14 @@ function recordSale(user, payload) {
     apply_vat: vatSplit.applyVat ? 'TRUE' : 'FALSE', vat_type: vatSplit.vatType,
     vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat, exempt_amount: vatSplit.exemptAmount,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
-    status: fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
+    status: fulfillmentType === 'immediate' ? SO_COMPLETED : SO_DRAFT,
     payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),
     paid_amount: initialPaymentStatus(payload.paymentType, fulfillmentType) === 'paid' ? calc.total : 0,
     delivered_at: fulfillmentType === 'immediate' ? createdAt : '', paid_at: '',
     sale_by: user.lineUserId, lat: payload.latitude || '', lng: payload.longitude || '',
     map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt
   });
-  logOrderStatus(user.tenantId, orderId, '', fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',
+  logOrderStatus(user.tenantId, orderId, '', fulfillmentType === 'immediate' ? SO_COMPLETED : SO_DRAFT,
     '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอปมือถือ',
     user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
 
@@ -239,9 +239,11 @@ function recordSale(user, payload) {
 
   if (fulfillmentType === 'immediate') {
     _cutVanStock(user.tenantId, user.lineUserId, need, orderId);
-  } else {
-    reserveStockForSale(user.tenantId, stockCheck.warehouseId, need, orderId);
   }
+  /* ★ 1 ต.ค. 2026 — ใบนัดส่งจากมือถือ **ไม่จองของตอนเปิดบิลอีกแล้ว**
+     เจ้าของระบบสั่งให้จองตอน "ศูนย์รับงาน" (ดู SO_RESERVED_STATUSES ใน 34_sales_status.gs)
+     เพราะใบที่เพิ่งเปิดยังเป็นร่างที่พนักงานแก้/ยกเลิกเองได้ ยังไม่มีใครรับปากลูกค้า
+     จองตั้งแต่ตอนนั้น = ของถูกกันไว้ด้วยใบที่อาจไม่เกิดขึ้นจริง แล้วใบอื่นขายไม่ได้ */
 
   // ล็อก product_code ของสินค้าที่เพิ่งขายจริง กัน admin เปลี่ยนรหัสย้อนหลังจนเอกสาร/รายงานเก่าอ้างรหัสผิดของ
   // เช็ค productMap ในหน่วยความจำก่อน (มีอยู่แล้วจากด้านบน) เขียนเฉพาะตัวที่ยังไม่เคยถูกล็อกเท่านั้น —

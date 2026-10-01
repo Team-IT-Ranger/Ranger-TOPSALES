@@ -702,7 +702,15 @@ function renderCustSelect(){
   if (q && list.length && !list.some(c => String(c.id) === cur)) { sel.value = String(list[0].id); cartChanged(); }
   else if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
 }
-function setPay(v){ PAY = v; document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); cartChanged(); }
+/* ★ 1 ต.ค. 2026 เจ้าของระบบสั่ง: เลือกจ่ายแบบ "เครดิต" เมื่อไหร่ ให้ติ๊ก "ส่งจากสำนักงาน" อัตโนมัติ
+   เดิมติ๊กให้เฉพาะบทบาทเครดิตเซลส์ตอนเปิดแอป — หน่วยรถที่เปลี่ยนมาเลือกเครดิตกลางคันจึงยังเป็นบิลขายจากรถ
+   คือตัดสต็อกบนรถทันทีทั้งที่ของยังไม่ได้ออกไป · ยังเอาติ๊กออกเองได้ถ้าตั้งใจส่งของจากรถจริงๆ */
+function setPay(v){
+  PAY = v;
+  document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if (v === 'credit_term' || v === 'credit') { const o = $('s-office'); if (o && !o.checked) o.checked = true; }
+  cartChanged();
+}
 const cartQty = (pid, code) => { const c = CART.find(x => String(x.productId) === String(pid) && x.unitCode === code); return c ? c.qty : 0; };
 // หน่วยฐานที่ตะกร้าใช้ไปแล้วของสินค้านั้น (ทุกหน่วยรวมกัน) — เทียบกับสต็อกบนรถ
 const baseUsed = pid => CART.filter(c => String(c.productId) === String(pid)).reduce((s, c) => s + c.qty * unitOf(prodById(pid), c.unitCode).unitFactor, 0);

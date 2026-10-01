@@ -40,7 +40,9 @@ const ctx = {
     if (!r) return false; Object.assign(r, f); return true; },
   centralNextId: n => sheetOf(n).reduce((m, o) => Math.max(m, parseInt(o.record_id) || 0), 0) + 1,
   cacheClear: () => {},
-  nowStr: () => '2026-09-26 09:00:00', safeDateStr: v => String(v || '')
+  nowStr: () => '2026-09-26 09:00:00', safeDateStr: v => String(v || ''),
+  // นิยามเดียวกับของจริงใน 18_pricing_engine.gs — ไฟล์นั้นไม่ได้โหลดในชุดนี้ แต่ customerSaleGate เรียกใช้
+  isCreditPayment: c => { c = String(c || '').toLowerCase(); return c === 'credit_term' || c === 'credit'; }
 };
 vm.createContext(ctx);
 const fakes = {};
@@ -114,6 +116,11 @@ ctx.updateCustomerAdmin(T1, { id: C1, status: 'blocked' });
 eq('ระงับเครดิต: ยังถือว่าใช้งานอยู่ (ขายสดได้)', [rowOf(C1).status, rowOf(C1).is_active], ['blocked', 'TRUE']);
 eq('  เปิดบิลเงินสดให้ร้านที่ถูกระงับเครดิตได้', ctx.customerSaleGate(rowOf(C1), 'cash'), null);
 fails('  แต่เปิดบิลเชื่อไม่ได้', ctx.customerSaleGate(rowOf(C1), 'credit'), /ระงับเครดิต/);
+/* ★ 1 ต.ค. 2026 — แอปมือถือส่งรหัสว่า `credit_term` ไม่ใช่ `credit`
+   ของเดิมเทียบสตริงดิบ `=== 'credit'` ด่านนี้จึงไม่เคยทำงานกับบิลจากมือถือเลยสักใบ
+   (ร้านที่ถูกระงับเครดิตเปิดบิลเชื่อได้ตามปกติ และไม่มีอะไรฟ้อง) */
+fails('  ★ รหัสจากแอปมือถือ (credit_term) ก็ต้องโดนกั้นด้วย',
+  ctx.customerSaleGate(rowOf(C1), 'credit_term'), /ระงับเครดิต/);
 ctx.updateCustomerAdmin(T1, { id: C1, status: 'inactive' });
 eq('ปิดการใช้งาน: is_active=FALSE และประทับวันที่ไว้', [rowOf(C1).is_active, rowOf(C1).inactive_at], ['FALSE', '2026-09-26 09:00:00']);
 fails('  ขายไม่ได้ทั้งสดและเชื่อ', ctx.customerSaleGate(rowOf(C1), 'cash'), /ปิดการใช้งาน/);

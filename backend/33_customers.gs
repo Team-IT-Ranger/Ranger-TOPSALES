@@ -268,7 +268,11 @@ function customerSaleGate(customer, paymentType) {
   if (status === CUSTOMER_STATUS_INACTIVE) {
     return { success: false, message: 'ลูกค้า ' + customerFullName(customer) + ' ถูกปิดการใช้งานแล้ว' };
   }
-  if (status === CUSTOMER_STATUS_BLOCKED && String(paymentType || '').toLowerCase() === 'credit') {
+  /* ★ 1 ต.ค. 2026 — เดิมเทียบ `=== 'credit'` ตรงๆ แต่แอปมือถือส่ง **`credit_term`** มาตลอด
+     ด่านนี้จึงไม่เคยทำงานเลย: ลูกค้าที่ถูกระงับเครดิตยังเปิดบิลเชื่อจากมือถือได้ โดยไม่มีอะไรฟ้อง
+     ใช้ `isCreditPayment()` (18_pricing_engine.gs) ที่รับทั้ง 'credit' และ 'credit_term' เหมือนจุดอื่นทั้งระบบ
+     **ห้ามเทียบรหัสวิธีชำระเป็นสตริงดิบอีก** */
+  if (status === CUSTOMER_STATUS_BLOCKED && isCreditPayment(paymentType)) {
     return { success: false, message: 'ลูกค้า ' + customerFullName(customer) + ' ถูกระงับเครดิต — ขายได้เฉพาะเงินสด' };
   }
   return null;

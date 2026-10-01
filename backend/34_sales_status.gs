@@ -17,20 +17,40 @@
  * เปลี่ยนสถานะ **ไม่แตะสต็อกและไม่แตะยอดขายรายวัน** — ยอดขายนับตั้งแต่เปิดบิล การยกเลิกเท่านั้นที่หักคืน
  */
 
-var SO_PENDING = 'pending_delivery', SO_DELIVERING = 'delivering', SO_COMPLETED = 'completed', SO_CANCELLED = 'cancelled';
+/* ═══ สายงานรับ-ส่งใบสั่งขาย (เจ้าของระบบกำหนด 1 ต.ค. 2026) ═══
+ *   draft ใหม่ ──(มือถือกดยืนยัน)──▶ confirmed ยืนยัน ──(ศูนย์กดรับงาน)──▶ accepted รับงาน
+ *     ──(ศูนย์แจ้งพร้อมส่ง)──▶ ready_to_ship พร้อมจัดส่ง ──▶ delivering กำลังจัดส่ง ──▶ completed จัดส่งแล้ว
+ *   ศูนย์ปฏิเสธไม่ขาย = rejected · ยกเลิก = cancelled
+ *
+ * ★ `pending_delivery` คือชื่อเดิมก่อน 1 ต.ค. 2026 — **ห้ามลบ** บิลเก่าทั้ง UAT/prod ยังเป็นค่านี้อยู่
+ *   ให้ความหมายเท่ากับ `confirmed` ทุกประการ จะได้ไม่ต้อง migrate ข้อมูลเก่า */
+var SO_DRAFT = 'draft', SO_CONFIRMED = 'confirmed', SO_ACCEPTED = 'accepted', SO_REJECTED = 'rejected',
+    SO_READY = 'ready_to_ship', SO_PENDING = 'pending_delivery',
+    SO_DELIVERING = 'delivering', SO_COMPLETED = 'completed', SO_CANCELLED = 'cancelled';
 var SO_STATUS_LABELS = {
-  pending_delivery: 'รอสำนักงานจัดส่ง', delivering: 'กำลังจัดส่ง', completed: 'ส่งของแล้ว', cancelled: 'ยกเลิกแล้ว'
+  draft: 'ใหม่ (ร่าง)', confirmed: 'ยืนยันแล้ว — รอศูนย์รับงาน', pending_delivery: 'ยืนยันแล้ว — รอศูนย์รับงาน',
+  accepted: 'ศูนย์รับงานแล้ว', ready_to_ship: 'พร้อมจัดส่ง', delivering: 'กำลังจัดส่ง',
+  completed: 'จัดส่งแล้ว', rejected: 'ศูนย์ปฏิเสธไม่ขาย', cancelled: 'ยกเลิกแล้ว'
 };
 /* ไปไหนต่อได้บ้างจากสถานะปัจจุบัน — ย้อนกลับได้หนึ่งขั้น (กดผิดเป็นเรื่องปกติ) แต่บิลที่ยกเลิกแล้วเปิดคืนไม่ได้
  * **ห้ามข้ามขั้น** (guide ข้อ 1.1): pending_delivery ไป completed ตรงๆ ไม่ได้ เพราะ delivering คือจุดที่ตัด
  * สต็อกออกจากคลัง ข้ามได้เมื่อไหร่ของก็ออกไปโดยไม่มีใครหักยอด แล้วไม่มีอะไรฟ้องเลย
  * (เคยเปิดทางลัดนี้ไว้ตอน delivering ยังไม่มีผลข้างเคียง — ปิดทิ้ง 2026-09-27 พร้อมกับตอนใส่จุดตัดสต็อก) */
 var SO_TRANSITIONS = {
-  pending_delivery: [SO_DELIVERING, SO_CANCELLED],
-  delivering:       [SO_COMPLETED, SO_PENDING, SO_CANCELLED],
+  draft:            [SO_CONFIRMED, SO_CANCELLED],
+  confirmed:        [SO_ACCEPTED, SO_REJECTED, SO_DRAFT, SO_CANCELLED],
+  pending_delivery: [SO_ACCEPTED, SO_REJECTED, SO_DRAFT, SO_CANCELLED],   // ชื่อเดิม = confirmed
+  accepted:         [SO_READY, SO_CONFIRMED, SO_CANCELLED],
+  ready_to_ship:    [SO_DELIVERING, SO_ACCEPTED, SO_CANCELLED],
+  delivering:       [SO_COMPLETED, SO_READY, SO_CANCELLED],
   completed:        [SO_DELIVERING, SO_CANCELLED],
+  rejected:         [SO_DRAFT, SO_CANCELLED],      // ตีกลับให้แก้แล้วยืนยันใหม่ได้ ไม่ต้องเปิดใบใหม่
   cancelled:        []
 };
+/* สถานะที่ "มือถือยังเป็นเจ้าของใบอยู่" — แก้/ยกเลิกเองได้ตามกติกาข้อ 3 ของเจ้าของระบบ
+   ร่าง = แก้ได้+ยกเลิกได้ · ยืนยันแล้วแต่ศูนย์ยังไม่รับงาน = ยกเลิกได้ แต่แก้ไม่ได้ · รับงานแล้ว = ทำอะไรไม่ได้ */
+var SO_MOBILE_EDITABLE = [SO_DRAFT];
+var SO_MOBILE_CANCELLABLE = [SO_DRAFT, SO_CONFIRMED, SO_PENDING];
 
 /* ═══════════ จุดตัดสต็อกของเรา — เขียนกำกับไว้ตามที่คู่มือกำชับ (guide ข้อ 1.2) ═══════════
  * **ขายจากรถ (fulfillment_type = 'immediate')**: ตัดสต็อกรถของพนักงานคนนั้น **ตอนบันทึกบิล** จุดเดียว
@@ -46,7 +66,18 @@ var SO_TRANSITIONS = {
  * อ้างนิยามเดียวกัน วันที่ย้ายจุดตัด แก้ที่นี่ที่เดียวแล้วทั้งสองฝั่งขยับตามพร้อมกัน (guide ข้อ 1.4)
  * **ห้ามตัดซ้ำในขั้นถัดไปเด็ดขาด** — updateSalesOrderStatus เทียบค่าก่อน/หลังแล้วขยับเฉพาะตอนค่าเปลี่ยน
  */
-var SO_STOCK_TAKEN_STATUSES = [SO_DELIVERING, SO_COMPLETED];
+/* ★ 1 ต.ค. 2026 ย้ายจุดตัดจาก "กำลังจัดส่ง" มาที่ **"พร้อมจัดส่ง"** (เจ้าของระบบเลือกเอง)
+   เพราะขั้นนั้นคือตอนที่ของถูกหยิบออกจากชั้น แพ็ค และออกใบกำกับภาษี/ใบจัดส่งแล้ว — ของไม่ได้อยู่ในคลังอีกต่อไป
+   รอตัดตอนรถออกวิ่ง = ระบบบอกว่ามีของทั้งที่ของนอนอยู่ในกล่อง แล้วจะมีคนมาขายซ้ำ (เหตุผลเดียวกับที่เคยย้ายมาที่ delivering)
+   ไม่ต้องแก้ที่อื่นเลย — จุดตัดและจุดคืนของอ่านจาก saleStockTaken() ตัวเดียวกันทั้งคู่ */
+var SO_STOCK_TAKEN_STATUSES = [SO_READY, SO_DELIVERING, SO_COMPLETED];
+/* ช่วงที่ "กันของไว้ให้แล้วแต่ยังไม่ตัดจริง" — เจ้าของระบบสั่งให้จองตอนศูนย์รับงาน
+   ก่อนหน้านั้น (ร่าง/ยืนยัน) ยังไม่กันของ เพราะศูนย์ยังไม่ได้รับปากว่าจะขายให้ */
+var SO_RESERVED_STATUSES = [SO_ACCEPTED];
+function saleStockReserved(order) {
+  if (!order || String(order.fulfillment_type) === 'immediate') return false;
+  return SO_RESERVED_STATUSES.indexOf(_soStatusOf(order)) !== -1;
+}
 function saleStockTaken(order) {
   if (!order) return false;
   if (String(order.fulfillment_type) === 'immediate') return true;          // ตัดไปแล้วตั้งแต่บันทึกบิล
@@ -288,13 +319,22 @@ function updateSalesOrderStatus(session, payload) {
           changes.push(willTake ? 'ตัดสต็อกออกจากคลังแล้ว' : 'คืนของเข้าคลังแล้ว');
           // ยอดจอง (guide ข้อ 1.3) เดินสวนทางกับสต็อกเสมอ: ตัดของจริงแล้ว = ปลดจอง (ไม่งั้นถูกนับซ้ำสองทาง)
           // ถอยกลับมาไม่ถึงจุดตัด = ยังเป็นคำมั่นกับลูกค้าอยู่ ต้องจองกันของไว้ใหม่เหมือนตอนเปิดบิล (มีของพอเสมอ เพิ่งคืนเข้าคลังไปหมาดๆ)
-          if (willTake) {
-            releaseStockReservation(tenantId, order.record_id);
+          if (willTake) releaseStockReservation(tenantId, order.record_id);
+        }
+        /* ยอดจองเดินแยกจากการตัดจริง (1 ต.ค. 2026): จองตอน "ศูนย์รับงาน" ปลดตอนตัดของจริงหรือตอนถอยกลับ
+           เช็คหลังบล็อกตัดสต็อกเสมอ เพราะถ้าเพิ่งตัดของจริงไป reservation ถูกปลดไปแล้ว จะได้ไม่จองซ้ำ */
+        var wasRes = saleStockReserved(order);
+        var willRes = saleStockReserved({ fulfillment_type: order.fulfillment_type, status: toStatus });
+        if (wasRes !== willRes) {
+          if (willRes) {
+            var need2 = _saleBaseQtyByProduct(tenantId, order.record_id);
+            if (Object.keys(need2).length) {
+              reserveStockForSale(tenantId, _ensureScopeWarehouse(_saleStockScope(tenantId)), need2, order.record_id);
+              changes.push('กันของในคลังไว้ให้แล้ว');
+            }
           } else {
-            var need2 = {};
-            tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
-              .forEach(function(it) { need2[String(it.product_id)] = (need2[String(it.product_id)] || 0) + (parseFloat(it.base_qty) || 0); });
-            if (Object.keys(need2).length) reserveStockForSale(tenantId, _ensureScopeWarehouse(_saleStockScope(tenantId)), need2, order.record_id);
+            releaseStockReservation(tenantId, order.record_id);
+            changes.push('ปลดของที่กันไว้');
           }
         }
         fields.status = toStatus;
