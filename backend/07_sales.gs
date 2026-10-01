@@ -205,8 +205,12 @@ function recordSale(user, payload) {
       return { success: false, message: 'ใบนี้อยู่ขั้น "' + SO_STATUS_LABELS[_soStatusOf(editing)] + '" แล้ว แก้ไขเองไม่ได้' };
     }
   }
-  var orderCode = editing ? editing.order_code : getNextDocNumber(user.tenantId, 'SO');
   var orderId = editing ? editing.record_id : tenantNextId(user.tenantId, 'sales_orders');
+  /* ★ ใบร่างยังไม่กินเลขที่เอกสาร (เจ้าของระบบตกลงไว้ 1 ต.ค. 2026) — ร่างที่ถูกทิ้งจะทำให้เลขเดินข้ามเป็นช่วงๆ
+     ซึ่งอธิบายกับสรรพากร/ผู้ตรวจไม่ได้ · ใช้รหัสชั่วคราว `DRAFT-<id>` ไปก่อน แล้วออกเลขจริงตอนกด "ยืนยัน"
+     (ดู confirmSalesOrder ใน 34_sales_status.gs) · ขายจากรถออกเลขทันที เพราะจบเป็นการขายตั้งแต่กดบันทึก */
+  var orderCode = editing ? editing.order_code
+    : (fulfillmentType === 'immediate' ? getNextDocNumber(user.tenantId, 'SO') : ('DRAFT-' + orderId));
   var createdAt = editing ? safeDateStr(editing.created_at) : nowStr();
 
   var vatSplit = calc.vat;   // แยกภาษีจากรายการจริง รองรับของยกเว้นภาษีปนในบิล (18_pricing_engine.gs)

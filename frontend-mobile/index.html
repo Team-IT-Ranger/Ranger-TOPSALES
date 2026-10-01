@@ -580,6 +580,10 @@ async function loadDashboard(){
     if (rs.success) { RECENT_SALES = rs.data || []; lsSet('recent_' + ME.lineUserId, RECENT_SALES); renderRecentSales(); }
   } catch (e) {}
 }
+/* รหัสชั่วคราวของใบร่าง (DRAFT-<id>) ไม่ใช่เลขที่เอกสาร — อย่าโชว์เป็นเลขบิลให้คนเข้าใจผิด
+   เลขจริงออกให้ตอนกดยืนยันเท่านั้น (ดู confirmSalesOrder) */
+const isDraftCode = c => String(c || '').indexOf('DRAFT-') === 0;
+const showCode = c => isDraftCode(c) ? '(ยังไม่ออกเลขที่)' : String(c || '');
 function renderRecentSales(){
   const box = $('h-recent'); if (!box) return;
   // แตะแถวเพื่อดูรายละเอียด/พิมพ์ซ้ำ (2026-09-30) — ออฟไลน์เปิดดูไม่ได้ เพราะยังไม่ได้แคชรายละเอียดบิลไว้ในเครื่อง
@@ -588,7 +592,7 @@ function renderRecentSales(){
        เพราะยังไม่ถูกส่งให้ศูนย์ ถ้าปล่อยค้างไว้คือยังไม่มีใครเห็นใบนั้นเลย
        ป้ายมาจาก backend (statusLabel) ไม่ตั้งชุดคำแปลที่สองในหน้าจอ */
     ? RECENT_SALES.map(o => '<div class="row" onclick="openSaleDetail(\'' + esc(o.code) + '\')" style="cursor:pointer">' +
-        '<span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(o.code) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') +
+        '<span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(showCode(o.code)) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') +
         (o.statusLabel ? ' · <b' + (o.status === 'draft' ? ' style="color:#C2410C"' : '') + '>' + esc(o.statusLabel) + '</b>' : '') + '</span></span>' +
         '<span class="mono">฿' + baht(o.total) + '</span></div>').join('')
     : '<div class="empty">ยังไม่มีรายการขาย</div>';
@@ -631,7 +635,7 @@ function renderSaleDetail(r){
   const items = r.items.filter(it => !it.isFree), free = r.items.filter(it => it.isFree);
   $('sd-body').innerHTML =
     '<div class="card stack">' +
-      '<div class="row"><b>' + esc(o.code) + '</b><span class="note">' + esc(o.createdAt) + '</span></div>' +
+      '<div class="row"><b>' + esc(showCode(o.code)) + '</b><span class="note">' + esc(o.createdAt) + '</span></div>' +
       (o.statusLabel ? '<div class="row"><span>สถานะ</span><b>' + esc(o.statusLabel) + '</b></div>' : '') +
       /* สองบรรทัดนี้มีไว้ให้ลูกค้าถือเป็นหลักฐาน: ของจะมาวันไหน และส่งไปที่ไหน */
       (o.requestedDeliveryDate ? '<div class="row"><span>นัดส่งโดยประมาณ</span><b>' + esc(o.requestedDeliveryDate) + '</b></div>' : '') +
@@ -689,7 +693,8 @@ async function confirmThisSale(code){
   if (!confirm('ยืนยันว่าใบสั่งขายนี้ถูกต้องครบถ้วน และส่งให้ศูนย์รับงาน?\nยืนยันแล้วจะแก้ไขเองไม่ได้')) return;
   const r = await api('confirmSalesOrder', { orderCode: code });
   toast(r.message || (r.success ? 'ยืนยันแล้ว' : 'ยืนยันไม่สำเร็จ'), !r.success);
-  if (r.success) openSaleDetail(code);
+  // ★ เลขที่เอกสารเพิ่งถูกออกให้ตอนยืนยัน — ต้องเปิดด้วยเลขใหม่ ไม่ใช่รหัสชั่วคราวเดิม
+  if (r.success) { refreshData(true); openSaleDetail(r.orderCode || code); }
 }
 /* แก้ไขร่าง = ยกเลิกใบเดิม แล้วยกรายการกลับเข้าตะกร้าให้แก้ต่อ (1 ต.ค. 2026)
    ★ ทำแบบนี้แทนการเขียน "แก้ไขบรรทัดบิล" ฝั่งมือถือทั้งชุด เพราะใบร่างยังไม่มีใครเห็นและยังไม่กันของ
@@ -985,7 +990,8 @@ async function submitSale(){
     if (!r.success) { toast(r.message || 'บันทึกไม่สำเร็จ', 'err'); return; }
     afterSale();
     // ★ 2026-09-30 เจ้าของระบบสั่ง: ของในคลังไม่พอสำหรับบิลส่งจากสำนักงาน = แค่เตือน ไม่บล็อกการบันทึก (checkOfficeDeliveryStock, 34_sales_status.gs)
-    toast('บิล ' + (r.orderCode || '') + ' · ฿' + baht(r.total) + (r.stockWarning ? ' — ⚠️ ' + r.stockWarning : ''), r.stockWarning ? 'err' : 'ok');
+    const isDraft = String(r.orderCode || '').indexOf('DRAFT-') === 0;
+    toast((isDraft ? 'บันทึกร่างแล้ว' : 'บิล ' + (r.orderCode || '')) + ' · ฿' + baht(r.total) + (r.stockWarning ? ' — ⚠️ ' + r.stockWarning : ''), r.stockWarning ? 'err' : 'ok');
     refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
     /* ★ 1 ต.ค. 2026 เจ้าของระบบสั่ง: บันทึกใบนัดส่งแล้วให้เปิดฉบับร่างให้ดูทันที
        พนักงานจะได้ตรวจความถูกต้องแล้วกด "ยืนยัน" ต่อได้เลยในจังหวะเดียว ไม่ต้องไปตามหาในบิลล่าสุด

@@ -406,15 +406,23 @@ function confirmSalesOrder(user, payload) {
     var from = _soStatusOf(order);
     if (from === SO_CONFIRMED || from === SO_PENDING) return { success: true, status: from, alreadyDone: true, message: 'ใบนี้ยืนยันไปแล้ว' };
     if (from !== SO_DRAFT) return { success: false, message: 'ใบนี้อยู่ขั้น "' + SO_STATUS_LABELS[from] + '" แล้ว ยืนยันซ้ำไม่ได้' };
-    tenantUpdate(user.tenantId, 'sales_orders', order.record_id, { status: SO_CONFIRMED, updated_at: nowStr(), updated_by: user.lineUserId });
+    /* ★ ออกเลขที่เอกสารจริงตรงนี้ — ใบร่างถือรหัสชั่วคราว `DRAFT-<id>` มาก่อน (ดู recordSale ใน 07_sales.gs)
+       ร่างที่ถูกทิ้งจึงไม่กินเลข และเลขที่ออกไปแล้วเรียงต่อเนื่องเสมอ
+       ใบที่ได้เลขจริงมาแล้ว (เช่นบิลเก่าก่อนกติกานี้) ไม่ออกซ้ำ */
+    var newCode = String(order.order_code || '').indexOf('DRAFT-') === 0
+      ? getNextDocNumber(user.tenantId, 'SO') : order.order_code;
+    tenantUpdate(user.tenantId, 'sales_orders', order.record_id,
+      { status: SO_CONFIRMED, order_code: newCode, updated_at: nowStr(), updated_by: user.lineUserId });
     logOrderStatus(user.tenantId, order.record_id, from, SO_CONFIRMED, '', '', 'พนักงานยืนยันความถูกต้องจากแอปมือถือ',
       user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
     /* ★ ยอดขายรายวันเริ่มนับตรงนี้ ไม่ใช่ตอนเปิดบิล — ใบร่างยังไม่ใช่การขาย (ตกลงกับเจ้าของระบบ 1 ต.ค. 2026)
        นับเป็นวันที่ "เปิดบิล" ไม่ใช่วันที่ยืนยัน เพื่อให้ยอดของใบเดียวกันอยู่วันเดียวตลอดสายงาน
        (ยกเลิกทีหลังก็หักคืนที่วันเดียวกัน ไม่งั้นยอดสองวันเพี้ยนพร้อมกัน) */
     bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), 1, parseFloat(order.total) || 0);
+    // คืนเลขใหม่ไปด้วย — หน้าจอต้องใช้เลขนี้อ้างอิงต่อ (รหัสชั่วคราวใช้ไม่ได้อีกแล้ว)
     return { success: true, status: SO_CONFIRMED, statusLabel: SO_STATUS_LABELS[SO_CONFIRMED],
-      message: 'ยืนยันแล้ว — ส่งให้ศูนย์รับงานเรียบร้อย' };
+      orderCode: newCode, previousCode: order.order_code,
+      message: 'ยืนยันแล้ว — เลขที่เอกสาร ' + newCode + ' ส่งให้ศูนย์รับงานเรียบร้อย' };
   });
 }
 
