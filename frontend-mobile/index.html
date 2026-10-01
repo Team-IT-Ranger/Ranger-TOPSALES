@@ -234,6 +234,15 @@
 
   <!-- ขาย -->
   <section class="screen" id="tab-sell">
+    <!-- ★ แถบบอกว่ากำลังแก้ใบไหนอยู่ + ทางออก (2 ต.ค. 2026 เจ้าของระบบแจ้ง)
+         ไม่มีแถบนี้ เซลส์จะไม่รู้ว่าตะกร้าที่เห็นคือใบร่างเดิมที่ยกมา แล้วเผลอกดบันทึกทับใบนั้น
+         ทั้งที่ตั้งใจจะเปิดใบใหม่ · และถอยออกจากโหมดแก้ไขไม่ได้เลยถ้าเปลี่ยนใจ -->
+    <div id="edit-banner" class="card" style="display:none;margin-bottom:12px;border-left:4px solid #C2410C">
+      <div class="row">
+        <span>กำลังแก้ไข <b id="edit-banner-code"></b><br><span class="note">กดบันทึกจะทับใบเดิม</span></span>
+        <button class="btn" onclick="exitEditMode()">ออกจากการแก้ไข</button>
+      </div>
+    </div>
     <div class="stack" style="margin-bottom:12px">
       <div class="field"><label>ลูกค้า</label>
         <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()">
@@ -705,6 +714,25 @@ async function confirmThisSale(code){
    ของเดิมยกเลิกแล้วเปิดใบใหม่ เปลืองทั้งเลขที่เอกสารและเวลา — ยิงเพิ่ม 2 คำขอ (~2 วินาที/คำขอ)
    ทั้งที่ข้อมูลที่ต้องใช้อยู่บนจอแล้ว · ตอนนี้กดแก้ไข = ไม่ยิงอะไรเลย ยิงครั้งเดียวตอนกดบันทึก */
 let EDIT_ORDER_CODE = null;   // มีค่า = กำลังแก้ใบร่างนี้อยู่ (ส่งเป็น editOrderCode ไปกับ recordSale)
+/* แถบแจ้งโหมดแก้ไข — เรียกทุกครั้งที่เข้า/ออกโหมด และตอนเปลี่ยนแท็บ
+   สถานะนี้มองไม่เห็นจากหน้าจอเลยถ้าไม่มีแถบ ซึ่งเป็นสถานะที่ "กดบันทึกแล้วทับของเดิม" */
+function renderEditBanner(){
+  const el = $('edit-banner'); if (!el) return;
+  el.style.display = EDIT_ORDER_CODE ? '' : 'none';
+  // ใบร่างยังไม่มีเลขที่ — เขียนว่า "ใบร่าง" ไปเลย ดีกว่าโชว์ "(ยังไม่ออกเลขที่)" ซึ่งอ่านแล้วงง
+  const c = $('edit-banner-code');
+  if (c) c.textContent = isDraftCode(EDIT_ORDER_CODE) ? 'ใบร่าง' : String(EDIT_ORDER_CODE || '');
+}
+/* ถอยออกจากโหมดแก้ไขโดยไม่บันทึก — ใบร่างเดิมยังอยู่ครบเหมือนเดิม (ยังไม่ได้แตะอะไรบนเซิร์ฟเวอร์เลย
+   เพราะการแก้ทั้งหมดเกิดในตะกร้าฝั่งเครื่อง จะไปถึงเซิร์ฟเวอร์ก็ต่อเมื่อกดบันทึก) */
+function exitEditMode(){
+  const code = EDIT_ORDER_CODE;
+  if (code && CART.length && !confirm('ออกจากการแก้ไขโดยไม่บันทึก?\nใบร่างเดิมจะยังอยู่เหมือนเดิม')) return;
+  EDIT_ORDER_CODE = null;
+  CART = []; QUOTE = null; FREE_OFF = new Set();
+  renderEditBanner(); renderProducts(); cartChanged();
+  toast('ออกจากการแก้ไขแล้ว — ใบร่างเดิมยังอยู่');
+}
 function editThisDraft(code){
   const d = LAST_SALE_DETAIL;
   if (!d || !d.order || d.order.code !== code) { toast('เปิดใบนี้ใหม่อีกครั้งแล้วค่อยกดแก้ไข', true); return; }
@@ -719,7 +747,7 @@ function editThisDraft(code){
   $('s-office').checked = d.order.fulfillmentType === 'office_delivery';
   syncDelivField();
   const dv = $('s-deliv'); if (dv) dv.value = d.order.requestedDeliveryDate || '';
-  renderProducts(); cartChanged();
+  renderEditBanner(); renderProducts(); cartChanged();
   toast('กำลังแก้ไข ' + code + ' — กดบันทึกเพื่อทับใบเดิม');
 }
 async function cancelThisSale(code){
@@ -934,6 +962,7 @@ function renderCartDetail(){
     '<button class="btn btn-sm" onclick="setSellMode(\'pick\')">+ เพิ่มสินค้าอีก</button></div>';
 }
 function renderCartBar(){
+  renderEditBanner();
   const bar = $('cartbar');
   bar.classList.toggle('hidden', TAB !== 'sell' || !CART.length);
   if (CART.length) {
@@ -949,7 +978,9 @@ function renderCartBar(){
     $('cb-src').innerHTML = src;
     $('cb-err').innerHTML = err ? '<div class="err">' + esc(err) + '</div>' : '';
     const save = $('cb-save'); save.disabled = !!err;
-    save.innerHTML = navigator.onLine ? MI.check + 'บันทึกการขาย' : MI.box + 'บันทึกเข้าคิว (ออฟไลน์)';
+    // ★ ป้ายปุ่มต้องบอกชัดว่ากำลังจะ "ทับใบเดิม" ไม่ใช่เปิดใบใหม่ (2 ต.ค. 2026)
+    save.innerHTML = !navigator.onLine ? MI.box + 'บันทึกเข้าคิว (ออฟไลน์)'
+      : (EDIT_ORDER_CODE ? MI.check + 'บันทึกการแก้ไข (ทับใบเดิม)' : MI.check + 'บันทึกการขาย');
   }
   renderSellMode();
 }
@@ -1004,7 +1035,7 @@ function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
   if (!$('s-office').checked) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
   lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
-  EDIT_ORDER_CODE = null;   // ออกจากโหมดแก้ไขเมื่อบันทึกเสร็จ
+  EDIT_ORDER_CODE = null; renderEditBanner();   // ออกจากโหมดแก้ไขเมื่อบันทึกเสร็จ
   const dv = $('s-deliv'); if (dv) dv.value = '';   // ไม่ให้บิลถัดไปติดวันนัดส่งของบิลก่อนมา
   CART = []; QUOTE = null; FREE_OFF = new Set(); SELL_MODE = 'pick'; renderProducts(); renderCartBar();
 }
