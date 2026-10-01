@@ -578,8 +578,12 @@ function renderRecentSales(){
   const box = $('h-recent'); if (!box) return;
   // แตะแถวเพื่อดูรายละเอียด/พิมพ์ซ้ำ (2026-09-30) — ออฟไลน์เปิดดูไม่ได้ เพราะยังไม่ได้แคชรายละเอียดบิลไว้ในเครื่อง
   box.innerHTML = RECENT_SALES.length
+    /* โชว์สถานะบิลด้วย (เจ้าของระบบสั่ง 1 ต.ค. 2026) — ใบที่ยังเป็น "ร่าง" ต้องสะดุดตา
+       เพราะยังไม่ถูกส่งให้ศูนย์ ถ้าปล่อยค้างไว้คือยังไม่มีใครเห็นใบนั้นเลย
+       ป้ายมาจาก backend (statusLabel) ไม่ตั้งชุดคำแปลที่สองในหน้าจอ */
     ? RECENT_SALES.map(o => '<div class="row" onclick="openSaleDetail(\'' + esc(o.code) + '\')" style="cursor:pointer">' +
-        '<span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(o.code) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') + '</span></span>' +
+        '<span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(o.code) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') +
+        (o.statusLabel ? ' · <b' + (o.status === 'draft' ? ' style="color:#C2410C"' : '') + '>' + esc(o.statusLabel) + '</b>' : '') + '</span></span>' +
         '<span class="mono">฿' + baht(o.total) + '</span></div>').join('')
     : '<div class="empty">ยังไม่มีรายการขาย</div>';
 }
@@ -657,6 +661,7 @@ function renderSaleDetail(r){
     /* ปุ่มยืนยัน/ยกเลิก — โชว์ตามสิทธิ์ที่ backend คำนวณมาให้ (canConfirm/canCancel)
        ร่าง = ยืนยันได้+ยกเลิกได้ · ยืนยันแล้ว = ยกเลิกได้ · ศูนย์รับงานแล้ว = ไม่มีปุ่ม ต้องแจ้งศูนย์ */
     (o.canConfirm ? '<button class="btn btn-primary btn-block no-print" style="margin-top:12px" onclick="confirmThisSale(\'' + esc(o.code) + '\')">✓ ยืนยันใบสั่งขาย — ส่งให้ศูนย์รับงาน</button>' : '') +
+    (o.canConfirm ? '<button class="btn btn-block no-print" style="margin-top:8px" onclick="editThisDraft(\'' + esc(o.code) + '\')">✎ แก้ไขรายการ</button>' : '') +
     (o.canCancel ? '<button class="btn btn-block no-print" style="margin-top:8px" onclick="cancelThisSale(\'' + esc(o.code) + '\')">ยกเลิกใบสั่งขายนี้</button>' : '') +
     (!o.canConfirm && !o.canCancel && o.status && o.status !== 'completed' && o.fulfillmentType !== 'immediate'
       ? '<div class="note no-print" style="margin-top:12px">ศูนย์รับงานแล้ว — แก้ไขหรือยกเลิกเองไม่ได้ กรุณาแจ้งศูนย์</div>' : '') +
@@ -671,6 +676,27 @@ async function confirmThisSale(code){
   const r = await api('confirmSalesOrder', { orderCode: code });
   toast(r.message || (r.success ? 'ยืนยันแล้ว' : 'ยืนยันไม่สำเร็จ'), !r.success);
   if (r.success) openSaleDetail(code);
+}
+/* แก้ไขร่าง = ยกเลิกใบเดิม แล้วยกรายการกลับเข้าตะกร้าให้แก้ต่อ (1 ต.ค. 2026)
+   ★ ทำแบบนี้แทนการเขียน "แก้ไขบรรทัดบิล" ฝั่งมือถือทั้งชุด เพราะใบร่างยังไม่มีใครเห็นและยังไม่กันของ
+     ยกเลิกทิ้งจึงไม่กระทบอะไรเลย · ได้ผลเหมือนแก้ไข แต่เส้นทางบันทึกยังเป็นเส้นเดียวกับการขายปกติ
+     (ราคา/ส่วนลด/ของแถม คิดใหม่ทั้งหมดจาก quoteSale ตามจริง ไม่ต้องมีตรรกะคิดราคาชุดที่สอง)
+   ของแถมไม่ยกกลับ — ระบบคิดให้เองตอนคิดราคาใหม่ */
+async function editThisDraft(code){
+  if (!navigator.onLine) { toast('ต้องออนไลน์ถึงจะแก้ไขได้', true); return; }
+  if (!confirm('แก้ไขใบสั่งขาย ' + code + '?\nระบบจะยกเลิกใบนี้แล้วนำรายการกลับเข้าตะกร้าให้แก้ต่อ')) return;
+  const d = await api('getSaleDetail', { orderCode: code });
+  if (!d.success) { toast(d.message, true); return; }
+  const r = await api('cancelMySalesOrder', { orderCode: code, reason: 'แก้ไขรายการ — เปิดใบใหม่แทน' });
+  if (!r.success) { toast(r.message, true); return; }
+  CART = (d.items || []).filter(it => !it.isFree)
+    .map(it => ({ productId: it.productId, unitCode: it.unitCode, qty: it.qty }));
+  QUOTE = null; FREE_OFF = new Set();
+  closeSaleDetail();
+  gotoTab('sell');
+  const sel = $('s-cust'); if (sel && d.order && d.order.customerId) sel.value = d.order.customerId;
+  renderProducts(); cartChanged();
+  toast('ยกเลิกใบเดิมแล้ว — แก้ไขในตะกร้าได้เลย');
 }
 async function cancelThisSale(code){
   if (!navigator.onLine) { toast('ต้องออนไลน์ถึงจะยกเลิกได้', true); return; }
@@ -937,6 +963,11 @@ async function submitSale(){
     // ★ 2026-09-30 เจ้าของระบบสั่ง: ของในคลังไม่พอสำหรับบิลส่งจากสำนักงาน = แค่เตือน ไม่บล็อกการบันทึก (checkOfficeDeliveryStock, 34_sales_status.gs)
     toast('บิล ' + (r.orderCode || '') + ' · ฿' + baht(r.total) + (r.stockWarning ? ' — ⚠️ ' + r.stockWarning : ''), r.stockWarning ? 'err' : 'ok');
     refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
+    /* ★ 1 ต.ค. 2026 เจ้าของระบบสั่ง: บันทึกใบนัดส่งแล้วให้เปิดฉบับร่างให้ดูทันที
+       พนักงานจะได้ตรวจความถูกต้องแล้วกด "ยืนยัน" ต่อได้เลยในจังหวะเดียว ไม่ต้องไปตามหาในบิลล่าสุด
+       (ใบที่ยังไม่กดยืนยัน = ศูนย์ยังมองไม่เห็น ถ้าไม่พาไปดูตรงนี้มีสิทธิ์ค้างเป็นร่างทิ้งไว้)
+       ขายจากรถไม่ต้องเปิด — จบตั้งแต่บันทึกแล้ว ไม่มีอะไรให้ยืนยันต่อ */
+    if (sale.fulfillmentType === 'office_delivery' && r.orderCode && navigator.onLine) openSaleDetail(r.orderCode);
   } finally { pressBusy(btn, false); btn.innerHTML = label; renderCartBar(); }
 }
 function afterSale(){

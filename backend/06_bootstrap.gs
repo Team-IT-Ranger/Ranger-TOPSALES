@@ -165,7 +165,9 @@ function getRecentSales(user, payload) {
       customer: custName[String(o.customer_id)] || 'ลูกค้าทั่วไป',
       payment: o.payment_method,
       total: parseFloat(o.total) || 0,
-      time: safeDateStr(o.created_at).substring(11, 16)
+      time: safeDateStr(o.created_at).substring(11, 16),
+      // สถานะไปแสดงในรายการบิลล่าสุดบนมือถือ (เจ้าของระบบสั่ง 1 ต.ค. 2026) — ป้ายมาจาก 34_sales_status.gs ชุดเดียว
+      status: _soStatusOf(o), statusLabel: SO_STATUS_LABELS[_soStatusOf(o)] || ''
     }; });
 
   return { success: true, data: orders };
@@ -212,6 +214,7 @@ function getSaleDetail(user, payload) {
       code: order.order_code, customer: cust ? customerFullName(cust) : 'ลูกค้าทั่วไป', customerPhone: cust ? cust.phone : '',
       /* สถานะ + สิทธิ์ของพนักงานกับใบนี้ (1 ต.ค. 2026) — ให้หน้าจอรู้ว่าจะโชว์ปุ่มยืนยัน/ยกเลิกไหม
          ตัดสินจากค่าคงที่ฝั่ง backend (34_sales_status.gs) ไม่ให้หน้าจอตั้งกติกาชุดที่สองขึ้นมาเอง */
+      customerId: order.customer_id,   // ใช้ตอน "แก้ไขร่าง" เพื่อเลือกร้านเดิมกลับให้ในหน้าขาย
       status: _soStatusOf(order), statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
       fulfillmentType: order.fulfillment_type || '',
       canConfirm: _soStatusOf(order) === SO_DRAFT,
