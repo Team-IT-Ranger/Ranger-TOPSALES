@@ -211,6 +211,11 @@ function listPendingExternalGoodsReceipts(session, payload) {
   var scope = _purchaseScope(session, payload);
   var rows = _scoped('goods_receipts', scope).filter(function(g) { return g.status === 'pending_review'; });
   var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
+  // ชื่อหน่วยจริงของสินค้า (ไม่ใช่แค่แปลงรหัส CT→"ลัง" เฉยๆ) — ชื่อหน่วยที่ยังไม่ยืนยันขนาดบรรจุมีคำเตือนฝังอยู่ในนี้
+  // (ดู UNIT_FACTOR_UNCONFIRMED, 10_master_data.gs) ถ้าไม่ดึงมาโชว์ แอดมินจะไม่รู้เลยว่า factor ที่เห็นยังไม่ยืนยัน
+  var unitLabels = {}; centralObjects('product_units').forEach(function(u) {
+    unitLabels[String(u.product_id) + '_' + normUnitCode(u.unit_code)] = u.unit_label;
+  });
   return { success: true, data: rows.map(function(g) {
     // ★ ตารางแบบ matrix ฝั่งหน้าเว็บต้องมีครบ: ชื่อ/รหัสสินค้า, จำนวนรับ(แก้ได้), หน่วย, factor จากระบบ,
     // จำนวนหน่วยฐานที่จะเข้าสต็อกจริง (คูณ factor แล้ว — คำนวณฝั่งหน้าเว็บสดตามจำนวนที่แก้ เพื่อให้เห็นก่อนกดยืนยัน),
@@ -219,6 +224,7 @@ function listPendingExternalGoodsReceipts(session, payload) {
       var p = products[String(it.product_id)];
       return { grItemId: it.record_id, productId: it.product_id, productCode: p ? p.product_code : '',
         productName: p ? p.name : '(สินค้าถูกลบ)', qty: Number(it.qty) || 0, unitCode: it.unit_code,
+        unitLabel: unitLabels[String(it.product_id) + '_' + normUnitCode(it.unit_code)] || '',
         unitFactor: Number(it.unit_factor) || 1, amount: Number(it.amount) || 0 };
     });
     return { id: g.record_id, grNo: g.gr_no, sourceRef: g.source_ref || '', receiveDate: g.receive_date, note: g.note, items: items };

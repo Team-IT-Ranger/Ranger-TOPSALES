@@ -12,6 +12,10 @@ var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings',
   'vendors', 'purchasing', 'inventory', 'accounting', 'docnum'];
 var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles',
   'vendors', 'purchasing', 'inventory'];   // ตัวแทนจำหน่ายซื้อของเองได้ (ข้อมูลแยกกันด้วย tenant_id — ดู 20_purchasing_master.gs)
+// ★ 2 ต.ค. 2026 — โมดูลที่ฝั่งตัวแทนได้ "ดูอย่างเดียว" (seed can_view=TRUE, can_edit=FALSE เสมอ) ต่างจาก
+// TENANT_MODULES ข้างบนที่ seed ทั้งดู+แก้คู่กัน — แยกลิสต์ต่างหากเพราะ 'products' ยังอยู่ใน OWNER_MODULES ด้วย
+// (บริษัทดู+แก้ได้เต็ม) การให้ตัวแทนแก้เองไม่ได้ตามกติกาเดิม (บริษัทเจ้าของสินค้าคุมราคา/สินค้าส่วนกลาง)
+var TENANT_VIEW_ONLY_MODULES = ['products'];
 
 var CENTRAL_SHEETS = {
   liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],
@@ -238,7 +242,7 @@ var CENTRAL_SHEETS = {
  */
 function ensureSchemaCurrent(force) {
   try {
-    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify({ sheets: CENTRAL_SHEETS, ownerModules: OWNER_MODULES, tenantModules: TENANT_MODULES }));
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify({ sheets: CENTRAL_SHEETS, ownerModules: OWNER_MODULES, tenantModules: TENANT_MODULES, tenantViewOnlyModules: TENANT_VIEW_ONLY_MODULES }));
     var fp = digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
     var props = PropertiesService.getScriptProperties();
     if (!force && props.getProperty('SCHEMA_FINGERPRINT') === fp) return false;
@@ -462,4 +466,5 @@ function _seedRolesAndPermissions() {
 
   OWNER_MODULES.forEach(function(m) { if (!existingPerms['owner_admin|' + m]) permSh.appendRow(['owner_admin', m, 'TRUE', 'TRUE']); });
   TENANT_MODULES.forEach(function(m) { if (!existingPerms['tenant_admin|' + m]) permSh.appendRow(['tenant_admin', m, 'TRUE', 'TRUE']); });
+  TENANT_VIEW_ONLY_MODULES.forEach(function(m) { if (!existingPerms['tenant_admin|' + m]) permSh.appendRow(['tenant_admin', m, 'TRUE', 'FALSE']); });
 }

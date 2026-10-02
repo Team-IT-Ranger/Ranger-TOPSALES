@@ -7,7 +7,10 @@
  *                       role_permissions (role_code, module_code, can_view, can_edit)
  *
  * scope: 'owner' = เฉพาะบริษัทเจ้าของสินค้าเห็น, 'tenant' = เฉพาะฝั่งตัวแทนเห็น, 'both' = ทั้งคู่
- * (scope ใช้ตอน seed ค่าเริ่มต้นเท่านั้น การบังคับจริงอยู่ที่การกรองข้อมูลด้วย user.tenantId ในแต่ละฟังก์ชัน)
+ * (scope ใช้ตอน seed ค่าเริ่มต้นเท่านั้น การบังคับจริงอยู่ที่การกรองข้อมูลด้วย user.tenantId ในแต่ละฟังก์ชัน
+ * — ★ 'products' เป็น scope:'both' ตั้งแต่ 2 ต.ค. 2026 แต่ตัวแทนได้แค่ดู แก้ไม่ได้: ค่าเริ่มต้นของ
+ * tenant_admin ถูก seed เป็น view=TRUE/edit=FALSE แยกต่างหากผ่าน TENANT_VIEW_ONLY_MODULES ใน 00_setup_sheets.gs
+ * ไม่ใช่ TENANT_MODULES ซึ่ง seed ทั้งดู+แก้คู่กันเสมอ — scope ที่นี่บอกแค่ "ใครเห็นเมนูนี้ได้บ้าง" เท่านั้น)
  */
 var MODULE_REGISTRY = [
   // ── ฝั่งตัวแทนจำหน่าย ──
@@ -22,7 +25,7 @@ var MODULE_REGISTRY = [
   { code: 'shipping',       label: 'การจัดส่ง',           scope: 'tenant' },
   { code: 'sales_report',   label: 'รายงานการขาย',        scope: 'both'   },
   // ── ฝั่งบริษัทเจ้าของสินค้า ──
-  { code: 'products',       label: 'สินค้าและราคา',       scope: 'owner'  },
+  { code: 'products',       label: 'สินค้าและราคา',       scope: 'both'   },
   { code: 'pricing',        label: 'ชุดราคาและส่วนลด',     scope: 'owner'  },
   { code: 'promotions',     label: 'โปรโมชั่น',           scope: 'owner'  },
   { code: 'tenants',        label: 'ตัวแทนจำหน่าย',       scope: 'owner'  },

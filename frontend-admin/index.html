@@ -931,11 +931,11 @@
              ตามแบบ Hippo Village (ดู inventory-app-blueprint.md — หน้าจอละหนึ่งเรื่อง คลิกเข้าไปดู) ═══ -->
         <section class="view" id="view-products">
           <div class="view-head">
-            <div><h1>สินค้าและราคา</h1><p>ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — คลิกแถวเพื่อแก้ไข คลิกหัวคอลัมน์เพื่อเรียง</p></div>
+            <div><h1>สินค้าและราคา</h1><p id="products-head-hint">ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — คลิกแถวเพื่อแก้ไข คลิกหัวคอลัมน์เพื่อเรียง</p></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-sm" onclick="openProductUnitsPage()">หน่วยขายเพิ่มเติม</button>
               <button class="btn btn-sm" onclick="openProductGroupsPage()">กลุ่มสินค้า</button>
-              <button class="btn btn-primary" onclick="openProductForm()">+ เพิ่มสินค้า</button>
+              <button class="btn btn-primary" id="products-add-btn" onclick="openProductForm()">+ เพิ่มสินค้า</button>
             </div>
           </div>
           <div class="table-wrap"><table>
@@ -954,6 +954,7 @@
           </div>
           <div class="form-card">
             <p class="form-hint">เลือกสินค้าเพื่อดู/เพิ่มหน่วยขายอื่นนอกจากหน่วยฐาน — แต่ละหน่วยมีบาร์โค้ด "ชุด" ของตัวเอง unique เฉพาะสินค้า+หน่วยนี้</p>
+            <div id="punits-warn"></div>
             <div class="form-grid g2">
               <div class="field span2"><label>สินค้า</label><select id="u-product" onchange="loadProductUnitsUI()"><option value="">— เลือกสินค้า —</option></select></div>
             </div>
@@ -961,14 +962,17 @@
               <thead><tr><th>รหัสหน่วย</th><th>ชื่อหน่วย</th><th>Factor</th><th>ราคา</th><th>บาร์โค้ด</th><th>สถานะ</th></tr></thead>
               <tbody id="units-body"><tr class="empty-row"><td colspan="6">เลือกสินค้าก่อน</td></tr></tbody>
             </table></div>
-            <div class="form-grid" style="margin-top:12px">
-              <div class="field"><label>รหัสหน่วย</label><input id="u-code" placeholder="เช่น CT"></div>
-              <div class="field"><label>ชื่อหน่วย</label><input id="u-label" placeholder="เช่น ลัง"></div>
-              <div class="field"><label>Factor <span class="unit">(1 หน่วยนี้ = กี่หน่วยฐาน)</span></label><input id="u-factor" type="number" placeholder="12"></div>
-              <div class="field"><label>ราคาต่อหน่วยนี้</label><input id="u-price" type="number" placeholder="0.00"></div>
-              <div class="field"><label>บาร์โค้ด (ชุด)</label><input id="u-barcode" placeholder="ไม่บังคับ"></div>
+            <p id="punits-viewonly-hint" class="form-hint" style="display:none">ข้อมูลหน่วยขายนี้บริษัทเป็นผู้ดูแล ดูได้แต่แก้ไม่ได้</p>
+            <div id="punits-addform">
+              <div class="form-grid" style="margin-top:12px">
+                <div class="field"><label>รหัสหน่วย</label><input id="u-code" placeholder="เช่น CT"></div>
+                <div class="field"><label>ชื่อหน่วย</label><input id="u-label" placeholder="เช่น ลัง"></div>
+                <div class="field"><label>Factor <span class="unit">(1 หน่วยนี้ = กี่หน่วยฐาน)</span></label><input id="u-factor" type="number" placeholder="12"></div>
+                <div class="field"><label>ราคาต่อหน่วยนี้</label><input id="u-price" type="number" placeholder="0.00"></div>
+                <div class="field"><label>บาร์โค้ด (ชุด)</label><input id="u-barcode" placeholder="ไม่บังคับ"></div>
+              </div>
+              <div class="form-actions"><button class="btn btn-primary" onclick="addProductUnitUI()">+ เพิ่มหน่วยขาย</button></div>
             </div>
-            <div class="form-actions"><button class="btn btn-primary" onclick="addProductUnitUI()">+ เพิ่มหน่วยขาย</button></div>
           </div>
         </section>
 
@@ -985,11 +989,14 @@
               <thead><tr><th>ชื่อกลุ่ม</th><th>คำอธิบาย</th></tr></thead>
               <tbody id="pgroups-body"><tr class="empty-row"><td colspan="2">กำลังโหลด...</td></tr></tbody>
             </table></div>
-            <div class="form-grid g2" style="margin-top:12px">
-              <div class="field"><label>ชื่อกลุ่มใหม่</label><input id="pg-name"></div>
-              <div class="field"><label>คำอธิบาย</label><input id="pg-desc"></div>
+            <p id="pgroups-viewonly-hint" class="form-hint" style="display:none">ข้อมูลกลุ่มสินค้านี้บริษัทเป็นผู้ดูแล ดูได้แต่แก้ไม่ได้</p>
+            <div id="pgroups-addform">
+              <div class="form-grid g2" style="margin-top:12px">
+                <div class="field"><label>ชื่อกลุ่มใหม่</label><input id="pg-name"></div>
+                <div class="field"><label>คำอธิบาย</label><input id="pg-desc"></div>
+              </div>
+              <div class="form-actions"><button class="btn btn-primary" onclick="addProductGroupUI()">+ เพิ่มกลุ่ม</button></div>
             </div>
-            <div class="form-actions"><button class="btn btn-primary" onclick="addProductGroupUI()">+ เพิ่มกลุ่ม</button></div>
           </div>
         </section>
 
@@ -1011,8 +1018,9 @@
               </div>
               <div class="form-grid" id="pf-fields" style="flex:1;min-width:280px"></div>
             </div>
+            <p id="pf-viewonly-hint" class="form-hint" style="display:none">ข้อมูลสินค้านี้บริษัทเป็นผู้ดูแล ดูได้แต่แก้ไม่ได้</p>
             <div class="form-actions">
-              <button class="btn btn-primary" onclick="saveProductForm()">บันทึก</button>
+              <button class="btn btn-primary" id="pf-save-btn" onclick="saveProductForm()">บันทึก</button>
               <button class="btn btn-sm" onclick="closeProductForm()">ยกเลิก</button>
             </div>
           </div>
@@ -2176,9 +2184,13 @@ const NAV_GROUPS = [
   ]},
   { n:'3', icon:'tag', label:'ข้อมูลสินค้า', subs:[
     { n:'3.1', label:'สินค้า', items:[
-      {n:'3.1.1', label:'รายการสินค้า', view:'products', mod:'products', ready:true, scope:'owner', grey:'tenant'},
-      {n:'3.1.2', label:'กำหนดกลุ่มสินค้า', view:'productgroups', mod:'products', ready:true, scope:'owner', grey:'tenant'},
-      {n:'3.1.3', label:'หน่วยขายเพิ่มเติม', view:'productunits', mod:'products', ready:true, scope:'owner', grey:'tenant'}
+      // ★ 2 ต.ค. 2026 — เจ้าของระบบสั่ง: ฝั่งตัวแทนเปิดดูได้ทุกเมนูในนี้ (scope:'both') แต่แก้ไม่ได้
+      // (เดิม scope:'owner' + grey:'tenant' = ล็อกเข้าไม่ได้เลย) การห้ามแก้ไขตอนนี้มาจากสิทธิ์ 'products'
+      // ของบทบาท tenant_admin ที่ seed เป็น view=TRUE/edit=FALSE (ดู 00_setup_sheets.gs) + แต่ละหน้าซ่อนปุ่ม
+      // แก้ไขเองด้วย canEdit('products') — ไม่ใช่ nav lock อีกต่อไป
+      {n:'3.1.1', label:'รายการสินค้า', view:'products', mod:'products', ready:true, scope:'both'},
+      {n:'3.1.2', label:'กำหนดกลุ่มสินค้า', view:'productgroups', mod:'products', ready:true, scope:'both'},
+      {n:'3.1.3', label:'หน่วยขายเพิ่มเติม', view:'productunits', mod:'products', ready:true, scope:'both'}
     ]}
   ]},
   { n:'4', icon:'box', label:'คลังสินค้า', subs:[
@@ -3510,6 +3522,13 @@ function sortProductsTable(key){
 }
 function renderProductsTable(){
   const body = document.getElementById('products-body');
+  // ★ module 'products' เปิดให้ฝั่งตัวแทนเข้าดูได้ทุกเมนูแล้ว (2 ต.ค. 2026) แต่แก้ไม่ได้ — ซ่อนปุ่ม
+  // เพิ่ม/เปิด-ปิดใช้งาน เฉพาะฝั่งที่ไม่มีสิทธิ์แก้ (เซิร์ฟเวอร์ปฏิเสธอยู่แล้ว แต่ซ่อนให้ไม่ต้องลองแล้วเจอ error)
+  const editOk = canEdit('products');
+  document.getElementById('products-add-btn').style.display = editOk ? '' : 'none';
+  document.getElementById('products-head-hint').textContent = editOk
+    ? 'ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — คลิกแถวเพื่อแก้ไข คลิกหัวคอลัมน์เพื่อเรียง'
+    : 'ข้อมูลสินค้านี้บริษัทเป็นผู้ดูแล ดูได้แต่แก้ไม่ได้ — คลิกแถวเพื่อดูรายละเอียด คลิกหัวคอลัมน์เพื่อเรียง';
   // dropdown เลือกสินค้า โชว์ [รหัสสินค้า] ชื่อ ตามหลัก Hippo Village — หารายการง่ายขึ้นเมื่อแคตาล็อกใหญ่
   const uProd = document.getElementById('u-product');
   uProd.innerHTML = '<option value="">— เลือกสินค้า —</option>' + productsCache.map(p =>
@@ -3538,7 +3557,7 @@ function renderProductsTable(){
       // ไม่งั้นได้ <span class="tag"> โผล่เป็นตัวหนังสือในตาราง
       return '<td'+(col.cls?' class="'+col.cls+'"':'')+'>'+(col.html ? val : esc(val))+'</td>';
     }).join('');
-    const actionCell = '<td onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td>';
+    const actionCell = editOk ? '<td onclick="event.stopPropagation()"><button class="btn btn-sm" onclick="toggleProductStatusUI(\''+esc(p.record_id)+'\','+isOn(p.is_active)+')">'+(isOn(p.is_active)?'ปิดใช้งาน':'เปิดใช้งาน')+'</button></td>' : '<td></td>';
     return '<tr class="clickable-row" onclick="openProductForm(\''+esc(p.record_id)+'\')">'+cells+actionCell+'</tr>';
   }).join('');
 }
@@ -3557,10 +3576,13 @@ async function loadProducts(){
 }
 
 /* ── หน้าเต็ม เพิ่ม/แก้ไขสินค้า 1 รายการ ── */
-function _pfFieldHtml(f, val, locked){
+// locked = ล็อกเฉพาะช่องนี้ (เช่น productCode ที่มีรายการขายแล้ว) · viewOnly = ล็อกทั้งฟอร์ม (ไม่มีสิทธิ์แก้โมดูล
+// 'products' เลย — ฝั่งตัวแทนเปิดดูได้ทุกเมนูแต่แก้ไม่ได้ ตั้งแต่ 2 ต.ค. 2026) คนละเหตุผล จึงคนละข้อความแจ้ง
+function _pfFieldHtml(f, val, locked, viewOnly){
   const cls = 'field' + (f.wide ? ' span2' : '');
   const lockHint = locked ? ' <span class="unit" style="color:var(--red)">(ล็อก — มีรายการขายกับสินค้านี้แล้ว)</span>' : '';
   const lbl = '<label>'+esc(f.label)+(f.required?' <span style="color:var(--red)">*</span>':'')+(f.hint?' <span class="unit">'+esc(f.hint)+'</span>':'')+lockHint+'</label>';
+  const ro = locked || viewOnly;
   if (f.type === 'select') {
     let opts;
     if (f.optionsFrom === 'productGroups') {
@@ -3569,18 +3591,19 @@ function _pfFieldHtml(f, val, locked){
     } else {
       opts = (f.options||[]).map(o => '<option value="'+o.value+'"'+(o.value===val?' selected':'')+'>'+esc(o.label)+'</option>').join('');
     }
-    return '<div class="'+cls+'">'+lbl+'<select data-key="'+f.key+'">'+opts+'</select></div>';
+    return '<div class="'+cls+'">'+lbl+'<select data-key="'+f.key+'"'+(ro?' disabled':'')+'>'+opts+'</select></div>';
   }
-  // readonly ไม่ใช่ disabled — ต้องยังอ่านค่าจาก .value ได้ตอนบันทึก (แค่ห้ามแก้)
-  const ro = locked ? ' readonly' : '';   // หน้าตาช่องที่ล็อกอยู่ใน CSS (.field input[readonly]) แล้ว
-  return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'"'+ro+' placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'"></div>';
+  // readonly ไม่ใช่ disabled — ต้องยังอ่านค่าจาก .value ได้ตอนบันทึก (แค่ห้ามแก้) · viewOnly ไม่เคยไปถึง saveProductForm()
+  // อยู่แล้ว (ปุ่มบันทึกถูกซ่อน) แต่ใช้ readonly เหมือนกันเพื่อให้โค้ดอ่านค่าแบบเดียวกันทุกที่
+  const roAttr = ro ? ' readonly' : '';   // หน้าตาช่องที่ล็อกอยู่ใน CSS (.field input[readonly]) แล้ว
+  return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'"'+roAttr+' placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'"></div>';
 }
-function renderProductFormFields(row){
+function renderProductFormFields(row, viewOnly){
   const codeLocked = !!(row && String(row.has_transactions) === 'TRUE');
   document.getElementById('pf-fields').innerHTML = PRODUCT_FIELDS.map(f => {
     const raw = row ? row[f.dataKey] : undefined;
     const val = (raw !== undefined && raw !== null && raw !== '') ? raw : (f.default !== undefined ? f.default : '');
-    return _pfFieldHtml(f, val, codeLocked && f.key === 'productCode');
+    return _pfFieldHtml(f, val, codeLocked && f.key === 'productCode', viewOnly);
   }).join('');
 }
 function readProductFormFields(){
@@ -3613,14 +3636,18 @@ function pfPickImage(input){
 function openProductForm(id){
   const row = id ? productsCache.find(x => String(x.record_id) === String(id)) : null;
   if (id && !row) { toast('ไม่พบสินค้านี้ในรายการ ลองโหลดหน้าใหม่', true); return; }
+  const viewOnly = !canEdit('products');
   editingProductId = id || null;
   pfPickedFile = null;
   document.getElementById('pf-title').textContent = row ? ('แก้ไขสินค้า: ' + (row.product_code?'['+row.product_code+'] ':'') + row.name) : 'เพิ่มสินค้าใหม่';
-  renderProductFormFields(row);
+  renderProductFormFields(row, viewOnly);
   setProductFormImagePreview(row ? row.image_url : '');
   document.getElementById('pf-img-file').value = '';
+  document.getElementById('pf-img-file').style.display = viewOnly ? 'none' : '';
+  document.getElementById('pf-save-btn').style.display = viewOnly ? 'none' : '';
+  document.getElementById('pf-viewonly-hint').style.display = viewOnly ? '' : 'none';
   const toggleBtn = document.getElementById('pf-toggle-btn');
-  if (row) { toggleBtn.style.display = ''; toggleBtn.textContent = isOn(row.is_active) ? 'ปิดใช้งาน' : 'เปิดใช้งาน'; }
+  if (row && !viewOnly) { toggleBtn.style.display = ''; toggleBtn.textContent = isOn(row.is_active) ? 'ปิดใช้งาน' : 'เปิดใช้งาน'; }
   else toggleBtn.style.display = 'none';
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-productform').classList.add('active');
@@ -3639,7 +3666,31 @@ function closeProductForm(){
   renderProductsTable();
 }
 // หน้าต่างย่อย (หน่วยขายเพิ่มเติม / กลุ่มสินค้า) — อยู่หลังปุ่มรอกด ไม่โผล่พร้อมกันในหน้ารายการหลัก
-function openProductUnitsPage(){ _switchProductView('view-productunits', 'หน่วยขายเพิ่มเติม'); }
+function openProductUnitsPage(){
+  _switchProductView('view-productunits', 'หน่วยขายเพิ่มเติม');
+  const editOk = canEdit('products');
+  document.getElementById('punits-addform').style.display = editOk ? '' : 'none';
+  document.getElementById('punits-viewonly-hint').style.display = editOk ? 'none' : '';
+  loadUnconfirmedUnitsWarn();
+}
+// ★ 2 ต.ค. 2026 — เจ้าของระบบสงสัยว่าตัวแปลงหน่วย (PC→PK→CT) ผิดอยู่มาก หลังเห็นค่า factor แปลกๆ ในรายการนำเข้า
+// การซื้อ ที่จริงระบบมีเครื่องมือนี้อยู่แล้ว (listUnconfirmedUnits, 10_master_data.gs) แต่ไม่เคยมี UI เรียกใช้เลย —
+// แสดงเป็นแถบเตือนบนหัวหน้า "หน่วยขายเพิ่มเติม" คลิกรายการไหนเพื่อกระโดดไปแก้ตัวนั้นได้ทันที
+async function loadUnconfirmedUnitsWarn(){
+  const box = document.getElementById('punits-warn');
+  const r = await callApi('listUnconfirmedUnits', {});
+  if (!r.success || !r.data.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="form-card" style="background:#FFF8E6;border-color:#F0C361;margin-bottom:10px">' +
+    '<p class="form-hint" style="color:#8A5A00"><b>⚠ สินค้า '+r.data.length+' รายการยังไม่ยืนยันขนาดบรรจุ</b> — factor ตอนนี้เป็นค่าตั้งต้น (1) ' +
+    'ซึ่งอาจไม่ตรงของจริง (1 ลัง ≠ 1 ชิ้นแน่ๆ สำหรับสินค้าส่วนใหญ่) คลิกรายการเพื่อแก้</p>' +
+    r.data.map(u => '<div class="row" style="cursor:pointer" onclick="jumpToProductUnit(\''+esc(u.productId)+'\')">' +
+      '<span>'+esc(u.product)+'</span><span class="unit mono-data">'+esc(u.unitCode)+' ×'+esc(u.unitFactor)+'</span></div>').join('') +
+    '</div>';
+}
+function jumpToProductUnit(productId){
+  document.getElementById('u-product').value = productId;
+  loadProductUnitsUI();
+}
 function closeProductUnitsPage(){ _switchProductView('view-products', 'สินค้าและราคา'); }
 function openProductGroupsPage(){ _switchProductView('view-productgroups', 'กลุ่มสินค้า'); }
 function closeProductGroupsPage(){ _switchProductView('view-products', 'สินค้าและราคา'); }
@@ -3701,6 +3752,9 @@ async function ensureProductGroups(force){
   pgBody.innerHTML = productGroupsCache.length
     ? productGroupsCache.map(g => '<tr><td>'+esc(g.name)+'</td><td>'+esc(g.description||'-')+'</td></tr>').join('')
     : '<tr class="empty-row"><td colspan="2">ยังไม่มีกลุ่มสินค้า</td></tr>';
+  const editOk = canEdit('products');
+  document.getElementById('pgroups-addform').style.display = editOk ? '' : 'none';
+  document.getElementById('pgroups-viewonly-hint').style.display = editOk ? 'none' : '';
 }
 async function addProductGroupUI(){
   const name = document.getElementById('pg-name').value.trim();
@@ -6114,12 +6168,18 @@ async function loadPendingGoodsReceipts(){
     '<div class="form-card" style="margin-bottom:10px"><h3>'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+' · รับของ '+esc(g.receiveDate)+')</span></h3>' +
     '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>รหัส</th><th>จำนวนรับ</th><th>หน่วย</th>' +
     '<th>factor</th><th>หน่วยฐานที่เข้าสต็อก</th><th>ราคาซื้อเข้าสุทธิ</th></tr></thead><tbody>' +
-    g.items.map(it => '<tr data-gritem="'+it.grItemId+'" data-factor="'+it.unitFactor+'">' +
+    g.items.map(it => {
+      // ★ ชื่อหน่วยจริงของสินค้า (ไม่ใช่แค่ CT→"ลัง") มีคำเตือนฝังไว้เองถ้ายังไม่ยืนยันขนาดบรรจุ — ต้องโชว์ให้เห็น
+      // ไม่งั้นแอดมินเห็น factor แปลกๆ แล้วไม่รู้ว่าทำไม (ดู UNIT_FACTOR_UNCONFIRMED, 10_master_data.gs)
+      const unconfirmed = /ยังไม่ยืนยัน/.test(it.unitLabel || '');
+      const unitText = it.unitLabel || unitLabelJs(it.unitCode);
+      return '<tr data-gritem="'+it.grItemId+'" data-factor="'+it.unitFactor+'">' +
       '<td>'+esc(it.productName)+'</td><td class="mono-data">'+esc(it.productCode)+'</td>' +
       '<td><input type="number" step="0.0001" min="0" value="'+it.qty+'" class="pgr-qty" style="width:90px" oninput="pgrRecalc(this)"></td>' +
-      '<td>'+esc(unitLabelJs(it.unitCode))+'</td><td class="mono-data">'+repQty(it.unitFactor)+'</td>' +
+      '<td'+(unconfirmed?' style="color:var(--red)"':'')+'>'+esc(unitText)+'</td><td class="mono-data">'+repQty(it.unitFactor)+'</td>' +
       '<td class="mono-data pgr-base">'+repQty(it.qty*it.unitFactor)+'</td>' +
-      '<td class="mono-data">฿'+baht(it.amount)+'</td></tr>').join('') +
+      '<td class="mono-data">฿'+baht(it.amount)+'</td></tr>';
+    }).join('') +
     '</tbody></table></div>' +
     '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button></div>'
   ).join('');
