@@ -46,11 +46,14 @@ const call = async body => {
   const token = login.token;
   console.log('ล็อกอินเป็น ' + USER + ' (' + login.roleCode + ') → ' + URL_.slice(0, 60) + '…\n');
 
-  // ★ 2026-09-30 (2) หากลุ่มลูกค้าปลายทางจาก "กลุ่มที่มีชุดราคา active อยู่ตอนนี้" ตรงกับคำในชื่อไฟล์ — ไม่ใช่
-  // ส่ง customerGroupName ตรงๆ (เสี่ยงไปสร้าง/ชนกับกลุ่มชื่อใกล้เคียงที่ไม่มีชุดราคา ดูคอมเมนต์เหนือ GROUPS)
-  const activeLists = await call({ action: 'listPriceLists', token });
-  if (!activeLists.success) { console.error('อ่านรายการชุดราคาเดิมไม่สำเร็จ: ' + activeLists.message); process.exit(1); }
-  const active = (activeLists.data || []).filter(l => l.status === 'active');
+  // ★ 2026-09-30 (2) หากลุ่มลูกค้าปลายทางจาก "กลุ่มที่มีชุดราคาอยู่แล้ว" ตรงกับคำในชื่อไฟล์ — ไม่ใช่ส่ง
+  // customerGroupName ตรงๆ (เสี่ยงไปสร้าง/ชนกับกลุ่มชื่อใกล้เคียงที่ไม่มีชุดราคา ดูคอมเมนต์เหนือ GROUPS)
+  // เลือกจากชุด active ก่อนเสมอ · ถ้าไม่มี active สักชุด (เช่น UAT ที่บางกลุ่มยังเป็นร่างค้างจากงวดก่อน) ยอมใช้
+  // ชุดสถานะอื่นแทนได้ ตราบใดที่ยังชี้ไปกลุ่มเดียวกันไม่ซ้ำซ้อน (ไม่งั้นค้างตายถ้าไม่มีใครเคย activate ชุดนั้นเลย)
+  const allLists = await call({ action: 'listPriceLists', token });
+  if (!allLists.success) { console.error('อ่านรายการชุดราคาเดิมไม่สำเร็จ: ' + allLists.message); process.exit(1); }
+  const active = (allLists.data || []).filter(l => l.status === 'active');
+  const any = allLists.data || [];
 
   let failed = 0;
   for (const f of files) {
@@ -62,17 +65,19 @@ const call = async body => {
     if (!grp) { console.error('ไม่รู้ว่าไฟล์นี้เป็นของกลุ่มลูกค้าไหน: ' + f); failed++; continue; }
     if (!period) { console.error('อ่านช่วงเวลาจากหัวไฟล์ไม่ได้: ' + f); failed++; continue; }
 
-    const matches = active.filter(l => (l.customerGroupName || '').indexOf(grp[1]) !== -1);
+    let matches = active.filter(l => (l.customerGroupName || '').indexOf(grp[1]) !== -1);
+    let usedFallback = false;
+    if (!matches.length) { matches = any.filter(l => (l.customerGroupName || '').indexOf(grp[1]) !== -1); usedFallback = true; }
     const groupIds = [...new Set(matches.map(l => l.customerGroupId))];
     if (groupIds.length !== 1) {
-      console.error('✗ ' + f + ' — หากลุ่มลูกค้าปลายทางไม่ได้ (คำ "' + grp[1] + '" เจอชุดราคา active ' + groupIds.length + ' กลุ่ม, ต้องการเจอ 1)' +
-        (matches.length ? ' — พบ: ' + matches.map(l => l.customerGroupName + ' (id ' + l.customerGroupId + ')').join(' / ') : ' — ไม่พบชุดราคา active ที่ชื่อกลุ่มมีคำนี้เลย'));
+      console.error('✗ ' + f + ' — หากลุ่มลูกค้าปลายทางไม่ได้ (คำ "' + grp[1] + '" เจอชุดราคา ' + groupIds.length + ' กลุ่ม, ต้องการเจอ 1)' +
+        (matches.length ? ' — พบ: ' + matches.map(l => l.customerGroupName + ' (id ' + l.customerGroupId + ')').join(' / ') : ' — ไม่พบชุดราคาที่ชื่อกลุ่มมีคำนี้เลย'));
       failed++; continue;
     }
     const groupId = groupIds[0], groupName = matches[0].customerGroupName;
 
     const name = groupName + ' ' + period.from + '..' + period.to;
-    console.log('■ ' + f + ' → กลุ่ม "' + groupName + '" (id ' + groupId + ', จากชุดราคา active เดิม: ' + matches.map(l => l.name).join(', ') + ')');
+    console.log('■ ' + f + ' → กลุ่ม "' + groupName + '" (id ' + groupId + ', จากชุดราคา' + (usedFallback ? ' [ไม่มี active — ใช้สถานะอื่นแทน]' : ' active') + 'เดิม: ' + matches.map(l => l.name + ' [' + l.status + ']').join(', ') + ')');
     console.log('   ' + s.items.length + ' กลุ่มราคา · ' +
       s.items.reduce((n, i) => n + i.variants.length, 0) + ' สินค้า · ' +
       s.items.reduce((n, i) => n + i.tiers.length, 0) + ' ขั้น · ' +

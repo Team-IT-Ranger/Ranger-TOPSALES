@@ -27,7 +27,8 @@ var IDEMPOTENT_ACTIONS = {
   savePurchaseRequisition: 1, savePurchaseOrder: 1, receiveGoods: 1,
   createApBillFromGr: 1, createApBillManual: 1, payApBills: 1,
   createArInvoice: 1, receiveArPayment: 1,
-  createTenant: 1, addCustomerAdmin: 1, addCustomer: 1
+  createTenant: 1, addCustomerAdmin: 1, addCustomer: 1,
+  importExternalSalesInvoices: 1, confirmExternalGoodsReceipt: 1
 };
 
 /**

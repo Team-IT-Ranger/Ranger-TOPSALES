@@ -1497,6 +1497,27 @@
           </table></div>
         </section>
 
+        <!-- ═══ นำเข้ารายการขายออกของบริษัท → PO+GR ของศูนย์ (2026-10-02) ═══ -->
+        <section class="view" id="view-externalsalesimport">
+          <div class="view-head">
+            <div><h1>นำเข้ารายการขายออกของบริษัท</h1>
+              <p>ดึงรายการขายออกจากบริษัทไปยังศูนย์ (ชีตกลาง D365) มาสร้างใบสั่งซื้อ+ใบรับของให้ศูนย์อัตโนมัติ —
+                ตรวจรายการก่อนทุกครั้ง ไม่มีการสร้างเอกสารโดยไม่มีคนยืนยัน</p></div>
+            <button class="btn btn-primary" id="esi-check-btn" onclick="esiCheck()">ตรวจรายการใหม่</button>
+          </div>
+          <div id="esi-result"></div>
+        </section>
+
+        <!-- ═══ ใบรับของรอตรวจรับ (จากการนำเข้าอัตโนมัติ — ของศูนย์ตัวเอง) ═══ -->
+        <section class="view" id="view-pendinggoodsreceipts">
+          <div class="view-head">
+            <div><h1>ใบรับของรอตรวจรับ</h1>
+              <p>ใบรับของกึ่งสำเร็จรูปจากรายการขายออกของบริษัท — ตรวจว่ารายการตรงกับของที่รับจริง แก้จำนวนได้ก่อนกดยืนยัน
+                ยืนยันแล้วระบบจะเพิ่มสต็อกให้ทันที</p></div>
+          </div>
+          <div id="pgr-body"><p class="unit">กำลังโหลด...</p></div>
+        </section>
+
         <section class="view" id="view-warehousestock">
           <div class="view-head">
             <div><h1>ยอดคงเหลือในคลัง</h1><p id="ws-summary">มูลค่าสินค้าคงเหลือตามต้นทุนเฉลี่ยถ่วงน้ำหนัก</p>
@@ -1645,10 +1666,12 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'savePackageTenants','migratePackageAssignments',
   'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus',
   'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
-  'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive']);
+  'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive',
+  'importExternalSalesInvoices','confirmExternalGoodsReceipt']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
-  'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin']);
+  'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin',
+  'importExternalSalesInvoices','confirmExternalGoodsReceipt']);
 const INFLIGHT = new Set();
 const newRequestId = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 // ปุ่มที่ผู้ใช้เพิ่งกด (ตอน callApi ถูกเรียกจาก onclick ปุ่มนั้นยังเป็น activeElement อยู่)
@@ -2146,7 +2169,10 @@ const NAV_GROUPS = [
       {n:'2.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', mod:'purchasing', ready:true, scope:'both'} ]},
     { n:'2.3', label:'ข้อมูลผู้ขาย', items:[
       {n:'2.3.1', label:'ผู้ขาย', view:'vendors', mod:'vendors', ready:true, scope:'both'},
-      {n:'2.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true, scope:'both'} ]}
+      {n:'2.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true, scope:'both'} ]},
+    { n:'2.4', label:'นำเข้าจากรายการขายออกของบริษัท', items:[
+      {n:'2.4.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner'},
+      {n:'2.4.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'} ]}
   ]},
   { n:'3', icon:'tag', label:'ข้อมูลสินค้า', subs:[
     { n:'3.1', label:'สินค้า', items:[
@@ -2491,6 +2517,7 @@ const LOADERS = {
   salesorders: loadSalesOrders,
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
+  externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
   apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
@@ -6007,6 +6034,80 @@ async function billFromGrList(grId){
   if (!r.success) { toast(r.message, true); return; }
   apCache = []; toast(r.message); loadGoodsReceipts();
 }
+/* ═══ นำเข้ารายการขายออกของบริษัท → PO+GR ของศูนย์ (2026-10-02) ═══
+   หน้านี้ยิง previewExternalSalesImport ซึ่งอ่านชีตภายนอก 256,484 แถว — ช้า (~2 นาที) ตั้งใจไม่ทำ
+   ตอนเปิดหน้าอัตโนมัติ ต้องกดปุ่ม "ตรวจรายการใหม่" เอง จะได้ไม่ไปรอทุกครั้งที่แวะเข้าเมนู */
+let esiData = null;
+async function esiCheck(){
+  const btn = document.getElementById('esi-check-btn'), box = document.getElementById('esi-result');
+  btn.disabled = true; btn.textContent = 'กำลังตรวจ... (อ่านชีตภายนอกช้า รอสักครู่)';
+  box.innerHTML = '<p class="unit">กำลังอ่านรายการขายออกจากชีตกลาง — ปกติใช้เวลา 1-2 นาที…</p>';
+  const r = await callApi('previewExternalSalesImport', {});
+  btn.disabled = false; btn.textContent = 'ตรวจรายการใหม่';
+  if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
+  esiData = r;
+  renderEsi();
+}
+function renderEsi(){
+  const r = esiData, box = document.getElementById('esi-result');
+  if (!r.candidates.length) {
+    box.innerHTML = '<p class="unit">ไม่มีรายการใหม่ที่พร้อมนำเข้า (ตั้งแต่ '+esc(r.cutoffDate)+')'+
+      (r.errors.length ? ' — มี '+r.errors.length+' ใบจับคู่ไม่ได้ ดูด้านล่าง' : '')+'</p>' + esiErrorsHtml(r);
+    return;
+  }
+  box.innerHTML =
+    '<div class="table-wrap"><table><thead><tr><th><input type="checkbox" checked onclick="esiToggleAll(this.checked)"></th>' +
+    '<th>ใบกำกับภาษี</th><th>วันที่ขาย</th><th>ศูนย์</th><th>รายการ</th><th>มูลค่า</th></tr></thead><tbody>' +
+    r.candidates.map(c => '<tr><td><input type="checkbox" class="esi-pick" value="'+esc(c.invoiceNumber)+'" checked></td>' +
+      '<td class="mono-data">'+esc(c.invoiceNumber)+'</td><td class="mono-data">'+esc(c.invoiceDate)+'</td>' +
+      '<td>'+esc(c.tenantName)+' <span class="unit">('+esc(c.tenantId)+')</span></td>' +
+      '<td>'+c.lines.map(l => esc(l.productName)+' × '+l.qtyCT).join('<br>')+'</td>' +
+      '<td class="mono-data">฿'+bahtPlain(c.totalAmt)+'</td></tr>').join('') +
+    '</tbody></table></div>' +
+    '<button class="btn btn-primary" style="margin-top:10px" onclick="esiSubmit()">นำเข้ารายการที่เลือก</button>' +
+    esiErrorsHtml(r);
+}
+function esiErrorsHtml(r){
+  var parts = [];
+  if (r.errors.length) parts.push('<div class="form-card" style="margin-top:10px"><h3>จับคู่ไม่ได้ ('+r.errors.length+' ใบ)</h3>' +
+    r.errors.map(e => '<div class="row"><span class="mono-data">'+esc(e.invoiceNumber)+'</span><span class="unit">'+esc(e.reason)+'</span></div>').join('') + '</div>');
+  if (r.alreadyImported.length) parts.push('<p class="unit" style="margin-top:10px">นำเข้าไปแล้ว '+r.alreadyImported.length+' ใบ (ไม่แสดงซ้ำ)</p>');
+  return parts.join('');
+}
+function esiToggleAll(v){ document.querySelectorAll('.esi-pick').forEach(c => c.checked = v); }
+async function esiSubmit(){
+  const invoiceNumbers = [...document.querySelectorAll('.esi-pick:checked')].map(c => c.value);
+  if (!invoiceNumbers.length) { toast('ยังไม่ได้เลือกใบที่จะนำเข้า', true); return; }
+  const r = await callApi('importExternalSalesInvoices', { invoiceNumbers });
+  if (!r.success) { toast(r.message, true); return; }
+  toast('นำเข้าแล้ว '+r.created.length+' ใบ'+(r.skipped.length ? ' (ข้าม '+r.skipped.length+' ใบ — ดูเหตุผลที่คอนโซล)' : ''));
+  if (r.skipped.length) console.log('ข้ามตอนนำเข้า:', r.skipped);
+  esiData = null; document.getElementById('esi-result').innerHTML = '';
+  esiCheck();
+}
+
+/* ═══ ใบรับของรอตรวจรับ (จากการนำเข้าอัตโนมัติ) ═══ */
+async function loadPendingGoodsReceipts(){
+  const box = document.getElementById('pgr-body');
+  box.innerHTML = '<p class="unit">กำลังโหลด...</p>';
+  const r = await callApi('listPendingExternalGoodsReceipts', {});
+  if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
+  if (!r.data.length) { box.innerHTML = '<p class="unit">ไม่มีใบรับของค้างตรวจรับ</p>'; return; }
+  box.innerHTML = r.data.map(g =>
+    '<div class="form-card" style="margin-bottom:10px"><h3>'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+' · รับของ '+esc(g.receiveDate)+')</span></h3>' +
+    g.items.map(it => '<div class="row"><span>'+esc(it.productName)+'</span>' +
+      '<span><input type="number" step="0.0001" min="0" value="'+it.qty+'" data-gritem="'+it.grItemId+'" style="width:100px"> '+esc(it.unitCode)+'</span></div>').join('') +
+    '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button></div>'
+  ).join('');
+}
+async function pgrConfirm(id){
+  const card = [...document.querySelectorAll('[data-gritem]')].filter(el => el.closest('.form-card').querySelector('button').getAttribute('onclick') === 'pgrConfirm('+id+')');
+  const items = card.map(el => ({ grItemId: el.dataset.gritem, qty: Number(el.value) || 0 }));
+  const r = await callApi('confirmExternalGoodsReceipt', { id, items });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message); loadPendingGoodsReceipts();
+}
+
 let wsCache = [];
 async function loadWarehouseStock(){
   const body = document.getElementById('ws-body');

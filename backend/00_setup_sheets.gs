@@ -164,11 +164,17 @@ var CENTRAL_SHEETS = {
   // ประวัติการตัดสินใจทุกครั้ง (ไม่ลบ ไม่ทับ) — ใช้ดูว่าใครอนุมัติขั้นไหนเมื่อไหร่
   pr_approvals: ['record_id','pr_id','step_no','approver_user_id','decision','comment','decided_at'],
 
+  // source_ref: เลขที่ใบกำกับภาษีจากชีตขายออกของบริษัท (FactSales.InvoiceNumber) เมื่อ PO ใบนี้ถูกสร้างจากการนำเข้า
+  // อัตโนมัติ (43_external_sales_import.gs) — ว่างสำหรับ PO ปกติที่เปิดมือ ใช้กันนำเข้าซ้ำ (เช็คว่าเคยมี PO
+  // ที่ source_ref นี้แล้วหรือยังก่อนสร้างใหม่)
   purchase_orders: ['record_id','tenant_id','po_no','vendor_id','pr_id','warehouse_id','status','order_date','expected_date',
-    'vat_type','subtotal_ex_vat','discount_ex_vat','vat_amount','total','note','created_by','created_at','closed_at'],
+    'vat_type','subtotal_ex_vat','discount_ex_vat','vat_amount','total','note','created_by','created_at','closed_at','source_ref'],
   po_items: ['record_id','po_id','line_no','pr_item_id','product_id','description','qty','unit_code','unit_factor','unit_price','amount','received_qty'],
 
-  goods_receipts: ['record_id','tenant_id','gr_no','po_id','vendor_id','warehouse_id','receive_date','note','status','journal_id','created_by','created_at'],
+  // status ปกติ = 'posted' (เข้าสต็อกทันทีตอนรับของมือ) · 'pending_review' = ใบรับของกึ่งสำเร็จรูปที่นำเข้า
+  // อัตโนมัติจากชีตขายออกของบริษัท ยังไม่เข้าสต็อกจนกว่าแอดมินศูนย์จะตรวจรับ (ดู confirmExternalGoodsReceipt,
+  // 43_external_sales_import.gs) · source_ref เหมือน purchase_orders ด้านบน
+  goods_receipts: ['record_id','tenant_id','gr_no','po_id','vendor_id','warehouse_id','receive_date','note','status','journal_id','created_by','created_at','source_ref'],
   gr_items: ['record_id','gr_id','po_item_id','product_id','qty','unit_code','unit_factor','base_qty','unit_cost','amount'],
 
   // ═══════════ บัญชี (แยกประเภท / ลูกหนี้ / เจ้าหนี้) — ดู 23_accounting.gs ═══════════
