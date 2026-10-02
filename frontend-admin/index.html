@@ -6038,6 +6038,14 @@ async function billFromGrList(grId){
    หน้านี้ยิง previewExternalSalesImport ซึ่งอ่านชีตภายนอก 256,484 แถว — ช้า (~2 นาที) ตั้งใจไม่ทำ
    ตอนเปิดหน้าอัตโนมัติ ต้องกดปุ่ม "ตรวจรายการใหม่" เอง จะได้ไม่ไปรอทุกครั้งที่แวะเข้าเมนู */
 let esiData = null;
+// ★ ตัว view loader ที่ LOADERS ต้องมี (เรียกตอนเข้าเมนู) — ของเดิมมีแค่ esiCheck() ที่ปุ่มเรียก แต่ไม่เคยเขียน
+// ฟังก์ชันนี้เลย ทำให้ `const LOADERS = {...}` อ้างชื่อที่ไม่มีจริง โยน ReferenceError ตั้งแต่โหลดสคริปต์
+// (ตัดการทำงานของสคริปต์ทั้งก้อนที่อยู่ "หลัง" บรรทัดนั้นไปเงียบๆ รวมถึงล็อกอินด้วย LINE) — เจอจริง 2 ต.ค. 2026
+// ไม่ยิง esiCheck() อัตโนมัติตามคอมเมนต์ข้างบน แค่คืนหน้าให้ว่างพร้อมกดตรวจใหม่ทุกครั้งที่แวะเข้าเมนู
+function loadExternalSalesImport(){
+  esiData = null;
+  document.getElementById('esi-result').innerHTML = '';
+}
 async function esiCheck(){
   const btn = document.getElementById('esi-check-btn'), box = document.getElementById('esi-result');
   btn.disabled = true; btn.textContent = 'กำลังตรวจ... (อ่านชีตภายนอกช้า รอสักครู่)';
