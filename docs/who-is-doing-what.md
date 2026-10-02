@@ -558,6 +558,14 @@ CLAUDE.md หัวข้อ "นำเข้ารายการขายอ�
 - ตั้งหน่วยซื้อ/ขายตั้งต้นเป็นลังแล้วทั้ง UAT (93) และ prod (13) — `.dev/set-default-trade-units.js`
 - backend push UAT แล้ว **รอ Deploy → New version** (`withdrawExternalGoodsReceipt` เป็น action ใหม่ ต้องมีก่อนปุ่มถอนจะทำงาน)
 
+## ★★ 2026-10-02 (ต่อ 5): นำเข้าอัตโนมัติตามเวลา + ย้ายเมนู 2.4 → 4.3
+
+- เพิ่ม `scheduledExternalSalesImport` (นำเข้าทุกใบที่พร้อม ไม่ต้องกด) + `installExternalSalesImportTriggers`/`removeExternalSalesImportTriggers`
+  + action `getExternalSalesAutoImportStatus` · เมนูย้ายเป็น 4.3.1/4.3.2 (โมดูล 4 คลังสินค้า) · รายละเอียดใน CLAUDE.md
+- **เจ้าของระบบต้องทำเอง (ทีละ env):** (1) เปิด Apps Script editor → รัน `installExternalSalesImportTriggers` (กดยอมรับสิทธิ์ใหม่
+  `script.scriptapp`) (2) แล้วค่อย Deploy → New version · ลำดับนี้สำคัญ · อย่าลืมตั้ง failure notification ที่หน้า Triggers
+- UAT: push backend แล้ว (รอสองขั้นตอนข้างบน) · prod ยังไม่มีฟีเจอร์นำเข้านี้เลย (ยังไม่ได้ขึ้น prod)
+
 ## งานถัดไป เรียงตามลำดับที่ควรทำ
 
 **1. แอดมินแก้บรรทัดบิลหลังรับงาน + ธง "ศูนย์แก้ไขแล้ว"** — เจ้าของระบบสั่งไว้ตั้งแต่ออกแบบ flow แต่ยังไม่ได้ทำ

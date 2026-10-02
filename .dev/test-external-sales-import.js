@@ -114,5 +114,56 @@ eq('ถอนใบที่ตรวจรับ (posted) ไปแล้วไ
 w = ctx.withdrawExternalGoodsReceipt({}, { id: 5 });
 eq('ใบที่ไม่ได้มาจากการนำเข้าอัตโนมัติ (PO ไม่มี source_ref) ถอนไม่ได้', [w.success, DB.goods_receipts[2].status], [false, 'pending_review']);
 
+
+console.log('\n── นำเข้าอัตโนมัติตามเวลา (scheduledExternalSalesImport) + ตั้ง trigger ──');
+const STORE = { purchase_orders: [], po_items: [], goods_receipts: [], gr_items: [] };
+const PROPS = {};
+let docNo = 0;
+Object.assign(ctx, {
+  PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in PROPS ? PROPS[k] : null), setProperty: (k, v) => { PROPS[k] = v; } }) },
+  _withDocLock: fn => fn(),
+  centralObjects: name => STORE[name] || [],
+  centralNextId: name => (STORE[name] || []).reduce((m, o) => Math.max(m, o.record_id || 0), 0) + 1,
+  centralAppend: (name, row) => { STORE[name].push(Object.assign({}, row)); },
+  centralAppendMany: (name, rows) => { rows.forEach(r => STORE[name].push(Object.assign({}, r))); },
+  _ensureCompanyVendor: () => 1, _ensureScopeWarehouse: () => 1,
+  _nextCentralDocNo: kind => kind + '-' + (++docNo),
+  UNIT_CT: 'CT', _productCaseFactor: () => 12,
+  _findById: (name, id) => STORE[name].find(x => String(x.record_id) === String(id)),
+  nowStr: () => '2026-10-02 12:30:00'
+});
+const CAND = { invoiceNumber: 'IV-A', invoiceDate: '2026-09-26', tenantId: 'T1', tenantName: 'ศูนย์ทดสอบ', lines: [{ productId: 1, productName: 'สินค้า A', qtyCT: 2, amtActual: 200 }], totalAmt: 200 };
+ctx._computeExternalSalesCandidates = () => ({ candidates: [CAND], errors: [{ invoiceNumber: 'IV-X', reason: 'ไม่พบศูนย์' }], alreadyImported: [] });
+
+let st = ctx.scheduledExternalSalesImport();
+eq('รอบอัตโนมัติ: นำเข้า 1 ใบโดยไม่ต้องมี session', [st.ok, st.created, st.unmatched], [true, 1, 1]);
+eq('ผู้สร้าง = system:auto และใบรับของยังเป็น pending_review (สต็อกไม่ขยับ)',
+  [STORE.purchase_orders[0].created_by, STORE.goods_receipts[0].created_by, STORE.goods_receipts[0].status], ['system:auto', 'system:auto', 'pending_review']);
+eq('gr_items สร้างจากแถว po_items ที่เพิ่งสร้าง: 1 แถว base_qty = 2 ลัง × factor 12 = 24', [STORE.gr_items.length, STORE.gr_items[0].base_qty], [1, 24]);
+eq('บันทึกผลรอบล่าสุดลง Script Property', JSON.parse(PROPS.EXTERNAL_SALES_AUTO_LAST_RUN).created, 1);
+
+st = ctx.scheduledExternalSalesImport();
+eq('รอบถัดไป ใบเดิมไม่ถูกสร้างซ้ำ (กันซ้ำหลังได้ล็อก)', [st.created, st.skipped, STORE.purchase_orders.length], [0, 1, 1]);
+
+ctx._computeExternalSalesCandidates = () => { throw new Error('ชีตอ่านไม่ได้'); };
+let threw = false; try { ctx.scheduledExternalSalesImport(); } catch (e) { threw = true; }
+eq('อ่านชีตล้ม → ต้องโยน error (ให้ trigger นับเป็นล้มเหลวและส่งอีเมลแจ้ง) + บันทึก ok:false',
+  [threw, JSON.parse(PROPS.EXTERNAL_SALES_AUTO_LAST_RUN).ok], [true, false]);
+
+const TRIG = [];
+ctx.ScriptApp = {
+  getProjectTriggers: () => TRIG.slice(),
+  deleteTrigger: t => { TRIG.splice(TRIG.indexOf(t), 1); },
+  newTrigger: fn => { const t = { fn, hour: null, getHandlerFunction: () => fn };
+    const b = { timeBased: () => b, everyDays: () => b, atHour: h => { t.hour = h; return b; }, nearMinute: () => b, create: () => { TRIG.push(t); return t; } }; return b; }
+};
+TRIG.push({ getHandlerFunction: () => 'scheduledExternalSalesImport', hour: 99 }, { getHandlerFunction: () => 'อื่นๆ', hour: 1 });
+let ins = ctx.installExternalSalesImportTriggers();
+eq('ตั้ง trigger: ลบของเดิมของฟังก์ชันนี้ 1 ตัว (ไม่แตะ trigger อื่น) แล้วสร้าง 3 ตัว 8/12/18 นาฬิกา',
+  [ins.removed, TRIG.filter(t => t.getHandlerFunction() === 'scheduledExternalSalesImport').map(t => t.hour), TRIG.length], [1, [8, 12, 18], 4]);
+ctx.installExternalSalesImportTriggers();
+eq('รันตั้ง trigger ซ้ำ → ยังมี 3 ตัว ไม่ซ้อนกัน', TRIG.filter(t => t.getHandlerFunction() === 'scheduledExternalSalesImport').length, 3);
+eq('เอา trigger ออก', [ctx.removeExternalSalesImportTriggers().removed, TRIG.length], [3, 1]);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

@@ -1530,10 +1530,11 @@
         <section class="view" id="view-externalsalesimport">
           <div class="view-head">
             <div><h1>นำเข้ารายการขายออกของบริษัท</h1>
-              <p>ดึงรายการขายออกจากบริษัทไปยังศูนย์ (ชีตกลาง D365) มาสร้างใบสั่งซื้อ+ใบรับของให้ศูนย์อัตโนมัติ —
-                ตรวจรายการก่อนทุกครั้ง ไม่มีการสร้างเอกสารโดยไม่มีคนยืนยัน</p></div>
+              <p>ดึงรายการขายออกจากบริษัทไปยังศูนย์ (ชีตกลาง D365) มาสร้างใบสั่งซื้อ+ใบรับของให้ศูนย์ — ระบบนำเข้าเองตามเวลาที่ตั้งไว้ได้
+                (ไม่ต้องรอกด) หรือกดตรวจ/นำเข้าเองที่นี่ก็ได้ · <b>สต็อกไม่ขยับจนกว่าแอดมินศูนย์จะตรวจรับ</b>ที่เมนู 4.3.2</p></div>
             <button class="btn btn-primary" id="esi-check-btn" onclick="esiCheck()">ตรวจรายการใหม่</button>
           </div>
+          <div id="esi-auto"></div>
           <div id="esi-result"></div>
         </section>
 
@@ -2198,10 +2199,7 @@ const NAV_GROUPS = [
       {n:'2.2.1', label:'รายการใบสั่งซื้อ (PO)', view:'purchaseorders', mod:'purchasing', ready:true, scope:'both'} ]},
     { n:'2.3', label:'ข้อมูลผู้ขาย', items:[
       {n:'2.3.1', label:'ผู้ขาย', view:'vendors', mod:'vendors', ready:true, scope:'both'},
-      {n:'2.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true, scope:'both'} ]},
-    { n:'2.4', label:'นำเข้าจากรายการขายออกของบริษัท', items:[
-      {n:'2.4.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner'},
-      {n:'2.4.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'} ]}
+      {n:'2.3.2', label:'สายอนุมัติใบขอซื้อ', view:'approvalflows', mod:'purchasing', ready:true, scope:'both'} ]}
   ]},
   { n:'3', icon:'tag', label:'ข้อมูลสินค้า', subs:[
     { n:'3.1', label:'สินค้า', items:[
@@ -2222,6 +2220,10 @@ const NAV_GROUPS = [
       {n:'4.2.2', label:'ใบเบิกจ่ายสินค้าออก', view:'v-issue', mod:'inventory', ready:false, scope:'both',
         soon:'ใบเบิกจ่ายสินค้าออก', desc:'เบิกของออกจากคลังแบบมีเลขเอกสาร (รวมเบิกขึ้นรถ Cash Van และโอนย้ายคลัง)'}
     ]},
+    // ★ 2 ต.ค. 2026 ย้ายมาจากโมดูล 2 (เดิม 2.4) — เจ้าของระบบสั่ง: งานนี้คือการเพิ่มจำนวนสินค้าเข้าคลัง คนจะนึกถึงโมดูลคลังก่อน
+    { n:'4.3', label:'นำเข้าจากรายการขายออกของบริษัท', items:[
+      {n:'4.3.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner'},
+      {n:'4.3.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'} ]},
     { n:'4.8', label:'รายงานเคลื่อนไหวสินค้า', items:[
       {n:'4.8.1', label:'รายงานเคลื่อนไหวสินค้า', view:'v-stockledger', mod:'inventory', ready:false, scope:'both',
         soon:'รายงานเคลื่อนไหวสินค้า', desc:'เข้า-ออก-คงเหลือรายสินค้า อ้างเอกสารต้นทาง (ข้อมูลมีอยู่แล้วใน stock_ledger)'}
@@ -6215,6 +6217,23 @@ let esiData = null;
 function loadExternalSalesImport(){
   esiData = null;
   document.getElementById('esi-result').innerHTML = '';
+  esiLoadAutoStatus();
+}
+// สถานะนำเข้าอัตโนมัติ (เร็ว ไม่อ่านชีตภายนอก) — บอกว่าตั้งเวลาไว้หรือยัง + ผลรอบล่าสุด · ตั้งเวลาด้วยการรัน
+// installExternalSalesImportTriggers ใน Apps Script editor (ดู 43_external_sales_import.gs)
+async function esiLoadAutoStatus(){
+  const box = document.getElementById('esi-auto');
+  const r = await callApi('getExternalSalesAutoImportStatus', {});
+  if (!r.success) { box.innerHTML = ''; return; }
+  const hh = r.hours.map(h => String(h).padStart(2,'0')+':'+String(r.minute).padStart(2,'0')).join(' · ');
+  let head;
+  if (r.triggersInstalled > 0) head = '<b style="color:#1F7A3E">● นำเข้าอัตโนมัติ: เปิดอยู่</b> — รันทุกวัน '+hh;
+  else if (r.triggersInstalled === 0) head = '<b style="color:#8A5A00">○ นำเข้าอัตโนมัติ: ยังไม่ได้ตั้งเวลา</b> — ให้ผู้ดูแลระบบเปิด Apps Script editor แล้วรันฟังก์ชัน <span class="mono-data">installExternalSalesImportTriggers</span> หนึ่งครั้ง (จะรัน '+hh+')';
+  else head = '<b>นำเข้าอัตโนมัติ</b> — ตั้งเวลาด้วยการรัน <span class="mono-data">installExternalSalesImportTriggers</span> ใน Apps Script editor (รัน '+hh+')';
+  const lr = r.lastRun;
+  const last = lr ? '<div class="unit" style="margin-top:4px">รอบอัตโนมัติล่าสุด '+esc(lr.at)+' — '+(lr.ok ? esc(lr.message) : '<span style="color:var(--red)">ล้มเหลว: '+esc(lr.message)+'</span>')+
+    (lr.invoices && lr.invoices.length ? '<br>'+lr.invoices.map(esc).join('<br>') : '')+'</div>' : '<div class="unit" style="margin-top:4px">ยังไม่เคยรันอัตโนมัติ</div>';
+  box.innerHTML = '<div class="form-card" style="margin-bottom:10px">'+head+last+'</div>';
 }
 async function esiCheck(){
   const btn = document.getElementById('esi-check-btn'), box = document.getElementById('esi-result');

@@ -11,7 +11,8 @@
  *   - Customer_id (ชีต) = tenants.customer_account  ·  ProductNumber (ชีต) = products.product_code
  *   - ตอนนี้แอดมินกดปุ่มนำเข้าเอง (ยังไม่ผูก time trigger) แต่ตรรกะอ่าน/จับคู่แยกเป็นฟังก์ชันล้วน
  *     (_computeExternalSalesCandidates) ไม่พึ่ง session เลย พร้อมต่อ time trigger ได้ทันทีในอนาคต
- *   - โปรแกรม "ต้องถาม" ก่อนสร้างใบเสมอ — ไม่มีการสร้างเอกสารแบบไม่มีคนยืนยันสักจุด (preview → เลือก → import)
+ *   - ปุ่มแอดมิน: preview → เลือก → import · และนำเข้าอัตโนมัติตามเวลาได้ (scheduledExternalSalesImport — ดูท้ายไฟล์) ซึ่งปลอดภัยเพราะ
+ *     สร้างได้แค่ PO + ใบรับของ pending_review สต็อกไม่ขยับจนกว่าแอดมินศูนย์ตรวจรับเอง (ปรับจากกติกาเดิม "ต้องมีคนยืนยันก่อน" ตามที่เจ้าของระบบสั่ง 2 ต.ค. 2026)
  *   - ใบรับของที่สร้างให้เป็น "กึ่งสำเร็จรูป" (status='pending_review') ยังไม่เข้าสต็อกจนกว่าแอดมินศูนย์จะกด
  *     ตรวจรับ (confirmExternalGoodsReceipt) ซึ่งแก้จำนวนให้ตรงกับที่รับจริงได้ก่อนกดยืนยัน
  */
@@ -153,16 +154,33 @@ function importExternalSalesInvoices(session, payload) {
   if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะฝั่งบริษัทเท่านั้นที่นำเข้ารายการนี้ได้' };
   var wanted = {}; (payload.invoiceNumbers || []).forEach(function(n) { wanted[String(n).trim()] = true; });
   if (!Object.keys(wanted).length) return { success: false, message: 'ยังไม่ได้เลือกใบที่จะนำเข้า' };
+  return _runExternalSalesImport(wanted, String(session.adminUserId || ''));
+}
 
+/**
+ * แกนนำเข้า — ใช้ร่วมกันระหว่างปุ่มแอดมิน (importExternalSalesInvoices) กับ time trigger (scheduledExternalSalesImport)
+ * ไม่พึ่ง session เลย · wanted = { 'IV123': true } เฉพาะใบที่เลือก · null = ทุกใบที่พร้อมนำเข้า (โหมดอัตโนมัติ)
+ * actorId = ผู้สร้างเอกสาร ('system:auto' ตอนรันเวลาอัตโนมัติ)
+ * ★ นำเข้าอัตโนมัติปลอดภัยเพราะสร้างได้แค่ PO + ใบรับของสถานะ pending_review — **สต็อกไม่ขยับ** จนกว่าแอดมินศูนย์จะตรวจรับเอง
+ */
+function _runExternalSalesImport(wanted, actorId) {
   var fresh;
   try { fresh = _computeExternalSalesCandidates(); } catch (e) { return { success: false, message: 'อ่านชีตภายนอกไม่สำเร็จ: ' + e.message }; }
   var byInvoice = {}; fresh.candidates.forEach(function(c) { byInvoice[c.invoiceNumber] = c; });
+  var targets = wanted ? Object.keys(wanted) : fresh.candidates.map(function(c) { return c.invoiceNumber; });
 
   return _withDocLock(function() {
     var created = [], skipped = [];
-    Object.keys(wanted).forEach(function(invNo) {
+    // อ่านชีตภายนอกช้า (~2 นาที) ระหว่างนั้นอีกรอบ (ปุ่มกด/trigger) อาจนำเข้าใบเดียวกันไปแล้ว — เช็คซ้ำอีกรอบหลังได้ล็อก
+    var already = {};
+    centralObjects('purchase_orders').forEach(function(po) {
+      var ref = String(po.source_ref || '').trim();
+      if (ref && String(po.status) !== 'cancelled') already[ref] = true;
+    });
+    targets.forEach(function(invNo) {
       var c = byInvoice[invNo];
       if (!c) { skipped.push({ invoiceNumber: invNo, reason: 'ไม่พบในรายการที่พร้อมนำเข้าแล้ว (อาจถูกนำเข้าไปแล้ว หรือจับคู่ไม่ได้)' }); return; }
+      if (already[invNo]) { skipped.push({ invoiceNumber: invNo, reason: 'ถูกนำเข้าไปแล้วโดยอีกรอบหนึ่ง' }); return; }
       var scope = String(c.tenantId);
       var vendorId = _ensureCompanyVendor(scope);
       var warehouseId = _ensureScopeWarehouse(scope);
@@ -176,7 +194,7 @@ function importExternalSalesInvoices(session, payload) {
         pr_id: '', warehouse_id: warehouseId, status: 'sent', order_date: c.invoiceDate, expected_date: c.invoiceDate,
         vat_type: 'none', subtotal_ex_vat: subtotal, discount_ex_vat: 0, vat_amount: 0, total: subtotal,
         note: 'นำเข้าอัตโนมัติจากรายการขายออกของบริษัท (ใบกำกับภาษี ' + invNo + ')',
-        created_by: session.adminUserId, created_at: nowStr(), closed_at: '', source_ref: invNo });
+        created_by: actorId, created_at: nowStr(), closed_at: '', source_ref: invNo });
       var poItemId = centralNextId('po_items');
       var poItemRows = c.lines.map(function(l, i) {
         var unitPrice = l.qtyCT ? _money(l.amtActual / l.qtyCT) : 0;
@@ -189,7 +207,7 @@ function importExternalSalesInvoices(session, payload) {
       var grNo = _nextCentralDocNo('GR', scope);
       centralAppend('goods_receipts', { record_id: grId, tenant_id: scope, gr_no: grNo, po_id: poId, vendor_id: vendorId, warehouse_id: warehouseId,
         receive_date: c.invoiceDate, note: 'ใบรับของกึ่งสำเร็จรูป — รอแอดมินศูนย์ตรวจรับให้ตรงกับของจริงก่อนเข้าสต็อก',
-        status: 'pending_review', journal_id: '', created_by: session.adminUserId, created_at: nowStr(), source_ref: invNo });
+        status: 'pending_review', journal_id: '', created_by: actorId, created_at: nowStr(), source_ref: invNo });
       var grItemId = centralNextId('gr_items');
       centralAppendMany('gr_items', poItemRows.map(function(it, i) {
         var factor = Number(it.unit_factor) || 1;
@@ -199,7 +217,7 @@ function importExternalSalesInvoices(session, payload) {
       }));
       created.push({ invoiceNumber: invNo, tenantId: scope, tenantName: c.tenantName, poId: poId, poNo: _findById('purchase_orders', poId).po_no, grId: grId, grNo: grNo });
     });
-    return { success: true, created: created, skipped: skipped };
+    return { success: true, created: created, skipped: skipped, errors: fresh.errors, alreadyImportedCount: fresh.alreadyImported.length };
   });
 }
 
@@ -319,15 +337,60 @@ function withdrawExternalGoodsReceipt(session, payload) {
   });
 }
 
-/**
- * จุดเกาะ time trigger ในอนาคต (ยังไม่ได้ผูก — ต้องเข้า Apps Script editor → Triggers ตั้งเอง 08:00/12:00/18:00)
- * ตอนนี้แค่ "ตรวจแล้วรายงาน" ไม่สร้างเอกสารให้อัตโนมัติ เพราะกติกาคือต้องมีคนยืนยันก่อนเสมอ (ดู docstring หัวไฟล์)
- * เขียน log ไว้ให้ดูผ่าน Apps Script executions ว่ารอบไหนเจอกี่ใบ เผื่อวันหนึ่งอยากเปลี่ยนเป็นแจ้งเตือนจริง
+/* ═══════════ นำเข้าอัตโนมัติตามเวลา (2 ต.ค. 2026 — เจ้าของระบบสั่ง: ไม่ต้องรอใครมากดสั่ง) ═══════════
+ * ตั้ง trigger ด้วยการเปิด Apps Script editor → เลือกฟังก์ชัน installExternalSalesImportTriggers → Run (ครั้งเดียว — ครั้งแรก
+ * จะขอสิทธิ์ script.scriptapp ให้กดยอมรับ) แล้วระบบรัน scheduledExternalSalesImport ทุกวันตามเวลาใน EXTERNAL_SALES_AUTO_HOURS
+ * (ชีตต้นทางอัปเดต 08:00/12:00/18:00 จึงรันหลังนั้น ~30 นาที) · รันซ้ำ installExternalSalesImportTriggers ได้ปลอดภัย (ลบของเดิมก่อนสร้างใหม่)
+ * เอาออก: removeExternalSalesImportTriggers · ผลรอบล่าสุดอยู่ใน Script Property EXTERNAL_SALES_AUTO_LAST_RUN (หน้าเมนู 4.3.1 แสดงให้ดู)
  */
-function scheduledExternalSalesImportCheck() {
+var EXTERNAL_SALES_AUTO_HANDLER = 'scheduledExternalSalesImport';
+var EXTERNAL_SALES_AUTO_HOURS = [8, 12, 18];
+var EXTERNAL_SALES_AUTO_MINUTE = 30;
+var EXTERNAL_SALES_AUTO_PROP = 'EXTERNAL_SALES_AUTO_LAST_RUN';
+
+/** ตัวที่ trigger เรียก — นำเข้าทุกใบที่พร้อมนำเข้า (ไม่ต้องมีคนกด) สร้างแค่ PO + ใบรับของ pending_review สต็อกยังไม่ขยับ */
+function scheduledExternalSalesImport() {
+  var status = { at: nowStr(), ok: false, created: 0, skipped: 0, unmatched: 0, invoices: [], message: '' };
   try {
-    var r = _computeExternalSalesCandidates();
-    Logger.log('nameExternalSalesImportCheck: พบ ' + r.candidates.length + ' ใบใหม่ที่ยังไม่ได้นำเข้า, ' +
-      r.errors.length + ' ใบจับคู่ไม่ได้, ' + r.alreadyImported.length + ' ใบนำเข้าไปแล้ว');
-  } catch (e) { Logger.log('scheduledExternalSalesImportCheck ล้มเหลว: ' + e.message); }
+    var r = _runExternalSalesImport(null, 'system:auto');
+    if (!r.success) { status.message = r.message; throw new Error(r.message); }
+    status.ok = true;
+    status.created = r.created.length; status.skipped = r.skipped.length; status.unmatched = (r.errors || []).length;
+    status.invoices = r.created.slice(0, 20).map(function(c) { return c.invoiceNumber + ' → ' + c.tenantName; });
+    status.message = 'นำเข้า ' + status.created + ' ใบ' + (status.skipped ? ' · ข้าม ' + status.skipped : '') + (status.unmatched ? ' · จับคู่ไม่ได้ ' + status.unmatched + ' ใบ (ต้องกรอก customer_account ของศูนย์ให้ครบ)' : '');
+    Logger.log('scheduledExternalSalesImport: ' + status.message);
+    return status;
+  } catch (e) {
+    status.ok = false; status.message = status.message || String(e.message || e);
+    Logger.log('scheduledExternalSalesImport ล้มเหลว: ' + status.message);
+    throw e;   // ให้ execution นับเป็นล้มเหลว — อีเมลแจ้ง failure ของ trigger (ตั้งใน Triggers) จะได้ทำงาน
+  } finally {
+    try { PropertiesService.getScriptProperties().setProperty(EXTERNAL_SALES_AUTO_PROP, JSON.stringify(status)); } catch (e2) {}
+  }
+}
+
+function installExternalSalesImportTriggers() {
+  var removed = removeExternalSalesImportTriggers().removed;
+  EXTERNAL_SALES_AUTO_HOURS.forEach(function(h) {
+    ScriptApp.newTrigger(EXTERNAL_SALES_AUTO_HANDLER).timeBased().everyDays(1).atHour(h).nearMinute(EXTERNAL_SALES_AUTO_MINUTE).create();
+  });
+  Logger.log('ตั้งเวลานำเข้าอัตโนมัติแล้ว: ' + EXTERNAL_SALES_AUTO_HOURS.join(', ') + ' นาฬิกา (ลบของเดิม ' + removed + ' ตัว)');
+  return { success: true, hours: EXTERNAL_SALES_AUTO_HOURS, minute: EXTERNAL_SALES_AUTO_MINUTE, removed: removed };
+}
+
+function removeExternalSalesImportTriggers() {
+  var old = ScriptApp.getProjectTriggers().filter(function(t) { return t.getHandlerFunction() === EXTERNAL_SALES_AUTO_HANDLER; });
+  old.forEach(function(t) { ScriptApp.deleteTrigger(t); });
+  return { success: true, removed: old.length };
+}
+
+/** เร็ว (ไม่อ่านชีตภายนอก) — หน้าเมนู 4.3.1 เรียกตอนเปิดหน้า เพื่อโชว์ว่าตั้งเวลาไว้หรือยัง + ผลรอบอัตโนมัติล่าสุด */
+function getExternalSalesAutoImportStatus(session) {
+  var err = _requirePermission(session, 'purchasing', 'view'); if (err) return err;
+  if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะฝั่งบริษัท' };
+  var last = null;
+  try { var raw = PropertiesService.getScriptProperties().getProperty(EXTERNAL_SALES_AUTO_PROP); if (raw) last = JSON.parse(raw); } catch (e) {}
+  var installed = null;   // null = อ่านไม่ได้ (ยังไม่ได้ให้สิทธิ์ script.scriptapp กับ deployment นี้)
+  try { installed = ScriptApp.getProjectTriggers().filter(function(t) { return t.getHandlerFunction() === EXTERNAL_SALES_AUTO_HANDLER; }).length; } catch (e2) {}
+  return { success: true, triggersInstalled: installed, hours: EXTERNAL_SALES_AUTO_HOURS, minute: EXTERNAL_SALES_AUTO_MINUTE, lastRun: last };
 }
