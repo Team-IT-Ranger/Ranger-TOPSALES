@@ -298,10 +298,10 @@ function listPendingExternalGoodsReceipts(session, payload) {
  * เพราะใบรับของของตัวแทนไม่ลง journal ตามกติกาเดิม)
  * payload: {
  *   id, receiveDate?: 'yyyy-MM-dd', note?: string, createRemainder?: bool (ค่าตั้งต้น true),
- *   items:   [{ grItemId, qty?, unitCode?, unitFactor?, remove?: bool }]   — ไม่ส่งช่อง = ใช้ค่าเดิม/ค่าปัจจุบันของสินค้า
- *   newItems:[{ productId, qty, unitCode?, unitFactor?, amount? }]          — ของที่ได้รับจริงแต่ไม่อยู่ในใบกำกับภาษี
+ *   items:   [{ grItemId, qty?, unitCode?, remove?: bool }]   — ไม่ส่งช่อง = ใช้ค่าเดิม/ค่าปัจจุบันของสินค้า
+ *   newItems:[{ productId, qty, unitCode?, amount? }]                       — ของที่ได้รับจริงแต่ไม่อยู่ในใบกำกับภาษี
  * }
- * - factor: ไม่ส่ง = ใช้ factor ปัจจุบันของสินค้า/หน่วยนั้น (ไม่ใช่ค่าตอนนำเข้า) · ส่งมา = ใช้ตามที่แอดมินกรอก (แก้เฉพาะใบนี้ ไม่แตะทะเบียนสินค้า)
+ * - factor: ใช้ factor ปัจจุบันของสินค้า/หน่วยที่เลือกเสมอ (ไม่ใช่ค่าตอนนำเข้า) — **แก้ตรงๆ ไม่ได้** เปลี่ยนตามหน่วยที่เลือกเท่านั้น (unitFactor ที่ส่งมาถูกเมิน)
  * - รับบางส่วน: รายการที่รับไม่ครบ/ไม่ติ๊กรับ → ส่วนที่เหลือ (หน่วยตามใบสั่งซื้อ) สร้างเป็นใบรอตรวจรับใบใหม่ (createRemainder) ใบสั่งซื้อค้าง partial
  * - ต้นทุนต่อหน่วยฐาน = ราคาต่อหน่วยของใบสั่งซื้อ ÷ factor ของหน่วยในใบสั่งซื้อ (เปลี่ยนหน่วยที่รับจริงไม่ทำให้ต้นทุนเพี้ยน)
  */
@@ -330,9 +330,9 @@ function confirmExternalGoodsReceipt(session, payload) {
       var qty = o.qty !== undefined ? _numOrNull(o.qty) : Number(gi.qty);
       if (qty === null || isNaN(qty) || qty < 0) return { success: false, message: 'รายการที่ ' + n + ': จำนวนที่รับจริงต้องเป็นตัวเลขไม่ติดลบ' };
       var unitCode = o.unitCode ? normUnitCode(o.unitCode, UNIT_PC) : normUnitCode(gi.unit_code, UNIT_CT);
-      var hasFactor = o.unitFactor !== undefined && o.unitFactor !== null && String(o.unitFactor).trim() !== '';
-      var factor = hasFactor ? Number(o.unitFactor) : _currentUnitFactor(gi.product_id, unitCode, gi.unit_factor);
-      if (!(factor > 0)) return { success: false, message: 'รายการที่ ' + n + ': factor ต้องมากกว่า 0' };
+      // ★ factor แก้ตรงๆ ไม่ได้ (เจ้าของระบบสั่ง 2 ต.ค. 2026) — เปลี่ยนตามหน่วยที่เลือกเท่านั้น: ใช้ factor ปัจจุบันของหน่วยนั้นเสมอ
+      //   ค่า unitFactor ที่ client ส่งมาถูกเมิน (กันยิง API ตรง) · factor ผิดให้ไปแก้ที่ทะเบียนหน่วยขายของสินค้า
+      var factor = _currentUnitFactor(gi.product_id, unitCode, gi.unit_factor);
       var poItem = poItemById[String(gi.po_item_id)] || null;
       var poUnit = poItem ? normUnitCode(poItem.unit_code, UNIT_CT) : unitCode;
       var poFactor = (unitCode === poUnit) ? factor : _currentUnitFactor(gi.product_id, poUnit, poItem ? poItem.unit_factor : 1);
@@ -345,9 +345,7 @@ function confirmExternalGoodsReceipt(session, payload) {
       var nq = _numOrNull(ni.qty);
       if (nq === null || isNaN(nq) || nq <= 0) return { success: false, message: 'รายการเพิ่มที่ ' + (k + 1) + ' (' + p.name + '): จำนวนต้องมากกว่า 0' };
       var nu = normUnitCode(ni.unitCode, UNIT_CT);
-      var nHas = ni.unitFactor !== undefined && ni.unitFactor !== null && String(ni.unitFactor).trim() !== '';
-      var nf = nHas ? Number(ni.unitFactor) : _currentUnitFactor(p.record_id, nu, 1);
-      if (!(nf > 0)) return { success: false, message: 'รายการเพิ่มที่ ' + (k + 1) + ' (' + p.name + '): factor ต้องมากกว่า 0' };
+      var nf = _currentUnitFactor(p.record_id, nu, 1);   // factor ตามหน่วยเท่านั้น เหมือนบรรทัดเดิม
       var na = _numOrNull(ni.amount); if (na === null) na = 0;
       if (isNaN(na) || na < 0) return { success: false, message: 'รายการเพิ่มที่ ' + (k + 1) + ' (' + p.name + '): ราคาซื้อต้องไม่ติดลบ' };
       newPlan.push({ product: p, qty: nq, unitCode: nu, factor: nf, amount: _money(na), baseQty: _money(nq * nf) });

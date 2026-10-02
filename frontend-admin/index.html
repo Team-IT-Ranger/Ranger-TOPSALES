@@ -584,6 +584,15 @@
 .pf-tab.on{color:var(--blue);border-bottom-color:var(--blue)}
 .clickable-row.unit-sel td{background:var(--blue-pale)}
 .pgr-removed td{text-decoration:line-through;opacity:.4}.pgr-removed td:last-child{text-decoration:none;opacity:1}
+/* ใบรับของรอตรวจรับ: แท็บต่อใบ · หัว/ท้ายอยู่กับที่ · เลื่อนเฉพาะแถวรายการ (ต้องให้ .view-body ไม่เลื่อนเอง แล้วส่งความสูงลงไปถึง .pgr-scroll) */
+#view-pendinggoodsreceipts .view-body{display:flex;flex-direction:column;overflow:hidden}
+#pgr-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.pgr-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);overflow-x:auto;flex:none;margin-bottom:8px}
+.pgr-tab{background:none;border:none;border-bottom:2px solid transparent;padding:8px 14px;font:inherit;font-weight:600;color:var(--ink-soft);cursor:pointer;white-space:nowrap}
+.pgr-tab.on{color:var(--blue);border-bottom-color:var(--blue)}
+.pgr-pane{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
+.pgr-pane .pgr-head,.pgr-pane .pgr-foot{flex:none}
+.pgr-pane .pgr-scroll{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:8px}
 </style>
 </head>
 <body>
@@ -6291,31 +6300,42 @@ async function esiSubmit(){
 }
 
 /* ═══ ใบรับของรอตรวจรับ (จากการนำเข้าอัตโนมัติ) — ยืดหยุ่นก่อนยืนยัน (2 ต.ค. 2026) ═══
-   ต่อบรรทัด: ติ๊กรับ/ไม่รับ · จำนวนรับ (แก้ได้ ปุ่มขึ้นลงทีละ 1) · หน่วย (เลือกได้) · factor (แก้ได้ — ค่าตั้งต้นคือ factor "ปัจจุบัน" ของสินค้า
-   จึงแก้ทะเบียนหน่วยแล้วกลับมาตรวจรับต่อได้เลย ไม่ต้องถอนใบ) · ✕ ลบบรรทัด · "+ เพิ่มรายการที่ได้รับจริง" (ไม่อยู่ในใบกำกับภาษี)
-   ต่อใบ: วันที่รับของ/หมายเหตุ แก้ได้ · รับไม่ครบ → ส่วนที่เหลือสร้างเป็นใบรอตรวจรับใหม่ (ติ๊กปิดได้)
-   "หน่วยฐานที่เข้าสต็อก" = จำนวน × factor คำนวณสดฝั่งหน้าเว็บ · ยอดรวมวางนอก <table> เพราะ initTableFooters() ทับ <tfoot> ทิ้ง */
+   • ใบละแท็บ (ใครแท็บมัน) · แต่ละแท็บเต็ม 1 หน้าจอ: หัว (ชื่อใบ/วันที่/หมายเหตุ) กับท้าย (ยอดรวม/ปุ่มตรวจรับ) อยู่กับที่ มีแต่แถวรายการที่เลื่อน
+   • ต่อบรรทัด: ติ๊กรับ/ไม่รับ · จำนวนรับ · หน่วย (เลือกได้) · factor (**แก้ตรงๆ ไม่ได้ — เปลี่ยนตามหน่วยที่เลือกเท่านั้น** ค่าคือ factor ปัจจุบัน
+     ของสินค้าในทะเบียนหน่วยขาย ผิดให้ไปแก้ที่ข้อมูลสินค้า → แท็บหน่วยขาย) · ✕ ลบบรรทัด · "+ เพิ่มรายการที่ได้รับจริง"
+   • ท้ายตาราง (tfoot ของเราเอง ติดป้าย data-own-foot ไม่ให้ initTableFooters/initTableSearch ทับ): จำนวนรายการ · จำนวนรับรวม ·
+     หน่วยฐานรวม · ราคาซื้อสุทธิรวม ตรงช่องของแต่ละคอลัมน์ — คำนวณสดทุกครั้งที่ติ๊ก/แก้จำนวน/เปลี่ยนหน่วย (pgrUpdateTotals) */
 const PGR_UNITS = {};      // grItemId -> [{code,label,factor}]
 let PGR_PRODUCTS = null;   // รายการสินค้าไว้เลือกตอน "เพิ่มรายการ" (โหลดครั้งแรกที่กดเพิ่ม)
+let PGR_ACTIVE = null;     // id ใบที่เปิดแท็บอยู่
 async function loadPendingGoodsReceipts(){
   const box = document.getElementById('pgr-body');
   box.innerHTML = '<p class="unit">กำลังโหลด...</p>';
   const r = await callApi('listPendingExternalGoodsReceipts', {});
   if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   if (!r.data.length) { box.innerHTML = '<p class="unit">ไม่มีใบรับของค้างตรวจรับ</p>'; return; }
-  box.innerHTML = r.data.map(g => {
-    // ยอดรวมตามใบกำกับภาษี = ผลรวม "ราคาซื้อเข้าสุทธิ" ของบรรทัดเดิมทุกบรรทัด (Amt_actual ตรงๆ) — ไม่ขยับตามติ๊ก/ลบ/เพิ่ม
+  if (!r.data.some(g => String(g.id) === String(PGR_ACTIVE))) PGR_ACTIVE = r.data[0].id;
+  box.innerHTML = '<div class="pgr-tabs">' + r.data.map(g =>
+      '<button class="pgr-tab'+(String(g.id) === String(PGR_ACTIVE) ? ' on' : '')+'" data-tab="'+g.id+'" title="'+esc(g.grNo)+'" onclick="pgrTab('+g.id+')">'+
+      esc(g.sourceRef || g.grNo)+' <span class="unit">('+g.items.length+')</span></button>').join('') + '</div>' +
+    r.data.map(g => {
     const grTotal = g.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
-    return '<div class="form-card" data-gr="'+g.id+'" style="margin-bottom:10px">' +
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">' +
-      '<h3 style="margin:0">'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+')</span></h3>' +
-      '<button class="btn btn-sm btn-ghost" title="ยกเลิกใบนี้ก่อนรับเข้าสต็อก เพื่อให้ฝั่งบริษัทนำเข้าใบกำกับภาษีนี้ใหม่" onclick="pgrWithdraw('+g.id+',\''+esc(g.grNo)+'\')">↩ ถอนใบรับของ (นำเข้าใหม่)</button>' +
+    return '<div class="form-card pgr-pane" data-gr="'+g.id+'" style="'+(String(g.id) === String(PGR_ACTIVE) ? '' : 'display:none')+'">' +
+    '<div class="pgr-head">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">' +
+        '<h3 style="margin:0">'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+')</span></h3>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn btn-sm" onclick="pgrShowAdd('+g.id+')">+ เพิ่มรายการที่ได้รับจริง</button>' +
+          '<button class="btn btn-sm btn-ghost" title="ยกเลิกใบนี้ก่อนรับเข้าสต็อก เพื่อให้ฝั่งบริษัทนำเข้าใบกำกับภาษีนี้ใหม่" onclick="pgrWithdraw('+g.id+',\''+esc(g.grNo)+'\')">↩ ถอนใบรับของ (นำเข้าใหม่)</button>' +
+        '</div></div>' +
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 4px;align-items:flex-end">' +
+        '<label class="unit">วันที่รับของ <input type="date" class="pgr-date" value="'+esc(g.receiveDate)+'"></label>' +
+        '<label class="unit" style="flex:1;min-width:220px">หมายเหตุ <input type="text" class="pgr-note" value="'+esc(g.note)+'" style="width:100%"></label>' +
+      '</div>' +
+      '<div class="unit" style="margin-bottom:4px">factor เปลี่ยนตามหน่วยที่เลือกเท่านั้น (แก้ตรงๆ ไม่ได้) — ถ้า factor ของสินค้ายังไม่ถูก ให้แก้ที่ <b>ข้อมูลสินค้า → แท็บหน่วยขาย</b> แล้วโหลดหน้านี้ใหม่</div>' +
+      '<div class="pgr-addform" style="display:none"></div>' +
     '</div>' +
-    '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0">' +
-      '<label class="unit">วันที่รับของ <input type="date" class="pgr-date" value="'+esc(g.receiveDate)+'"></label>' +
-      '<label class="unit" style="flex:1;min-width:220px">หมายเหตุ <input type="text" class="pgr-note" value="'+esc(g.note)+'" style="width:100%"></label>' +
-    '</div>' +
-    '<div class="table-wrap"><table><thead><tr><th style="width:44px"><input type="checkbox" checked title="เลือก/ไม่เลือกทุกบรรทัด" onclick="pgrToggleAll(this)"></th>' +
+    '<div class="pgr-scroll"><div class="table-wrap"><table data-own-foot="1"><thead><tr><th style="width:44px"><input type="checkbox" checked title="เลือก/ไม่เลือกทุกบรรทัด" onclick="pgrToggleAll(this)"></th>' +
     '<th>สินค้า</th><th>รหัส</th><th>จำนวนรับ</th><th>หน่วย</th>' +
     '<th>factor</th><th>หน่วยฐานที่เข้าสต็อก</th><th>ราคาซื้อเข้าสุทธิ</th><th style="width:36px"></th></tr></thead><tbody>' +
     g.items.map(it => {
@@ -6326,23 +6346,31 @@ async function loadPendingGoodsReceipts(){
       '<td><input type="checkbox" class="pgr-pick" checked title="ติ๊ก = รับรายการนี้ · ไม่ติ๊ก = ไม่รับ (ไม่เข้าสต็อก)" onclick="pgrToggle(this)"></td>' +
       '<td>'+esc(it.productName)+'</td><td class="mono-data">'+esc(it.productCode)+'</td>' +
       '<td><input type="number" step="1" min="0" value="'+it.qty+'" class="pgr-qty" style="width:90px" oninput="pgrRecalc(this)"></td>' +
-      '<td><select class="pgr-unit"'+(unconfirmed?' style="color:var(--red)"':'')+' onchange="pgrUnitChanged(this)">'+
+      '<td><select class="pgr-unit"'+(unconfirmed?' style="color:var(--red)" title="ยังไม่ยืนยันขนาดบรรจุ — แก้ที่ข้อมูลสินค้า → แท็บหน่วยขาย"':'')+' onchange="pgrUnitChanged(this)">'+
         it.units.map(u => '<option value="'+esc(u.code)+'" data-factor="'+u.factor+'"'+(u.code === it.unitCode ? ' selected' : '')+'>'+esc(u.label)+(u.factor !== 1 ? ' (×'+u.factor+')' : '')+'</option>').join('')+'</select></td>' +
-      '<td><input type="number" step="any" min="0" value="'+it.unitFactor+'" class="pgr-factor" style="width:80px" oninput="pgrRecalc(this)">' +
+      '<td><input type="text" class="pgr-factor mono-data" readonly tabindex="-1" value="'+it.unitFactor+'" style="width:70px;border-color:transparent;background:transparent" title="เปลี่ยนตามหน่วยที่เลือก — แก้ตรงๆ ไม่ได้">' +
         (changed ? '<div class="unit" title="factor ตอนนำเข้า ×'+it.importedFactor+' → ปัจจุบัน ×'+it.unitFactor+'">↻ ตามหน่วยสินค้าปัจจุบัน</div>' : '') + '</td>' +
       '<td class="mono-data pgr-base">'+repQty(it.qty*it.unitFactor)+'</td>' +
       '<td class="mono-data">฿'+baht(it.amount)+'</td>' +
       '<td><button class="btn btn-sm btn-ghost" title="ลบบรรทัดนี้ออกจากใบ (กดซ้ำ = ยกเลิกการลบ)" onclick="pgrRemove(this)">✕</button></td></tr>';
     }).join('') +
-    '</tbody></table></div>' +
-    '<div style="margin-top:8px"><button class="btn btn-sm" onclick="pgrShowAdd('+g.id+')">+ เพิ่มรายการที่ได้รับจริง (ไม่อยู่ในใบกำกับภาษี)</button></div>' +
-    '<div class="pgr-addform" style="display:none;margin-top:8px"></div>' +
-    '<div class="row" style="justify-content:flex-end;gap:18px;margin-top:6px;padding-top:8px;border-top:1px solid var(--border);flex-wrap:wrap">' +
-    '<span>ยอดรายการที่เลือกรับ <b class="mono-data pgr-sel-total">฿'+baht(grTotal)+'</b> <span class="unit pgr-sel-count">('+g.items.length+' จาก '+g.items.length+' รายการ)</span></span>' +
-    '<span>ยอดรวมตามใบกำกับภาษี <span class="unit">(เทียบกับเอกสารตัวจริงที่ได้รับ)</span> &nbsp; <b class="mono-data">฿'+baht(grTotal)+'</b></span></div>' +
-    '<label class="unit" style="display:block;margin-top:8px"><input type="checkbox" class="pgr-remainder" checked> ส่วนที่ไม่ได้รับ/รับไม่ครบ → สร้างเป็นใบรอตรวจรับใหม่ (รอรับต่อ)</label>' +
-    '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button></div>';
+    '</tbody><tfoot><tr><td colspan="3" class="pgr-ft-count"></td><td class="mono-data pgr-ft-qty" title="จำนวนรับรวม (เฉพาะที่ติ๊กรับ)"></td><td></td><td></td>' +
+    '<td class="mono-data pgr-ft-base" title="หน่วยฐานที่เข้าสต็อกรวม"></td><td class="mono-data pgr-ft-amt" title="ราคาซื้อเข้าสุทธิรวมของบรรทัดในตาราง — เทียบกับยอดรวมบนใบกำกับภาษีตัวจริง (ใบนี้ตามใบกำกับ: ฿'+baht(grTotal)+')"></td><td></td></tr></tfoot>' +
+    '</table></div></div>' +
+    '<div class="pgr-foot">' +
+      '<div class="unit" style="margin:6px 0 2px;text-align:right">ยอดรายการที่เลือกรับ <b class="mono-data pgr-sel-total">฿'+baht(grTotal)+'</b> <span class="pgr-sel-count"></span></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
+        '<label class="unit"><input type="checkbox" class="pgr-remainder" checked> ส่วนที่ไม่ได้รับ/รับไม่ครบ → สร้างเป็นใบรอตรวจรับใหม่ (รอรับต่อ)</label>' +
+        '<button class="btn btn-primary btn-sm" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button>' +
+      '</div>' +
+    '</div></div>';
   }).join('');
+  box.querySelectorAll('.pgr-pane').forEach(pgrUpdateTotals);
+}
+function pgrTab(id){
+  PGR_ACTIVE = id;
+  document.querySelectorAll('#pgr-body .pgr-tab').forEach(b => b.classList.toggle('on', String(b.dataset.tab) === String(id)));
+  document.querySelectorAll('#pgr-body .pgr-pane').forEach(p => { p.style.display = String(p.dataset.gr) === String(id) ? '' : 'none'; });
 }
 function pgrRecalc(el){
   const tr = el.closest('tr');
@@ -6350,8 +6378,9 @@ function pgrRecalc(el){
   const pick = tr.querySelector('.pgr-pick');
   const off = (pick && !pick.checked) || tr.classList.contains('pgr-removed');
   tr.querySelector('.pgr-base').textContent = repQty(off ? 0 : qty * factor);
+  pgrUpdateTotals(tr.closest('.form-card'));
 }
-// เปลี่ยนหน่วย → factor ตามหน่วยนั้น (ค่าของระบบ) แล้วยังแก้ factor ต่อเองได้
+// เปลี่ยนหน่วย → factor ตามหน่วยนั้น (ค่าของระบบ) — factor แก้ตรงๆ ไม่ได้
 function pgrUnitChanged(sel){
   const tr = sel.closest('tr');
   tr.querySelector('.pgr-factor').value = sel.selectedOptions[0].dataset.factor;
@@ -6360,9 +6389,8 @@ function pgrUnitChanged(sel){
 function pgrToggle(cb){
   const tr = cb.closest('tr');
   tr.classList.toggle('pgr-off', !cb.checked);
-  tr.querySelectorAll('.pgr-qty,.pgr-unit,.pgr-factor').forEach(e => e.disabled = !cb.checked);
+  tr.querySelectorAll('.pgr-qty,.pgr-unit').forEach(e => e.disabled = !cb.checked);
   pgrRecalc(tr.querySelector('.pgr-qty'));
-  pgrUpdateTotals(cb.closest('.form-card'));
 }
 function pgrToggleAll(master){
   const card = master.closest('.form-card');
@@ -6372,21 +6400,31 @@ function pgrToggleAll(master){
 function pgrRemove(btn){
   const tr = btn.closest('tr'), card = tr.closest('.form-card');
   if (tr.dataset.new) { tr.remove(); pgrUpdateTotals(card); return; }
-  tr.classList.toggle('pgr-removed');
-  const gone = tr.classList.contains('pgr-removed');
-  tr.querySelectorAll('input,select').forEach(e => { if (!e.classList.contains('pgr-pick')) e.disabled = gone || (e.classList.contains('pgr-qty') || e.classList.contains('pgr-unit') || e.classList.contains('pgr-factor') ? !tr.querySelector('.pgr-pick').checked : false); });
-  tr.querySelector('.pgr-pick').disabled = gone;
+  const gone = tr.classList.toggle('pgr-removed');
+  const pick = tr.querySelector('.pgr-pick');
+  if (gone) tr.querySelectorAll('input,select').forEach(e => { e.disabled = true; });
+  else { pick.disabled = false; pgrToggle(pick); }
   btn.textContent = gone ? '↺' : '✕';
   pgrRecalc(tr.querySelector('.pgr-qty'));
-  pgrUpdateTotals(card);
 }
+// ท้ายตาราง: จำนวนรายการ · จำนวนรับรวม · หน่วยฐานรวม · ราคาซื้อเข้าสุทธิรวม (ตรงช่องคอลัมน์)
 function pgrUpdateTotals(card){
+  if (!card) return;
   const rows = [...card.querySelectorAll('tbody tr[data-gritem]')].filter(tr => !tr.classList.contains('pgr-removed'));
   const on = rows.filter(tr => tr.querySelector('.pgr-pick').checked);
   const added = [...card.querySelectorAll('tbody tr[data-new]')];
-  const total = on.reduce((s, tr) => s + (Number(tr.dataset.amount) || 0), 0) + added.reduce((s, tr) => s + (Number(tr.querySelector('.pgr-amount').value) || 0), 0);
-  card.querySelector('.pgr-sel-total').textContent = '฿' + baht(total);
-  card.querySelector('.pgr-sel-count').textContent = '(' + on.length + ' จาก ' + rows.length + ' รายการ' + (added.length ? ' + เพิ่ม '+added.length : '') + ')';
+  const num = (tr, sel) => Number(tr.querySelector(sel).value) || 0;
+  const qty = on.reduce((s, tr) => s + num(tr, '.pgr-qty'), 0) + added.reduce((s, tr) => s + num(tr, '.pgr-qty'), 0);
+  const base = on.reduce((s, tr) => s + num(tr, '.pgr-qty') * num(tr, '.pgr-factor'), 0) + added.reduce((s, tr) => s + num(tr, '.pgr-qty') * num(tr, '.pgr-factor'), 0);
+  const addAmt = added.reduce((s, tr) => s + num(tr, '.pgr-amount'), 0);
+  const tableAmt = rows.reduce((s, tr) => s + (Number(tr.dataset.amount) || 0), 0) + addAmt;
+  const selAmt = on.reduce((s, tr) => s + (Number(tr.dataset.amount) || 0), 0) + addAmt;
+  card.querySelector('.pgr-ft-count').textContent = 'ทั้งหมด ' + (rows.length + added.length) + ' รายการ (รับ ' + (on.length + added.length) + ')';
+  card.querySelector('.pgr-ft-qty').textContent = repQty(qty);
+  card.querySelector('.pgr-ft-base').textContent = repQty(base);
+  card.querySelector('.pgr-ft-amt').textContent = '฿' + baht(tableAmt);
+  card.querySelector('.pgr-sel-total').textContent = '฿' + baht(selAmt);
+  card.querySelector('.pgr-sel-count').textContent = '(' + (on.length + added.length) + ' จาก ' + (rows.length + added.length) + ' รายการ)';
 }
 // ── เพิ่มรายการที่ได้รับจริงแต่ไม่อยู่ในใบกำกับภาษี ──
 async function pgrShowAdd(grId){
@@ -6399,14 +6437,19 @@ async function pgrShowAdd(grId){
     PGR_PRODUCTS = r.data.filter(p => isOn(p.is_active));
   }
   box.style.display = '';
-  box.innerHTML = '<div class="form-card" style="background:var(--blue-pale)"><div class="form-grid">' +
+  box.innerHTML = '<div class="form-card" style="background:var(--blue-pale);margin:6px 0"><div class="form-grid">' +
     plField('สินค้า', '<select class="pga-prod" onchange="pgrAddProductChanged(this)"><option value="">— เลือกสินค้า —</option>'+
       PGR_PRODUCTS.map(p => '<option value="'+p.record_id+'">'+(p.product_code ? esc(p.product_code)+' — ' : '')+esc(p.name)+'</option>').join('')+'</select>', 'span2') +
     plField('จำนวน', '<input type="number" class="pga-qty" min="0" step="1" value="1">') +
     plField('หน่วย', '<select class="pga-unit" onchange="pgrAddUnitChanged(this)"></select>') +
-    plField('factor', '<input type="number" class="pga-factor" min="0" step="any" value="1">') +
+    plField('factor <span class="unit">(ตามหน่วยที่เลือก)</span>', '<input type="text" class="pga-factor" readonly value="1">') +
     plField('ราคาซื้อสุทธิรวม <span class="unit">(0 = ของแถม)</span>', '<input type="number" class="pga-amount" min="0" step="any" value="0">') +
-    '</div><div class="form-actions"><button class="btn btn-primary btn-sm" onclick="pgrAddLine('+grId+')">เพิ่มเข้าใบนี้</button></div></div>';
+    '</div><div class="form-actions"><button class="btn btn-primary btn-sm" onclick="pgrAddLine('+grId+')">เพิ่มเข้าใบนี้</button>' +
+    '<button class="btn btn-sm" onclick="pgrCloseAdd('+grId+')">ปิด</button></div></div>';
+}
+function pgrCloseAdd(grId){
+  const card = document.querySelector('#pgr-body .form-card[data-gr="'+grId+'"]');
+  const box = card.querySelector('.pgr-addform'); box.style.display = 'none'; box.innerHTML = '';
 }
 async function pgrAddProductChanged(sel){
   const box = sel.closest('.pgr-addform'), us = box.querySelector('.pga-unit');
@@ -6417,8 +6460,9 @@ async function pgrAddProductChanged(sel){
     const r = await callApi('listProductUnits', { productId: pid });
     PRODUCT_UNITS_CACHE[pid] = r.success ? r.data.filter(u => isOn(u.is_active)) : [];
   }
-  const opts = [{ code: normUnitJs(p.unit_code) || 'PC', label: p.unit || 'ชิ้น', factor: 1 }]
-    .concat(PRODUCT_UNITS_CACHE[pid].filter(u => normUnitJs(u.unit_code) !== (normUnitJs(p.unit_code) || 'PC')).map(u => ({ code: normUnitJs(u.unit_code), label: u.unit_label, factor: Number(u.unit_factor) || 1 })));
+  const baseCode = normUnitJs(p.unit_code) || 'PC';
+  const opts = [{ code: baseCode, label: p.unit || 'ชิ้น', factor: 1 }]
+    .concat(PRODUCT_UNITS_CACHE[pid].filter(u => normUnitJs(u.unit_code) !== baseCode).map(u => ({ code: normUnitJs(u.unit_code), label: u.unit_label, factor: Number(u.unit_factor) || 1 })));
   us.innerHTML = opts.map(u => '<option value="'+esc(u.code)+'" data-factor="'+u.factor+'">'+esc(u.label)+(u.factor !== 1 ? ' (×'+u.factor+')' : '')+'</option>').join('');
   const ct = opts.find(u => u.code === 'CT'); if (ct) us.value = 'CT';
   pgrAddUnitChanged(us);
@@ -6434,21 +6478,22 @@ function pgrAddLine(grId){
   const amount = Number(f.querySelector('.pga-amount').value) || 0;
   if (!pid) { toast('เลือกสินค้าก่อน', true); return; }
   if (!(qty > 0)) { toast('จำนวนต้องมากกว่า 0', true); return; }
-  if (!(factor > 0)) { toast('factor ต้องมากกว่า 0', true); return; }
+  if (!(factor > 0)) { toast('เลือกหน่วยก่อน', true); return; }
   const p = PGR_PRODUCTS.find(x => String(x.record_id) === String(pid));
-  const us = f.querySelector('.pga-unit'), uLabel = us.selectedOptions[0].textContent;
+  const uLabel = f.querySelector('.pga-unit').selectedOptions[0].textContent;
   const tr = document.createElement('tr');
   tr.dataset.new = '1'; tr.dataset.product = pid; tr.dataset.unit = unit;
   tr.innerHTML = '<td title="รายการที่เพิ่มเอง">＋</td><td>'+esc(p.name)+' <span class="unit">(เพิ่มเอง — ไม่อยู่ในใบกำกับภาษี)</span></td><td class="mono-data">'+esc(p.product_code)+'</td>' +
     '<td><input type="number" step="1" min="0" value="'+qty+'" class="pgr-qty" style="width:90px" oninput="pgrRecalc(this)"></td>' +
     '<td>'+esc(uLabel)+'</td>' +
-    '<td><input type="number" step="any" min="0" value="'+factor+'" class="pgr-factor" style="width:80px" oninput="pgrRecalc(this)"></td>' +
+    '<td><input type="text" class="pgr-factor mono-data" readonly tabindex="-1" value="'+factor+'" style="width:70px;border-color:transparent;background:transparent"></td>' +
     '<td class="mono-data pgr-base">'+repQty(qty*factor)+'</td>' +
     '<td><input type="number" step="any" min="0" value="'+amount+'" class="pgr-amount" style="width:100px" oninput="pgrUpdateTotals(this.closest(\'.form-card\'))"></td>' +
     '<td><button class="btn btn-sm btn-ghost" onclick="pgrRemove(this)">✕</button></td>';
   card.querySelector('tbody').appendChild(tr);
-  f.style.display = 'none';
+  pgrCloseAdd(grId);
   pgrUpdateTotals(card);
+  const sc = card.querySelector('.pgr-scroll'); sc.scrollTop = sc.scrollHeight;
 }
 async function pgrConfirm(id){
   const card = document.querySelector('#pgr-body .form-card[data-gr="'+id+'"]');
@@ -6463,14 +6508,14 @@ async function pgrConfirm(id){
     if (!confirm('รับ '+on.length+' จาก '+rows.length+' รายการ'+(removed ? ' · ลบ '+removed+' บรรทัด' : '')+'\n'+
       (notAll ? (remainder ? 'รายการที่ไม่ติ๊กจะไม่เข้าสต็อก แต่สร้างเป็นใบรอตรวจรับใหม่ให้รับต่อภายหลัง' : 'รายการที่ไม่ติ๊กจะไม่เข้าสต็อก และค้างอยู่ในใบสั่งซื้อ (ไม่สร้างใบรอตรวจรับใหม่)')+'\n' : '')+'ยืนยัน?')) return;
   }
+  // ไม่ส่ง factor ไป — backend ใช้ factor ปัจจุบันของหน่วยที่เลือกเสมอ (factor แก้ตรงๆ ไม่ได้)
   const items = rows.map(tr => {
-    const id2 = tr.dataset.gritem;
-    if (tr.classList.contains('pgr-removed')) return { grItemId: id2, remove: true };
-    return { grItemId: id2, qty: tr.querySelector('.pgr-pick').checked ? (Number(tr.querySelector('.pgr-qty').value) || 0) : 0,
-      unitCode: tr.querySelector('.pgr-unit').value, unitFactor: tr.querySelector('.pgr-factor').value };
+    if (tr.classList.contains('pgr-removed')) return { grItemId: tr.dataset.gritem, remove: true };
+    return { grItemId: tr.dataset.gritem, qty: tr.querySelector('.pgr-pick').checked ? (Number(tr.querySelector('.pgr-qty').value) || 0) : 0,
+      unitCode: tr.querySelector('.pgr-unit').value };
   });
   const newItems = added.map(tr => ({ productId: tr.dataset.product, qty: Number(tr.querySelector('.pgr-qty').value) || 0, unitCode: tr.dataset.unit,
-    unitFactor: tr.querySelector('.pgr-factor').value, amount: Number(tr.querySelector('.pgr-amount').value) || 0 }));
+    amount: Number(tr.querySelector('.pgr-amount').value) || 0 }));
   const r = await callApi('confirmExternalGoodsReceipt', { id, items, newItems, createRemainder: remainder,
     receiveDate: card.querySelector('.pgr-date').value, note: card.querySelector('.pgr-note').value });
   if (!r.success) { toast(r.message, true); return; }
@@ -7056,7 +7101,7 @@ function tblLoading(body, cols){
     const tag = t.querySelector('.tbl-hits');
     if (tag) tag.textContent = q ? ('พบ ' + hit + ' จาก ' + rows.length + ' รายการ') : '';
     // ท้ายตารางบอกจำนวนที่แสดงอยู่จริง ไม่ใช่จำนวนทั้งหมด ตอนกำลังกรอง
-    const foot = t.tFoot && t.tFoot.rows[0] && t.tFoot.rows[0].cells[0];
+    const foot = !t.hasAttribute('data-own-foot') && t.tFoot && t.tFoot.rows[0] && t.tFoot.rows[0].cells[0];
     if (foot) {
       const text = q ? ('แสดง ' + hit + ' จาก ' + rows.length + ' รายการ')
                      : (rows.length ? 'ทั้งหมด ' + rows.length.toLocaleString('en-US') + ' รายการ' : '\u2014');
@@ -7212,6 +7257,7 @@ function tblLoading(body, cols){
     // ทุกตารางที่อยู่ในกรอบเลื่อน รวมตารางในโมดัลด้วย — ยกเว้นเอกสารสำหรับพิมพ์ ซึ่งมีท้ายกระดาษของตัวเอง
     document.querySelectorAll('.table-wrap > table').forEach(t => {
       if (t.closest('.docsheet')) return;
+      if (t.hasAttribute('data-own-foot')) return;   // ตารางที่ทำท้ายตาราง (ยอดรวมต่อคอลัมน์) เอง เช่น ใบรับของรอตรวจรับ
       const head = [...(t.tHead ? t.tHead.rows : [])].find(r => !r.classList.contains('tbl-search-row'));
       if (!head) return;
       const body = t.tBodies[0];

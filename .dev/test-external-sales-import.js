@@ -182,7 +182,8 @@ function fresh() {
     products: [{ record_id: 1, name: 'สินค้า 1', product_code: 'P1', unit: 'ชิ้น' }, { record_id: 2, name: 'สินค้า 2', product_code: 'P2', unit: 'ชิ้น' },
                { record_id: 3, name: 'สินค้า 3', product_code: 'P3', unit: 'ชิ้น' }],
     // สินค้า 1: ทะเบียนหน่วยแก้เป็น 60 แล้ว (ตอนนำเข้าใบนี้เก็บ factor 1 ไว้) · สินค้า 2 ไม่มีแถวหน่วย CT เลย
-    product_units: [{ product_id: 1, unit_code: 'CT', unit_label: 'ลัง', unit_factor: 60, is_active: 'TRUE' }],
+    product_units: [{ product_id: 1, unit_code: 'CT', unit_label: 'ลัง', unit_factor: 60, is_active: 'TRUE' },
+                    { product_id: 3, unit_code: 'PK', unit_label: 'แพ็ค', unit_factor: 5, is_active: 'TRUE' }],
     purchase_orders: [{ record_id: 10, tenant_id: 'T1', status: 'sent', source_ref: 'IV9', subtotal_ex_vat: 6400, total: 6400, note: '' }],
     po_items: [{ record_id: 100, po_id: 10, product_id: 1, qty: 10, unit_code: 'CT', unit_factor: 1, unit_price: 600, amount: 6000, received_qty: 0 },
                { record_id: 101, po_id: 10, product_id: 2, qty: 4, unit_code: 'CT', unit_factor: 1, unit_price: 100, amount: 400, received_qty: 0 }],
@@ -228,7 +229,7 @@ eq('ต้นทุนต่อหน่วยฐาน = ราคาต่อ�
 fresh();
 c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, receiveDate: '2026-09-28', note: 'ของมาถึงช้า',
   items: [{ grItemId: 200, qty: 4 }, { grItemId: 201, remove: true }],
-  newItems: [{ productId: 3, qty: 2, unitCode: 'PK', unitFactor: 5, amount: 50 }] });
+  newItems: [{ productId: 3, qty: 2, unitCode: 'PK', amount: 50 }] });
 eq('รับบางส่วน + ลบบรรทัด + เพิ่มบรรทัด: สำเร็จ', c.success, true);
 eq('สต็อกเข้า: สินค้า 1 = 4×60 = 240 · สินค้าเพิ่ม 3 = 2 แพ็ค × 5 = 10 · บรรทัดที่ลบไม่เข้า',
   STOCK.map(x => x.pid + ':' + x.baseQty).sort(), ['1:240', '3:10']);
@@ -251,9 +252,10 @@ c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 
 eq('ไม่ติ๊กรับสักบรรทัด (qty 0 ทั้งหมด ไม่เพิ่มบรรทัด) → ปฏิเสธ ไม่เขียนอะไร', [c.success, D2.goods_receipts[0].status, STOCK.length], [false, 'pending_review', 0]);
 
 fresh();
-c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 10, unitFactor: 12 }, { grItemId: 201, qty: 4 }] });
-eq('แก้ factor รายบรรทัด (12 เฉพาะใบนี้): เข้าสต็อก 10×12 = 120 · ต้นทุน 600÷12 = 50 · PO รับครบ (10 ลัง)',
-  [STOCK.find(x => x.pid === '1').baseQty, STOCK.find(x => x.pid === '1').cost, D2.po_items[0].received_qty, D2.purchase_orders[0].status], [120, 50, 10, 'received']);
+c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 10, unitFactor: 12 }, { grItemId: 201, qty: 4 }],
+  newItems: [{ productId: 3, qty: 1, unitCode: 'CT', unitFactor: 99, amount: 0 }] });
+eq('factor แก้ตรงๆ ไม่ได้: ส่ง unitFactor 12 / 99 มาก็ถูกเมิน ใช้ factor ปัจจุบันของหน่วย (สินค้า 1 ลัง = 60 → 600 ชิ้น · สินค้า 3 ไม่มีแถว CT → 1)',
+  [STOCK.find(x => x.pid === '1').baseQty, STOCK.find(x => x.pid === '3').baseQty], [600, 1]);
 
 fresh();
 c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 120, unitCode: 'PC' }, { grItemId: 201, qty: 4 }] });
@@ -261,9 +263,6 @@ eq('เปลี่ยนหน่วยที่รับจริงเป็�
   [STOCK.find(x => x.pid === '1').baseQty, STOCK.find(x => x.pid === '1').cost, D2.po_items[0].received_qty, D2.purchase_orders[0].status,
    (D2.gr_items.find(g => g.gr_id !== 20 && g.product_id === 1) || {}).qty], [120, 10, 2, 'partial', 8]);
 
-fresh();
-c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 10, unitFactor: 0 }] });
-eq('factor ติดลบ/ศูนย์ → ปฏิเสธทั้งใบ', [c.success, D2.goods_receipts[0].status], [false, 'pending_review']);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
