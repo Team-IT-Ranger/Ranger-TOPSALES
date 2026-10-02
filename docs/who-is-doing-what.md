@@ -579,6 +579,12 @@ factor ตามหน่วยสินค้าปัจจุบัน (แ�
 
 รายละเอียดใน CLAUDE.md หัวข้อ "ราคาฐานต่อลัง (ก่อน VAT)…" · ไม่แตะ backend ใช้ action เดิม (ไม่ต้อง deploy)
 
+## ★★ 2026-10-03: ขึ้น prod — `main` = UAT (17 คอมมิต: นำเข้ารายการขายออก/ใบรับของรอตรวจรับ/หน่วยสินค้า)
+
+หน้าเว็บ prod ขึ้นแล้ว (Cloudflare) · `clasp push` prod แล้ว (45 ไฟล์ ตรวจด้วย `clasp pull` ตรงกับ repo ทุกไฟล์ + scope `script.scriptapp`)
+· **ยังไม่ได้ Deploy → New version** — ต้องให้เจ้าของโปรเจกต์รัน `installExternalSalesImportTriggers` ใน editor (กดยอมรับสิทธิ์) ก่อน แล้วค่อย Deploy
+(Edit deployment `AKfycbxGSgR4…` เท่านั้น) · ข้อมูลสินค้า prod อัปเดตหน่วย/ราคาฐานจากชีต unitofitem แล้ว (`.dev/apply-unit-sheet.js`)
+
 ## งานถัดไป เรียงตามลำดับที่ควรทำ
 
 **1. แอดมินแก้บรรทัดบิลหลังรับงาน + ธง "ศูนย์แก้ไขแล้ว"** — เจ้าของระบบสั่งไว้ตั้งแต่ออกแบบ flow แต่ยังไม่ได้ทำ
