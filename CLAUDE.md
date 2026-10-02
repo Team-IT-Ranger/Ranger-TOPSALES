@@ -1320,6 +1320,13 @@ Express, 1,106 ราย, 38 คอลัมน์, เข้ารหัส TIS
   สิทธิ์เกินของตัวเอง, ขอบเขตบทบาทของตัวแทน, `resolveAssignableRole`.
 - `node .dev/test-line-auth.js` — unit tests ของการยืนยัน LINE ID token (`27_line_auth.gs`) ด้วย UrlFetchApp จำลอง:
   token ของแอปอื่น/หมดอายุ/ปลอมต้องไม่ผ่าน, สวมรอย lineUserId คนอื่นไม่ได้, แคชไม่ยิงซ้ำ, ความเข้มตาม env.
+- `node .dev/test-record-sale.js` (เพิ่ม 2 ต.ค. 2026) — harness ของ `recordSale()` ทั้งเส้น (`07_sales.gs`)
+  ที่ขาดมานาน (ของเดิมมีแค่ `_priceSaleCart` ใน `test-sales.js`): ขายจากรถสต็อกพอ/ไม่พอ, office_delivery
+  ของคลังไม่พอ = เตือนไม่บล็อก, และเส้นทาง **แก้ไขใบร่าง** (`payload.editOrderCode`, 2 ต.ค. 2026) ที่ก่อนหน้านี้
+  ตรวจด้วย e2e บน UAT อย่างเดียว — เขียนทับใบเดิมถูกเลข/record_id/วันที่เดิม, บรรทัดสินค้าเก่าถูกแทนที่ไม่ใช่พ่วง,
+  ไม่นับยอดขายรายวันซ้ำ, แก้ใบคนอื่น/ใบที่พ้นสถานะร่างแล้วถูกปฏิเสธ · mock เฉพาะจุดที่ `recordSale` เรียกจริง
+  (ไม่โหลด `34_sales_status.gs`/`28_units.gs` ทั้งไฟล์) แล้ว override `_priceSaleCart` หลังโหลด — ใช้แก้ข้อ 1
+  ใน `docs/who-is-doing-what.md` (แอดมินแก้บรรทัดบิลหลังรับงาน) ต่อได้โดยมีอะไรคุมแล้ว
 - `BACKEND_URL='<exec url>' node .dev/import-pricelists.js [--dry]` — นำเข้าใบราคาจริงจาก `reference/*.xlsx`
   เข้าสภาพแวดล้อมไหนก็ได้ (ใช้ `pricelist-parser.js` ตัวเดียวกับหน้าเว็บ + SheetJS ใน `.dev/xlsx.full.min.js`)
   ได้ชุดราคาสถานะ **ร่าง** เสมอ — เปิดใช้งานต้องกดเองในแอป · `--dry` = อ่านไฟล์อย่างเดียวไม่แตะ backend
