@@ -18,21 +18,23 @@ function row(o) { return HEADER.map(h => (o[h] !== undefined ? o[h] : '')); }
 const SHEET_ROWS = [
   HEADER,
   // ใบ INV-1: TNKI ขายให้ศูนย์ CD00017, 2 บรรทัดสินค้า — ควรผ่าน
-  row({ InvoiceDate: '2026/09/26', InvoiceNumber: 'INV-1', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 5, Amt_actual: 5000, DiscountAmt: 100, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Entity: 'TNKI' }),
-  row({ InvoiceDate: '2026/09/26', InvoiceNumber: 'INV-1', Customer_id: 'CD00017', ProductNumber: '10115', qtyCT: 2, Amt_actual: 2000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Entity: 'TNKI' }),
+  row({ InvoiceDate: '2026/09/26', InvoiceNumber: 'INV-1', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 5, Amt_actual: 5000, DiscountAmt: 100, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'TD', Entity: 'TNKI' }),
+  row({ InvoiceDate: '2026/09/26', InvoiceNumber: 'INV-1', Customer_id: 'CD00017', ProductNumber: '10115', qtyCT: 2, Amt_actual: 2000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'TD', Entity: 'TNKI' }),
   // ใบ INV-2: ก่อน cutoff (2026-09-25) — ต้องถูกตัดทิ้ง
-  row({ InvoiceDate: '2026/09/24', InvoiceNumber: 'INV-2', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Entity: 'TNKI' }),
+  row({ InvoiceDate: '2026/09/24', InvoiceNumber: 'INV-2', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'TD', Entity: 'TNKI' }),
   // ใบ INV-3: Entity ไม่ใช่ TNKI (เช่น ศูนย์ขายต่อ/Sell-out) — ต้องถูกตัดทิ้ง
-  row({ InvoiceDate: '2026/09/26', InvoiceNumber: 'INV-3', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-out', Sell_FOC: 'Sell', Entity: 'BDC' }),
+  row({ InvoiceDate: '2026/09/26', InvoiceNumber: 'INV-3', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-out', Sell_FOC: 'Sell', Sales_business: 'TD', Entity: 'BDC' }),
   // ใบ INV-4: ศูนย์ที่ไม่มีใน tenants.customer_account — ควรไปอยู่ errors
-  row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-4', Customer_id: 'CD99999', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Entity: 'TNKI' }),
+  row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-4', Customer_id: 'CD99999', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'TD', Entity: 'TNKI' }),
   // ใบ INV-5: สินค้าไม่มีใน products.product_code — ควรไปอยู่ errors
-  row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-5', Customer_id: 'CD00017', ProductNumber: '99999', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Entity: 'TNKI' }),
+  row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-5', Customer_id: 'CD00017', ProductNumber: '99999', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'TD', Entity: 'TNKI' }),
   // ใบ INV-6: ของแถมล้วน (qtyCT=1 แต่ Amt_actual=0, Sell_FOC=FOC) — เส้นทางนี้ไม่ได้กรองด้วย Sell_FOC โดยตรง
   // (เอนจิ้นดูแค่ qtyCT>0) จึงยังเข้ามาเป็นรายการซื้อปกติที่ Amt_actual=0 — ตรวจว่าคำนวณ unit price ได้ 0 ไม่ error
-  row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-6', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 0, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'FOC', Entity: 'TNKI' }),
+  row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-6', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 0, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'FOC', Sales_business: 'TD', Entity: 'TNKI' }),
   // ใบ INV-7: นำเข้าไปแล้ว (จะมี PO ที่ source_ref=INV-7) — ควรไปอยู่ alreadyImported
-  row({ InvoiceDate: '2026/09/28', InvoiceNumber: 'INV-7', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Entity: 'TNKI' })
+  row({ InvoiceDate: '2026/09/28', InvoiceNumber: 'INV-7', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'TD', Entity: 'TNKI' }),
+  // ใบ INV-8: Sales_business ไม่ใช่ 'TD' (ธุรกิจสายอื่นปนอยู่ในชีตเดียวกัน, เพิ่ม 2 ต.ค. 2026) — ต้องถูกตัดทิ้ง
+  row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-8', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'XY', Entity: 'TNKI' })
 ];
 
 class FakeSheet { getDataRange() { return { getValues: () => SHEET_ROWS }; } }
@@ -76,6 +78,9 @@ eq('INV-5 ไปอยู่ errors เพราะหาสินค้าจ�
 
 eq('INV-7 ไปอยู่ alreadyImported เพราะมี PO ที่ source_ref ตรงกันอยู่แล้ว',
   r.alreadyImported.some(a => a.invoiceNumber === 'INV-7'), true);
+
+eq('INV-8 ถูกตัดทิ้งเพราะ Sales_business ไม่ใช่ TD (2 ต.ค. 2026 — ธุรกิจสายอื่นปนอยู่ในชีตเดียวกัน)',
+  [r.candidates.some(c => c.invoiceNumber === 'INV-8'), r.errors.some(e => e.invoiceNumber === 'INV-8')], [false, false]);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

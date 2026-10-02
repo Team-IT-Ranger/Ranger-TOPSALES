@@ -6,6 +6,7 @@
  *
  * ขอบเขตที่ตกลงกับเจ้าของระบบแล้ว (2026-10-02):
  *   - กรองเฉพาะ Entity='TNKI' (บริษัทขายออกเอง ไม่ใช่ศูนย์ขายต่อ/Sell-out) + Sales_type='Sell-in'
+ *     + Sales_business='TD' (เพิ่ม 2 ต.ค. 2026 — ชีตมีธุรกิจอื่นปนอยู่ เอาเฉพาะสายที่ใช้จริงกับศูนย์กลุ่มนี้)
  *   - เริ่มนับจาก InvoiceDate >= EXTERNAL_SALES_IMPORT_CUTOFF (2026-09-25) — ก่อนหน้านั้นไม่ต้องย้อนนำเข้า
  *   - Customer_id (ชีต) = tenants.customer_account  ·  ProductNumber (ชีต) = products.product_code
  *   - ตอนนี้แอดมินกดปุ่มนำเข้าเอง (ยังไม่ผูก time trigger) แต่ตรรกะอ่าน/จับคู่แยกเป็นฟังก์ชันล้วน
@@ -19,6 +20,7 @@ var EXTERNAL_SALES_SHEET_TAB = 'FactSales';
 var EXTERNAL_SALES_IMPORT_CUTOFF = '2026-09-25';   // InvoiceDate >= วันนี้เท่านั้นที่ดึงมา (ตกลงกับเจ้าของระบบ)
 var EXTERNAL_SALES_ENTITY = 'TNKI';
 var EXTERNAL_SALES_TYPE = 'Sell-in';
+var EXTERNAL_SALES_BUSINESS = 'TD';
 
 // "2026/09/25" หรือ Date object (Sheets คืนมาเป็น Date ถ้าช่องตั้งรูปแบบวันที่) → "2026-09-25"
 function _externalDateStr(v) {
@@ -43,7 +45,7 @@ function _readExternalFactSalesRows() {
   var header = values[0];
   var col = {};
   header.forEach(function(h, i) { col[String(h).trim()] = i; });
-  var need = ['InvoiceDate', 'InvoiceNumber', 'Customer_id', 'ProductNumber', 'qtyCT', 'Amt_actual', 'DiscountAmt', 'Sales_type', 'Entity'];
+  var need = ['InvoiceDate', 'InvoiceNumber', 'Customer_id', 'ProductNumber', 'qtyCT', 'Amt_actual', 'DiscountAmt', 'Sales_type', 'Entity', 'Sales_business'];
   need.forEach(function(k) { if (col[k] === undefined) throw new Error('ชีตภายนอกไม่มีคอลัมน์ "' + k + '" (โครงสร้างไฟล์อาจเปลี่ยน)'); });
 
   var out = [];
@@ -51,6 +53,7 @@ function _readExternalFactSalesRows() {
     var row = values[r];
     if (String(row[col.Entity] || '').trim() !== EXTERNAL_SALES_ENTITY) continue;
     if (String(row[col.Sales_type] || '').trim() !== EXTERNAL_SALES_TYPE) continue;
+    if (String(row[col.Sales_business] || '').trim() !== EXTERNAL_SALES_BUSINESS) continue;
     var dateStr = _externalDateStr(row[col.InvoiceDate]);
     if (!dateStr || dateStr < EXTERNAL_SALES_IMPORT_CUTOFF) continue;
     out.push({
@@ -209,9 +212,14 @@ function listPendingExternalGoodsReceipts(session, payload) {
   var rows = _scoped('goods_receipts', scope).filter(function(g) { return g.status === 'pending_review'; });
   var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
   return { success: true, data: rows.map(function(g) {
+    // ★ ตารางแบบ matrix ฝั่งหน้าเว็บต้องมีครบ: ชื่อ/รหัสสินค้า, จำนวนรับ(แก้ได้), หน่วย, factor จากระบบ,
+    // จำนวนหน่วยฐานที่จะเข้าสต็อกจริง (คูณ factor แล้ว — คำนวณฝั่งหน้าเว็บสดตามจำนวนที่แก้ เพื่อให้เห็นก่อนกดยืนยัน),
+    // ราคาซื้อเข้าสุทธิของบรรทัด (amount — มาจาก Amt_actual สุทธิหลังหักส่วนลดจากชีตต้นทางตรงๆ ไม่ใช่ราคาต่อหน่วย)
     var items = _childrenOf('gr_items', 'gr_id', g.record_id).map(function(it) {
       var p = products[String(it.product_id)];
-      return { grItemId: it.record_id, productId: it.product_id, productName: p ? p.name : '(สินค้าถูกลบ)', qty: Number(it.qty) || 0, unitCode: it.unit_code };
+      return { grItemId: it.record_id, productId: it.product_id, productCode: p ? p.product_code : '',
+        productName: p ? p.name : '(สินค้าถูกลบ)', qty: Number(it.qty) || 0, unitCode: it.unit_code,
+        unitFactor: Number(it.unit_factor) || 1, amount: Number(it.amount) || 0 };
     });
     return { id: g.record_id, grNo: g.gr_no, sourceRef: g.source_ref || '', receiveDate: g.receive_date, note: g.note, items: items };
   }) };

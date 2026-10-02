@@ -6088,13 +6088,22 @@ async function esiSubmit(){
   if (!invoiceNumbers.length) { toast('ยังไม่ได้เลือกใบที่จะนำเข้า', true); return; }
   const r = await callApi('importExternalSalesInvoices', { invoiceNumbers });
   if (!r.success) { toast(r.message, true); return; }
-  toast('นำเข้าแล้ว '+r.created.length+' ใบ'+(r.skipped.length ? ' (ข้าม '+r.skipped.length+' ใบ — ดูเหตุผลที่คอนโซล)' : ''));
+  // ★ แจ้งผลให้ชัดว่า "นำเข้าเสร็จเรียบร้อยแล้ว" จริง ไม่ใช่แค่ตัวเลขลอยๆ — ระบุใบ/ศูนย์ที่สร้างสำเร็จด้วย (คนกดจะได้
+  // มั่นใจว่าใบไหนเข้าศูนย์ไหนจริง) ใบเยอะเกินแสดงบน toast ไหวค่อยตัดเหลือจำนวน รายละเอียดเต็มอยู่ console เสมอ
+  var names = r.created.map(function(c){ return c.invoiceNumber+' → '+c.tenantName; });
+  var shown = names.length <= 5 ? names.join(', ') : (names.slice(0,5).join(', ')+' และอีก '+(names.length-5)+' ใบ');
+  toast((r.created.length ? 'นำเข้าเสร็จเรียบร้อยแล้ว '+r.created.length+' ใบ: '+shown : 'ไม่มีใบที่นำเข้าสำเร็จ')+
+    (r.skipped.length ? ' (ข้าม '+r.skipped.length+' ใบ — ดูเหตุผลที่คอนโซล)' : ''), !r.created.length);
+  console.log('นำเข้าสำเร็จ:', r.created);
   if (r.skipped.length) console.log('ข้ามตอนนำเข้า:', r.skipped);
   esiData = null; document.getElementById('esi-result').innerHTML = '';
   esiCheck();
 }
 
-/* ═══ ใบรับของรอตรวจรับ (จากการนำเข้าอัตโนมัติ) ═══ */
+/* ═══ ใบรับของรอตรวจรับ (จากการนำเข้าอัตโนมัติ) — ตาราง matrix ให้อ่านง่าย (2 ต.ค. 2026) ═══
+   คอลัมน์: ชื่อสินค้า / รหัส / จำนวนรับ(แก้ได้) / หน่วย / factor จากระบบ / จำนวนหน่วยฐานที่จะเข้าสต็อกจริง
+   (คูณ factor แล้ว — เพราะเราเก็บสต็อกเป็นหน่วยชิ้นเสมอ) / ราคาซื้อเข้าสุทธิ — คอลัมน์ตัวคูณ factor คำนวณสดฝั่ง
+   หน้าเว็บทุกครั้งที่แก้จำนวนรับ (pgrRecalc) ให้เห็นตัวเลขที่จะเข้าสต็อกจริงก่อนกดยืนยัน ไม่ใช่แค่ค่าตอนนำเข้าครั้งแรก */
 async function loadPendingGoodsReceipts(){
   const box = document.getElementById('pgr-body');
   box.innerHTML = '<p class="unit">กำลังโหลด...</p>';
@@ -6103,14 +6112,27 @@ async function loadPendingGoodsReceipts(){
   if (!r.data.length) { box.innerHTML = '<p class="unit">ไม่มีใบรับของค้างตรวจรับ</p>'; return; }
   box.innerHTML = r.data.map(g =>
     '<div class="form-card" style="margin-bottom:10px"><h3>'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+' · รับของ '+esc(g.receiveDate)+')</span></h3>' +
-    g.items.map(it => '<div class="row"><span>'+esc(it.productName)+'</span>' +
-      '<span><input type="number" step="0.0001" min="0" value="'+it.qty+'" data-gritem="'+it.grItemId+'" style="width:100px"> '+esc(it.unitCode)+'</span></div>').join('') +
+    '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>รหัส</th><th>จำนวนรับ</th><th>หน่วย</th>' +
+    '<th>factor</th><th>หน่วยฐานที่เข้าสต็อก</th><th>ราคาซื้อเข้าสุทธิ</th></tr></thead><tbody>' +
+    g.items.map(it => '<tr data-gritem="'+it.grItemId+'" data-factor="'+it.unitFactor+'">' +
+      '<td>'+esc(it.productName)+'</td><td class="mono-data">'+esc(it.productCode)+'</td>' +
+      '<td><input type="number" step="0.0001" min="0" value="'+it.qty+'" class="pgr-qty" style="width:90px" oninput="pgrRecalc(this)"></td>' +
+      '<td>'+esc(unitLabelJs(it.unitCode))+'</td><td class="mono-data">'+repQty(it.unitFactor)+'</td>' +
+      '<td class="mono-data pgr-base">'+repQty(it.qty*it.unitFactor)+'</td>' +
+      '<td class="mono-data">฿'+baht(it.amount)+'</td></tr>').join('') +
+    '</tbody></table></div>' +
     '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button></div>'
   ).join('');
 }
+// แก้ "จำนวนรับ" แล้วอัปเดต "หน่วยฐานที่เข้าสต็อก" ของแถวนั้นให้เห็นสดก่อนกดยืนยัน (ไม่ยิง API)
+function pgrRecalc(input){
+  const tr = input.closest('tr');
+  const factor = Number(tr.dataset.factor) || 1;
+  tr.querySelector('.pgr-base').textContent = repQty((Number(input.value) || 0) * factor);
+}
 async function pgrConfirm(id){
-  const card = [...document.querySelectorAll('[data-gritem]')].filter(el => el.closest('.form-card').querySelector('button').getAttribute('onclick') === 'pgrConfirm('+id+')');
-  const items = card.map(el => ({ grItemId: el.dataset.gritem, qty: Number(el.value) || 0 }));
+  const rowsEl = [...document.querySelectorAll('[data-gritem]')].filter(el => el.closest('.form-card').querySelector('button').getAttribute('onclick') === 'pgrConfirm('+id+')');
+  const items = rowsEl.map(el => ({ grItemId: el.dataset.gritem, qty: Number(el.querySelector('.pgr-qty').value) || 0 }));
   const r = await callApi('confirmExternalGoodsReceipt', { id, items });
   if (!r.success) { toast(r.message, true); return; }
   toast(r.message); loadPendingGoodsReceipts();
