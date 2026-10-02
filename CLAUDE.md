@@ -173,7 +173,7 @@ Google Drive ไม่ merge ไฟล์ที่ถูกเขียนพร
   `main` ff-merge จาก `UAT` (`a70a667`, 88 คอมมิต) + push แล้ว · backend push เข้าโปรเจกต์ prod (`1XObaZXu…`)
   แล้ว redeploy deployment เดิม (`AKfycbxGSgR4…`) เป็น **@14** — ยิง action หลอกเช็ค deployment สดแล้วตอบถูก
   · frontend: GitHub Pages workflow รันแล้ว (build ใหม่ยืนยันแล้ว) และ Cloudflare Pages (โฮสต์จริงตอนนี้ —
-  ดู "ย้ายไป Cloudflare Pages" ด้านล่าง) build production branch ใหม่แล้วเช่นกัน (เจอ `openApproveStaffModal`
+  ดูหัวข้อ "Deploying" ด้านล่าง) build production branch ใหม่แล้วเช่นกัน (เจอ `openApproveStaffModal`
   ในหน้าที่เสิร์ฟจริง ยืนยันว่าไม่ใช่ของแคช)
   · **★ พบบั๊กที่ต้องแก้ต่อ**: `config.js` ตัดสิน env จาก **hostname** (ของ Cloudflare Pages ที่มี `uat.` เป็น
   subdomain) แต่ GitHub Pages ยังคงโครง path เดิม (`/admin-uat/`, `/mobile-uat/`) — hostname ของ github.io
@@ -1237,13 +1237,22 @@ Express, 1,106 ราย, 38 คอลัมน์, เข้ารหัส TIS
 
 ## Deploying
 
-- Frontend (`frontend-admin/index.html`, `config.js`, `pricelist-parser.js`): just push to `UAT` (or
-  `main`) — `.github/workflows/deploy-admin.yml` deploys automatically to `/admin-uat/` or `/admin/`.
-  **แก้ `config.js` เมื่อไหร่ ให้บัมป์ `?v=` ของ `<script src="config.js?v=…">` ใน `index.html` ด้วย** ทั้งสองแอป —
+- **★ โฮสต์จริงคือ Cloudflare Pages ตั้งแต่ 2026-09-30 — ไม่ใช่ GitHub Pages อีกแล้ว** (เคยเขียนผิดในไฟล์นี้
+  จนถึง 2 ต.ค. 2026 — แก้แล้ว) แก้ `frontend-admin/` หรือ `frontend-mobile/` แล้ว **push ขึ้น `UAT` (หรือ `main`)
+  เฉยๆ ก็พอ** Cloudflare Pages มี Git integration ผูกกับ repo นี้โดยตรง (คนละตัวกับ GitHub Actions) คอยตรวจ push
+  เอง build ให้อัตโนมัติ — วัดจริง 2 ต.ค. 2026: ไลฟ์ภายใน **~15 วินาที** หลัง push
+  · URL จริง: `https://ranger-topsales-admin.pages.dev/` (prod), `https://uat.ranger-topsales-admin.pages.dev/` (UAT),
+  `https://ranger-topsales-mobile.pages.dev/` (mobile prod), `https://uat.ranger-topsales-mobile.pages.dev/` (mobile UAT)
+  · `config.js` ตัดสิน env จาก **hostname** (มี `uat.` หรือไม่) ไม่ใช่จาก path แล้ว
+  · `.github/workflows/deploy-admin.yml` **ไม่ได้ deploy แอปอีกต่อไป** — เหลือหน้าที่เดียวคือสร้าง "หน้าแจ้งย้าย"
+    ไว้ที่ `team-it-ranger.github.io/Ranger-TOPSALES/{admin,admin-uat,mobile,mobile-uat}/` (ลิงก์เก่า) ให้ redirect
+    ไป Cloudflare อัตโนมัติใน 3 วิ — ตั้งใจทำแบบนี้ ไม่ใช่ลืมปิด workflow (เหตุผลอยู่ในคอมเมนต์หัวไฟล์ workflow):
+    ลิงก์ GitHub Pages เดิมแยก `/admin/` กับ `/admin-uat/` ไม่ออกแล้วตั้งแต่ `config.js` เปลี่ยนไปใช้ hostname
+    ถ้ายังเสิร์ฟแอปจริงอยู่ ใครเปิดลิงก์ "UAT" เก่าที่ค้างในเครื่องจะกลายเป็นเขียนข้อมูล **production** โดยไม่รู้ตัว
+  · **แก้ `config.js` เมื่อไหร่ ให้บัมป์ `?v=` ของ `<script src="config.js?v=…">` ใน `index.html` ด้วย** ทั้งสองแอป —
   เบราว์เซอร์แคชไฟล์นี้ไว้ ผู้ใช้เดิมจะยังยิงไป backend ตัวเก่าจนกว่าแคชหมดอายุ (เจอมาแล้วตอนเปิด prod 2026-09-24)
-  อีกอาการของวันนั้น: บิลด์ของ Pages ที่ทริกเกอร์จาก push ขึ้น `main` ประกอบ `/mobile/` จาก main ได้ไฟล์ **เก่า**
-  (ทั้งที่ main มีคอมมิตแล้ว ส่วน `/mobile-uat/` จาก UAT ได้ไฟล์ใหม่) — แก้ด้วยการ push อีกครั้งให้บิลด์ใหม่
-  วิธีเช็คของจริงที่เสิร์ฟอยู่: `curl -s '<pages url>/mobile/config.js?cb=1' | grep …` อย่าดูจากเบราว์เซอร์อย่างเดียว
+  · วิธีเช็คของจริงที่เสิร์ฟอยู่: `curl -s '<pages.dev url>/config.js?cb=1' | grep …` อย่าดูจากเบราว์เซอร์อย่างเดียว
+    (แคชเบราว์เซอร์ทำให้เข้าใจผิดว่ายังไม่ขึ้นทั้งที่ของจริงขึ้นแล้ว — เจอเองตอนไล่บั๊ก 2 ต.ค. 2026)
 - Backend: `.dev/push-backend.sh dev|uat|prod` pushes the `.gs` files via `clasp` (`prod` refuses with
   a message until `backend/.clasp.prod.json` exists), but that alone
   does **not** redeploy the live Web App URL — Apps Script libraries need an explicit new deployment
