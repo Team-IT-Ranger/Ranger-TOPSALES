@@ -6164,8 +6164,12 @@ async function loadPendingGoodsReceipts(){
   const r = await callApi('listPendingExternalGoodsReceipts', {});
   if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   if (!r.data.length) { box.innerHTML = '<p class="unit">ไม่มีใบรับของค้างตรวจรับ</p>'; return; }
-  box.innerHTML = r.data.map(g =>
-    '<div class="form-card" style="margin-bottom:10px"><h3>'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+' · รับของ '+esc(g.receiveDate)+')</span></h3>' +
+  box.innerHTML = r.data.map(g => {
+    // ★ ยอดรวมท้ายตาราง — ผลรวม "ราคาซื้อเข้าสุทธิ" ของทุกบรรทัด (Amt_actual จากชีตต้นทางตรงๆ ไม่คำนวณใหม่)
+    // ให้แอดมินเทียบกับยอดรวมบนใบกำกับภาษีตัวจริงที่บริษัทส่งมาได้ทันทีโดยไม่ต้องบวกเลขเอง — ไม่ขยับตามจำนวนรับ
+    // ที่แก้ได้ในตาราง เพราะยอดนี้คือ "สิ่งที่ใบกำกับภาษีบอก" ไม่ใช่สิ่งที่กำลังจะเข้าสต็อก คนละความหมายกัน
+    const grTotal = g.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+    return '<div class="form-card" style="margin-bottom:10px"><h3>'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+' · รับของ '+esc(g.receiveDate)+')</span></h3>' +
     '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>รหัส</th><th>จำนวนรับ</th><th>หน่วย</th>' +
     '<th>factor</th><th>หน่วยฐานที่เข้าสต็อก</th><th>ราคาซื้อเข้าสุทธิ</th></tr></thead><tbody>' +
     g.items.map(it => {
@@ -6181,8 +6185,12 @@ async function loadPendingGoodsReceipts(){
       '<td class="mono-data">฿'+baht(it.amount)+'</td></tr>';
     }).join('') +
     '</tbody></table></div>' +
-    '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button></div>'
-  ).join('');
+    // ★ ยอดรวมวางนอก <table> ตั้งใจ — ใส่เป็น <tfoot> จะโดน initTableFooters() (ด้านล่างไฟล์นี้) เขียนทับด้วย
+    // "ทั้งหมด N รายการ" ทันทีที่ DOM เปลี่ยน (ตัวนั้นไล่หา t.tFoot ของทุกตารางใน .table-wrap แล้วใช้ซ้ำ)
+    '<div class="row" style="justify-content:flex-end;margin-top:6px;padding-top:8px;border-top:1px solid var(--border)">' +
+    '<span>ยอดรวมตามใบกำกับภาษี <span class="unit">(เทียบกับเอกสารตัวจริงที่ได้รับ)</span> &nbsp; <b class="mono-data">฿'+baht(grTotal)+'</b></span></div>' +
+    '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button></div>';
+  }).join('');
 }
 // แก้ "จำนวนรับ" แล้วอัปเดต "หน่วยฐานที่เข้าสต็อก" ของแถวนั้นให้เห็นสดก่อนกดยืนยัน (ไม่ยิง API)
 function pgrRecalc(input){
