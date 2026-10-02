@@ -578,6 +578,11 @@
   .busy-chip[hidden]{ display:none; }
   .busy-dot{ width:6px; height:6px; border-radius:50%; background:currentColor; animation:busyPulse 1s infinite; }
   @keyframes busyPulse{ 0%,100%{opacity:.25} 50%{opacity:1} }
+.pgr-off td{opacity:.45}.pgr-off td:first-child{opacity:1}
+.pf-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:0 0 12px}
+.pf-tab{background:none;border:none;border-bottom:2px solid transparent;padding:9px 18px;font:inherit;font-weight:600;color:var(--ink-soft);cursor:pointer}
+.pf-tab.on{color:var(--blue);border-bottom-color:var(--blue)}
+.clickable-row.unit-sel td{background:var(--blue-pale)}
 </style>
 </head>
 <body>
@@ -1009,6 +1014,11 @@
             </div>
             <button class="btn btn-sm" id="pf-toggle-btn" style="display:none" onclick="toggleProductActiveFromForm()">ปิดใช้งาน</button>
           </div>
+          <div class="pf-tabs">
+            <button class="pf-tab on" id="pf-tabbtn-detail" onclick="pfTab('detail')">รายละเอียด</button>
+            <button class="pf-tab" id="pf-tabbtn-units" onclick="pfTab('units')">หน่วยขาย</button>
+          </div>
+          <div id="pf-tab-detail">
           <div class="form-card">
             <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
               <div style="flex-shrink:0">
@@ -1022,6 +1032,17 @@
             <div class="form-actions">
               <button class="btn btn-primary" id="pf-save-btn" onclick="saveProductForm()">บันทึก</button>
               <button class="btn btn-sm" onclick="closeProductForm()">ยกเลิก</button>
+            </div>
+          </div>
+          </div>
+          <div id="pf-tab-units" style="display:none">
+            <div class="form-card">
+              <p class="form-hint" id="pf-units-hint">คลิกที่หน่วยในตารางเพื่อดู/แก้ไขข้อมูลของหน่วยนั้นด้านล่าง — Factor = 1 หน่วยนี้เท่ากับกี่หน่วยฐาน (สต็อกเก็บเป็นหน่วยฐานเสมอ)</p>
+              <div class="table-wrap"><table>
+                <thead><tr><th>รหัสหน่วย</th><th>ชื่อหน่วย</th><th>Factor</th><th>ราคา</th><th>บาร์โค้ด</th><th>สถานะ</th></tr></thead>
+                <tbody id="pf-units-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+              </table></div>
+              <div id="pf-unit-edit" style="margin-top:12px"></div>
             </div>
           </div>
         </section>
@@ -1675,7 +1696,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus',
   'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
   'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive',
-  'importExternalSalesInvoices','confirmExternalGoodsReceipt']);
+  'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','addProductUnit','updateProductUnit']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin',
@@ -3633,6 +3654,99 @@ function pfPickImage(input){
   reader.onload = () => setProductFormImagePreview(reader.result);
   reader.readAsDataURL(file);
 }
+/* ── แท็บ "หน่วยขาย" ในหน้ารายละเอียดสินค้า (2 ต.ค. 2026) ──
+   เจ้าของระบบสั่ง: ดูสินค้าแล้วเห็น 2 แท็บ — รายละเอียด / หน่วยขาย · คลิกหน่วยในตาราง = แสดงข้อมูลหน่วยนั้นด้านล่างพร้อมแก้ได้เลย
+   (หน้า "หน่วยขายเพิ่มเติม" 3.1.3 เดิมยังอยู่ — แต่ดูสินค้าตัวหนึ่งแล้วอยากเห็น/แก้ factor ต้องไม่ต้องออกไปหน้าอื่น)
+   ฝั่งไม่มีสิทธิ์แก้ (PF_VIEWONLY) เห็นข้อมูลครบแต่ไม่มีปุ่มบันทึก/เพิ่ม */
+let PF_UNITS = [], PF_UNIT_SEL = null, PF_VIEWONLY = false;
+function pfTab(name){
+  document.getElementById('pf-tab-detail').style.display = name === 'detail' ? '' : 'none';
+  document.getElementById('pf-tab-units').style.display = name === 'units' ? '' : 'none';
+  document.getElementById('pf-tabbtn-detail').classList.toggle('on', name === 'detail');
+  document.getElementById('pf-tabbtn-units').classList.toggle('on', name === 'units');
+  if (name === 'units') pfLoadUnits();
+}
+async function pfLoadUnits(){
+  const body = document.getElementById('pf-units-body');
+  if (!editingProductId) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="6">บันทึกสินค้านี้ก่อน แล้วค่อยกลับมาตั้งหน่วยขาย</td></tr>';
+    document.getElementById('pf-unit-edit').innerHTML = '';
+    return;
+  }
+  tblLoading(body, 6);
+  const r = await callApi('listProductUnits', { productId: editingProductId });
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  PF_UNITS = r.data;
+  if (PF_UNIT_SEL && PF_UNIT_SEL !== 'new' && !PF_UNITS.some(u => String(u.record_id) === String(PF_UNIT_SEL))) PF_UNIT_SEL = null;
+  pfRenderUnits();
+}
+function pfRenderUnits(){
+  const body = document.getElementById('pf-units-body');
+  body.innerHTML = PF_UNITS.length
+    ? PF_UNITS.map(u => {
+        const warn = /ยังไม่ยืนยัน/.test(u.unit_label || '');
+        return '<tr class="clickable-row'+(String(PF_UNIT_SEL) === String(u.record_id) ? ' unit-sel' : '')+'" onclick="pfPickUnit(\''+esc(u.record_id)+'\')">' +
+          '<td class="mono-data">'+esc(u.unit_code)+'</td>' +
+          '<td'+(warn?' style="color:var(--red)"':'')+'>'+esc(u.unit_label)+'</td>' +
+          '<td class="mono-data">×'+esc(u.unit_factor)+'</td><td class="mono-data">฿'+baht(u.price)+'</td>' +
+          '<td class="mono-data">'+esc(u.barcode||'-')+'</td>' +
+          '<td><span class="pill '+(isOn(u.is_active)?'ok':'off')+'">'+(isOn(u.is_active)?'ใช้งาน':'ปิด')+'</span></td></tr>';
+      }).join('')
+    : '<tr class="empty-row"><td colspan="6">ยังไม่มีหน่วยขายเพิ่มเติม'+(PF_VIEWONLY ? '' : ' — กด "+ เพิ่มหน่วยขาย" ด้านล่าง')+'</td></tr>';
+  pfRenderUnitEdit();
+}
+function pfPickUnit(id){ PF_UNIT_SEL = id; pfRenderUnits(); }
+function pfNewUnit(){ PF_UNIT_SEL = 'new'; pfRenderUnits(); }
+function pfRenderUnitEdit(){
+  const box = document.getElementById('pf-unit-edit');
+  const isNew = PF_UNIT_SEL === 'new';
+  const u = (!isNew && PF_UNIT_SEL) ? PF_UNITS.find(x => String(x.record_id) === String(PF_UNIT_SEL)) : null;
+  if (!u && !isNew) {
+    box.innerHTML = PF_VIEWONLY ? '' : '<button class="btn btn-sm" onclick="pfNewUnit()">+ เพิ่มหน่วยขาย</button>';
+    return;
+  }
+  const ro = PF_VIEWONLY ? ' readonly' : '';
+  const code = isNew
+    ? '<select id="pfu-code">'+['CT','PK','PC'].filter(c => !PF_UNITS.some(x => normUnitJs(x.unit_code) === c)).map(c => '<option value="'+c+'">'+c+' — '+unitLabelJs(c)+'</option>').join('')+'</select>'
+    : '<input id="pfu-code" value="'+esc(u.unit_code)+'" readonly>';
+  box.innerHTML = '<div class="form-card" style="background:var(--blue-pale)">' +
+    '<h3 style="margin:0 0 10px">'+(isNew ? 'เพิ่มหน่วยขายใหม่' : 'หน่วย '+esc(u.unit_code)+' — '+esc(u.unit_label))+'</h3>' +
+    '<div class="form-grid">' +
+      plField('รหัสหน่วย', code) +
+      plField('ชื่อหน่วย', '<input id="pfu-label" value="'+(isNew ? '' : plVal(u.unit_label))+'" placeholder="เช่น ลัง"'+ro+'>') +
+      plField('Factor <span class="unit">(1 หน่วยนี้ = กี่หน่วยฐาน)</span>', '<input id="pfu-factor" type="number" min="0" step="any" value="'+(isNew ? '' : plVal(u.unit_factor))+'" placeholder="12"'+ro+'>') +
+      plField('ราคาต่อหน่วยนี้', '<input id="pfu-price" type="number" min="0" step="any" value="'+(isNew ? '' : plVal(u.price))+'" placeholder="0.00"'+ro+'>') +
+      plField('บาร์โค้ด (ชุด)', '<input id="pfu-barcode" value="'+(isNew ? '' : plVal(u.barcode))+'" placeholder="ไม่บังคับ"'+ro+'>') +
+      (isNew ? '' : plField('สถานะ', '<select id="pfu-active"'+(PF_VIEWONLY?' disabled':'')+'><option value="TRUE"'+(isOn(u.is_active)?' selected':'')+'>ใช้งาน</option><option value="FALSE"'+(isOn(u.is_active)?'':' selected')+'>ปิดใช้งาน</option></select>')) +
+    '</div>' +
+    (PF_VIEWONLY ? '<p class="form-hint">ข้อมูลหน่วยขายนี้บริษัทเป็นผู้ดูแล ดูได้แต่แก้ไม่ได้</p>' :
+      '<div class="form-actions"><button class="btn btn-primary" onclick="pfSaveUnit()">บันทึกหน่วยนี้</button>' +
+      '<button class="btn btn-sm" onclick="pfNewUnit()">+ เพิ่มหน่วยใหม่</button>' +
+      '<button class="btn btn-sm" onclick="PF_UNIT_SEL=null;pfRenderUnits()">ปิด</button></div>') +
+    '</div>';
+}
+const normUnitJs = c => { const x = String(c||'').toUpperCase(); return {CASE:'CT',PACK:'PK',PCS:'PC',SHEET:'PC'}[x] || x; };
+async function pfSaveUnit(){
+  const g = id => document.getElementById(id).value.trim();
+  const factor = parseFloat(g('pfu-factor'));
+  if (!(factor > 0)) { toast('Factor ต้องเป็นตัวเลขมากกว่า 0', true); return; }
+  let label = g('pfu-label');
+  if (!label) { toast('กรุณากรอกชื่อหน่วย', true); return; }
+  // แก้ factor ให้เป็นค่าจริงแล้ว (≠ ค่าตั้งต้น 1) คำเตือน "(ยังไม่ยืนยันขนาดบรรจุ)" ในชื่อหน่วยไม่ควรค้างอยู่อีก
+  if (/ยังไม่ยืนยัน/.test(label) && factor !== 1) label = label.replace(/\s*\(ยังไม่ยืนยันขนาดบรรจุ\)/, '').trim() || label;
+  const price = parseFloat(g('pfu-price')) || 0;
+  let r;
+  if (PF_UNIT_SEL === 'new') {
+    r = await callApi('addProductUnit', { productId: editingProductId, unitCode: g('pfu-code'), unitLabel: label, unitFactor: factor, price, barcode: g('pfu-barcode') });
+  } else {
+    r = await callApi('updateProductUnit', { id: PF_UNIT_SEL, unitLabel: label, unitFactor: factor, price, barcode: g('pfu-barcode'), isActive: document.getElementById('pfu-active').value });
+  }
+  if (!r.success) { toast(r.message, true); return; }
+  delete PRODUCT_UNITS_CACHE[editingProductId];
+  toast('บันทึกหน่วยขายแล้ว');
+  if (PF_UNIT_SEL === 'new') PF_UNIT_SEL = null;
+  pfLoadUnits();
+}
 function openProductForm(id){
   const row = id ? productsCache.find(x => String(x.record_id) === String(id)) : null;
   if (id && !row) { toast('ไม่พบสินค้านี้ในรายการ ลองโหลดหน้าใหม่', true); return; }
@@ -3652,6 +3766,8 @@ function openProductForm(id){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-productform').classList.add('active');
   document.getElementById('crumb-current').textContent = row ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่';
+  PF_VIEWONLY = viewOnly; PF_UNIT_SEL = null; PF_UNITS = [];
+  pfTab('detail');
 }
 // สลับ view ตรงๆ โดยไม่ผ่าน gotoView() — กันไม่ให้ไปเรียก LOADERS['products'] (loadProducts, ยิง API
 // โหลดใหม่ทั้งชุด) ทุกครั้งที่แค่ "กลับ" จากหน้าต่างย่อย ทั้งที่ cache ในเครื่องล่าสุดอยู่แล้ว
@@ -6165,29 +6281,32 @@ async function loadPendingGoodsReceipts(){
   if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   if (!r.data.length) { box.innerHTML = '<p class="unit">ไม่มีใบรับของค้างตรวจรับ</p>'; return; }
   box.innerHTML = r.data.map(g => {
-    // ★ ยอดรวมท้ายตาราง — ผลรวม "ราคาซื้อเข้าสุทธิ" ของทุกบรรทัด (Amt_actual จากชีตต้นทางตรงๆ ไม่คำนวณใหม่)
-    // ให้แอดมินเทียบกับยอดรวมบนใบกำกับภาษีตัวจริงที่บริษัทส่งมาได้ทันทีโดยไม่ต้องบวกเลขเอง — ไม่ขยับตามจำนวนรับ
-    // ที่แก้ได้ในตาราง เพราะยอดนี้คือ "สิ่งที่ใบกำกับภาษีบอก" ไม่ใช่สิ่งที่กำลังจะเข้าสต็อก คนละความหมายกัน
+    // ★ ยอดรวมตามใบกำกับภาษี = ผลรวม "ราคาซื้อเข้าสุทธิ" ทุกบรรทัด (Amt_actual ตรงๆ) ไว้เทียบกับเอกสารตัวจริง — ไม่ขยับตามติ๊ก/จำนวน
+    // ส่วน "ยอดรายการที่เลือกรับ" ขยับตามติ๊ก (pgrUpdateTotals) · วางนอก <table> เพราะ initTableFooters() ทับ <tfoot> ทิ้ง
     const grTotal = g.items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
-    return '<div class="form-card" style="margin-bottom:10px"><h3>'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+' · รับของ '+esc(g.receiveDate)+')</span></h3>' +
-    '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>รหัส</th><th>จำนวนรับ</th><th>หน่วย</th>' +
+    return '<div class="form-card" data-gr="'+g.id+'" style="margin-bottom:10px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">' +
+      '<h3 style="margin:0">'+esc(g.grNo)+' <span class="unit">(ใบกำกับภาษี '+esc(g.sourceRef)+' · รับของ '+esc(g.receiveDate)+')</span></h3>' +
+      '<button class="btn btn-sm btn-ghost" title="ยกเลิกใบนี้ก่อนรับเข้าสต็อก เพื่อให้ฝั่งบริษัทนำเข้าใบกำกับภาษีนี้ใหม่" onclick="pgrWithdraw('+g.id+',\''+esc(g.grNo)+'\')">↩ ถอนใบรับของ (นำเข้าใหม่)</button>' +
+    '</div>' +
+    '<div class="table-wrap"><table><thead><tr><th style="width:44px"><input type="checkbox" checked title="เลือก/ไม่เลือกทุกบรรทัด" onclick="pgrToggleAll(this)"></th>' +
+    '<th>สินค้า</th><th>รหัส</th><th>จำนวนรับ</th><th>หน่วย</th>' +
     '<th>factor</th><th>หน่วยฐานที่เข้าสต็อก</th><th>ราคาซื้อเข้าสุทธิ</th></tr></thead><tbody>' +
     g.items.map(it => {
-      // ★ ชื่อหน่วยจริงของสินค้า (ไม่ใช่แค่ CT→"ลัง") มีคำเตือนฝังไว้เองถ้ายังไม่ยืนยันขนาดบรรจุ — ต้องโชว์ให้เห็น
-      // ไม่งั้นแอดมินเห็น factor แปลกๆ แล้วไม่รู้ว่าทำไม (ดู UNIT_FACTOR_UNCONFIRMED, 10_master_data.gs)
+      // ชื่อหน่วยจริงของสินค้า (ไม่ใช่แค่ CT→"ลัง") มีคำเตือนฝังไว้เองถ้ายังไม่ยืนยันขนาดบรรจุ (UNIT_FACTOR_UNCONFIRMED, 10_master_data.gs)
       const unconfirmed = /ยังไม่ยืนยัน/.test(it.unitLabel || '');
       const unitText = it.unitLabel || unitLabelJs(it.unitCode);
-      return '<tr data-gritem="'+it.grItemId+'" data-factor="'+it.unitFactor+'">' +
+      return '<tr data-gritem="'+it.grItemId+'" data-factor="'+it.unitFactor+'" data-amount="'+(Number(it.amount)||0)+'">' +
+      '<td><input type="checkbox" class="pgr-pick" checked title="ติ๊ก = รับรายการนี้ · ไม่ติ๊ก = ไม่รับ (ไม่เข้าสต็อก)" onclick="pgrToggle(this)"></td>' +
       '<td>'+esc(it.productName)+'</td><td class="mono-data">'+esc(it.productCode)+'</td>' +
-      '<td><input type="number" step="0.0001" min="0" value="'+it.qty+'" class="pgr-qty" style="width:90px" oninput="pgrRecalc(this)"></td>' +
+      '<td><input type="number" step="1" min="0" value="'+it.qty+'" class="pgr-qty" style="width:90px" oninput="pgrRecalc(this)"></td>' +
       '<td'+(unconfirmed?' style="color:var(--red)"':'')+'>'+esc(unitText)+'</td><td class="mono-data">'+repQty(it.unitFactor)+'</td>' +
       '<td class="mono-data pgr-base">'+repQty(it.qty*it.unitFactor)+'</td>' +
       '<td class="mono-data">฿'+baht(it.amount)+'</td></tr>';
     }).join('') +
     '</tbody></table></div>' +
-    // ★ ยอดรวมวางนอก <table> ตั้งใจ — ใส่เป็น <tfoot> จะโดน initTableFooters() (ด้านล่างไฟล์นี้) เขียนทับด้วย
-    // "ทั้งหมด N รายการ" ทันทีที่ DOM เปลี่ยน (ตัวนั้นไล่หา t.tFoot ของทุกตารางใน .table-wrap แล้วใช้ซ้ำ)
-    '<div class="row" style="justify-content:flex-end;margin-top:6px;padding-top:8px;border-top:1px solid var(--border)">' +
+    '<div class="row" style="justify-content:flex-end;gap:18px;margin-top:6px;padding-top:8px;border-top:1px solid var(--border);flex-wrap:wrap">' +
+    '<span>ยอดรายการที่เลือกรับ <b class="mono-data pgr-sel-total">฿'+baht(grTotal)+'</b> <span class="unit pgr-sel-count">('+g.items.length+' จาก '+g.items.length+' รายการ)</span></span>' +
     '<span>ยอดรวมตามใบกำกับภาษี <span class="unit">(เทียบกับเอกสารตัวจริงที่ได้รับ)</span> &nbsp; <b class="mono-data">฿'+baht(grTotal)+'</b></span></div>' +
     '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="pgrConfirm('+g.id+')">ตรวจรับแล้ว — เข้าสต็อก</button></div>';
   }).join('');
@@ -6196,12 +6315,41 @@ async function loadPendingGoodsReceipts(){
 function pgrRecalc(input){
   const tr = input.closest('tr');
   const factor = Number(tr.dataset.factor) || 1;
-  tr.querySelector('.pgr-base').textContent = repQty((Number(input.value) || 0) * factor);
+  const picked = tr.querySelector('.pgr-pick').checked;
+  tr.querySelector('.pgr-base').textContent = repQty(picked ? (Number(input.value) || 0) * factor : 0);
+}
+// ติ๊กรับ/ไม่รับทีละบรรทัด — ไม่ติ๊ก = ปิดช่องจำนวน หน่วยฐานเป็น 0 และตอนยืนยันส่ง qty 0 (ไม่เข้าสต็อก ใบสั่งซื้อค้างรับต่อ)
+function pgrToggle(cb){
+  const tr = cb.closest('tr');
+  tr.classList.toggle('pgr-off', !cb.checked);
+  tr.querySelector('.pgr-qty').disabled = !cb.checked;
+  pgrRecalc(tr.querySelector('.pgr-qty'));
+  pgrUpdateTotals(cb.closest('.form-card'));
+}
+function pgrToggleAll(master){
+  const card = master.closest('.form-card');
+  card.querySelectorAll('.pgr-pick').forEach(cb => { cb.checked = master.checked; pgrToggle(cb); });
+}
+function pgrUpdateTotals(card){
+  const rows = [...card.querySelectorAll('tbody tr[data-gritem]')];
+  const on = rows.filter(tr => tr.querySelector('.pgr-pick').checked);
+  card.querySelector('.pgr-sel-total').textContent = '฿' + baht(on.reduce((s, tr) => s + (Number(tr.dataset.amount) || 0), 0));
+  card.querySelector('.pgr-sel-count').textContent = '(' + on.length + ' จาก ' + rows.length + ' รายการ)';
 }
 async function pgrConfirm(id){
-  const rowsEl = [...document.querySelectorAll('[data-gritem]')].filter(el => el.closest('.form-card').querySelector('button').getAttribute('onclick') === 'pgrConfirm('+id+')');
-  const items = rowsEl.map(el => ({ grItemId: el.dataset.gritem, qty: Number(el.querySelector('.pgr-qty').value) || 0 }));
+  const card = document.querySelector('#pgr-body .form-card[data-gr="'+id+'"]');
+  const rows = [...card.querySelectorAll('tbody tr[data-gritem]')];
+  const on = rows.filter(tr => tr.querySelector('.pgr-pick').checked);
+  if (!on.length) { toast('ไม่ได้ติ๊กรับรายการใดเลย — ถ้าไม่รับทั้งใบให้กด "ถอนใบรับของ"', true); return; }
+  if (on.length < rows.length && !confirm('จะรับ '+on.length+' จาก '+rows.length+' รายการ — รายการที่ไม่ติ๊กจะไม่เข้าสต็อก (ใบสั่งซื้อยังค้างรับรายการนั้นอยู่) ยืนยัน?')) return;
+  const items = rows.map(tr => ({ grItemId: tr.dataset.gritem, qty: tr.querySelector('.pgr-pick').checked ? (Number(tr.querySelector('.pgr-qty').value) || 0) : 0 }));
   const r = await callApi('confirmExternalGoodsReceipt', { id, items });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message); loadPendingGoodsReceipts();
+}
+async function pgrWithdraw(id, grNo){
+  if (!confirm('ถอนใบรับของ '+grNo+' ?\n\nใบรับของ+ใบสั่งซื้อที่นำเข้าคู่กันจะถูกยกเลิก (ยังไม่เข้าสต็อก) แล้วใบกำกับภาษีนี้จะกลับไปอยู่ในรายการ "พร้อมนำเข้า" ให้ฝั่งบริษัทนำเข้าใหม่ได้')) return;
+  const r = await callApi('withdrawExternalGoodsReceipt', { id });
   if (!r.success) { toast(r.message, true); return; }
   toast(r.message); loadPendingGoodsReceipts();
 }

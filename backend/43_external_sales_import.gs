@@ -79,7 +79,11 @@ function _computeExternalSalesCandidates() {
     var code = String(p.product_code || '').trim(); if (code) productByCode[code] = p;
   });
   var importedInvoices = {};
-  centralObjects('purchase_orders').forEach(function(po) { var ref = String(po.source_ref || '').trim(); if (ref) importedInvoices[ref] = true; });
+  // ใบสั่งซื้อที่ถูกยกเลิก/ถอนกลับแล้ว (withdrawExternalGoodsReceipt) ไม่นับว่า "นำเข้าแล้ว" — ต้องนำเข้าใหม่ได้
+  centralObjects('purchase_orders').forEach(function(po) {
+    var ref = String(po.source_ref || '').trim();
+    if (ref && String(po.status) !== 'cancelled') importedInvoices[ref] = true;
+  });
 
   var groups = {}, order = [];
   rows.forEach(function(r) {
@@ -163,7 +167,10 @@ function importExternalSalesInvoices(session, payload) {
       var vendorId = _ensureCompanyVendor(scope);
       var warehouseId = _ensureScopeWarehouse(scope);
 
-      var poId = centralNextId('purchase_orders');
+      // ★ รหัสเอกสารใหม่ต้องไม่ชนกับแถวลูกที่ค้างอยู่ — ถ้ามีคนลบใบแม่ (PO/GR) ออกจากชีตตรงๆ แถวลูกจะกลายเป็นแถวกำพร้า
+      // แล้ว max(record_id)+1 ของใบแม่จะวนมาเท่าเดิม ใบใหม่เลย "รับ" แถวกำพร้าของใบเก่าไปด้วย (เจอจริง 2 ต.ค. 2026:
+      // GR-BDC-202610-0001 มีสินค้าเกินที่ไม่อยู่ในใบกำกับภาษี) · ลูกของใบนี้อ้างจากแถวที่เพิ่งสร้างเองเท่านั้น ไม่อ่านกลับจากชีต
+      var poId = _freshParentId('purchase_orders', 'po_items', 'po_id');
       var subtotal = _money(c.lines.reduce(function(s, l) { return s + l.amtActual; }, 0));
       centralAppend('purchase_orders', { record_id: poId, tenant_id: scope, po_no: _nextCentralDocNo('PO', scope), vendor_id: vendorId,
         pr_id: '', warehouse_id: warehouseId, status: 'sent', order_date: c.invoiceDate, expected_date: c.invoiceDate,
@@ -171,20 +178,20 @@ function importExternalSalesInvoices(session, payload) {
         note: 'นำเข้าอัตโนมัติจากรายการขายออกของบริษัท (ใบกำกับภาษี ' + invNo + ')',
         created_by: session.adminUserId, created_at: nowStr(), closed_at: '', source_ref: invNo });
       var poItemId = centralNextId('po_items');
-      centralAppendMany('po_items', c.lines.map(function(l, i) {
+      var poItemRows = c.lines.map(function(l, i) {
         var unitPrice = l.qtyCT ? _money(l.amtActual / l.qtyCT) : 0;
         return { record_id: poItemId + i, po_id: poId, line_no: i + 1, pr_item_id: '', product_id: l.productId, description: l.productName,
           qty: l.qtyCT, unit_code: UNIT_CT, unit_factor: _productCaseFactor(l.productId), unit_price: unitPrice, amount: _money(l.amtActual), received_qty: 0 };
-      }));
+      });
+      centralAppendMany('po_items', poItemRows);
 
-      var grId = centralNextId('goods_receipts');
+      var grId = _freshParentId('goods_receipts', 'gr_items', 'gr_id');
       var grNo = _nextCentralDocNo('GR', scope);
       centralAppend('goods_receipts', { record_id: grId, tenant_id: scope, gr_no: grNo, po_id: poId, vendor_id: vendorId, warehouse_id: warehouseId,
         receive_date: c.invoiceDate, note: 'ใบรับของกึ่งสำเร็จรูป — รอแอดมินศูนย์ตรวจรับให้ตรงกับของจริงก่อนเข้าสต็อก',
         status: 'pending_review', journal_id: '', created_by: session.adminUserId, created_at: nowStr(), source_ref: invNo });
       var grItemId = centralNextId('gr_items');
-      var poItems = _childrenOf('po_items', 'po_id', poId);
-      centralAppendMany('gr_items', poItems.map(function(it, i) {
+      centralAppendMany('gr_items', poItemRows.map(function(it, i) {
         var factor = Number(it.unit_factor) || 1;
         return { record_id: grItemId + i, gr_id: grId, po_item_id: it.record_id, product_id: it.product_id,
           qty: it.qty, unit_code: it.unit_code, unit_factor: factor, base_qty: _money(it.qty * factor),
@@ -194,6 +201,13 @@ function importExternalSalesInvoices(session, payload) {
     });
     return { success: true, created: created, skipped: skipped };
   });
+}
+
+// record_id ถัดไปของ "ใบแม่" ที่ไม่ชนกับ foreign key ที่แถวลูกยังอ้างอยู่ (กันแถวลูกกำพร้า — ดูหมายเหตุใน importExternalSalesInvoices)
+function _freshParentId(parentSheet, childSheet, fkCol) {
+  var next = centralNextId(parentSheet);
+  centralObjects(childSheet).forEach(function(r) { var v = parseInt(r[fkCol]) || 0; if (v >= next) next = v + 1; });
+  return next;
 }
 
 // unit_factor ของหน่วยลัง (CT) ของสินค้า — ไม่พบตั้ง 1 (เข้าสต็อกเป็นจำนวนลังตรงๆ แทน จะได้ไม่ตันกลางทาง)
@@ -227,7 +241,7 @@ function listPendingExternalGoodsReceipts(session, payload) {
         unitLabel: unitLabels[String(it.product_id) + '_' + normUnitCode(it.unit_code)] || '',
         unitFactor: Number(it.unit_factor) || 1, amount: Number(it.amount) || 0 };
     });
-    return { id: g.record_id, grNo: g.gr_no, sourceRef: g.source_ref || '', receiveDate: g.receive_date, note: g.note, items: items };
+    return { id: g.record_id, grNo: g.gr_no, sourceRef: g.source_ref || '', receiveDate: safeDateStr(g.receive_date), note: g.note, items: items };
   }) };
 }
 
@@ -255,6 +269,12 @@ function confirmExternalGoodsReceipt(session, payload) {
       if (qty === null || qty < 0) return { success: false, message: 'รายการที่ ' + (i + 1) + ': จำนวนที่รับจริงต้องเป็นตัวเลขไม่ติดลบ' };
     }
 
+    var anyQty = grItems.some(function(gi) {
+      var q = overrides.hasOwnProperty(String(gi.record_id)) ? overrides[String(gi.record_id)] : Number(gi.qty);
+      return q > 0;
+    });
+    if (!anyQty) return { success: false, message: 'ไม่ได้เลือกรับรายการใดเลย — ถ้าไม่รับทั้งใบให้กด "ถอนใบรับของ" เพื่อนำเข้าใหม่' };
+
     var stockOps = [];
     grItems.forEach(function(gi) {
       var qty = overrides.hasOwnProperty(String(gi.record_id)) ? overrides[String(gi.record_id)] : Number(gi.qty);
@@ -275,6 +295,27 @@ function confirmExternalGoodsReceipt(session, payload) {
     centralUpdate('purchase_orders', po.record_id, { status: done ? 'received' : (some ? 'partial' : po.status), closed_at: done ? nowStr() : '' });
     centralUpdate('goods_receipts', gr.record_id, { status: 'posted' });
     return { success: true, message: 'ตรวจรับใบ ' + gr.gr_no + ' แล้ว — เข้าสต็อกเรียบร้อย' };
+  });
+}
+
+/**
+ * payload: { id } — ถอนใบรับของที่ยังไม่ตรวจรับ (pending_review) กลับ เมื่อแอดมินเห็นว่านำเข้ามาผิด/คำนวณผิด
+ * ใบรับของ + ใบสั่งซื้อที่นำเข้าคู่กันถูกยกเลิก (cancelled — เก็บเป็นประวัติ ไม่ลบ) ยังไม่มีสต็อก/บัญชีขยับเลยจึงไม่ต้องคืนอะไร
+ * แล้วเลขใบกำกับภาษีนั้นกลับไปอยู่ในรายการ "พร้อมนำเข้า" ให้ฝั่งบริษัทกดนำเข้าใหม่ได้ (ตัวกันซ้ำไม่นับ PO ที่ cancelled)
+ */
+function withdrawExternalGoodsReceipt(session, payload) {
+  var err = _requirePermission(session, 'inventory', 'edit'); if (err) return err;
+  var scope = _purchaseScope(session, payload);
+  return _withDocLock(function() {
+    var gr = _findScoped('goods_receipts', payload.id, scope);
+    if (!gr) return { success: false, message: 'ไม่พบใบรับของนี้' };
+    if (gr.status !== 'pending_review') return { success: false, message: 'ถอนได้เฉพาะใบที่ยังรอตรวจรับ — ใบนี้ตรวจรับไปแล้ว (ใช้ "ยกเลิกใบรับของ" แทน)' };
+    var po = gr.po_id ? _findScoped('purchase_orders', gr.po_id, scope) : null;
+    if (po && !String(po.source_ref || '').trim()) return { success: false, message: 'ใบนี้ไม่ได้มาจากการนำเข้าอัตโนมัติ — ถอนไม่ได้' };
+    var reason = 'ถอนกลับก่อนตรวจรับ (นำเข้าใหม่) โดย ' + (session.displayName || session.username || session.adminUserId || '');
+    centralUpdate('goods_receipts', gr.record_id, { status: 'cancelled', note: String(gr.note || '') + '\n' + reason });
+    if (po) centralUpdate('purchase_orders', po.record_id, { status: 'cancelled', closed_at: nowStr(), note: String(po.note || '') + '\n' + reason });
+    return { success: true, message: 'ถอนใบ ' + gr.gr_no + ' แล้ว — ฝั่งบริษัทกด "ตรวจรายการใหม่" เพื่อนำเข้าใบกำกับภาษี ' + (gr.source_ref || '') + ' ใหม่ได้' };
   });
 }
 
