@@ -237,36 +237,73 @@ function _productCaseFactor(productId) {
   return 1;
 }
 
+// factor ปัจจุบันของ (สินค้า, หน่วย) จากทะเบียนหน่วยขาย (product_units) — หน่วยฐาน (PC) = 1 เสมอ
+// ไม่พบแถว = ใช้ค่า fallback (ค่าที่เก็บไว้ในใบ) · ★ ใบรับของรอตรวจรับใช้ "ค่าปัจจุบัน" ตอนแสดง/ตอนยืนยันเสมอ ไม่ใช่ค่าตอนนำเข้า
+// เพื่อให้แก้ factor ที่ทะเบียนสินค้าให้ถูกแล้วกลับมาตรวจรับต่อได้เลย ไม่ต้องถอนใบแล้วนำเข้าใหม่ (เจ้าของระบบสั่ง 2 ต.ค. 2026)
+function _currentUnitFactor(productId, unitCode, fallback) {
+  var code = normUnitCode(unitCode, UNIT_PC);
+  if (code === UNIT_PC) return 1;
+  var rows = centralObjects('product_units');
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].product_id) === String(productId) && normUnitCode(rows[i].unit_code) === code) {
+      var f = Number(rows[i].unit_factor);
+      if (f > 0) return f;
+    }
+  }
+  return Number(fallback) > 0 ? Number(fallback) : 1;
+}
+
+// หน่วยที่เลือกได้ของสินค้า = หน่วยฐาน + หน่วยขายที่ยังใช้งาน (ให้แอดมินศูนย์เปลี่ยนหน่วยรายบรรทัดตอนตรวจรับ)
+function _receiveUnitOptions(product, unitRowsByProduct) {
+  var opts = [{ code: UNIT_PC, label: (product && product.unit) || 'ชิ้น', factor: 1 }];
+  (unitRowsByProduct[String(product ? product.record_id : '')] || []).forEach(function(u) {
+    if (String(u.is_active) === 'FALSE' || u.is_active === false) return;
+    var code = normUnitCode(u.unit_code);
+    if (code === UNIT_PC) return;
+    opts.push({ code: code, label: u.unit_label || code, factor: Number(u.unit_factor) || 1 });
+  });
+  return opts;
+}
+
+function _q4(n) { return Math.round((Number(n) || 0) * 10000) / 10000; }
+
 // คิวใบรับของกึ่งสำเร็จรูปที่รอแอดมินศูนย์ตรวจรับ (ขอบเขตตามตัวแทนปกติ — ศูนย์เห็นแค่ของตัวเอง)
 function listPendingExternalGoodsReceipts(session, payload) {
   var err = _requirePermission(session, 'inventory', 'view'); if (err) return err;
   var scope = _purchaseScope(session, payload);
   var rows = _scoped('goods_receipts', scope).filter(function(g) { return g.status === 'pending_review'; });
   var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
-  // ชื่อหน่วยจริงของสินค้า (ไม่ใช่แค่แปลงรหัส CT→"ลัง" เฉยๆ) — ชื่อหน่วยที่ยังไม่ยืนยันขนาดบรรจุมีคำเตือนฝังอยู่ในนี้
-  // (ดู UNIT_FACTOR_UNCONFIRMED, 10_master_data.gs) ถ้าไม่ดึงมาโชว์ แอดมินจะไม่รู้เลยว่า factor ที่เห็นยังไม่ยืนยัน
-  var unitLabels = {}; centralObjects('product_units').forEach(function(u) {
-    unitLabels[String(u.product_id) + '_' + normUnitCode(u.unit_code)] = u.unit_label;
-  });
+  var unitRowsByProduct = {};
+  centralObjects('product_units').forEach(function(u) { var k = String(u.product_id); (unitRowsByProduct[k] = unitRowsByProduct[k] || []).push(u); });
   return { success: true, data: rows.map(function(g) {
-    // ★ ตารางแบบ matrix ฝั่งหน้าเว็บต้องมีครบ: ชื่อ/รหัสสินค้า, จำนวนรับ(แก้ได้), หน่วย, factor จากระบบ,
-    // จำนวนหน่วยฐานที่จะเข้าสต็อกจริง (คูณ factor แล้ว — คำนวณฝั่งหน้าเว็บสดตามจำนวนที่แก้ เพื่อให้เห็นก่อนกดยืนยัน),
-    // ราคาซื้อเข้าสุทธิของบรรทัด (amount — มาจาก Amt_actual สุทธิหลังหักส่วนลดจากชีตต้นทางตรงๆ ไม่ใช่ราคาต่อหน่วย)
+    // ★ ตาราง matrix ฝั่งหน้าเว็บ: ชื่อ/รหัส, จำนวนรับ(แก้ได้), หน่วย(เลือกได้), factor(แก้ได้), หน่วยฐานที่เข้าสต็อกจริง, ราคาซื้อเข้าสุทธิ
+    // factor ที่ส่งไปคือ "ค่าปัจจุบันของสินค้า" (importedFactor = ค่าตอนนำเข้า ไว้โชว์ว่าเปลี่ยนไปแล้ว) — ดู _currentUnitFactor
     var items = _childrenOf('gr_items', 'gr_id', g.record_id).map(function(it) {
       var p = products[String(it.product_id)];
+      var unitCode = normUnitCode(it.unit_code, UNIT_CT);
+      var units = _receiveUnitOptions(p, unitRowsByProduct);
+      var cur = units.filter(function(u) { return u.code === unitCode; })[0];
       return { grItemId: it.record_id, productId: it.product_id, productCode: p ? p.product_code : '',
-        productName: p ? p.name : '(สินค้าถูกลบ)', qty: Number(it.qty) || 0, unitCode: it.unit_code,
-        unitLabel: unitLabels[String(it.product_id) + '_' + normUnitCode(it.unit_code)] || '',
-        unitFactor: Number(it.unit_factor) || 1, amount: Number(it.amount) || 0 };
+        productName: p ? p.name : '(สินค้าถูกลบ)', qty: Number(it.qty) || 0, unitCode: unitCode,
+        unitLabel: cur ? cur.label : '', units: units,
+        unitFactor: _currentUnitFactor(it.product_id, unitCode, it.unit_factor), importedFactor: Number(it.unit_factor) || 1,
+        amount: Number(it.amount) || 0 };
     });
-    return { id: g.record_id, grNo: g.gr_no, sourceRef: g.source_ref || '', receiveDate: safeDateStr(g.receive_date), note: g.note, items: items };
+    return { id: g.record_id, grNo: g.gr_no, sourceRef: g.source_ref || '', receiveDate: safeDateStr(g.receive_date).substring(0, 10), note: g.note || '', items: items };
   }) };
 }
 
 /**
- * payload: { id, items:[{grItemId, qty}]? } — แอดมินศูนย์ตรวจรับ: แก้จำนวนให้ตรงกับของจริงได้ก่อนยืนยัน
- * (ไม่ส่ง items มา = ใช้จำนวนที่นำเข้าไว้เดิมทั้งหมด) ยืนยันแล้วค่อยเข้าสต็อกจริง — เส้นทางเดียวกับ receiveGoods
- * แต่ไม่ลงบัญชี (ใบรับของของตัวแทนไม่ลง journal อยู่แล้วตามกติกาเดิม)
+ * แอดมินศูนย์ตรวจรับ — ยืดหยุ่นได้ก่อนยืนยัน (2 ต.ค. 2026) แล้วค่อยเข้าสต็อกจริง (เส้นทางเดียวกับ receiveGoods แต่ไม่ลงบัญชี
+ * เพราะใบรับของของตัวแทนไม่ลง journal ตามกติกาเดิม)
+ * payload: {
+ *   id, receiveDate?: 'yyyy-MM-dd', note?: string, createRemainder?: bool (ค่าตั้งต้น true),
+ *   items:   [{ grItemId, qty?, unitCode?, unitFactor?, remove?: bool }]   — ไม่ส่งช่อง = ใช้ค่าเดิม/ค่าปัจจุบันของสินค้า
+ *   newItems:[{ productId, qty, unitCode?, unitFactor?, amount? }]          — ของที่ได้รับจริงแต่ไม่อยู่ในใบกำกับภาษี
+ * }
+ * - factor: ไม่ส่ง = ใช้ factor ปัจจุบันของสินค้า/หน่วยนั้น (ไม่ใช่ค่าตอนนำเข้า) · ส่งมา = ใช้ตามที่แอดมินกรอก (แก้เฉพาะใบนี้ ไม่แตะทะเบียนสินค้า)
+ * - รับบางส่วน: รายการที่รับไม่ครบ/ไม่ติ๊กรับ → ส่วนที่เหลือ (หน่วยตามใบสั่งซื้อ) สร้างเป็นใบรอตรวจรับใบใหม่ (createRemainder) ใบสั่งซื้อค้าง partial
+ * - ต้นทุนต่อหน่วยฐาน = ราคาต่อหน่วยของใบสั่งซื้อ ÷ factor ของหน่วยในใบสั่งซื้อ (เปลี่ยนหน่วยที่รับจริงไม่ทำให้ต้นทุนเพี้ยน)
  */
 function confirmExternalGoodsReceipt(session, payload) {
   var err = _requirePermission(session, 'inventory', 'edit'); if (err) return err;
@@ -278,41 +315,122 @@ function confirmExternalGoodsReceipt(session, payload) {
     var po = _findScoped('purchase_orders', gr.po_id, scope);
     if (!po) return { success: false, message: 'ไม่พบใบสั่งซื้อต้นทาง' };
 
-    var overrides = {}; (payload.items || []).forEach(function(it) { if (it.grItemId != null) overrides[String(it.grItemId)] = _numOrNull(it.qty); });
+    var ov = {}; (payload.items || []).forEach(function(it) { if (it.grItemId != null) ov[String(it.grItemId)] = it; });
     var grItems = _childrenOf('gr_items', 'gr_id', gr.record_id);
-    var poItemsById = {}; _childrenOf('po_items', 'po_id', po.record_id).forEach(function(it) { poItemsById[String(it.record_id)] = it; });
+    var poItems = _childrenOf('po_items', 'po_id', po.record_id);
+    var poItemById = {}; poItems.forEach(function(it) { poItemById[String(it.record_id)] = it; });
+    var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
 
+    // ── 1) ตรวจ + วางแผนทุกบรรทัดก่อนเขียนอะไร (ผิดข้อเดียว = ปฏิเสธทั้งใบ ไม่เขียนครึ่งๆ กลางๆ) ──
+    var plan = [], n = 0;
     for (var i = 0; i < grItems.length; i++) {
-      var qty = overrides.hasOwnProperty(String(grItems[i].record_id)) ? overrides[String(grItems[i].record_id)] : Number(grItems[i].qty);
-      if (qty === null || qty < 0) return { success: false, message: 'รายการที่ ' + (i + 1) + ': จำนวนที่รับจริงต้องเป็นตัวเลขไม่ติดลบ' };
+      var gi = grItems[i], o = ov[String(gi.record_id)] || {};
+      n++;
+      if (o.remove) { plan.push({ gi: gi, removed: true }); continue; }
+      var qty = o.qty !== undefined ? _numOrNull(o.qty) : Number(gi.qty);
+      if (qty === null || isNaN(qty) || qty < 0) return { success: false, message: 'รายการที่ ' + n + ': จำนวนที่รับจริงต้องเป็นตัวเลขไม่ติดลบ' };
+      var unitCode = o.unitCode ? normUnitCode(o.unitCode, UNIT_PC) : normUnitCode(gi.unit_code, UNIT_CT);
+      var hasFactor = o.unitFactor !== undefined && o.unitFactor !== null && String(o.unitFactor).trim() !== '';
+      var factor = hasFactor ? Number(o.unitFactor) : _currentUnitFactor(gi.product_id, unitCode, gi.unit_factor);
+      if (!(factor > 0)) return { success: false, message: 'รายการที่ ' + n + ': factor ต้องมากกว่า 0' };
+      var poItem = poItemById[String(gi.po_item_id)] || null;
+      var poUnit = poItem ? normUnitCode(poItem.unit_code, UNIT_CT) : unitCode;
+      var poFactor = (unitCode === poUnit) ? factor : _currentUnitFactor(gi.product_id, poUnit, poItem ? poItem.unit_factor : 1);
+      plan.push({ gi: gi, poItem: poItem, qty: qty, unitCode: unitCode, factor: factor, poFactor: poFactor, baseQty: _money(qty * factor) });
     }
-
-    var anyQty = grItems.some(function(gi) {
-      var q = overrides.hasOwnProperty(String(gi.record_id)) ? overrides[String(gi.record_id)] : Number(gi.qty);
-      return q > 0;
-    });
+    var newPlan = [];
+    for (var k = 0; k < (payload.newItems || []).length; k++) {
+      var ni = payload.newItems[k], p = products[String(ni.productId)];
+      if (!p) return { success: false, message: 'รายการเพิ่มที่ ' + (k + 1) + ': ไม่พบสินค้า' };
+      var nq = _numOrNull(ni.qty);
+      if (nq === null || isNaN(nq) || nq <= 0) return { success: false, message: 'รายการเพิ่มที่ ' + (k + 1) + ' (' + p.name + '): จำนวนต้องมากกว่า 0' };
+      var nu = normUnitCode(ni.unitCode, UNIT_CT);
+      var nHas = ni.unitFactor !== undefined && ni.unitFactor !== null && String(ni.unitFactor).trim() !== '';
+      var nf = nHas ? Number(ni.unitFactor) : _currentUnitFactor(p.record_id, nu, 1);
+      if (!(nf > 0)) return { success: false, message: 'รายการเพิ่มที่ ' + (k + 1) + ' (' + p.name + '): factor ต้องมากกว่า 0' };
+      var na = _numOrNull(ni.amount); if (na === null) na = 0;
+      if (isNaN(na) || na < 0) return { success: false, message: 'รายการเพิ่มที่ ' + (k + 1) + ' (' + p.name + '): ราคาซื้อต้องไม่ติดลบ' };
+      newPlan.push({ product: p, qty: nq, unitCode: nu, factor: nf, amount: _money(na), baseQty: _money(nq * nf) });
+    }
+    var anyQty = plan.some(function(pl) { return !pl.removed && pl.qty > 0; }) || newPlan.length > 0;
     if (!anyQty) return { success: false, message: 'ไม่ได้เลือกรับรายการใดเลย — ถ้าไม่รับทั้งใบให้กด "ถอนใบรับของ" เพื่อนำเข้าใหม่' };
 
-    var stockOps = [];
-    grItems.forEach(function(gi) {
-      var qty = overrides.hasOwnProperty(String(gi.record_id)) ? overrides[String(gi.record_id)] : Number(gi.qty);
-      var factor = Number(gi.unit_factor) || 1;
-      var baseQty = _money(qty * factor);
-      centralUpdate('gr_items', gi.record_id, { qty: qty, base_qty: baseQty });
-      var poItem = poItemsById[String(gi.po_item_id)];
-      if (poItem) centralUpdate('po_items', poItem.record_id, { received_qty: _money((Number(poItem.received_qty) || 0) + qty) });
-      if (gi.product_id && baseQty > 0) stockOps.push({ productId: String(gi.product_id), baseQty: baseQty, unitCost: Number(gi.unit_cost) || 0 });
+    // ── 2) เขียน: บรรทัดเดิม (แก้/ลบ) · บรรทัดเพิ่ม · ยอด PO ──
+    var stockOps = [], auditNotes = [];
+    plan.forEach(function(pl) {
+      var gi = pl.gi, name = (products[String(gi.product_id)] || {}).name || ('สินค้า ' + gi.product_id);
+      if (pl.removed) {
+        auditNotes.push('ลบบรรทัด: ' + name + ' (' + gi.qty + ' ' + (gi.unit_code || '') + ')');
+        if (gi.po_item_id) deleteRowsWhere(centralSheet('po_items'), 'record_id', gi.po_item_id);
+        deleteRowsWhere(centralSheet('gr_items'), 'record_id', gi.record_id);
+        return;
+      }
+      var unitCost = pl.poItem && pl.poFactor > 0 ? _money((Number(pl.poItem.unit_price) || 0) / pl.poFactor) : (Number(gi.unit_cost) || 0);
+      centralUpdate('gr_items', gi.record_id, { qty: pl.qty, unit_code: pl.unitCode, unit_factor: pl.factor, base_qty: pl.baseQty, unit_cost: unitCost });
+      if (pl.poItem) {
+        centralUpdate('po_items', pl.poItem.record_id, { unit_factor: pl.poFactor,
+          received_qty: _q4((Number(pl.poItem.received_qty) || 0) + pl.baseQty / pl.poFactor) });
+      }
+      if (gi.product_id && pl.baseQty > 0) stockOps.push({ productId: String(gi.product_id), baseQty: pl.baseQty, unitCost: unitCost });
     });
+    if (newPlan.length) {
+      var poItemNext = centralNextId('po_items'), grItemNext = centralNextId('gr_items'), lineNo = poItems.length;
+      var newPo = [], newGr = [];
+      newPlan.forEach(function(np, i) {
+        auditNotes.push('เพิ่มบรรทัด: ' + np.product.name + ' (' + np.qty + ' ' + np.unitCode + ') — ไม่อยู่ในใบกำกับภาษี');
+        newPo.push({ record_id: poItemNext + i, po_id: po.record_id, line_no: lineNo + i + 1, pr_item_id: '', product_id: np.product.record_id,
+          description: np.product.name + ' (เพิ่มตอนตรวจรับ — ไม่อยู่ในใบกำกับภาษี)', qty: np.qty, unit_code: np.unitCode, unit_factor: np.factor,
+          unit_price: np.qty ? _money(np.amount / np.qty) : 0, amount: np.amount, received_qty: np.qty });
+        var cost = np.baseQty ? _money(np.amount / np.baseQty) : 0;
+        newGr.push({ record_id: grItemNext + i, gr_id: gr.record_id, po_item_id: poItemNext + i, product_id: np.product.record_id,
+          qty: np.qty, unit_code: np.unitCode, unit_factor: np.factor, base_qty: np.baseQty, unit_cost: cost, amount: np.amount });
+        stockOps.push({ productId: String(np.product.record_id), baseQty: np.baseQty, unitCost: cost });
+      });
+      centralAppendMany('po_items', newPo);
+      centralAppendMany('gr_items', newGr);
+    }
+    var after = _childrenOf('po_items', 'po_id', po.record_id);
+    var subtotal = _money(after.reduce(function(s, it) { return s + (Number(it.amount) || 0); }, 0));
+
+    // ── 3) ส่วนที่เหลือรอรับต่อ → ใบรอตรวจรับใบใหม่ ──
+    var remGr = null;
+    if (payload.createRemainder !== false) {
+      var remLines = after.map(function(it) { return { it: it, rem: _q4((Number(it.qty) || 0) - (Number(it.received_qty) || 0)) }; })
+        .filter(function(x) { return x.rem > 1e-9; });
+      if (remLines.length) {
+        var remId = _freshParentId('goods_receipts', 'gr_items', 'gr_id');
+        remGr = { id: remId, no: _nextCentralDocNo('GR', scope), count: remLines.length };
+        centralAppend('goods_receipts', { record_id: remId, tenant_id: scope, gr_no: remGr.no, po_id: po.record_id, vendor_id: gr.vendor_id,
+          warehouse_id: gr.warehouse_id, receive_date: gr.receive_date, status: 'pending_review', journal_id: '', created_by: String(session.adminUserId || ''),
+          created_at: nowStr(), source_ref: gr.source_ref || '',
+          note: 'ส่วนที่เหลือจาก ' + gr.gr_no + ' — รอรับต่อ (รับบางส่วนแล้ว)' });
+        var remItemId = centralNextId('gr_items');
+        centralAppendMany('gr_items', remLines.map(function(x, i) {
+          var unit = normUnitCode(x.it.unit_code, UNIT_CT), f = _currentUnitFactor(x.it.product_id, unit, x.it.unit_factor);
+          var amt = Number(x.it.qty) ? _money((Number(x.it.amount) || 0) * x.rem / Number(x.it.qty)) : 0;
+          return { record_id: remItemId + i, gr_id: remId, po_item_id: x.it.record_id, product_id: x.it.product_id, qty: x.rem, unit_code: unit,
+            unit_factor: f, base_qty: _money(x.rem * f), unit_cost: f ? _money((Number(x.it.unit_price) || 0) / f) : 0, amount: amt };
+        }));
+      }
+    }
+
     stockOps.forEach(function(op) {
       _applyStockIn(scope, gr.warehouse_id, op.productId, op.baseQty, op.unitCost, 'receipt', 'GR', gr.record_id, gr.gr_no, session.adminUserId);
     });
 
-    var after = _childrenOf('po_items', 'po_id', po.record_id);
-    var done = after.every(function(it) { return (Number(it.received_qty) || 0) >= (Number(it.qty) || 0) - 1e-9; });
+    var done = after.length > 0 && after.every(function(it) { return (Number(it.received_qty) || 0) >= (Number(it.qty) || 0) - 1e-9; });
     var some = after.some(function(it) { return (Number(it.received_qty) || 0) > 0; });
-    centralUpdate('purchase_orders', po.record_id, { status: done ? 'received' : (some ? 'partial' : po.status), closed_at: done ? nowStr() : '' });
-    centralUpdate('goods_receipts', gr.record_id, { status: 'posted' });
-    return { success: true, message: 'ตรวจรับใบ ' + gr.gr_no + ' แล้ว — เข้าสต็อกเรียบร้อย' };
+    centralUpdate('purchase_orders', po.record_id, { status: done ? 'received' : (some ? 'partial' : po.status), closed_at: done ? nowStr() : '',
+      subtotal_ex_vat: subtotal, total: subtotal });
+    var grFields = { status: 'posted' };
+    if (payload.receiveDate && /^\d{4}-\d{2}-\d{2}$/.test(String(payload.receiveDate))) grFields.receive_date = String(payload.receiveDate);
+    var noteText = payload.note !== undefined ? String(payload.note || '').trim() : String(gr.note || '');
+    if (auditNotes.length) noteText += (noteText ? '\n' : '') + auditNotes.join('\n');
+    grFields.note = noteText;
+    centralUpdate('goods_receipts', gr.record_id, grFields);
+    return { success: true, remainderGrNo: remGr ? remGr.no : '', remainderLines: remGr ? remGr.count : 0,
+      message: 'ตรวจรับใบ ' + gr.gr_no + ' แล้ว — เข้าสต็อกเรียบร้อย' +
+        (remGr ? ' · ส่วนที่เหลือ ' + remGr.count + ' รายการสร้างเป็นใบรอตรวจรับใหม่ ' + remGr.no : '') };
   });
 }
 
@@ -332,7 +450,10 @@ function withdrawExternalGoodsReceipt(session, payload) {
     if (po && !String(po.source_ref || '').trim()) return { success: false, message: 'ใบนี้ไม่ได้มาจากการนำเข้าอัตโนมัติ — ถอนไม่ได้' };
     var reason = 'ถอนกลับก่อนตรวจรับ (นำเข้าใหม่) โดย ' + (session.displayName || session.username || session.adminUserId || '');
     centralUpdate('goods_receipts', gr.record_id, { status: 'cancelled', note: String(gr.note || '') + '\n' + reason });
-    if (po) centralUpdate('purchase_orders', po.record_id, { status: 'cancelled', closed_at: nowStr(), note: String(po.note || '') + '\n' + reason });
+    // ใบสั่งซื้อที่มีของรับเข้าไปแล้วบางส่วน (นี่คือใบ "ส่วนที่เหลือรอรับต่อ") ห้ามยกเลิกทั้งใบ — ยกเลิกแค่ใบรับของนี้
+    var receivedSome = po && _childrenOf('po_items', 'po_id', po.record_id).some(function(it) { return (Number(it.received_qty) || 0) > 0; });
+    if (po && !receivedSome) centralUpdate('purchase_orders', po.record_id, { status: 'cancelled', closed_at: nowStr(), note: String(po.note || '') + '\n' + reason });
+    if (receivedSome) return { success: true, message: 'ถอนใบ ' + gr.gr_no + ' แล้ว (ใบสั่งซื้อยังเปิดอยู่เพราะมีของรับเข้าไปแล้วบางส่วน — ส่วนที่เหลือไม่ถูกนำเข้าใหม่อัตโนมัติ)' };
     return { success: true, message: 'ถอนใบ ' + gr.gr_no + ' แล้ว — ฝั่งบริษัทกด "ตรวจรายการใหม่" เพื่อนำเข้าใบกำกับภาษี ' + (gr.source_ref || '') + ' ใหม่ได้' };
   });
 }

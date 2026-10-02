@@ -105,12 +105,19 @@ const DB = { goods_receipts: [{ record_id: 3, gr_no: 'GR-1', status: 'pending_re
 Object.assign(ctx, {
   _requirePermission: () => null, _purchaseScope: () => 'T1', _withDocLock: fn => fn(), nowStr: () => '2026-10-02 10:00:00',
   _findScoped: (name, id) => DB[name].find(x => String(x.record_id) === String(id)) || null,
+  _childrenOf: (name, fk, id) => (DB[name] || []).filter(r => String(r[fk]) === String(id)),
   centralUpdate: (name, id, patch) => { Object.assign(DB[name].find(x => String(x.record_id) === String(id)), patch); return true; }
 });
+DB.po_items = [{ record_id: 1, po_id: 2, received_qty: 0 }, { record_id: 2, po_id: 7, received_qty: 0 }, { record_id: 3, po_id: 8, received_qty: 5 }];
+DB.goods_receipts.push({ record_id: 6, gr_no: 'GR-R', status: 'pending_review', po_id: 8, source_ref: 'IV3', note: '' });
+DB.purchase_orders.push({ record_id: 8, status: 'partial', source_ref: 'IV3', note: '' });
 let w = ctx.withdrawExternalGoodsReceipt({ displayName: 'แอดมิน' }, { id: 3 });
 eq('ถอนใบที่รอตรวจรับ → สำเร็จ + GR/PO เป็น cancelled', [w.success, DB.goods_receipts[0].status, DB.purchase_orders[0].status], [true, 'cancelled', 'cancelled']);
 w = ctx.withdrawExternalGoodsReceipt({}, { id: 4 });
 eq('ถอนใบที่ตรวจรับ (posted) ไปแล้วไม่ได้', [w.success, DB.goods_receipts[1].status], [false, 'posted']);
+w = ctx.withdrawExternalGoodsReceipt({}, { id: 6 });
+eq('ถอนใบ "ส่วนที่เหลือรอรับต่อ" (PO มีของรับไปแล้ว) → ยกเลิกแค่ใบรับของ ใบสั่งซื้อยังเปิด (partial)',
+  [w.success, DB.goods_receipts[3].status, DB.purchase_orders[3].status], [true, 'cancelled', 'partial']);
 w = ctx.withdrawExternalGoodsReceipt({}, { id: 5 });
 eq('ใบที่ไม่ได้มาจากการนำเข้าอัตโนมัติ (PO ไม่มี source_ref) ถอนไม่ได้', [w.success, DB.goods_receipts[2].status], [false, 'pending_review']);
 
@@ -164,6 +171,99 @@ eq('ตั้ง trigger: ลบของเดิมของฟังก์ช
 ctx.installExternalSalesImportTriggers();
 eq('รันตั้ง trigger ซ้ำ → ยังมี 3 ตัว ไม่ซ้อนกัน', TRIG.filter(t => t.getHandlerFunction() === 'scheduledExternalSalesImport').length, 3);
 eq('เอา trigger ออก', [ctx.removeExternalSalesImportTriggers().removed, TRIG.length], [3, 1]);
+
+
+console.log('\n── ใบรับของรอตรวจรับยืดหยุ่น: factor ปัจจุบัน / หน่วยรายบรรทัด / เพิ่ม-ลบบรรทัด / รับบางส่วน (2 ต.ค. 2026) ──');
+let D2;
+const STOCK = [];
+function fresh() {
+  STOCK.length = 0;
+  D2 = {
+    products: [{ record_id: 1, name: 'สินค้า 1', product_code: 'P1', unit: 'ชิ้น' }, { record_id: 2, name: 'สินค้า 2', product_code: 'P2', unit: 'ชิ้น' },
+               { record_id: 3, name: 'สินค้า 3', product_code: 'P3', unit: 'ชิ้น' }],
+    // สินค้า 1: ทะเบียนหน่วยแก้เป็น 60 แล้ว (ตอนนำเข้าใบนี้เก็บ factor 1 ไว้) · สินค้า 2 ไม่มีแถวหน่วย CT เลย
+    product_units: [{ product_id: 1, unit_code: 'CT', unit_label: 'ลัง', unit_factor: 60, is_active: 'TRUE' }],
+    purchase_orders: [{ record_id: 10, tenant_id: 'T1', status: 'sent', source_ref: 'IV9', subtotal_ex_vat: 6400, total: 6400, note: '' }],
+    po_items: [{ record_id: 100, po_id: 10, product_id: 1, qty: 10, unit_code: 'CT', unit_factor: 1, unit_price: 600, amount: 6000, received_qty: 0 },
+               { record_id: 101, po_id: 10, product_id: 2, qty: 4, unit_code: 'CT', unit_factor: 1, unit_price: 100, amount: 400, received_qty: 0 }],
+    goods_receipts: [{ record_id: 20, tenant_id: 'T1', gr_no: 'GR-20', po_id: 10, status: 'pending_review', source_ref: 'IV9', receive_date: '2026-09-25', warehouse_id: 1, vendor_id: 1, note: 'เดิม' }],
+    gr_items: [{ record_id: 200, gr_id: 20, po_item_id: 100, product_id: 1, qty: 10, unit_code: 'CT', unit_factor: 1, base_qty: 10, unit_cost: 600, amount: 6000 },
+               { record_id: 201, gr_id: 20, po_item_id: 101, product_id: 2, qty: 4, unit_code: 'CT', unit_factor: 1, base_qty: 4, unit_cost: 100, amount: 400 }]
+  };
+}
+let grDoc = 20;
+Object.assign(ctx, {
+  UNIT_PC: 'PC',
+  normUnitCode: (c, d) => { const x = String(c == null ? '' : c).trim().toUpperCase(); return x ? ({ CASE: 'CT', PACK: 'PK', PCS: 'PC' }[x] || x) : (d === undefined ? '' : d); },
+  _numOrNull: v => (v === null || v === undefined || String(v).trim() === '' ? null : (isFinite(Number(v)) ? Number(v) : NaN)),
+  safeDateStr: v => String(v || ''),
+  centralObjects: name => D2[name] || [],
+  _scoped: name => D2[name] || [],
+  _findScoped: (name, id) => D2[name].find(x => String(x.record_id) === String(id)) || null,
+  _childrenOf: (name, fk, id) => D2[name].filter(r => String(r[fk]) === String(id)),
+  centralUpdate: (name, id, patch) => { Object.assign(D2[name].find(x => String(x.record_id) === String(id)), patch); return true; },
+  centralAppend: (name, row) => { D2[name].push(Object.assign({}, row)); },
+  centralAppendMany: (name, rows) => { rows.forEach(r => D2[name].push(Object.assign({}, r))); },
+  centralNextId: name => (D2[name] || []).reduce((m, o) => Math.max(m, o.record_id || 0), 0) + 1,
+  centralSheet: name => ({ __n: name }),
+  deleteRowsWhere: (sh, col, val) => { D2[sh.__n] = D2[sh.__n].filter(r => String(r[col]) !== String(val)); return 1; },
+  _nextCentralDocNo: kind => kind + '-NEW-' + (++grDoc),
+  _applyStockIn: (scope, wh, pid, baseQty, cost) => { STOCK.push({ pid, baseQty, cost }); }
+});
+const S1 = { adminUserId: 'u1' };
+
+fresh();
+const lst = ctx.listPendingExternalGoodsReceipts(S1, {}).data[0].items;
+eq('รายการแสดง factor "ปัจจุบัน" ของสินค้า (60) ไม่ใช่ค่าตอนนำเข้า (1) และบอกค่าตอนนำเข้าไว้ด้วย', [lst[0].unitFactor, lst[0].importedFactor], [60, 1]);
+eq('หน่วยที่เลือกได้ = หน่วยฐาน + หน่วยขายที่ใช้งานอยู่ (ชิ้น, CT)', lst[0].units.map(u => u.code), ['PC', 'CT']);
+eq('สินค้าที่ไม่มีแถวหน่วย CT ใช้ค่าที่เก็บไว้ (1) แทน', lst[1].unitFactor, 1);
+
+fresh();
+let c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 10 }, { grItemId: 201, qty: 4 }] });
+eq('ยืนยันโดยไม่ส่ง factor → ใช้ factor ปัจจุบัน: สินค้า 1 เข้าสต็อก 10 ลัง × 60 = 600 ชิ้น (ไม่ต้องถอนนำเข้าใหม่)',
+  [c.success, STOCK.find(x => x.pid === '1').baseQty, STOCK.find(x => x.pid === '2').baseQty], [true, 600, 4]);
+eq('ต้นทุนต่อหน่วยฐาน = ราคาต่อลัง 600 ÷ 60 = 10 · ใบสั่งซื้อรับครบ → received · ใบรับของ posted · ไม่มีใบเหลือ',
+  [STOCK.find(x => x.pid === '1').cost, D2.purchase_orders[0].status, D2.goods_receipts[0].status, D2.goods_receipts.length], [10, 'received', 'posted', 1]);
+
+fresh();
+c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, receiveDate: '2026-09-28', note: 'ของมาถึงช้า',
+  items: [{ grItemId: 200, qty: 4 }, { grItemId: 201, remove: true }],
+  newItems: [{ productId: 3, qty: 2, unitCode: 'PK', unitFactor: 5, amount: 50 }] });
+eq('รับบางส่วน + ลบบรรทัด + เพิ่มบรรทัด: สำเร็จ', c.success, true);
+eq('สต็อกเข้า: สินค้า 1 = 4×60 = 240 · สินค้าเพิ่ม 3 = 2 แพ็ค × 5 = 10 · บรรทัดที่ลบไม่เข้า',
+  STOCK.map(x => x.pid + ':' + x.baseQty).sort(), ['1:240', '3:10']);
+eq('บรรทัดที่ลบ (สินค้า 2) หายทั้ง gr_items/po_items (เลขแถวลูกถูกใช้ซ้ำได้ ไม่เป็นไร เพราะลบคู่กัน)', [D2.gr_items.some(x => x.product_id === 2), D2.po_items.some(x => x.product_id === 2)], [false, false]);
+const remGr = D2.goods_receipts.find(g => g.record_id !== 20);
+const remItems = remGr ? D2.gr_items.filter(g => g.gr_id === remGr.record_id) : [];
+eq('ส่วนที่เหลือ 6 ลัง (10−4) สร้างเป็นใบรอตรวจรับใหม่ pending_review ผูก PO เดิม + ใบกำกับภาษีเดิม',
+  [!!remGr, remGr && remGr.status, remGr && remGr.po_id, remGr && remGr.source_ref, remItems.length, remItems[0] && remItems[0].qty, remItems[0] && remItems[0].amount],
+  [true, 'pending_review', 10, 'IV9', 1, 6, 3600]);
+eq('ใบสั่งซื้อ: partial · ยอดรวมคำนวณใหม่ = 6000 + 50 · วันที่รับ/หมายเหตุอัปเดต + บันทึกการลบ/เพิ่มไว้ในหมายเหตุ',
+  [D2.purchase_orders[0].status, D2.purchase_orders[0].total, D2.goods_receipts[0].receive_date, /ของมาถึงช้า/.test(D2.goods_receipts[0].note), /ลบบรรทัด/.test(D2.goods_receipts[0].note), /เพิ่มบรรทัด/.test(D2.goods_receipts[0].note)],
+  ['partial', 6050, '2026-09-28', true, true, true]);
+
+fresh();
+c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, createRemainder: false, items: [{ grItemId: 200, qty: 4 }, { grItemId: 201, qty: 0 }] });
+eq('createRemainder:false → ไม่สร้างใบเหลือ (ส่วนที่เหลือค้างอยู่ใน PO)', [c.success, D2.goods_receipts.length, D2.purchase_orders[0].status], [true, 1, 'partial']);
+
+fresh();
+c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 0 }, { grItemId: 201, qty: 0 }] });
+eq('ไม่ติ๊กรับสักบรรทัด (qty 0 ทั้งหมด ไม่เพิ่มบรรทัด) → ปฏิเสธ ไม่เขียนอะไร', [c.success, D2.goods_receipts[0].status, STOCK.length], [false, 'pending_review', 0]);
+
+fresh();
+c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 10, unitFactor: 12 }, { grItemId: 201, qty: 4 }] });
+eq('แก้ factor รายบรรทัด (12 เฉพาะใบนี้): เข้าสต็อก 10×12 = 120 · ต้นทุน 600÷12 = 50 · PO รับครบ (10 ลัง)',
+  [STOCK.find(x => x.pid === '1').baseQty, STOCK.find(x => x.pid === '1').cost, D2.po_items[0].received_qty, D2.purchase_orders[0].status], [120, 50, 10, 'received']);
+
+fresh();
+c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 120, unitCode: 'PC' }, { grItemId: 201, qty: 4 }] });
+eq('เปลี่ยนหน่วยที่รับจริงเป็นชิ้น (PC) รับ 120 ชิ้น → เข้าสต็อก 120 · PO นับเป็น 2 ลัง (120÷60) · ต้นทุนยังอิงราคาลัง 600÷60 = 10 · เหลือ 8 ลังเป็นใบใหม่',
+  [STOCK.find(x => x.pid === '1').baseQty, STOCK.find(x => x.pid === '1').cost, D2.po_items[0].received_qty, D2.purchase_orders[0].status,
+   (D2.gr_items.find(g => g.gr_id !== 20 && g.product_id === 1) || {}).qty], [120, 10, 2, 'partial', 8]);
+
+fresh();
+c = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 10, unitFactor: 0 }] });
+eq('factor ติดลบ/ศูนย์ → ปฏิเสธทั้งใบ', [c.success, D2.goods_receipts[0].status], [false, 'pending_review']);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
