@@ -3237,22 +3237,36 @@ function renderSaleOrderStatusCard(r){
   const at = steps.indexOf(o.status === 'pending_delivery' ? 'confirmed' : o.status);
   const stepBar = steps.map((st, i) =>
     '<span class="pill '+(i <= at ? 'ok' : '')+'" style="'+(i > at ? 'opacity:.45' : '')+'">'+(i+1)+'. '+SO_LABELS[st]+'</span>').join(' <span class="unit">→</span> ');
-  const nextBtns = (o.nextStatuses || []).map(n =>
-    '<button class="btn btn-sm btn-primary" onclick="setSaleOrderStatus(\''+n.code+'\')">'+esc(n.label)+'</button>').join(' ');
+  /* ปุ่มขั้นถัดไปมีแค่ "ไปข้างหน้า" (+ ปฏิเสธการขาย) — ขั้นที่ย้อนกลับได้ (กดผิด) ไม่โชว์เป็นปุ่มหลัก เพราะอ่านแล้วเหมือนขั้นปัจจุบันซ้ำ
+     (เช่นใบที่บันทึกรับงานแล้ว เคยมีปุ่ม "ยืนยันแล้ว → รอแอดมินกดรับงาน" โผล่ข้างๆ) · ย้อนขั้นอยู่ที่ปุ่มเล็ก "↩ ย้อนขั้น" ปุ่มเดียว ถามยืนยันก่อน */
+  const idxOf = c => steps.indexOf(c === 'pending_delivery' ? 'confirmed' : c);
+  const all = o.nextStatuses || [];
+  const isBack = n => at >= 0 && idxOf(n.code) >= 0 && idxOf(n.code) < at;
+  const fwd = all.filter(n => !isBack(n)), back = all.filter(isBack);
+  const nextBtns = fwd.map(n =>
+    '<button class="btn btn-sm '+(n.code === 'rejected' ? '' : 'btn-primary')+'" onclick="setSaleOrderStatus(\''+n.code+'\')">'+esc(n.label)+'</button>').join(' ') +
+    (back.length ? ' <button class="btn btn-sm btn-ghost" title="กดผิดขั้น — ย้อนกลับไปขั้น: '+esc(back[0].label)+'" onclick="askSaleOrderBack(\''+back[0].code+'\',\''+esc(back[0].label)+'\')">↩ ย้อนขั้น</button>' : '');
   const outstanding = Math.max(0, (o.total || 0) - (o.paidAmount || 0));
   const payBtns = o.paymentStatus === 'paid'
     ? '<button class="btn btn-sm" onclick="setSaleOrderPayment(0)">ยกเลิกการรับชำระ</button>'
     : '<button class="btn btn-sm btn-primary" onclick="setSaleOrderPaidFull()">รับชำระครบ ฿'+baht(outstanding)+'</button> ' +
       '<button class="btn btn-sm" onclick="askSaleOrderPartial()">รับชำระบางส่วน…</button>';
-  box.innerHTML = '<div class="form-card"><div class="form-grid g2">' +
-    '<div><div class="unit">สถานะการส่งของ</div><div style="margin:6px 0 10px">'+stepBar+'</div>' +
+  /* สองคอลัมน์ยืดเท่ากัน แล้วดันแถวปุ่มลงล่างสุดของทั้งสองฝั่ง (margin-top:auto) — ปุ่มส่งของกับปุ่มรับเงินอยู่ระนาบเดียวกันเสมอ
+     ไม่ว่าแถบขั้นตอนฝั่งซ้ายจะตกบรรทัดกี่แถว */
+  const col = 'display:flex;flex-direction:column;min-height:100%';
+  const btnRow = 'margin-top:auto;padding-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  box.innerHTML = '<div class="form-card"><div class="form-grid g2" style="align-items:stretch">' +
+    '<div style="'+col+'"><div class="unit">สถานะการส่งของ</div><div style="margin:6px 0 10px">'+stepBar+'</div>' +
       (o.deliveredAt ? '<div class="unit">ส่งของเมื่อ '+esc(o.deliveredAt)+'</div>' : '') +
-      '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+nextBtns+'</div></div>' +
-    '<div><div class="unit">สถานะการเงิน</div><div style="margin:6px 0 10px">'+soPayPill(o.paymentStatus) +
+      '<div style="'+btnRow+'">'+nextBtns+'</div></div>' +
+    '<div style="'+col+'"><div class="unit">สถานะการเงิน</div><div style="margin:6px 0 10px">'+soPayPill(o.paymentStatus) +
       ' <span class="mono-data">รับแล้ว ฿'+baht(o.paidAmount)+' / ฿'+baht(o.total)+'</span></div>' +
       (o.paidAt ? '<div class="unit">รับเงินเมื่อ '+esc(o.paidAt)+'</div>' : '') +
-      '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+payBtns+'</div></div>' +
+      '<div style="'+btnRow+'">'+payBtns+'</div></div>' +
     '</div></div>';
+}
+function askSaleOrderBack(code, label){
+  if (confirm('ย้อนใบนี้กลับไปขั้น "' + label + '" ?\n(ใช้เมื่อกดผิดขั้น — ถ้าย้อนจากขั้นที่ตัด/จองสต็อกไปแล้ว ระบบคืน/ปลดยอดให้เอง)')) setSaleOrderStatus(code);
 }
 function renderSaleOrderHistory(r){
   const box = document.getElementById('sod-history');
