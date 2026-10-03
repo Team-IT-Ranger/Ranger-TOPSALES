@@ -130,9 +130,17 @@ function updateStaffAdmin(session, payload) {
 }
 
 // ── Admin App: สินค้า (บริษัทเจ้าของสินค้าเท่านั้น) ──
+/** เรียงตามรหัสสินค้า: รหัสตัวเลขล้วนเรียงตามค่าตัวเลข (10185 ก่อน 10813) แล้วค่อยรหัสที่มีตัวอักษร — ใช้เป็นลำดับตั้งต้นของทุกรายการ/ตัวเลือกสินค้า (3 ต.ค. 2026) */
+function _productCodeCmp(a, b) {
+  var x = String((a && a.product_code) == null ? '' : a.product_code).trim(), y = String((b && b.product_code) == null ? '' : b.product_code).trim();
+  var nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+  if (nx && ny) return (Number(x) - Number(y)) || (x < y ? -1 : x > y ? 1 : 0);
+  if (nx !== ny) return nx ? -1 : 1;
+  return x < y ? -1 : x > y ? 1 : 0;
+}
 function listProductsAdmin(session) {
   var err = _requirePermission(session, 'products', 'view'); if (err) return err;
-  return { success: true, data: centralObjects('products') };
+  return { success: true, data: centralObjects('products').slice().sort(_productCodeCmp) };
 }
 
 // product_code = รหัสประจำตัวสินค้า ต้อง unique ทั้งระบบ (ไม่สนตัวพิมพ์เล็ก-ใหญ่/ช่องว่างหัวท้าย)

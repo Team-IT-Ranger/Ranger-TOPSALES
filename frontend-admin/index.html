@@ -1678,6 +1678,16 @@ let SESSION = JSON.parse(localStorage.getItem(LS_SESSION) || 'null');
 let SCOPE = 'tenant'; // 'tenant' | 'owner' — คำนวณจาก EFFECTIVE_TENANT_ID() เสมอ
 let ACTIVE_TENANT_ID = null; // Ultra Admin (super_admin) เท่านั้นที่ตั้งค่านี้ได้ — สวมสิทธิ์เข้าตัวแทนรายนั้น
 let productGroupsCache = [], customerGroupsCache = [], productsCache = [];
+/* เรียงสินค้าตามรหัสเป็นลำดับตั้งต้นทุกที่ (ตาราง + ทุก dropdown เลือกสินค้า) — รหัสตัวเลขล้วนเรียงตามค่า (10185 < 10813) รหัสที่มีตัวอักษรตามหลัง
+   backend ก็เรียงให้แล้ว (_productCodeCmp) แต่ cache ที่กู้จาก snapshot/ของที่เพิ่งเพิ่มเองยังต้องเรียงฝั่งนี้ด้วย */
+const prodCodeCmp = (a, b) => {
+  const x = String(a.product_code == null ? '' : a.product_code).trim(), y = String(b.product_code == null ? '' : b.product_code).trim();
+  const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+  if (nx && ny) return (Number(x) - Number(y)) || (x < y ? -1 : x > y ? 1 : 0);
+  if (nx !== ny) return nx ? -1 : 1;
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+const sortProductsByCode = arr => (arr || []).slice().sort(prodCodeCmp);
 
 // เซสชันจริงเป็นตัวแทน (tenant_admin) → ใช้ tenant ตัวเอง, ไม่งั้นถ้า Ultra Admin เลือกสวมสิทธิ์ไว้ → ใช้อันนั้น, ไม่งั้น = โหมดบริษัทเจ้าของสินค้า
 function EFFECTIVE_TENANT_ID(){ return (SESSION && SESSION.tenantId) || ACTIVE_TENANT_ID || null; }
@@ -3411,7 +3421,7 @@ let PRODUCTS_FRESH_TS = 0;
 async function ensureProductsForSale(){
   if (productsCache.length && Date.now() - PRODUCTS_FRESH_TS < 60000) return;
   const r = await callApi('listProductsAdmin', {});
-  if (r.success) { productsCache = r.data; PRODUCTS_FRESH_TS = Date.now(); listSnapSave('products', productsCache); }
+  if (r.success) { productsCache = sortProductsByCode(r.data); PRODUCTS_FRESH_TS = Date.now(); listSnapSave('products', productsCache); }
   else if (!productsCache.length) await loadProducts();
 }
 // โหลดใหม่ทุกครั้งที่เปิดฟอร์ม (ไม่แคชข้าม) กันของเก่าติดค้างข้ามบริบทถ้าสลับตัวแทน/โหมดบริษัทระหว่างเซสชัน
@@ -3775,7 +3785,7 @@ function renderProductsTable(){
   if (!productsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="'+(PRODUCT_TABLE_COLS.length+1)+'">ยังไม่มีสินค้า</td></tr>'; return; }
 
   renderCatFilter('products', 'products-cat-filter', productsCache, p => String(p.category||'').trim(), p => String(p.sub_category||'').trim(), renderProductsTable);
-  let rows = productsCache.filter(p => _catMatch(CAT_FILTER.products, String(p.category||'').trim(), String(p.sub_category||'').trim()));
+  let rows = sortProductsByCode(productsCache).filter(p => _catMatch(CAT_FILTER.products, String(p.category||'').trim(), String(p.sub_category||'').trim()));
   if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="'+(PRODUCT_TABLE_COLS.length+1)+'">ไม่มีสินค้าในหมวดที่เลือก</td></tr>'; return; }
   if (PRODUCT_SORT) {
     const col = PRODUCT_TABLE_COLS.find(c => c.key === PRODUCT_SORT.key);
@@ -3798,13 +3808,13 @@ function renderProductsTable(){
 async function loadProducts(){
   const body = document.getElementById('products-body');
   // เคยโหลดแล้ว → วาดจาก cache ทันที (หน้าไม่ว่าง ไม่ต้องรอ backend 2-4 วิ) แล้วค่อยอัปเดตเบื้องหลัง
-  if (!productsCache.length) productsCache = listSnapLoad('products') || [];   // เปิดแอปใหม่ก็ยังเห็นของเมื่อวาน
+  if (!productsCache.length) productsCache = sortProductsByCode(listSnapLoad('products') || []);   // เปิดแอปใหม่ก็ยังเห็นของเมื่อวาน
   if (productsCache.length) renderProductsTable();
   else tblLoading(body, 12);
   // ยิงคู่ขนาน — เดิมรอกลุ่มสินค้าให้เสร็จก่อนค่อยโหลดสินค้า เสียเวลาเป็นสองเท่าโดยไม่จำเป็น
   const [, r] = await Promise.all([ensureProductGroups(), callApi('listProductsAdmin', {})]);
   if (!r.success) { if (!productsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
-  productsCache = r.data; PRODUCTS_FRESH_TS = Date.now();
+  productsCache = sortProductsByCode(r.data); PRODUCTS_FRESH_TS = Date.now();
   listSnapSave('products', productsCache);
   renderProductsTable();
 }
@@ -4070,6 +4080,7 @@ async function saveProductForm(){
     if (p) { Object.assign(p, fields); if (imageUrl) p.image_url = imageUrl; }
   } else {
     productsCache.push(Object.assign({ record_id: productId, is_active: 'TRUE', image_url: imageUrl || '' }, fields));
+    productsCache = sortProductsByCode(productsCache);
   }
   toast(isEditing ? 'บันทึกการแก้ไขสำเร็จ' : 'เพิ่มสินค้าสำเร็จ');
   closeProductForm();
@@ -5250,7 +5261,7 @@ async function pliPickFile(input){
     if (!sheet) { st.textContent = 'ไม่พบตารางราคาในไฟล์นี้ (ต้องเป็นรูปแบบ "ใบรายการขาย" ที่มีหัวราคาเงินสด/เครดิต)'; return; }
     PLI = { sheet, fileName: file.name };
     const [pr, gr] = await Promise.all([productsCache.length ? Promise.resolve(null) : callApi('listProductsAdmin', {}), callApi('listCustomerGroups', {})]);
-    if (pr && pr.success) productsCache = pr.data;
+    if (pr && pr.success) productsCache = sortProductsByCode(pr.data);
     if (gr.success) { customerGroupsCache = gr.data; document.getElementById('pli-groups').innerHTML = gr.data.map(g => '<option value="'+esc(g.name)+'">').join(''); }
     // เดาชื่อ/กลุ่ม/ช่วงเวลาจากหัวไฟล์ (แก้ได้ก่อนนำเข้า)
     const period = (window.PricelistParser || PP).parsePeriod(sheet.title) || {};
@@ -6653,7 +6664,7 @@ async function pgrShowAdd(grId){
   if (!PGR_PRODUCTS) {
     const r = await callApi('listProductsAdmin', {});
     if (!r.success) { toast(r.message, true); return; }
-    PGR_PRODUCTS = r.data.filter(p => isOn(p.is_active));
+    PGR_PRODUCTS = sortProductsByCode(r.data.filter(p => isOn(p.is_active)));
   }
   box.style.display = '';
   box.innerHTML = '<div class="form-card" style="background:var(--blue-pale);margin:6px 0"><div class="form-grid">' +
@@ -7722,6 +7733,34 @@ window.onload = async function(){
   if (await handleLineCallback()) return;
   if (TOKEN && SESSION) routeAfterAuth();
 };
+
+/* ═══ แจ้งเมื่อมีเวอร์ชันใหม่ (3 ต.ค. 2026) ═══
+   แท็บที่เปิดค้างไว้ไม่เคยโหลดหน้าใหม่เอง — deploy แล้วผู้ใช้ยังเห็นของเก่า (เช่น สินค้าที่เพิ่งเพิ่มไม่โผล่ในรายการ) แล้วเข้าใจว่าระบบไม่ทำงาน
+   ทุก 5 นาที และทุกครั้งที่กลับมาเปิดแท็บ: ดึง index.html สดๆ เทียบกับตอนเปิดหน้า — ต่างกัน = ขึ้นแถบให้กดรีเฟรช (ไม่รีเฟรชให้เอง กันกรอกฟอร์มค้างอยู่หาย) */
+(function versionWatch(){
+  const hash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+  let base = null, shown = false;
+  async function check(){
+    if (shown || !navigator.onLine) return;
+    try {
+      const r = await fetch(location.pathname + '?vc=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const h = hash(await r.text());
+      if (base === null) { base = h; return; }
+      if (h !== base) {
+        shown = true;
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#2B63D9;color:#fff;padding:10px 14px;text-align:center;font:600 14px sans-serif;cursor:pointer';
+        bar.textContent = 'มีเวอร์ชันใหม่ของระบบ — แตะที่นี่เพื่อรีเฟรช (ข้อมูลที่กรอกค้างไว้ให้บันทึกก่อน)';
+        bar.onclick = () => location.reload();
+        document.body.appendChild(bar);
+      }
+    } catch (e) { /* ออฟไลน์/เน็ตสะดุด — ไว้รอบหน้า */ }
+  }
+  setTimeout(check, 3000);
+  setInterval(check, 300000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+})();
 </script>
 </body>
 </html>

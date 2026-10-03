@@ -666,8 +666,8 @@ function renderSaleDetail(r){
             (it.unitDiscount ? ' (ลด ฿' + baht(it.unitDiscount) + '/หน่วย)' : '') +
             (it.lineDiscount ? '<br>รวมก่อนลด ฿' + baht(it.lineTotal) + ' − ส่วนลด ฿' + baht(it.lineDiscount) : '');
         }
-        return '<div class="row"><span>' + esc(it.name) + '<br><span class="note">' + detail + '</span></span><span class="mono">฿' + baht(it.lineTotal) + '</span></div>'; }).join('') +
-      free.map(it => '<div class="row" style="background:#EAF6EE;border-radius:8px"><span>🎁 ' + esc(it.name) + '<br><span class="note">' + it.qty + ' ' + esc(unitLabelForItem(it)) + ' ฟรี</span></span><span class="mono">ฟรี</span></div>').join('') +
+        return '<div class="row"><span>' + pcode(it.code) + esc(it.name) + '<br><span class="note">' + detail + '</span></span><span class="mono">฿' + baht(it.lineTotal) + '</span></div>'; }).join('') +
+      free.map(it => '<div class="row" style="background:#EAF6EE;border-radius:8px"><span>🎁 ' + pcode(it.code) + esc(it.name) + '<br><span class="note">' + it.qty + ' ' + esc(unitLabelForItem(it)) + ' ฟรี</span></span><span class="mono">ฟรี</span></div>').join('') +
     '</div>' +
     '<div class="card stack" style="margin-top:10px">' +
       '<div class="row"><span>ราคารวมหลังหักส่วนลดสินค้า (ไม่รวมภาษี)</span><span class="mono">฿' + baht(o.subtotalAfterProductDiscountExVat) + '</span></div>' +
@@ -822,14 +822,16 @@ const cartQty = (pid, code) => { const c = CART.find(x => String(x.productId) ==
 // หน่วยฐานที่ตะกร้าใช้ไปแล้วของสินค้านั้น (ทุกหน่วยรวมกัน) — เทียบกับสต็อกบนรถ
 const baseUsed = pid => CART.filter(c => String(c.productId) === String(pid)).reduce((s, c) => s + c.qty * unitOf(prodById(pid), c.unitCode).unitFactor, 0);
 
+// รหัสสินค้านำหน้าชื่อ — พนักงานจำสินค้าจากรหัส (ใบราคา/ใบกำกับใช้รหัส) · ค้นหาด้วยรหัสได้เช่นกัน
+const pcode = c => c ? '<span class="mono" style="color:var(--ink-soft);font-weight:600">' + esc(c) + '</span> ' : '';
 function renderProducts(){
   const box = $('s-list'), q = $('s-q').value.trim().toLowerCase();
   if (!DATA.products.length) { box.innerHTML = '<div class="empty">ยังไม่มีข้อมูลสินค้า — ไปหน้าแรกกด Sync</div>'; return; }
-  const list = DATA.products.filter(p => !q || String(p.name).toLowerCase().includes(q));
+  const list = DATA.products.filter(p => !q || String(p.name).toLowerCase().includes(q) || String(p.code || '').toLowerCase().includes(q));
   if (!list.length) { box.innerHTML = '<div class="empty">ไม่พบสินค้า</div>'; return; }
   box.innerHTML = list.slice(0, 80).map(p => {
     const code = UNIT_PICK[p.id] != null ? UNIT_PICK[p.id] : '', u = unitOf(p, code), n = cartQty(p.id, code);
-    return '<div class="prod"><div class="nm">'+esc(p.name)+'</div>' +
+    return '<div class="prod"><div class="nm">'+pcode(p.code)+esc(p.name)+'</div>' +
       '<div class="sub">บนรถ <span class="'+(p.vanStock < 3 ? 'low' : 'ok')+'">'+esc(p.vanStock)+'</span> '+esc(p.unit)+(baseUsed(p.id) ? ' · ในตะกร้า '+baseUsed(p.id)+' '+esc(p.unit) : '')+'</div>' +
       '<div class="ctl"><select onchange="pickUnit(\''+esc(p.id)+'\', this.value)">' + unitsOf(p).map(x => '<option value="'+esc(x.unitCode)+'"'+(x.unitCode === u.unitCode ? ' selected' : '')+'>'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</option>').join('') + '</select>' +
       '<div class="step"><button onclick="bump(\''+esc(p.id)+'\',-1)">−</button><input type="number" inputmode="numeric" min="0" value="'+(n || '')+'" placeholder="0" onchange="setQty(\''+esc(p.id)+'\', this.value)"><button class="plus" onclick="bump(\''+esc(p.id)+'\',1)">+</button></div></div></div>';
@@ -932,7 +934,7 @@ function renderCartDetail(){
           (unitDisc ? ' (ลด ฿' + baht(unitDisc) + '/หน่วย)' : '') + (ql && ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') +
           (lineDisc ? '<br>รวมก่อนลด ฿' + baht(line) + ' − ส่วนลด ฿' + baht(lineDisc) : '');
       }
-      return '<div class="row"><span>' + esc(p.name) + '<br><span class="note">' + detail + '</span></span>' +
+      return '<div class="row"><span>' + pcode(p.code) + esc(p.name) + '<br><span class="note">' + detail + '</span></span>' +
         '<span style="display:flex;align-items:center;gap:8px"><span class="mono">฿' + baht(line) + '</span>' +
         '<button class="btn btn-sm" onclick="removeCartItem(\'' + esc(c.productId) + '\',\'' + esc(c.unitCode) + '\')">✕</button></span></div>';
     }).join('') +
@@ -942,7 +944,7 @@ function renderCartDetail(){
       const unitLabel = p.id ? unitOf(p, f.unitCode).unitLabel : f.unitCode;
       return '<div class="row" style="background:#EAF6EE;border-radius:8px" onclick="toggleFreeGood(\'' + esc(f.ruleId) + '\')">' +
         '<span><input type="checkbox" ' + (off ? '' : 'checked') + ' onclick="event.stopPropagation();toggleFreeGood(\'' + esc(f.ruleId) + '\')" style="margin-right:6px">' +
-        '🎁 ' + esc(p.name) + '<br><span class="note">' + f.qty + ' ' + esc(unitLabel) + ' ฟรี · ' + esc(f.ruleName) + (off ? ' · <b>ไม่ให้ของแถมนี้</b>' : '') + '</span></span>' +
+        '🎁 ' + pcode(p.code) + esc(p.name) + '<br><span class="note">' + f.qty + ' ' + esc(unitLabel) + ' ฟรี · ' + esc(f.ruleName) + (off ? ' · <b>ไม่ให้ของแถมนี้</b>' : '') + '</span></span>' +
         '<span class="mono">' + (off ? '—' : 'ฟรี') + '</span></div>';
     }).join('') +
     // ★ ส่วนลด — แสดงทุกกฎที่โดนใช้ (ไม่ว่าจะมาจากชุดราคาหรือเส้นทางโปรโมชั่นเดิม) ไม่ใช่แค่ "ส่วนลดท้ายบิล" ตัวเดียว
@@ -1049,7 +1051,7 @@ function renderStock(){
   $('st-hint').textContent = STOCK_MODE === 'restock' ? 'ใส่จำนวนที่เบิกจากคลังขึ้นรถ (หน่วยฐาน)' : 'ใส่จำนวนที่นับได้จริงบนรถ (หน่วยฐาน) — เว้นว่าง = ไม่ได้นับ';
   $('st-btn').textContent = STOCK_MODE === 'restock' ? 'ยืนยันเบิกของขึ้นรถ' : 'ยืนยันผลตรวจนับ';
   $('st-list').innerHTML = DATA.products.length ? DATA.products.map(p =>
-    '<div class="prod" style="display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><div class="nm">'+esc(p.name)+'</div><div class="sub">บนรถ <b>'+esc(p.vanStock)+'</b> '+esc(p.unit)+'</div></div>' +
+    '<div class="prod" style="display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><div class="nm">'+pcode(p.code)+esc(p.name)+'</div><div class="sub">บนรถ <b>'+esc(p.vanStock)+'</b> '+esc(p.unit)+'</div></div>' +
     '<input class="inp" style="width:84px;text-align:center" type="number" inputmode="numeric" min="0" placeholder="'+(STOCK_MODE === 'restock' ? '0' : 'นับได้')+'" value="'+(STOCK_QTY[p.id] != null ? STOCK_QTY[p.id] : '')+'" onchange="setStockQty(\''+esc(p.id)+'\', this.value)"></div>').join('')
     : '<div class="empty">ยังไม่มีข้อมูลสินค้า — ไปหน้าแรกกด Sync</div>';
 }
@@ -1136,6 +1138,34 @@ async function submitCust(){
 }
 
 boot();
+
+/* ═══ แจ้งเมื่อมีเวอร์ชันใหม่ (3 ต.ค. 2026) ═══
+   แท็บที่เปิดค้างไว้ไม่เคยโหลดหน้าใหม่เอง — deploy แล้วผู้ใช้ยังเห็นของเก่า (เช่น สินค้าที่เพิ่งเพิ่มไม่โผล่ในรายการ) แล้วเข้าใจว่าระบบไม่ทำงาน
+   ทุก 5 นาที และทุกครั้งที่กลับมาเปิดแท็บ: ดึง index.html สดๆ เทียบกับตอนเปิดหน้า — ต่างกัน = ขึ้นแถบให้กดรีเฟรช (ไม่รีเฟรชให้เอง กันกรอกฟอร์มค้างอยู่หาย) */
+(function versionWatch(){
+  const hash = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
+  let base = null, shown = false;
+  async function check(){
+    if (shown || !navigator.onLine) return;
+    try {
+      const r = await fetch(location.pathname + '?vc=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const h = hash(await r.text());
+      if (base === null) { base = h; return; }
+      if (h !== base) {
+        shown = true;
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#2B63D9;color:#fff;padding:10px 14px;text-align:center;font:600 14px sans-serif;cursor:pointer';
+        bar.textContent = 'มีเวอร์ชันใหม่ของระบบ — แตะที่นี่เพื่อรีเฟรช (ข้อมูลที่กรอกค้างไว้ให้บันทึกก่อน)';
+        bar.onclick = () => location.reload();
+        document.body.appendChild(bar);
+      }
+    } catch (e) { /* ออฟไลน์/เน็ตสะดุด — ไว้รอบหน้า */ }
+  }
+  setTimeout(check, 3000);
+  setInterval(check, 300000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+})();
 </script>
 </body>
 </html>

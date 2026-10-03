@@ -23,8 +23,9 @@ function getBootstrap(user) {
 
   var products = centralObjects('products')
     .filter(function(p) { return isNotOff(p.is_active); })
+    .sort(_productCodeCmp)   // เรียงตามรหัสสินค้า (ลำดับตั้งต้นของรายการเลือกสินค้าในแอปมือถือ)
     .map(function(p) { return {
-      id: String(p.record_id), name: p.name, price: parseFloat(p.base_price) || 0,
+      id: String(p.record_id), code: String(p.product_code || ''), name: p.name, price: parseFloat(p.base_price) || 0,
       unit: p.unit || 'ชิ้น', groupId: parseInt(p.group_id) || 0,
       vanStock: myStock[String(p.record_id)] || 0,
       // หน่วยขายเพิ่มเติม (แพ็ค/ลัง ฯลฯ) — หน่วยฐาน (unit/price ด้านบน) มี factor=1 เสมอ ไม่ต้องใส่ในลิสต์นี้
@@ -194,7 +195,7 @@ function getSaleDetail(user, payload) {
   var items = tenantObjects(user.tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
     .map(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
       var lineTotal = parseFloat(it.line_total) || 0; return {
-      productId: it.product_id, name: p ? p.name : '(สินค้าถูกลบ)',
+      productId: it.product_id, code: p ? String(p.product_code || '') : '', name: p ? p.name : '(สินค้าถูกลบ)',
       unitCode: it.unit_code, qty: parseFloat(it.qty) || 0, price: parseFloat(it.price) || 0,
       lineTotal: lineTotal, isFree: String(it.is_free) === '1',
       // ส่วนลดต่อบรรทัด (2026-09-30) — บิลเก่าก่อนมีคอลัมน์นี้อ่านเป็น '' → parseFloat ได้ NaN → || 0 ดักไว้
