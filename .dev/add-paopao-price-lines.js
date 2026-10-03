@@ -4,7 +4,8 @@
 // env: BACKEND_URL, ADMIN_USER, ADMIN_PASS   (ต้องเป็นแอดมินฝั่งบริษัท · ห้ามชี้ prod/uat ผิดตัว — ตรวจ URL ก่อนรัน)
 // ทำไมเพิ่มเข้าชุดเดิมแทนสร้างชุด Pao Pao ใหม่: ร้านหนึ่งได้ "ชุดราคาเดียว" (resolvePriceListForCustomer เลือกชุดเดียวตาม priority → valid_from → id)
 //   สร้างชุดแยกสำหรับกลุ่มเดียวกัน = ชุดใหม่ชนะ แล้วสินค้ายาจุดยุง/สเปรย์ขายไม่ได้ทั้งหมด (สินค้านอกชุดที่ชนะขายไม่ได้)
-// ราคา = รวม VAT ต่อลัง ขั้น 1-3 / 4-9 / 10-29 / 30+ ลัง · ลัง = 6 / 8 / 4 แพ็คตามกลุ่ม · ไม่ใส่แถวแพ็ค (หน่วยฐานของ Pao Pao คือแพ็คอยู่แล้ว)
+// ราคา = รวม VAT ต่อลัง ขั้น 1-3 / 4-9 / 10-29 / 30+ ลัง · 1 ลัง (CT) = 6 / 8 / 4 แพ็ค (PK) = 6 / 8 / 4 ชิ้น (PC) ตามกลุ่ม
+// แถวแพ็ค (PK, factor 1 = 1 PC): ราคาแพ็ค = ราคาลังขั้น 1 ÷ จำนวนแพ็คต่อลัง · ขายเฉพาะรถ+เงินสดตามกติกาแพ็คของระบบ (ตรงกับแถว "ขายแยกหน่วยแพ็ค" ในใบราคา)
 const URL = process.env.BACKEND_URL, USER = process.env.ADMIN_USER, PASS = process.env.ADMIN_PASS;
 const COMMIT = process.argv.includes('--commit');
 if (!URL || !USER || !PASS) { console.error('ต้องตั้ง BACKEND_URL, ADMIN_USER, ADMIN_PASS'); process.exit(1); }
@@ -13,11 +14,14 @@ const T = (min, max, cash, credit) => ({ min, max, cashInclVat: cash, creditIncl
   label: 'ซื้อ ' + (max ? (min === max ? min : min + ' - ' + max) : min + ' ลังขึ้นไป') + (max ? ' ลัง' : '') });
 const LINES = [
   { name: 'Mini', codes: ['10257', '10258', '10259'], caseFactor: 6, listExVat: 403.74, suggestedPack: 60, retailPiece: 18,
-    tiers: [T(1, 3, 372, 382), T(4, 9, 360, 370), T(10, 29, 348, 358), T(30, null, 336, 346)] },
+    tiers: [T(1, 3, 372, 382), T(4, 9, 360, 370), T(10, 29, 348, 358), T(30, null, 336, 346)],
+    pack: { cashInclVat: 62, listExVat: 67.29 } },
   { name: 'Regular', codes: ['10263', '10264', '10265'], caseFactor: 8, listExVat: 1069.16, suggestedPack: null, retailPiece: 79,
-    tiers: [T(1, 3, 496, 506), T(4, 9, 480, 490), T(10, 29, 456, 466), T(30, null, 432, 442)] },
+    tiers: [T(1, 3, 496, 506), T(4, 9, 480, 490), T(10, 29, 456, 466), T(30, null, 432, 442)],
+    pack: { cashInclVat: 62, listExVat: 133.64 } },
   { name: 'Jumbo', codes: ['10267', '10268', '10269', '10270'], caseFactor: 4, listExVat: 1342.06, suggestedPack: null, retailPiece: 269,
-    tiers: [T(1, 3, 1056, 1066), T(4, 9, 1016, 1026), T(10, 29, 976, 986), T(30, null, 936, 946)] }
+    tiers: [T(1, 3, 1056, 1066), T(4, 9, 1016, 1026), T(10, 29, 976, 986), T(30, null, 936, 946)],
+    pack: { cashInclVat: 264, listExVat: 335.51 } }
 ];
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -53,11 +57,13 @@ async function post(body, tries = 4) {
   for (const ln of LINES) {
     const missing = ln.codes.filter(c => !idOf[c]);
     if (missing.length) { console.log('  ข้าม', ln.name, '— ไม่มีสินค้ารหัส', missing.join(',')); continue; }
-    const already = ln.codes.filter(c => have.has(c));
-    if (already.length) { console.log('  ข้าม', ln.name, '— มีในชุดแล้ว:', already.join(',')); continue; }
+    const existing = (detail.lines || []).find(l => l.products.some(p => ln.codes.includes(String(p.productCode))));
+    if (existing && (existing.packs || []).length) { console.log('  ข้าม', ln.name, '— มีในชุดพร้อมแถวแพ็คแล้ว'); continue; }
     const payload = { priceListId: list.id, productIds: ln.codes.map(c => idOf[c]), caseFactor: ln.caseFactor, listExVat: ln.listExVat,
-      tiers: ln.tiers, packs: [], suggestedPack: ln.suggestedPack, retailPiece: ln.retailPiece };
-    console.log('  ' + (COMMIT ? 'เพิ่ม' : '(ดูเฉยๆ) จะเพิ่ม'), ln.name, ln.codes.join(','), '× ลังละ', ln.caseFactor, '→', ln.tiers.map(t => t.min + '+:' + t.cashInclVat + '/' + t.creditInclVat).join(' '));
+      tiers: ln.tiers, packs: [{ factor: 1, cashInclVat: ln.pack.cashInclVat, listExVat: ln.pack.listExVat, note: '(ขายเฉพาะหน่วยรถ) แพ็ค' }],
+      suggestedPack: ln.suggestedPack, retailPiece: ln.retailPiece };
+    if (existing) payload.lineId = existing.lineId;   // มีแล้วแต่ยังไม่มีแถวแพ็ค → เขียนทับทั้ง line
+    console.log('  ' + (COMMIT ? (existing ? 'อัปเดต' : 'เพิ่ม') : '(ดูเฉยๆ) จะ' + (existing ? 'อัปเดต' : 'เพิ่ม')), ln.name, ln.codes.join(','), '× ลังละ', ln.caseFactor, '→', ln.tiers.map(t => t.min + '+:' + t.cashInclVat + '/' + t.creditInclVat).join(' '), '| แพ็ค', ln.pack.cashInclVat);
     if (COMMIT) { const r = await call('savePriceListLine', payload); if (!r.success) throw new Error(ln.name + ': ' + r.message); (r.warnings || []).forEach(w => console.log('    เตือน:', w)); }
   }
 
