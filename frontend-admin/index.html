@@ -950,6 +950,7 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-sm" onclick="openProductUnitsPage()">หน่วยขายเพิ่มเติม</button>
               <button class="btn btn-sm" onclick="openProductGroupsPage()">กลุ่มสินค้า</button>
+              <button class="btn btn-sm" id="products-cat-sync-btn" style="display:none" title="ดึงหมวด (Category/subCategory) จากชีตกลางของบริษัท แท็บ lu_prodcate ใส่ให้สินค้าที่ยังว่าง" onclick="syncProductCategoriesUI()">ดึงหมวดจากชีตกลาง</button>
               <button class="btn btn-primary" id="products-add-btn" onclick="openProductForm()">+ เพิ่มสินค้า</button>
             </div>
           </div>
@@ -1328,9 +1329,16 @@
               <button class="btn btn-primary" onclick="loadRepProd()">ดูรายงาน</button>
             </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>สินค้า</th><th>กลุ่ม</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>จำนวนบิล</th><th>ยอดขาย</th></tr></thead>
-            <tbody id="rp-body"><tr class="empty-row"><td colspan="7">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>หมวด</th><th>หมวดย่อย</th><th>กลุ่ม</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>จำนวนบิล</th><th>ยอดขาย</th></tr></thead>
+            <tbody id="rp-body"><tr class="empty-row"><td colspan="9">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
           </table></div>
+          <div class="form-card">
+            <h3>สรุปตามหมวดสินค้า (Category / subCategory)</h3>
+            <div class="table-wrap"><table>
+              <thead><tr><th>หมวด</th><th>หมวดย่อย</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>ยอดขาย</th></tr></thead>
+              <tbody id="rp-cat-body"><tr class="empty-row"><td colspan="5">—</td></tr></tbody>
+            </table></div>
+          </div>
           <div class="form-card">
             <h3>สรุปรายกลุ่มสินค้า</h3>
             <div class="table-wrap"><table>
@@ -1565,8 +1573,8 @@
                 · <b>ขายได้</b> = คงเหลือ − จองแล้ว คือตัวที่ใช้ตัดสินว่ารับออร์เดอร์เพิ่มได้อีกเท่าไร</p></div>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>สินค้า</th><th>คลัง</th><th>คงเหลือ</th><th>จองแล้ว</th><th>ขายได้</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
-            <tbody id="ws-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>หมวด</th><th>หมวดย่อย</th><th>คลัง</th><th>คงเหลือ</th><th>จองแล้ว</th><th>ขายได้</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
+            <tbody id="ws-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card" id="ws-ledger-card" style="display:none"><h3 id="ws-ledger-title">ความเคลื่อนไหว</h3><div id="ws-ledger"></div></div>
         </section>
@@ -1707,7 +1715,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus',
   'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
   'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive',
-  'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','addProductUnit','updateProductUnit']);
+  'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','syncProductCategories','addProductUnit','updateProductUnit']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin',
@@ -2539,15 +2547,18 @@ async function loadRepCust(){
 async function loadRepProd(){
   const body = document.getElementById('rp-body'), gBody = document.getElementById('rp-group-body');
   const q = repInitDates('rp');
-  tblLoading(body, 7);
+  tblLoading(body, 9);
   const r = await callApi('salesReportByProduct', q);
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
   body.innerHTML = rowsOrEmpty(r.products.map(x =>
-    '<tr><td class="mono-data">'+dash(x.productCode)+'</td><td>'+esc(x.productName)+'</td><td>'+esc(x.groupName)+'</td>' +
+    '<tr><td class="mono-data">'+dash(x.productCode)+'</td><td>'+esc(x.productName)+'</td><td>'+dash(x.category)+'</td><td>'+dash(x.subCategory)+'</td><td>'+esc(x.groupName)+'</td>' +
     '<td class="mono-data">'+repQty(x.qty)+'</td><td class="mono-data">'+(x.freeQty ? repQty(x.freeQty) : '—')+'</td>' +
     '<td class="mono-data">'+repQty(x.bills)+'</td><td class="mono-data">฿'+bahtPlain(x.revenue)+'</td></tr>').join(''),
-    7, 'ไม่มีการขายในช่วงที่เลือก') +
-    (r.products.length ? '<tr><td colspan="6"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td></tr>' : '');
+    9, 'ไม่มีการขายในช่วงที่เลือก') +
+    (r.products.length ? '<tr><td colspan="8"><b>รวม</b></td><td class="mono-data"><b>฿'+bahtPlain(r.totalRevenue)+'</b></td></tr>' : '');
+  document.getElementById('rp-cat-body').innerHTML = rowsOrEmpty((r.categories || []).map(c =>
+    '<tr><td>'+esc(c.category)+'</td><td>'+dash(c.subCategory)+'</td><td class="mono-data">'+repQty(c.qty)+'</td>' +
+    '<td class="mono-data">'+(c.freeQty ? repQty(c.freeQty) : '—')+'</td><td class="mono-data">฿'+bahtPlain(c.revenue)+'</td></tr>').join(''), 5, '—');
   gBody.innerHTML = rowsOrEmpty(r.groups.map(g =>
     '<tr><td>'+esc(g.groupName)+'</td><td class="mono-data">'+repQty(g.qty)+'</td>' +
     '<td class="mono-data">'+(g.freeQty ? repQty(g.freeQty) : '—')+'</td>' +
@@ -3483,6 +3494,9 @@ const PRODUCT_FIELDS = [
   { key:'unit', dataKey:'unit', label:'หน่วยฐาน (ไทย)', type:'text', placeholder:'ชิ้น', default:'ชิ้น' },
   { key:'unitCode', dataKey:'unit_code', label:'รหัสหน่วยฐาน (อังกฤษ)', type:'text', placeholder:'pcs', default:'pcs', hint:'(เช่นเดียวกับรหัสหน่วยในหน่วยขายเพิ่มเติม)' },
   { key:'groupId', dataKey:'group_id', label:'กลุ่มสินค้า', type:'select', optionsFrom:'productGroups', parseType:'int' },
+  // หมวดหลัก 2 ชั้น (main grouping) — ที่มาคือชีตกลาง lu_prodcate · พิมพ์เองได้ มีรายการที่มีอยู่ให้เลือก (datalist)
+  { key:'category', dataKey:'category', label:'หมวด (Category)', type:'text', suggest:'category', placeholder:'เช่น COIL / AEROSOL / GLUE', hint:'(หมวดหลักของสินค้า — ใช้จัดกลุ่มในรายงานและคลัง)' },
+  { key:'subCategory', dataKey:'sub_category', label:'หมวดย่อย (subCategory)', type:'text', suggest:'sub_category', placeholder:'เช่น ขด8ชมทุกกลิ่น' },
   { key:'taxStatus', dataKey:'tax_status', label:'สถานะภาษี', type:'select', default:'', options:[
     {value:'',label:'คิด VAT 7% (ปกติ)'}, {value:'exempt',label:'ยกเว้น VAT'}, {value:'zero',label:'อัตราศูนย์'}
   ], hint:'(ราคาที่กรอกเป็นราคารวมภาษีแล้วเสมอ — สินค้ายกเว้นภาษีจะไม่ถูกถอด 7% ออกตอนออกใบกำกับ)' },
@@ -3523,6 +3537,8 @@ const PRODUCT_TABLE_COLS = [
   { key:'unit', label:'หน่วยฐาน (ไทย)', sortVal:p=>p.unit },
   { key:'unit_code', label:'รหัสหน่วย (Eng)', sortVal:p=>p.unit_code, cls:'mono-data' },
   { key:'group', label:'กลุ่ม', sortVal:p=>{ const g=productGroupsCache.find(x=>String(x.record_id)===String(p.group_id)); return g?g.name:''; } },
+  { key:'category', label:'หมวด (Category)', sortVal:p=>p.category||'' },
+  { key:'sub_category', label:'หมวดย่อย', sortVal:p=>p.sub_category||'' },
   { key:'sales_unit_code', html:true, label:'หน่วยขาย', sortVal:p=>p.sales_unit_code||'',
     render:p=>p.sales_unit_code ? '<span class="tag">'+esc(unitLabelJs(p.sales_unit_code))+'</span>' : '<span class="unit">'+esc(p.unit||'-')+'</span>' },
   { key:'purchase_unit_code', html:true, label:'หน่วยซื้อ', sortVal:p=>p.purchase_unit_code||'',
@@ -3559,6 +3575,7 @@ function renderProductsTable(){
   // เพิ่ม/เปิด-ปิดใช้งาน เฉพาะฝั่งที่ไม่มีสิทธิ์แก้ (เซิร์ฟเวอร์ปฏิเสธอยู่แล้ว แต่ซ่อนให้ไม่ต้องลองแล้วเจอ error)
   const editOk = canEdit('products');
   document.getElementById('products-add-btn').style.display = editOk ? '' : 'none';
+  document.getElementById('products-cat-sync-btn').style.display = (editOk && SCOPE === 'owner') ? '' : 'none';
   document.getElementById('products-head-hint').textContent = editOk
     ? 'ควบคุมจากส่วนกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — คลิกแถวเพื่อแก้ไข คลิกหัวคอลัมน์เพื่อเรียง'
     : 'ข้อมูลสินค้านี้บริษัทเป็นผู้ดูแล ดูได้แต่แก้ไม่ได้ — คลิกแถวเพื่อดูรายละเอียด คลิกหัวคอลัมน์เพื่อเรียง';
@@ -3629,7 +3646,13 @@ function _pfFieldHtml(f, val, locked, viewOnly){
   // readonly ไม่ใช่ disabled — ต้องยังอ่านค่าจาก .value ได้ตอนบันทึก (แค่ห้ามแก้) · viewOnly ไม่เคยไปถึง saveProductForm()
   // อยู่แล้ว (ปุ่มบันทึกถูกซ่อน) แต่ใช้ readonly เหมือนกันเพื่อให้โค้ดอ่านค่าแบบเดียวกันทุกที่
   const roAttr = ro ? ' readonly' : '';   // หน้าตาช่องที่ล็อกอยู่ใน CSS (.field input[readonly]) แล้ว
-  return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'"'+roAttr+' placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'"></div>';
+  let dl = '', listAttr = '';
+  if (f.suggest) {   // รายการที่มีอยู่แล้วในทะเบียนสินค้า — พิมพ์ซ้ำเองแล้วสะกดไม่ตรงกันจะกลายเป็นคนละหมวด
+    const vals = [...new Set(productsCache.map(p => String(p[f.suggest]||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));
+    listAttr = ' list="pf-dl-'+f.key+'"';
+    dl = '<datalist id="pf-dl-'+f.key+'">'+vals.map(v => '<option value="'+esc(v)+'"></option>').join('')+'</datalist>';
+  }
+  return '<div class="'+cls+'">'+lbl+'<input type="'+f.type+'" data-key="'+f.key+'"'+listAttr+roAttr+' placeholder="'+esc(f.placeholder||'')+'" value="'+esc(val)+'">'+dl+'</div>';
 }
 function renderProductFormFields(row, viewOnly){
   const codeLocked = !!(row && String(row.has_transactions) === 'TRUE');
@@ -3822,6 +3845,17 @@ function jumpToProductUnit(productId){
 function closeProductUnitsPage(){ _switchProductView('view-products', 'สินค้าและราคา'); }
 function openProductGroupsPage(){ _switchProductView('view-productgroups', 'กลุ่มสินค้า'); }
 function closeProductGroupsPage(){ _switchProductView('view-products', 'สินค้าและราคา'); }
+// ดึง Category/subCategory จากแท็บ lu_prodcate ของชีตกลาง — ดูผลก่อนเสมอ (dryRun) แล้วค่อยถามยืนยัน · เติมเฉพาะช่องที่ยังว่าง ไม่ทับที่กรอกเองไว้
+async function syncProductCategoriesUI(){
+  toast('กำลังอ่านชีตกลาง...');
+  const d = await callApi('syncProductCategories', { dryRun:true });
+  if (!d.success) { toast(d.message, true); return; }
+  if (!d.updated) { toast('ไม่มีสินค้าที่ต้องเติมหมวด (ตรงกับชีต '+d.matched+' สินค้า · ไม่พบรหัสในชีต '+d.unmatched+')'); return; }
+  if (!confirm('จะเติมหมวดให้สินค้า '+d.updated+' รายการ (ตรงกับชีต '+d.matched+' · ไม่พบรหัสในชีต '+d.unmatched+')\nเติมเฉพาะช่องที่ยังว่าง — ค่าที่กรอกเองไว้ไม่ถูกทับ\n\nยืนยัน?')) return;
+  const r = await callApi('syncProductCategories', {});
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message); loadProducts();
+}
 async function saveProductForm(){
   const payload = readProductFormFields();
   const missing = PRODUCT_FIELDS.find(f => f.required && !payload[f.key]);
@@ -3845,6 +3879,7 @@ async function saveProductForm(){
     external_code:payload.externalCode, barcode:payload.barcode, group_barcode:payload.groupBarcode,
     sales_unit_code:payload.salesUnitCode, purchase_unit_code:payload.purchaseUnitCode, carton_barcode:payload.cartonBarcode,
     packing_text:payload.packingText, weight_kg:payload.weightKg, reorder_point:payload.reorderPoint,
+    category:payload.category, sub_category:payload.subCategory,
     is_stock:payload.isStock, is_sellable:payload.isSellable, is_purchasable:payload.isPurchasable, no_discount:payload.noDiscount };
   if (isEditing) {
     const p = productsCache.find(x => String(x.record_id) === String(productId));
@@ -6532,9 +6567,9 @@ let wsCache = [];
 async function loadWarehouseStock(){
   const body = document.getElementById('ws-body');
   if (!wsCache.length) wsCache = listSnapLoad('warehousestock') || [];
-  if (wsCache.length) renderWarehouseStock(); else tblLoading(body, 10);
+  if (wsCache.length) renderWarehouseStock(); else tblLoading(body, 12);
   const r = await callApi('listWarehouseStock', { nonZeroOnly: false });
-  if (!r.success) { if (!wsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!wsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
   wsCache = r.data;
   listSnapSave('warehousestock', wsCache);
   renderWarehouseStock();
@@ -6554,14 +6589,14 @@ function renderWarehouseStock(){
        ขายได้ติดลบ = จองเกินของที่มี (ของถูกตัดไปทางอื่นหลังจองแล้ว) ต้องเห็นชัดที่สุด */
     const availCell = avail < 0 ? '<span class="pill off">'+avail+'</span>'
       : (rsv > 0 ? '<span class="pill wait">'+avail+'</span>' : String(avail));
-    return '<tr><td class="mono-data">'+dash(s.productCode)+'</td><td>'+esc(s.productName)+'</td><td>'+esc(s.warehouseName)+'</td>' +
+    return '<tr><td class="mono-data">'+dash(s.productCode)+'</td><td>'+esc(s.productName)+'</td><td>'+dash(s.category)+'</td><td>'+dash(s.subCategory)+'</td><td>'+esc(s.warehouseName)+'</td>' +
       '<td class="mono-data">'+qty+'</td>' +
       '<td class="mono-data">'+(rsv ? '<b>'+rsv+'</b>' : '—')+'</td>' +
       '<td class="mono-data">'+availCell+'</td>' +
       '<td>'+esc(s.unit)+'</td><td class="mono-data">฿'+bahtPlain(s.avgCost)+'</td>' +
       '<td class="mono-data">฿'+bahtPlain(s.value)+'</td>' +
       '<td><button class="btn btn-sm" onclick="showLedger('+s.productId+',\''+esc(s.productName)+'\')">ความเคลื่อนไหว</button></td></tr>';
-  }).join(''), 10, 'ยังไม่มีสินค้าในคลัง — รับของจากใบสั่งซื้อก่อน');
+  }).join(''), 12, 'ยังไม่มีสินค้าในคลัง — รับของจากใบสั่งซื้อก่อน');
 }
 async function showLedger(productId, name){
   const card = document.getElementById('ws-ledger-card');

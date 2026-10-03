@@ -75,6 +75,7 @@ var ADMIN_ACTION_MAP = {
 
   listProductsAdmin:      listProductsAdmin,
   addProduct:             addProduct,
+  syncProductCategories:  syncProductCategories,
   updateProduct:          updateProduct,
   uploadProductImage:     uploadProductImage,
   listProductUnits:       listProductUnits,

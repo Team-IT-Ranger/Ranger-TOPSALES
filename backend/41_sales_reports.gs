@@ -155,7 +155,7 @@ function salesReportByProduct(session, payload) {
   var orderIds = {};
   _salesReportOrders(tenantId, payload.dateFrom, payload.dateTo).forEach(function(o) { orderIds[String(o.record_id)] = true; });
 
-  var byProduct = {}, byGroup = {};
+  var byProduct = {}, byGroup = {}, byCategory = {};
   tenantObjects(tenantId, 'order_items').forEach(function(it) {
     if (!orderIds[String(it.order_id)]) return;
     var pid = String(it.product_id || '');
@@ -166,11 +166,16 @@ function salesReportByProduct(session, payload) {
     var qty = Number(it.base_qty) || 0, revenue = Number(it.line_total) || 0;
 
     if (!byProduct[pid]) byProduct[pid] = { productId: pid, productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)',
-      groupId: gid, groupName: groupName, qty: 0, freeQty: 0, revenue: 0, bills: {} };
+      groupId: gid, groupName: groupName, category: p ? (p.category || '') : '', subCategory: p ? (p.sub_category || '') : '', qty: 0, freeQty: 0, revenue: 0, bills: {} };
     var row = byProduct[pid];
     if (isFree) row.freeQty += qty; else { row.qty += qty; row.revenue = _money(row.revenue + revenue); }
     row.bills[String(it.order_id)] = true;
 
+    // สรุปตามหมวดหลัก (Category / subCategory — 44_product_categories.gs) · สินค้าที่ยังไม่มีหมวดรวมเป็น '(ไม่มีหมวด)'
+    var catName = (p && p.category) || '(ไม่มีหมวด)', subName = (p && p.sub_category) || '';
+    var catKey = catName + '\u0001' + subName;
+    if (!byCategory[catKey]) byCategory[catKey] = { category: catName, subCategory: subName, qty: 0, freeQty: 0, revenue: 0 };
+    if (isFree) byCategory[catKey].freeQty += qty; else { byCategory[catKey].qty += qty; byCategory[catKey].revenue = _money(byCategory[catKey].revenue + revenue); }
     if (!byGroup[gid]) byGroup[gid] = { groupId: gid, groupName: groupName, qty: 0, freeQty: 0, revenue: 0 };
     if (isFree) byGroup[gid].freeQty += qty; else { byGroup[gid].qty += qty; byGroup[gid].revenue = _money(byGroup[gid].revenue + revenue); }
   });
@@ -178,7 +183,7 @@ function salesReportByProduct(session, payload) {
   var productRows = Object.keys(byProduct).map(function(k) {
     var r = byProduct[k];
     return { productId: r.productId, productCode: r.productCode, productName: r.productName, groupId: r.groupId, groupName: r.groupName,
-      qty: r.qty, freeQty: r.freeQty, revenue: r.revenue, bills: Object.keys(r.bills).length };
+      category: r.category, subCategory: r.subCategory, qty: r.qty, freeQty: r.freeQty, revenue: r.revenue, bills: Object.keys(r.bills).length };
   });
   productRows.sort(function(a, b) { return b.revenue - a.revenue; });
   var limit = _int(payload.limit) || 200;
@@ -186,7 +191,9 @@ function salesReportByProduct(session, payload) {
 
   var groupRows = Object.keys(byGroup).map(function(k) { return byGroup[k]; });
   groupRows.sort(function(a, b) { return b.revenue - a.revenue; });
+  var categoryRows = Object.keys(byCategory).map(function(k) { return byCategory[k]; });
+  categoryRows.sort(function(a, b) { return b.revenue - a.revenue; });
 
   return { success: true, tenantId: tenantId, dateFrom: payload.dateFrom, dateTo: payload.dateTo,
-    products: productRows, groups: groupRows, totalRevenue: _money(productRows.reduce(function(s, r) { return s + r.revenue; }, 0)) };
+    products: productRows, groups: groupRows, categories: categoryRows, totalRevenue: _money(productRows.reduce(function(s, r) { return s + r.revenue; }, 0)) };
 }

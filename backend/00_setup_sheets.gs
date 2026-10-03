@@ -54,10 +54,11 @@ var CENTRAL_SHEETS = {
        is_stock        ← ISINV  สินค้านี้ตัดสต็อกไหม (ค่าบริการ/ค่าขนส่งขายได้แต่ไม่มีของ)
        is_sellable / is_purchasable ← ISSAL / ISPUR  โผล่ในหน้าเปิดบิล / หน้าสั่งซื้อไหม
        no_discount     ← NoDisc ของ Smartsales  ห้ามลดราคา (ส่วนลดท้ายบิลไม่กินรายการนี้)
+       category / sub_category ← ชีตกลางบริษัท แท็บ lu_prodcate (Category / subCategory) = หมวดสินค้าหลัก 2 ชั้น (3 ต.ค. 2026) — ดู 44_product_categories.gs
        reorder_point   ← TOTREO  จุดสั่งซื้อ ใช้เตือนของใกล้หมดในหน้าคลัง
        last_purchase_* ← LPURPR/LPURDAT  ราคาซื้อครั้งล่าสุด (ระบบเติมให้เองตอนรับของ) ใช้ตอนเปิดใบสั่งซื้อ
      ค่าว่างของทุก is_* แปลว่า "ใช่" — สินค้าเดิมทุกตัวจึงทำงานเหมือนเดิมโดยไม่ต้อง migrate */
-  products: ['record_id','product_code','name','base_price','unit','unit_code','group_id','is_active','external_code',
+  products: ['record_id','product_code','name','base_price','unit','unit_code','group_id','category','sub_category','is_active','external_code',
     'barcode','group_barcode','cost_price','vat_type','image_url','has_transactions','alias_codes','tax_status',
     'name_en','sales_unit_code','sales_unit_factor','purchase_unit_code','purchase_unit_factor','carton_barcode',
     'packing_text','weight_kg','is_stock','is_sellable','is_purchasable','no_discount','reorder_point',

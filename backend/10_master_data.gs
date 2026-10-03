@@ -152,7 +152,8 @@ var PRODUCT_EXTRA_FIELDS = {
   purchaseUnitCode: 'purchase_unit_code', purchaseUnitFactor: 'purchase_unit_factor',
   cartonBarcode: 'carton_barcode', packingText: 'packing_text', weightKg: 'weight_kg',
   isStock: 'is_stock', isSellable: 'is_sellable', isPurchasable: 'is_purchasable',
-  noDiscount: 'no_discount', reorderPoint: 'reorder_point', note: 'note'
+  noDiscount: 'no_discount', reorderPoint: 'reorder_point', note: 'note',
+  category: 'category', subCategory: 'sub_category'   // หมวดสินค้าหลัก 2 ชั้น (44_product_categories.gs)
 };
 var PRODUCT_UNIT_FIELDS = { salesUnitCode: 1, purchaseUnitCode: 1 };
 var PRODUCT_BOOL_FIELDS = { isStock: 1, isSellable: 1, isPurchasable: 1, noDiscount: 1 };

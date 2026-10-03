@@ -246,7 +246,7 @@ fails('ยกเลิก PO ที่รับของแล้วไม่ไ
 
 console.log('\n── ยกเลิกใบรับของ (แก้ไข/ยกเลิกหลังลงบัญชีแล้ว) ──');
 // สินค้าใหม่ (20) กันชนตัวเลขรวมของสินค้า 10/11/12 ที่เช็คไว้แล้วด้านบนและจะถูกเช็คต่อด้านล่าง (ต้นทุนเฉลี่ย/งบทดลอง)
-append(sheets.products, { record_id: 20, product_code: 'P-400', name: 'ถุงพลาสติก', unit: 'ห่อ', base_price: 0, is_active: true });
+append(sheets.products, { record_id: 20, product_code: 'P-400', name: 'ถุงพลาสติก', unit: 'ห่อ', category: 'PACK', sub_category: 'ถุง', base_price: 0, is_active: true });
 r = ctx.savePurchaseOrder(MGR, { vendorId: VENDOR, orderDate: '2026-09-27', vatType: 'excluded',
   items: [{ productId: 20, qty: 40, unitCode: 'กล่อง', unitFactor: 5, unitPrice: 100 }] });
 const PO5 = r.po.id;
@@ -255,7 +255,7 @@ const po5 = ctx.getPurchaseOrder(MGR, { id: PO5 }).po;
 r = ctx.receiveGoods(MGR, { poId: PO5, receiveDate: '2026-09-27', items: [{ poItemId: po5.items[0].id, qty: 40 }] });
 ok('รับของก่อนทดสอบยกเลิก (40 กล่อง × 5 = 200 ห่อ ต้นทุน/ห่อ = 100/5 = 20)', r);
 eq('  เข้าสต็อกและลงบัญชีถูกต้อง', [ctx.listWarehouseStock(MGR, {}).data.find(s => String(s.productId) === '20'), r.po.status],
-   [{ warehouseId: 1, warehouseName: 'คลังกลาง', productId: '20', productCode: 'P-400', productName: 'ถุงพลาสติก', unit: 'ห่อ',
+   [{ warehouseId: 1, warehouseName: 'คลังกลาง', productId: '20', productCode: 'P-400', productName: 'ถุงพลาสติก', unit: 'ห่อ', category: 'PACK', subCategory: 'ถุง',
       qty: 200, reserved: 0, available: 200, avgCost: 20, value: 4000, updatedAt: '2026-09-23 10:00:00' }, 'received']);
 const GR5 = r.grId, JV5 = r.journalId;
 
@@ -460,7 +460,7 @@ ctx.centralUpdate('customers', 500, { status: 'active', last_sale_at: '2026-09-1
 append(sheets.customers, { record_id: 501, customer_code: 'C-501', name: 'ร้านทดสอบสอง', tenant_id: 'T1', is_active: true, status: 'active', last_sale_at: '2026-09-10' });
 append(sheets.customers, { record_id: 502, customer_code: 'C-502', name: 'ร้านที่หายไป', tenant_id: 'T1', is_active: true, status: 'active', last_sale_at: '2026-01-01' });
 append(sheets.product_groups, { record_id: 900, name: 'วัสดุสิ้นเปลือง', description: '' });
-append(sheets.products, { record_id: 22, product_code: 'P-500', name: 'ฟิล์มพันสินค้า', unit: 'ม้วน', group_id: 900, base_price: 0, is_active: true });
+append(sheets.products, { record_id: 22, product_code: 'P-500', name: 'ฟิล์มพันสินค้า', unit: 'ม้วน', group_id: 900, category: 'PACK', sub_category: 'ฟิล์ม', base_price: 0, is_active: true });
 
 [
   { record_id: 9001, order_code: 'SO-9001', customer_id: 500, total: 1000, status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-09-01 10:00:00' },
@@ -504,11 +504,13 @@ eq('lostDays สูงมาก → ไม่มีใครติดร้า�
 console.log('\n  -- 1.8.3 แยกสินค้า/กลุ่มสินค้า --');
 r = ctx.salesReportByProduct(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16' });
 eq('สินค้า 10 ขายรวม 20+10=30 หน่วยฐาน ยอด 1,500 (ไม่รวมบิลที่ยกเลิก)', r.products.find(x => x.productId === '10'),
-  { productId: '10', productCode: 'P-100', productName: 'กล่องกระดาษ', groupId: '', groupName: '(ไม่มีกลุ่ม)', qty: 30, freeQty: 0, revenue: 1500, bills: 2 });
+  { productId: '10', productCode: 'P-100', productName: 'กล่องกระดาษ', groupId: '', groupName: '(ไม่มีกลุ่ม)', category: '', subCategory: '', qty: 30, freeQty: 0, revenue: 1500, bills: 2 });
 eq('สินค้า 22 มีทั้งขายจริง (40, 2,000) และของแถม (5 หน่วย ไม่รวมยอด) พร้อมกลุ่มสินค้า — นับ 2 บิลเพราะแถมอยู่คนละบิลกับที่ขายจริง',
   r.products.find(x => x.productId === '22'),
-  { productId: '22', productCode: 'P-500', productName: 'ฟิล์มพันสินค้า', groupId: '900', groupName: 'วัสดุสิ้นเปลือง', qty: 40, freeQty: 5, revenue: 2000, bills: 2 });
+  { productId: '22', productCode: 'P-500', productName: 'ฟิล์มพันสินค้า', groupId: '900', groupName: 'วัสดุสิ้นเปลือง', category: 'PACK', subCategory: 'ฟิล์ม', qty: 40, freeQty: 5, revenue: 2000, bills: 2 });
 eq('สรุปตามกลุ่มสินค้า: วัสดุสิ้นเปลือง 2,000 / ไม่มีกลุ่ม 1,500', r.groups.map(g => [g.groupName, g.revenue]), [['วัสดุสิ้นเปลือง', 2000], ['(ไม่มีกลุ่ม)', 1500]]);
+eq('สรุปตามหมวดหลัก (Category/subCategory): PACK/ฟิล์ม 2,000 · สินค้าที่ยังไม่มีหมวดรวมเป็น (ไม่มีหมวด) 1,500',
+  r.categories.map(c => [c.category, c.subCategory, c.qty, c.freeQty, c.revenue]), [['PACK', 'ฟิล์ม', 40, 5, 2000], ['(ไม่มีหมวด)', '', 30, 0, 1500]]);
 eq('ยอดรวมทั้งรายงาน = 3,500 (เท่ากับ 1.8.1)', r.totalRevenue, 3500);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

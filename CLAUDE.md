@@ -1354,6 +1354,19 @@ Express, 1,106 ราย, 38 คอลัมน์, เข้ารหัส TIS
 จับกลุ่มสินค้าด้วย "ชื่อ" (รหัสกลุ่มคนละ env) สร้างกลุ่มที่ขาดให้ · ถ้ารหัสนั้นเป็น alias ของสินค้าอื่นในปลายทางจะถอดออกก่อน · ช่อง true/false ส่งเฉพาะเมื่อต้นทางมีค่า
 · ใช้แล้ว UAT→prod 20 รหัส (สร้าง 15 · แก้ 5 · กลุ่มใหม่ 5 · หน่วย +20) — **prod: 10504 เคยเป็น alias ของ 10503 ถูกแยกเป็นสินค้าของตัวเองแล้ว → เพิ่มเข้า line เดียวกับ 10503 ในชุดราคา Q4 ทั้ง 4 ชุดบน prod แล้ว (3 ต.ค. 2026, `.dev/add-product-to-price-lines.js` — ราคา/ขั้นเหมือน 10503 เป๊ะ นับขั้นรวมกับ 10503 เพราะอยู่ line เดียวกัน)**
 
+## หมวดสินค้าหลัก Category / subCategory (2026-10-03)
+
+เจ้าของระบบสั่ง: เพิ่ม `products.category` + `products.sub_category` ทั้ง UAT และ prod เป็น **main grouping** ของสินค้า · ที่มาคือชีตกลางบริษัท
+(ไฟล์เดียวกับ FactSales `19MzAR7dpg4kBJsZCHhWYgMUhdpQ1Z8pFBN7JObi5YA0`) แท็บ **`lu_prodcate`** (ProductNumber/SalesUnit/Category/subCategory ~300 แถว — ค่าเช่น COIL/AEROSOL/GLUE/LE/Other)
+· **คนละเรื่องกับ `group_id`** (กลุ่มสินค้าเดิม) ไม่แตะ ไม่ทับ · backend `44_product_categories.gs`
+- **ซิงก์**: action `syncProductCategories {dryRun?, overwrite?}` (ปุ่ม "ดึงหมวดจากชีตกลาง" หน้าสินค้า ฝั่งบริษัท — ดูผลก่อนถามยืนยัน) · จับคู่ด้วย `product_code`/`alias_codes`
+  · **เติมเฉพาะช่องที่ยังว่าง** ค่าที่คนกรอกเองไม่ถูกทับ (ยกเว้น `overwrite:true`) · รันซ้ำได้
+  · **ครั้งแรกในแต่ละ env รันจาก Apps Script editor ได้เลยไม่ต้อง Deploy**: เลือกฟังก์ชัน `runSyncProductCategories` → Run (เพิ่มคอลัมน์ใหม่ + เติมค่า, ดู Execution log)
+    — editor รันโค้ดที่ HEAD · รหัสสินค้าในชีตเป็นรหัส Express/ระบบเก่าจำนวนมาก (6256392 ฯลฯ) ที่ไม่มีในทะเบียนเรา จึงไม่ตรงทุกตัว — สินค้าที่ไม่ตรงปล่อยว่างแล้วกรอกเองในฟอร์มได้
+- **แสดงผลแล้ว**: ตารางสินค้า (คอลัมน์ หมวด/หมวดย่อย) · ฟอร์มสินค้า (พิมพ์เองได้ มี datalist ของค่าที่มีอยู่) · ยอดคงเหลือในคลัง (`listWarehouseStock`/`listStockLedger` ส่ง `category/subCategory`)
+  · รายงานการขายแยกสินค้า (คอลัมน์ในตาราง + การ์ด "สรุปตามหมวดสินค้า" จาก `salesReportByProduct.categories`; สินค้าไม่มีหมวดรวมเป็น "(ไม่มีหมวด)")
+- เทสต์: `.dev/test-product-categories.js` (+ แก้ expectation ใน `test-purchasing-accounting.js` ให้มีฟิลด์ใหม่)
+
 ## Environment gotchas
 
 - Windows + Git Bash: `.gs`/`.js`/`.html` files are CRLF. Prefer the `Edit`/`Write` tools over shell

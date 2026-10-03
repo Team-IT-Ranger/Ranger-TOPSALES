@@ -482,6 +482,7 @@ function listWarehouseStock(session, payload) {
     var reserved = _reservedQty(scope, r.warehouse_id, r.product_id);
     return { warehouseId: r.warehouse_id, warehouseName: warehouses[String(r.warehouse_id)] || '', productId: r.product_id,
       productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)', unit: p ? (p.unit || 'ชิ้น') : '',
+      category: p ? (p.category || '') : '', subCategory: p ? (p.sub_category || '') : '',
       qty: qty, reserved: reserved, available: qty - reserved, avgCost: cost, value: _money(qty * cost), updatedAt: safeDateStr(r.updated_at) };
   });
   if (payload.nonZeroOnly) out = out.filter(function(r) { return r.qty !== 0; });
@@ -500,7 +501,7 @@ function listStockLedger(session, payload) {
   var out = rows.map(function(r) {
     var p = products[String(r.product_id)];
     return { id: r.record_id, warehouseId: r.warehouse_id, productId: r.product_id, productCode: p ? p.product_code : '',
-      productName: p ? p.name : '', changeQty: Number(r.change_qty) || 0, balanceAfter: Number(r.balance_after) || 0,
+      productName: p ? p.name : '', category: p ? (p.category || '') : '', subCategory: p ? (p.sub_category || '') : '', changeQty: Number(r.change_qty) || 0, balanceAfter: Number(r.balance_after) || 0,
       unitCost: Number(r.unit_cost) || 0, moveType: r.move_type, refType: r.ref_type, refId: r.ref_id, note: r.note || '',
       createdAt: safeDateStr(r.created_at) };
   });
