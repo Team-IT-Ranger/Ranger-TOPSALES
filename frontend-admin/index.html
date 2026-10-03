@@ -593,6 +593,7 @@
 .pgr-pane{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
 .pgr-pane .pgr-head,.pgr-pane .pgr-foot{flex:none}
 .pgr-pane .pgr-scroll{flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.cat-filter{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:0 0 10px}.cat-filter select{margin-left:4px}
 </style>
 </head>
 <body>
@@ -853,6 +854,20 @@
             <div id="sod-actions"></div>
           </div>
           <div id="sod-status-card"></div>
+          <!-- แก้ไขรายการหลังบันทึกรับงาน (editSalesOrderAdmin) — เปิดจากปุ่ม "แก้ไขรายการ" เฉพาะใบขั้นบันทึกรับงานแล้ว -->
+          <div class="form-card" id="sod-edit-card" style="display:none">
+            <h3>แก้ไขรายการในใบนี้</h3>
+            <p class="form-hint">เปลี่ยนรหัสสินค้า แก้จำนวน เพิ่ม/ลบบรรทัด แก้วันนัดส่ง แล้วกด "คำนวณใหม่" เพื่อดูราคา — ราคา/ส่วนลด/ภาษีคิดจากชุดราคาของร้านเหมือนตอนเปิดบิล · เลขที่เอกสารคงเดิม · ยอดจองคลังปรับตามรายการใหม่</p>
+            <div class="form-grid g2"><div class="field"><label>วันนัดส่ง</label><input type="date" id="sed-date"></div></div>
+            <div id="sed-rows" style="margin-top:8px"></div>
+            <div style="margin:10px 0"><button class="btn btn-sm" onclick="sedAddRow()">+ เพิ่มรายการ</button></div>
+            <div id="sed-result" style="margin:10px 0"></div>
+            <div class="form-actions">
+              <button class="btn" onclick="sedPreview()">คำนวณใหม่</button>
+              <button class="btn btn-primary" onclick="sedSave()">✓ บันทึกการแก้ไข</button>
+              <button class="btn btn-ghost" onclick="sedClose()">ยกเลิกการแก้ไข</button>
+            </div>
+          </div>
           <div class="table-wrap"><table>
             <thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย (ไม่รวม VAT)</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>หลังหักส่วนลด</th><th>รวมภาษีแล้ว</th></tr></thead>
             <tbody id="sod-body"></tbody>
@@ -954,6 +969,7 @@
               <button class="btn btn-primary" id="products-add-btn" onclick="openProductForm()">+ เพิ่มสินค้า</button>
             </div>
           </div>
+          <div class="cat-filter" id="products-cat-filter"></div>
           <div class="table-wrap"><table>
             <thead><tr id="products-thead-row"></tr></thead>
             <tbody id="products-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
@@ -1328,6 +1344,7 @@
               <div class="field"><label>ถึงวันที่</label><input type="date" id="rp-to"></div>
               <button class="btn btn-primary" onclick="loadRepProd()">ดูรายงาน</button>
             </div>
+          <div class="cat-filter" id="ws-cat-filter"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>สินค้า</th><th>หมวด</th><th>หมวดย่อย</th><th>กลุ่ม</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>จำนวนบิล</th><th>ยอดขาย</th></tr></thead>
             <tbody id="rp-body"><tr class="empty-row"><td colspan="9">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
@@ -1715,7 +1732,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus',
   'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
   'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive',
-  'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','syncProductCategories','addProductUnit','updateProductUnit']);
+  'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','syncProductCategories','editSalesOrderAdmin','addProductUnit','updateProductUnit']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin',
@@ -2179,18 +2196,18 @@ const NAV_GROUPS = [
         soon:'ใบเสนอราคา', desc:'เสนอราคาก่อนเปิดบิลจริง แปลงเป็นใบสั่งขายได้'}
     ]},
     { n:'1.2', label:'ราคาขาย / ส่วนลด', items:[
-      {n:'1.2.1', label:'กำหนดชุดตารางราคาขาย', view:'pricelists', mod:'pricing', ready:true, scope:'owner', grey:'tenant'},
-      {n:'1.2.2', label:'กำหนดชุดส่วนลดการขาย', view:'promotions', mod:'promotions', ready:true, scope:'owner', grey:'tenant'}
+      {n:'1.2.1', label:'กำหนดชุดตารางราคาขาย', view:'pricelists', mod:'pricing', ready:true, scope:'both'},
+      {n:'1.2.2', label:'กำหนดชุดส่วนลดการขาย', view:'promotions', mod:'promotions', ready:true, scope:'both'}
     ]},
     { n:'1.3', label:'ส่งเสริมการขาย', items:[
-      {n:'1.3.1', label:'ชุดแถม (ของแถม)', view:'freegoods', mod:'promotions', ready:true, scope:'owner', grey:'tenant'}
+      {n:'1.3.1', label:'ชุดแถม (ของแถม)', view:'freegoods', mod:'promotions', ready:true, scope:'both'}
     ]},
     { n:'1.4', label:'ข้อมูลลูกค้า', items:[
       {n:'1.4.1', label:'ทะเบียนรายชื่อลูกค้า', view:'customers', mod:'customers', ready:true, scope:'both'},
       {n:'1.4.2', label:'รายชื่อร้านค้า (สำหรับกฎ/โปร)', view:'custlists', mod:'customers', ready:true, scope:'both'},
-      {n:'1.4.3', label:'กลุ่มลูกค้า', view:'custgroups', mod:'settings', ready:true, scope:'owner', grey:'tenant'},
-      {n:'1.4.4', label:'ช่องทางการจัดจำหน่าย', view:'distchannels', mod:'settings', ready:true, scope:'owner', grey:'tenant'},
-      {n:'1.4.5', label:'ประเภทการชำระเงิน', view:'paytypes', mod:'settings', ready:true, scope:'owner', grey:'tenant'}
+      {n:'1.4.3', label:'กลุ่มลูกค้า', view:'custgroups', mod:'settings', ready:true, scope:'both'},
+      {n:'1.4.4', label:'ช่องทางการจัดจำหน่าย', view:'distchannels', mod:'settings', ready:true, scope:'both'},
+      {n:'1.4.5', label:'ประเภทการชำระเงิน', view:'paytypes', mod:'settings', ready:true, scope:'both'}
     ]},
     { n:'1.5', label:'พนักงานและเขตขาย', items:[
       /* รายชื่อพนักงานขายย้ายไปรวมกับ "ผู้ใช้งานและอนุมัติ" (9.4.1) แล้ว 2026-09-29 — คนละหน้าที่ทับซ้อนกันเดิม */
@@ -2267,7 +2284,7 @@ const NAV_GROUPS = [
   { n:'9', icon:'gear', label:'ตั้งค่าระบบ', subs:[
     { n:'9.1', label:'ข้อมูลบริษัท', items:[
       /* หน้าจอคนละตัวตามฝั่ง แต่เป็นเมนูเดียวกัน — gotoView แปลงให้ตอนกด */
-      {n:'9.1.1', label:'ข้อมูลบริษัท', view:'companyinfo', mod:'settings', ready:true, scope:'both'} ]},
+      {n:'9.1.1', label:'ข้อมูลบริษัท', view:'companyinfo', mod:'settings', modTenant:'tenants', ready:true, scope:'both'} ]},
     { n:'9.2', label:'เลขที่เอกสาร', items:[
       {n:'9.2.1', label:'ตั้งค่ารูปแบบเลขที่เอกสาร', view:'docnum', mod:'docnum', ready:true, scope:'both'} ]},
     { n:'9.3', label:'ตัวแทนจำหน่าย', items:[
@@ -2378,6 +2395,42 @@ let MY_PERMS = { isSuper: false, permissions: {} };
 const canView = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].view);
 const canEdit = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].edit);
 
+/* ═══ โหมดดูอย่างเดียว (viewer) — แอดมินศูนย์เปิดดูเมนูที่บริษัทคุมได้ แต่แก้ไม่ได้ (3 ต.ค. 2026) ═══
+   เซิร์ฟเวอร์ปฏิเสธการแก้อยู่แล้ว (สิทธิ์ edit=FALSE) — ตรงนี้ซ่อนปุ่ม/ฟอร์มที่แก้ข้อมูลให้ไม่ต้องกดแล้วเจอ error
+   ใช้ชื่อฟังก์ชันใน onclick ตัดสิน (ทุกหน้าที่แก้ข้อมูลตั้งชื่อ add/save/delete/... ตามกติกาเดียวกัน) แล้วไล่ซ่อนให้ทุกครั้งที่หน้าถูกวาดใหม่
+   ปุ่มดูอย่างเดียว (กลับ · ตรวจสิทธิ์ร้าน · คิดราคา · ดูตัวอย่างของแถม · เปิดรายละเอียด) ไม่ถูกแตะ */
+const RO_GUARDS = [
+  { mod:'pricing',    views:['pricelists','pricelistdetail','pricelistimport'] },
+  { mod:'promotions', views:['promotions','freegoods'] },
+  { mod:'settings',   views:['custgroups','distchannels','paytypes'] }
+];
+const RO_WRITE_FN = /^(add|save|delete|deactivate|create|void|openClone|openCreate|openPriceListImport|openRuleModal|openFgSetModal|openFgItemModal|openPromote|openPromoDistribution|openLineModal|pli|plmAdd|plmToggle|pkgToggleAll|toggleTenantStatus)/;
+function applyViewOnlyGuards(){
+  RO_GUARDS.forEach(g => {
+    if (canEdit(g.mod)) return;
+    g.views.forEach(v => {
+      const root = document.getElementById('view-' + v); if (!root) return;
+      root.querySelectorAll('[onclick]').forEach(n => {
+        const m = (n.getAttribute('onclick') || '').match(/^\s*([A-Za-z_]+)\(/);
+        if (!m || !RO_WRITE_FN.test(m[1])) return;
+        const card = n.closest('.form-card');
+        n.style.display = 'none'; n.removeAttribute('onclick'); n.classList.remove('clickable-row');
+        if (card) {
+          // การ์ดที่เป็นฟอร์มเพิ่มข้อมูลล้วนๆ (ไม่มีตาราง) ซ่อนทั้งใบ · การ์ดที่แสดงข้อมูลอยู่ด้วยแค่ปิดช่องกรอกไม่ให้แก้
+          if (!card.querySelector('table, .table-wrap')) card.style.display = 'none';
+          else card.querySelectorAll('input,select,textarea').forEach(i => { i.disabled = true; });
+        }
+      });
+    });
+  });
+}
+let _roGuardTimer = null;
+function scheduleViewOnlyGuards(){ clearTimeout(_roGuardTimer); _roGuardTimer = setTimeout(applyViewOnlyGuards, 30); }
+(function initViewOnlyGuards(){
+  const obs = new MutationObserver(scheduleViewOnlyGuards);
+  RO_GUARDS.forEach(g => g.views.forEach(v => { const el = document.getElementById('view-' + v); if (el) obs.observe(el, { childList:true, subtree:true }); }));
+})();
+
 /**
  * สถานะของเมนูหนึ่งรายการสำหรับผู้ใช้คนนี้
  *   'ok'     ใช้งานได้
@@ -2391,7 +2444,8 @@ function navState(it){
       ? { s:'locked', why:'บริษัทเจ้าของสินค้าเป็นผู้ดูแลเมนูนี้' }
       : { s:'hidden' };
   }
-  if (!canView(it.mod)) return { s:'locked', why:'ยังไม่ได้รับสิทธิ์ — ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์' };
+  // modTenant = โมดูลที่ใช้ตรวจแทนเมื่อเป็นฝั่งตัวแทน (เมนูเดียวสองหน้าจอ — 9.1.1 ฝั่งตัวแทนคือโปรไฟล์ตัวแทน ใช้สิทธิ์ 'tenants')
+  if (!canView((SCOPE === 'tenant' && it.modTenant) || it.mod)) return { s:'locked', why:'ยังไม่ได้รับสิทธิ์ — ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์' };
   if (!it.ready) return { s:'locked', why:'เร็วๆ นี้ — ยังไม่เปิดใช้งาน', soon:true };
   return { s:'ok' };
 }
@@ -2601,6 +2655,7 @@ function gotoView(view){
   document.querySelectorAll('.sb-action').forEach(b => b.classList.toggle('active', b.dataset.view === menuId));
 
   if (LOADERS[view]) LOADERS[view]();
+  scheduleViewOnlyGuards();   // ปุ่มที่อยู่ใน HTML ตายตัว (ไม่ได้วาดใหม่) ก็ต้องซ่อนด้วยเมื่อเปิดหน้าในโหมดดูอย่างเดียว
 }
 
 /* ══════════════ DASHBOARD ══════════════ */
@@ -2711,14 +2766,14 @@ async function loadCustomers(){
     if (cached && cached.length) { custMasterCache = cached; custCachePartial = true; renderCustomers(); }
   }
   tblLoading(body, 8);
-  const [, , r] = await Promise.all([ensureCustomerGroups(), ensureDistChannels(), callApi('listCustomersAdmin', {})]);
+  const [, , r] = await Promise.all([ensureCustomerGroups(), ensureDistChannels(), callApi('listCustomersAdmin', { slim: true })]);
   if (!r.success) {
     if (!custMasterCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>';
     else toast(r.message, true);            // มีของเก่าให้ดูอยู่ — อย่าล้างทิ้งเพราะเน็ตสะดุดครั้งเดียว
     return;
   }
   custMasterCache = r.customers || [];
-  custCachePartial = false;
+  custCachePartial = !!r.slim;   // slim = ไม่มีที่อยู่/ภาษี/พิกัด — เปิดฟอร์มแก้ไขจะดึงของเต็มรายนั้นทาง getCustomerAdmin
   listSnapSave('customers', custMasterCache.map(custSnapRow));
   renderCustomers();
 }
@@ -2731,7 +2786,14 @@ async function ensureDistChannels(){
 /* ฟอร์มลูกค้าเต็มรูปแบบ — ใช้โมดัลตัวเดียวกับหน้าชุดราคา (plModal/plModalErr/plBusy) */
 async function openCustomerModal(id){
   // แถวที่กู้มาจาก localStorage ย่อไว้ — ต้องได้ของเต็มก่อนถึงเปิดฟอร์มได้ (ดูหมายเหตุที่ custCachePartial)
-  if (id && custCachePartial) { toast('กำลังโหลดข้อมูลลูกค้า…'); await loadCustomers(); }
+  const cur = id ? custMasterCache.find(x => String(x.id) === String(id)) : null;
+  if (id && custCachePartial && !(cur && 'address' in cur)) {   // แถวที่ดึงเต็มรูปมาแล้วมีช่อง address — ไม่ต้องดึงซ้ำ
+    toast('กำลังโหลดข้อมูลลูกค้า…');
+    const full = await callApi('getCustomerAdmin', { id });
+    if (!full.success) { toast(full.message, true); return; }
+    const at = custMasterCache.findIndex(x => String(x.id) === String(id));
+    if (at >= 0) custMasterCache[at] = full.customer; else custMasterCache.push(full.customer);
+  }
   const c = id ? custMasterCache.find(x => String(x.id) === String(id)) : null;
   const v = (k, d) => esc(c && c[k] !== undefined && c[k] !== null ? c[k] : (d === undefined ? '' : d));
   const sel = (list, cur, blank) => (blank ? '<option value="">'+blank+'</option>' : '') +
@@ -3013,9 +3075,9 @@ const payLabel = code => { const p = paymentTypesCache.find(x => x.code === code
 /* สถานะบิลขายสองแกน — ป้ายต้องตรงกับ backend (34_sales_status.gs) เป๊ะ */
 /* สายงาน 1 ต.ค. 2026 — ต้องตรงกับ SO_STATUS_LABELS ใน 34_sales_status.gs
    `pending_delivery` = ชื่อเดิมของ `confirmed` (บิลเก่ายังเป็นค่านี้ ห้ามตัดทิ้ง) */
-const SO_LABELS = { draft:'ใหม่ (ร่าง)', confirmed:'ยืนยันแล้ว — รอรับงาน', pending_delivery:'ยืนยันแล้ว — รอรับงาน',
-  accepted:'รับงานแล้ว', ready_to_ship:'พร้อมจัดส่ง', delivering:'กำลังจัดส่ง',
-  completed:'จัดส่งแล้ว', rejected:'ปฏิเสธไม่ขาย', cancelled:'ยกเลิกแล้ว' };
+const SO_LABELS = { draft:'ใหม่ (ร่าง)', confirmed:'ยืนยันแล้ว → รอแอดมินกดรับงาน', pending_delivery:'ยืนยันแล้ว → รอแอดมินกดรับงาน',
+  accepted:'บันทึกรับงานแล้ว → รอการจัดส่ง', ready_to_ship:'พร้อมจัดส่ง', delivering:'กำลังจัดส่ง',
+  completed:'จัดส่งแล้ว', rejected:'ปฏิเสธการขาย', cancelled:'ยกเลิกแล้ว' };
 const SO_PILL   = { draft:'off', confirmed:'wait', pending_delivery:'wait', accepted:'wait', ready_to_ship:'wait',
   delivering:'wait', completed:'ok', rejected:'off', cancelled:'off' };
 // ปุ่มขั้นถัดไปไม่ได้ตั้งไว้ที่นี่ — backend ส่ง `nextStatuses` มาจาก SO_TRANSITIONS ให้แล้ว (แหล่งเดียว)
@@ -3103,7 +3165,10 @@ function renderSaleOrderDetail(r){
   const o = r.order;
   document.getElementById('sod-title').textContent = o.code;
   document.getElementById('sod-meta').innerHTML = esc(o.customer) + ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
-    ' · ' + esc(o.createdAt) + (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
+    ' · ' + esc(o.createdAt) + (o.requestedDeliveryDate ? ' · <b>วันนัดส่ง ' + esc(o.requestedDeliveryDate) + '</b>' : '') +
+    (o.centerEditedAt ? ' · <span class="pill wait" title="ศูนย์แก้ไขรายการหลังรับงาน — พนักงานจะเห็นแจ้งเตือนในแอปมือถือ">แก้ไขโดยศูนย์ ' + esc(o.centerEditedAt) + (o.centerEditedBy ? ' (' + esc(o.centerEditedBy) + ')' : '') + '</span>' : '') +
+    (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
+  sedClose();
   document.getElementById('sod-actions').innerHTML =
     '<div class="sod-print-menu">' +
       '<button class="btn btn-sm" onclick="toggleSoPrintMenu(event)">พิมพ์เอกสาร ▾</button>' +
@@ -3113,6 +3178,7 @@ function renderSaleOrderDetail(r){
             ? ' <span class="unit">(ไม่มีราคา)</span>' : '') +
           (code === 'parcel' ? ' <span class="unit">100×150 มม.</span>' : '') + '</button>').join('') +
       '</div></div> ' +
+    (o.canEditLines ? '<button class="btn btn-sm btn-primary" onclick="openSodEdit()">✎ แก้ไขรายการ</button> ' : '') +
     (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
   renderSaleOrderStatusCard(r);
   renderSaleOrderHistory(r);
@@ -3172,7 +3238,7 @@ function renderSaleOrderStatusCard(r){
   const stepBar = steps.map((st, i) =>
     '<span class="pill '+(i <= at ? 'ok' : '')+'" style="'+(i > at ? 'opacity:.45' : '')+'">'+(i+1)+'. '+SO_LABELS[st]+'</span>').join(' <span class="unit">→</span> ');
   const nextBtns = (o.nextStatuses || []).map(n =>
-    '<button class="btn btn-sm btn-primary" onclick="setSaleOrderStatus(\''+n.code+'\')">เปลี่ยนเป็น: '+esc(n.label)+'</button>').join(' ');
+    '<button class="btn btn-sm btn-primary" onclick="setSaleOrderStatus(\''+n.code+'\')">'+esc(n.label)+'</button>').join(' ');
   const outstanding = Math.max(0, (o.total || 0) - (o.paidAmount || 0));
   const payBtns = o.paymentStatus === 'paid'
     ? '<button class="btn btn-sm" onclick="setSaleOrderPayment(0)">ยกเลิกการรับชำระ</button>'
@@ -3324,7 +3390,16 @@ async function cancelSaleOrderUI(){
 }
 
 /* ── เปิดบิลขายใหม่ ── */
-async function ensureProductsForSale(){ if (!productsCache.length) await loadProducts(); }
+/* ★ รายการสินค้าในฟอร์มเปิดบิล/แก้ไขบิลต้องสดเสมอ — เดิมใช้ cache ที่ค้างจากตอนเปิดหน้าสินค้า/snapshot ข้ามวัน
+   สินค้าที่เพิ่งเพิ่ม (เช่น 10185) จึงไม่โผล่ในรายการเลือกสินค้าขายจนกว่าจะรีเฟรชทั้งหน้า · โหลดใหม่ทุกครั้งที่เปิดฟอร์ม
+   (ข้ามถ้าเพิ่งโหลดไม่เกิน 60 วินาที) — ล้มเหลวก็ใช้ของเดิมต่อ ไม่ให้ฟอร์มเปิดไม่ได้ */
+let PRODUCTS_FRESH_TS = 0;
+async function ensureProductsForSale(){
+  if (productsCache.length && Date.now() - PRODUCTS_FRESH_TS < 60000) return;
+  const r = await callApi('listProductsAdmin', {});
+  if (r.success) { productsCache = r.data; PRODUCTS_FRESH_TS = Date.now(); listSnapSave('products', productsCache); }
+  else if (!productsCache.length) await loadProducts();
+}
 // โหลดใหม่ทุกครั้งที่เปิดฟอร์ม (ไม่แคชข้าม) กันของเก่าติดค้างข้ามบริบทถ้าสลับตัวแทน/โหมดบริษัทระหว่างเซสชัน
 async function ensureStaffCache(){
   const r = await callApi('listStaffAdmin', {});
@@ -3369,7 +3444,7 @@ async function openSaleOrderNew(){
 
   const custSel = document.getElementById('son-customer');
   custSel.innerHTML = '<option value="">กำลังโหลด...</option>';
-  const [custR] = await Promise.all([callApi('listCustomersAdmin', {}), ensureStaffCache(), ensureProductsForSale(), ensurePaymentTypesCache()]);
+  const [custR] = await Promise.all([callApi('listCustomersAdmin', { slim: true }), ensureStaffCache(), ensureProductsForSale(), ensurePaymentTypesCache()]);
   customersCache = custR.success ? (custR.customers || []).filter(c => c.isActive) : [];
   custSel.innerHTML = '<option value="">— เลือกลูกค้า —</option>' + customersCache.map(c => '<option value="'+c.id+'">'+esc(custLabel(c))+'</option>').join('');
 
@@ -3395,6 +3470,31 @@ function _sonProdLabel(id){
   const p = productsCache.find(x => String(x.record_id) === String(id));
   return p ? ((p.product_code ? p.product_code+' — ' : '') + p.name) : id;
 }
+/* ตารางผลคำนวณราคา + สรุปยอด (ไม่รวมภาษี → ภาษี → รวม) — ใช้ร่วมกันระหว่างเปิดบิลใหม่ (sonPreview) กับแก้ไขใบที่รับงานแล้ว (sedPreview)
+   ตัวเลขทุกตัวมาจาก previewSaleAdmin เครื่องเดียวกับตอนบันทึกจริง */
+function renderSalePreviewHtml(r){
+  return '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>ราคา/หน่วย (ไม่รวม VAT)</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>หลังหักส่วนลด</th><th>รวมภาษีแล้ว</th></tr></thead><tbody>' +
+      r.lines.map(l => { var lb = l.listBreakdown;
+        var unitPrice = lb ? lb.unitPriceExVat : l.unitPrice, unitDisc = lb ? lb.unitDiscountExVat : (l.unitDiscount||0),
+            before = lb ? lb.beforeDiscountExVat : l.lineTotal, disc = lb ? lb.discountExVat : (l.lineDiscount||0),
+            after = lb ? lb.netExVat : (l.netTotal != null ? l.netTotal : l.lineTotal);
+        return '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+l.qty+'</td><td>'+esc(l.unitCode)+'</td>' +
+        '<td class="mono-data">฿'+baht(unitPrice)+'</td><td class="mono-data">'+(unitDisc ? '-฿'+baht(unitDisc) : '-')+'</td>' +
+        '<td class="mono-data">฿'+baht(before)+'</td><td class="mono-data">'+(disc ? '-฿'+baht(disc) : '-')+'</td>' +
+        '<td class="mono-data">฿'+baht(after)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>'; }).join('') +
+      (r.freeGoods||[]).map(f => '<tr style="background:var(--blue-pale)"><td colspan="3">'+esc(_sonProdLabel(f.productId))+' <span class="unit">(ของแถม: '+esc(f.ruleName)+')</span></td>' +
+        '<td colspan="2">'+f.qty+' '+esc(f.unitCode||'')+'</td><td>-</td><td>-</td><td>-</td><td>ฟรี</td></tr>').join('') +
+      '</tbody></table></div>' +
+      (r.priceListName ? '<div class="activity-row"><span>ใช้ชุดราคา</span><span class="amt">'+esc(r.priceListName)+'</span></div>' : '') +
+      '<div class="activity-row"><span>ราคารวมหลังหักส่วนลดสินค้า (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalAfterProductDiscountExVat)+'</span></div>' +
+      (r.billDiscountExVat ? '<div class="activity-row"><span>ส่วนลดท้ายบิล (ไม่รวมภาษี)</span><span class="amt mono-data">-฿'+baht(r.billDiscountExVat)+'</span></div>' : '') +
+      (r.vatMixed
+        ? '<div class="activity-row"><span>มูลค่าสินค้าที่ยกเว้นภาษี</span><span class="amt mono-data">฿'+baht(r.exemptAmount)+'</span></div>' +
+          '<div class="activity-row"><span>มูลค่าสินค้าที่เสียภาษี</span><span class="amt mono-data">฿'+baht(r.taxableExVat)+'</span></div>'
+        : '<div class="activity-row"><span>ราคาสุทธิหักส่วนลดท้ายบิล (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalExVat)+'</span></div>') +
+      (r.applyVat ? '<div class="activity-row"><span>ภาษีมูลค่าเพิ่ม '+Math.round((r.vatRate != null ? r.vatRate : 0.07)*100)+'%</span><span class="amt mono-data">฿'+baht(r.vatAmount)+'</span></div>' : '') +
+      '<div class="activity-row"><b>ราคารวมภาษีมูลค่าเพิ่ม</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
+}
 async function sonPreview(){
   const out = document.getElementById('son-result');
   document.getElementById('son-confirm').style.display = 'none'; sonPreviewData = null;
@@ -3416,28 +3516,62 @@ async function sonPreview(){
   // เป็นเลขไม่รวมภาษี (มาจากราคาตั้ง G ของใบราคาจริง ผ่าน listBreakdown, _lineListBreakdown 18_pricing_engine.gs)
   // แล้วค่อยแยกคอลัมน์ "รวมภาษีแล้ว" ไว้ท้ายสุด — บรรทัดที่ไม่มีชุดราคาอ้างอิง (เส้นทางโปรโมชั่นเดิม) ไม่มี
   // listBreakdown จะ fallback ไปใช้ตัวเลขรวมภาษีเดิมในคอลัมน์เหล่านั้นแทน (ไม่มีราคาตั้งให้ถอดภาษีจริง)
-  out.innerHTML = '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>ราคา/หน่วย (ไม่รวม VAT)</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>หลังหักส่วนลด</th><th>รวมภาษีแล้ว</th></tr></thead><tbody>' +
-    r.lines.map(l => { var lb = l.listBreakdown;
-      var unitPrice = lb ? lb.unitPriceExVat : l.unitPrice, unitDisc = lb ? lb.unitDiscountExVat : (l.unitDiscount||0),
-          before = lb ? lb.beforeDiscountExVat : l.lineTotal, disc = lb ? lb.discountExVat : (l.lineDiscount||0),
-          after = lb ? lb.netExVat : (l.netTotal != null ? l.netTotal : l.lineTotal);
-      return '<tr><td>'+esc(_sonProdLabel(l.productId))+'</td><td>'+l.qty+'</td><td>'+esc(l.unitCode)+'</td>' +
-      '<td class="mono-data">฿'+baht(unitPrice)+'</td><td class="mono-data">'+(unitDisc ? '-฿'+baht(unitDisc) : '-')+'</td>' +
-      '<td class="mono-data">฿'+baht(before)+'</td><td class="mono-data">'+(disc ? '-฿'+baht(disc) : '-')+'</td>' +
-      '<td class="mono-data">฿'+baht(after)+'</td><td class="mono-data">฿'+baht(l.lineTotal)+'</td></tr>'; }).join('') +
-    (r.freeGoods||[]).map(f => '<tr style="background:var(--blue-pale)"><td colspan="3">'+esc(_sonProdLabel(f.productId))+' <span class="unit">(ของแถม: '+esc(f.ruleName)+')</span></td>' +
-      '<td colspan="2">'+f.qty+' '+esc(f.unitCode||'')+'</td><td>-</td><td>-</td><td>-</td><td>ฟรี</td></tr>').join('') +
-    '</tbody></table></div>' +
-    (r.priceListName ? '<div class="activity-row"><span>ใช้ชุดราคา</span><span class="amt">'+esc(r.priceListName)+'</span></div>' : '') +
-    '<div class="activity-row"><span>ราคารวมหลังหักส่วนลดสินค้า (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalAfterProductDiscountExVat)+'</span></div>' +
-    (r.billDiscountExVat ? '<div class="activity-row"><span>ส่วนลดท้ายบิล (ไม่รวมภาษี)</span><span class="amt mono-data">-฿'+baht(r.billDiscountExVat)+'</span></div>' : '') +
-    (r.vatMixed
-      ? '<div class="activity-row"><span>มูลค่าสินค้าที่ยกเว้นภาษี</span><span class="amt mono-data">฿'+baht(r.exemptAmount)+'</span></div>' +
-        '<div class="activity-row"><span>มูลค่าสินค้าที่เสียภาษี</span><span class="amt mono-data">฿'+baht(r.taxableExVat)+'</span></div>'
-      : '<div class="activity-row"><span>ราคาสุทธิหักส่วนลดท้ายบิล (ไม่รวมภาษี)</span><span class="amt mono-data">฿'+baht(r.subtotalExVat)+'</span></div>') +
-    (r.applyVat ? '<div class="activity-row"><span>ภาษีมูลค่าเพิ่ม '+Math.round((r.vatRate != null ? r.vatRate : 0.07)*100)+'%</span><span class="amt mono-data">฿'+baht(r.vatAmount)+'</span></div>' : '') +
-    '<div class="activity-row"><b>ราคารวมภาษีมูลค่าเพิ่ม</b><span class="amt mono-data"><b>฿'+baht(r.total)+'</b></span></div>';
+  out.innerHTML = renderSalePreviewHtml(r);
   document.getElementById('son-confirm').style.display = '';
+}
+/* ── แก้ไขรายการในใบที่ "บันทึกรับงานแล้ว" (editSalesOrderAdmin) ── */
+async function sedAddRow(it){
+  const opts = productsCache.filter(p => isOn(p.is_active))
+    .map(p => '<option value="'+p.record_id+'">'+(p.product_code ? esc(p.product_code)+' — ' : '')+esc(p.name)+'</option>').join('');
+  const d = document.createElement('div');
+  d.className = 'son-row'; d.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
+  d.innerHTML = '<select class="son-prod" style="flex:1;min-width:0" onchange="sonRowProductChanged(this)"><option value="">— เลือกสินค้า —</option>'+opts+'</select>' +
+    '<select class="son-unit" style="width:170px"></select>' +
+    '<input type="number" class="son-qty" min="1" value="1" style="width:80px">' +
+    '<button class="btn btn-sm" onclick="this.parentNode.remove()">✕</button>';
+  document.getElementById('sed-rows').appendChild(d);
+  if (it) {
+    const sel = d.querySelector('.son-prod'); sel.value = String(it.productId);
+    await sonRowProductChanged(sel);
+    const us = d.querySelector('.son-unit');
+    if ([...us.options].some(o => o.value === it.unitCode)) us.value = it.unitCode;   // ลัง/แพ็ค · หน่วยฐาน (PC) ใช้ตัวเลือกแรก
+    d.querySelector('.son-qty').value = it.qty;
+  }
+}
+async function openSodEdit(){
+  const o = SOD_DATA.order, card = document.getElementById('sod-edit-card');
+  card.style.display = '';
+  document.getElementById('sed-rows').innerHTML = ''; document.getElementById('sed-result').innerHTML = '';
+  document.getElementById('sed-date').value = o.requestedDeliveryDate || '';
+  await ensureProductsForSale();
+  for (const it of SOD_DATA.items.filter(x => !x.isFree)) await sedAddRow(it);
+  card.scrollIntoView({ block: 'nearest' });
+}
+function sedClose(){ const c = document.getElementById('sod-edit-card'); if (c) c.style.display = 'none'; }
+function _sedItems(){
+  return [...document.querySelectorAll('#sed-rows .son-row')].map(row => ({
+    productId: row.querySelector('.son-prod').value, unitCode: row.querySelector('.son-unit').value, qty: Number(row.querySelector('.son-qty').value)
+  })).filter(it => it.productId);
+}
+async function sedPreview(){
+  const out = document.getElementById('sed-result'), o = SOD_DATA.order, items = _sedItems();
+  if (!items.length) { out.innerHTML = '<div class="err" style="display:block">เพิ่มรายการสินค้าอย่างน้อย 1 รายการ</div>'; return false; }
+  out.textContent = 'กำลังคำนวณ...';
+  const r = await callApi('previewSaleAdmin', { customerId: o.customerId, paymentType: o.paymentMethod, fulfillmentType: 'office_delivery', items });
+  if (!r.success) { out.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return false; }
+  out.innerHTML = renderSalePreviewHtml(r) +
+    '<div class="activity-row"><span>ยอดเดิมก่อนแก้</span><span class="amt mono-data">฿'+baht(o.total)+'</span></div>';
+  return true;
+}
+async function sedSave(){
+  const o = SOD_DATA.order, items = _sedItems();
+  if (!items.length) { toast('เพิ่มรายการสินค้าอย่างน้อย 1 รายการ', true); return; }
+  if (!confirm('บันทึกการแก้ไขใบ '+o.code+' ?\nระบบจะคิดราคาใหม่จากชุดราคาของร้าน และปรับยอดจองสินค้าในคลังตามรายการใหม่ — พนักงานขายจะเห็นแจ้งเตือนว่าศูนย์แก้ไขใบนี้แล้ว')) return;
+  const r = await callApi('editSalesOrderAdmin', { id: currentSaleOrderId, items, requestedDeliveryDate: document.getElementById('sed-date').value || '' });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message, !!r.stockWarning);
+  const row = salesOrdersCache.find(x => x.id === currentSaleOrderId); if (row) row.total = r.total;
+  openSaleOrderDetail(currentSaleOrderId);
 }
 async function sonSubmit(){
   if (!sonPreviewData) return;
@@ -3564,6 +3698,40 @@ function _productCmp(a, b, col, dir){
   const c = col.numeric ? (x - y) : String(x).localeCompare(String(y), 'th', { numeric:true, sensitivity:'base' });
   return dir === 'desc' ? -c : c;
 }
+/* ── ตัวกรองหมวดสินค้า (Category / subCategory) — ใช้ร่วมกันทั้งตารางสินค้าและยอดคงเหลือในคลัง ──
+   หมวดย่อยแสดงเฉพาะที่อยู่ใต้หมวดที่เลือก · "(ไม่มีหมวด)" ไว้ไล่ตามสินค้าที่ยังไม่ได้ใส่หมวด */
+const CAT_FILTER = { products:{ cat:'', sub:'' }, stock:{ cat:'', sub:'' } };
+const CAT_NONE = 'none';
+function _catMatch(f, cat, sub){
+  if (f.cat === CAT_NONE) { if (cat) return false; }
+  else if (f.cat && cat !== f.cat) return false;
+  if (f.sub && sub !== f.sub) return false;
+  return true;
+}
+function renderCatFilter(scope, elId, rows, getCat, getSub, rerender){
+  const el = document.getElementById(elId); if (!el) return;
+  const f = CAT_FILTER[scope];
+  const srt = a => a.sort((x,y) => x.localeCompare(y, 'th'));
+  const cats = srt([...new Set(rows.map(getCat).filter(Boolean))]);
+  // กลุ่มที่เลือกไว้ไม่มีอยู่แล้ว (ข้อมูลเปลี่ยน) → ล้างตัวกรอง ไม่งั้นตารางว่างโดยไม่รู้สาเหตุ
+  if (f.cat && f.cat !== CAT_NONE && !cats.includes(f.cat)) { f.cat = ''; f.sub = ''; }
+  const subs = srt([...new Set(rows.filter(r => !f.cat || (f.cat === CAT_NONE ? !getCat(r) : getCat(r) === f.cat)).map(getSub).filter(Boolean))]);
+  if (f.sub && !subs.includes(f.sub)) f.sub = '';
+  const hasBlank = rows.some(r => !getCat(r));
+  const opt = (v, t, sel) => '<option value="'+esc(v)+'"'+(sel?' selected':'')+'>'+esc(t)+'</option>';
+  el.innerHTML =
+    '<label class="unit">หมวด <select onchange="setCatFilter(\''+scope+'\',\'cat\',this.value)">' + opt('', 'ทั้งหมด', !f.cat) +
+      cats.map(c => opt(c, c, f.cat === c)).join('') + (hasBlank ? opt(CAT_NONE, '(ไม่มีหมวด)', f.cat === CAT_NONE) : '') + '</select></label> ' +
+    '<label class="unit">หมวดย่อย <select onchange="setCatFilter(\''+scope+'\',\'sub\',this.value)">' + opt('', 'ทั้งหมด', !f.sub) +
+      subs.map(c => opt(c, c, f.sub === c)).join('') + '</select></label>' +
+    ((f.cat || f.sub) ? ' <button class="btn btn-sm btn-ghost" onclick="setCatFilter(\''+scope+'\',\'clear\')">ล้างตัวกรอง</button>' : '');
+}
+function setCatFilter(scope, field, value){
+  const f = CAT_FILTER[scope];
+  if (field === 'clear') { f.cat = ''; f.sub = ''; }
+  else { f[field] = value; if (field === 'cat') f.sub = ''; }
+  if (scope === 'products') renderProductsTable(); else renderWarehouseStock();
+}
 function sortProductsTable(key){
   PRODUCT_SORT = (PRODUCT_SORT && PRODUCT_SORT.key === key)
     ? { key, dir: PRODUCT_SORT.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
@@ -3592,7 +3760,9 @@ function renderProductsTable(){
 
   if (!productsCache.length) { body.innerHTML = '<tr class="empty-row"><td colspan="'+(PRODUCT_TABLE_COLS.length+1)+'">ยังไม่มีสินค้า</td></tr>'; return; }
 
-  let rows = productsCache.slice();
+  renderCatFilter('products', 'products-cat-filter', productsCache, p => String(p.category||'').trim(), p => String(p.sub_category||'').trim(), renderProductsTable);
+  let rows = productsCache.filter(p => _catMatch(CAT_FILTER.products, String(p.category||'').trim(), String(p.sub_category||'').trim()));
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="'+(PRODUCT_TABLE_COLS.length+1)+'">ไม่มีสินค้าในหมวดที่เลือก</td></tr>'; return; }
   if (PRODUCT_SORT) {
     const col = PRODUCT_TABLE_COLS.find(c => c.key === PRODUCT_SORT.key);
     if (col) rows.sort((a,b) => _productCmp(a, b, col, PRODUCT_SORT.dir));
@@ -3620,7 +3790,7 @@ async function loadProducts(){
   // ยิงคู่ขนาน — เดิมรอกลุ่มสินค้าให้เสร็จก่อนค่อยโหลดสินค้า เสียเวลาเป็นสองเท่าโดยไม่จำเป็น
   const [, r] = await Promise.all([ensureProductGroups(), callApi('listProductsAdmin', {})]);
   if (!r.success) { if (!productsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
-  productsCache = r.data;
+  productsCache = r.data; PRODUCTS_FRESH_TS = Date.now();
   listSnapSave('products', productsCache);
   renderProductsTable();
 }
@@ -6578,9 +6748,12 @@ async function loadWarehouseStock(){
    (backend ก็บวก r.value ของทุกแถว) แต่ทำแบบนี้แล้วหน้าที่กู้จาก snapshot ได้ยอดรวมถูกด้วย
    ถ้าเก็บเลขที่ส่งมาแทน พอเปิดแอปใหม่จะมีตารางแต่ยอดรวมหาย */
 function renderWarehouseStock(){
-  const total = wsCache.reduce((s, x) => s + (Number(x.value) || 0), 0);
-  document.getElementById('ws-summary').innerHTML = 'มูลค่าสินค้าคงเหลือรวม <b>฿'+bahtPlain(total)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก) — ตรงกับบัญชีสินค้าคงเหลือ 1300';
-  document.getElementById('ws-body').innerHTML = rowsOrEmpty(wsCache.map(s => {
+  renderCatFilter('stock', 'ws-cat-filter', wsCache, s => String(s.category||'').trim(), s => String(s.subCategory||'').trim(), renderWarehouseStock);
+  const view = wsCache.filter(s => _catMatch(CAT_FILTER.stock, String(s.category||'').trim(), String(s.subCategory||'').trim()));
+  const total = view.reduce((s, x) => s + (Number(x.value) || 0), 0);
+  const filtered = view.length !== wsCache.length;
+  document.getElementById('ws-summary').innerHTML = (filtered ? 'มูลค่าสินค้าคงเหลือเฉพาะหมวดที่เลือก' : 'มูลค่าสินค้าคงเหลือรวม') + ' <b>฿'+bahtPlain(total)+'</b> (ต้นทุนเฉลี่ยถ่วงน้ำหนัก)' + (filtered ? ' — แสดง '+view.length+' จาก '+wsCache.length+' รายการ' : ' — ตรงกับบัญชีสินค้าคงเหลือ 1300');
+  document.getElementById('ws-body').innerHTML = rowsOrEmpty(view.map(s => {
     const qty = Number(s.qty) || 0, rsv = Number(s.reserved) || 0;
     // available มาจาก backend ไม่ได้คิดเองซ้ำ — คิดสองที่แล้ววันหนึ่งนิยามขยับ จะได้เลขคนละตัวโดยไม่มีใครรู้
     const avail = Number(s.available) || 0;
@@ -6741,7 +6914,7 @@ async function openArInvoiceForm(){
     plModalActions('submitArInvoice()', 'ออกใบแจ้งหนี้'));
 }
 function arToggleManual(){ document.getElementById('arf-manual').style.display = document.getElementById('arf-order').value ? 'none' : ''; }
-async function ensureCustomers(){ if (!customersCache.length) { const r = await callApi('listCustomersAdmin', {}); if (r.success) customersCache = (r.customers || []).filter(c => c.isActive); } return customersCache; }
+async function ensureCustomers(){ if (!customersCache.length) { const r = await callApi('listCustomersAdmin', { slim: true }); if (r.success) customersCache = (r.customers || []).filter(c => c.isActive); } return customersCache; }
 function submitArInvoice(){ return plBusy(async () => {
   const orderId = document.getElementById('arf-order').value;
   const payload = { invoiceDate: document.getElementById('arf-date').value, dueDays: Number(document.getElementById('arf-days').value) || 30,

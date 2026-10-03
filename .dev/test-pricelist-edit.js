@@ -43,7 +43,7 @@ ctx.SpreadsheetApp = { openById: () => { throw new Error('should not be called')
 ctx.PropertiesService = { getScriptProperties: () => ({ getProperty: () => '' }) };
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', '02_helpers.gs'), 'utf8'), ctx, { filename: '02_helpers.gs' });
 Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
-for (const f of ['28_units.gs', '17_pricing.gs', '18_pricing_engine.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
+for (const f of ['28_units.gs', '38_package_distribution.gs', '17_pricing.gs', '18_pricing_engine.gs']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', f), 'utf8'), ctx, { filename: f });
 
 let failed = 0;
 const eq = (name, actual, expected) => {

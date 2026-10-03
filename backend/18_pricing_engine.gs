@@ -388,13 +388,13 @@ function previewPricing(session, payload) {
   var ctx;
   if (payload.customerId) {
     var cust = plrCustomerRow(payload.customerId);
-    if (!cust) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
+    if (!cust || (_myTenantOnly(session) !== null && String(cust.tenant_id) !== _myTenantOnly(session))) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
     ctx = getPricingContextForCustomer(payload.customerId, payload.date);
     if (!ctx) return { success: false, message: 'ร้านนี้ยังไม่เข้าเงื่อนไขชุดราคาไหนเลย — ตรวจด้วย "ตรวจสิทธิ์ของร้าน" ว่าติดที่การจ่ายชุดให้ตัวแทน หรือกฎสิทธิ์' };
   } else if (payload.priceListId) {
     var picked = null;
     centralObjects('price_lists').forEach(function(l) { if (String(l.record_id) === String(payload.priceListId)) picked = l; });
-    ctx = _pricingContextForList(picked);
+    ctx = (picked && !_pkgVisible(session, PKG_PRICE_LIST, picked.record_id)) ? null : _pricingContextForList(picked);
     if (!ctx) return { success: false, message: 'ไม่พบชุดราคานี้' };
   } else {
     ctx = getPricingContext(payload.customerGroupId, payload.date);

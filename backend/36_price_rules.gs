@@ -268,8 +268,9 @@ function listPriceListRules(session, payload) {
     (conds[String(c.rule_id)] = conds[String(c.rule_id)] || []).push({
       id: c.record_id, field: c.field, op: c.op, value: c.value });
   });
+  var pkgType = target === PLR_TARGET_PROMO ? PKG_PROMO : target === PLR_TARGET_FREE_GOODS ? 'free_goods' : PKG_PRICE_LIST, pkgIdx = packageTenantIndex();
   var rules = centralObjects('price_list_rules')
-    .filter(function(r) { return plrTargetOf(r) === target && (!listId || String(r.price_list_id) === listId); })
+    .filter(function(r) { return plrTargetOf(r) === target && (!listId || String(r.price_list_id) === listId) && _pkgVisible(session, pkgType, r.price_list_id, pkgIdx); })
     .sort(function(a, b) { return (Number(b.priority) || 0) - (Number(a.priority) || 0); })
     .map(function(r) { return {
       id: r.record_id, targetType: plrTargetOf(r), priceListId: r.price_list_id, name: r.name || '', matchType: r.match_type || PLR_MATCH_ALL,
@@ -384,6 +385,8 @@ function previewPriceListAudience(session, payload) {
   var limit = parseInt(payload.limit) || 25;
 
   var customers = centralObjects('customers').filter(function(c) { return isNotOff(c.is_active); });
+  var mine = _myTenantOnly(session);   // ฝั่งตัวแทนทดลองได้เฉพาะร้านของตัวเอง
+  if (mine !== null) payload.tenantId = mine;
   if (payload.tenantId) customers = customers.filter(function(c) { return String(c.tenant_id) === String(payload.tenantId); });
 
   var matched = customers.filter(function(c) { return plrRuleMatches(c, rule, conds); });
@@ -405,7 +408,7 @@ function explainCustomerPricing(session, payload) {
   var err = _requirePermission(session, 'pricing', 'view'); if (err) return err;
   payload = payload || {};
   var cust = plrCustomerRow(payload.customerId);
-  if (!cust) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
+  if (!cust || (_myTenantOnly(session) !== null && String(cust.tenant_id) !== _myTenantOnly(session))) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
   var today = payload.date || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   var rulesByList = plrRulesByList();
   var pkgIdx = packageTenantIndex();

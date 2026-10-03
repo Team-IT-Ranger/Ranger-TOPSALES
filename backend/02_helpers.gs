@@ -43,9 +43,49 @@ function _normalizeRowDates(rows) {
   });
 }
 function _sheetCacheKey(name) { return 'sheet_' + name + '_v1'; }
+
+/* ═══════════ แคชก้อนใหญ่: บีบอัด gzip + แบ่งเป็นชิ้น (3 ต.ค. 2026 — เจ้าของระบบ: "เปิดหน้าข้อมูลช้ามาก") ═══════════
+ * CacheService เก็บได้ ≤ 100 KB ต่อค่า — เดิมตารางที่ JSON เกิน 90 KB "ไม่ถูกแคชเลย" ซึ่งคือตารางที่ใหญ่ที่สุดพอดี
+ * (ลูกค้า 2,039 ร้าน ≈ 1.7 MB · ชุดราคาหลายงวด) ทุกหน้าที่แตะตารางพวกนี้จึงอ่านชีตสดทุกครั้ง 4-8 วินาที
+ * ตอนนี้: JSON → gzip (ซ้ำเยอะ บีบเหลือ ~10%) → base64 → ชิ้นละ ≤ 90,000 ตัวอักษร เก็บ N+1 คีย์ (`key#n` บอกจำนวนชิ้น)
+ *   อ่านด้วย getAll ครั้งเดียว · ชิ้นใดหายไป (หมดอายุไม่พร้อมกัน) = ถือว่าไม่มีแคช อ่านชีตสดแทน ไม่เคยได้ข้อมูลครึ่งๆ กลางๆ
+ *   ก้อนเล็ก (< 90 KB) ยังเก็บแบบเดิมคีย์เดียว ไม่บีบ — ไม่เสียเวลาบีบของที่ไม่จำเป็น */
+var CACHE_CHUNK_CHARS = 90000;
+function _cacheBigPut(key, json, ttl) {
+  var cache = CacheService.getScriptCache();
+  if (json.length < CACHE_CHUNK_CHARS) { cache.put(key, json, ttl); return; }
+  var b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(json, 'application/json')).getBytes());
+  var n = Math.ceil(b64.length / CACHE_CHUNK_CHARS), all = {};
+  for (var i = 0; i < n; i++) all[key + '#' + i] = b64.substring(i * CACHE_CHUNK_CHARS, (i + 1) * CACHE_CHUNK_CHARS);
+  all[key + '#n'] = String(n);
+  cache.putAll(all, ttl);
+}
+function _cacheBigGet(key) {
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get(key);
+  if (raw) return raw;
+  var n = parseInt(cache.get(key + '#n'), 10) || 0;
+  if (!n) return null;
+  var keys = [];
+  for (var i = 0; i < n; i++) keys.push(key + '#' + i);
+  var got = cache.getAll(keys), parts = [];
+  for (var j = 0; j < n; j++) { var p = got[key + '#' + j]; if (!p) return null; parts.push(p); }
+  return Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(parts.join('')), 'application/x-gzip')).getDataAsString();
+}
+function _cacheBigRemove(key) {
+  var cache = CacheService.getScriptCache();
+  var n = parseInt(cache.get(key + '#n'), 10) || 0;
+  var keys = [key, key + '#n'];
+  for (var i = 0; i < n; i++) keys.push(key + '#' + i);
+  cache.removeAll(keys);
+}
+
+// ตารางที่แอปมือถือ (getBootstrap) เอาไปทำแคตตาล็อก — เปลี่ยนเมื่อไหร่ ต้องให้แคช bootstrap ของทุกคนหมดอายุ (ดู 03_cache.gs)
+var CATALOG_TABLES = { products: 1, product_units: 1, customers: 1, discount_rules: 1 };
 function centralInvalidate(name) {
   delete _objMemo[name];
-  if (SHEET_CACHE_TABLES[name]) { try { CacheService.getScriptCache().remove(_sheetCacheKey(name)); } catch (e) {} }
+  if (SHEET_CACHE_TABLES[name]) { try { _cacheBigRemove(_sheetCacheKey(name)); } catch (e) {} }
+  if (CATALOG_TABLES[name] && typeof bumpCatalogVersion === 'function') bumpCatalogVersion();
 }
 
 // เก็บ Spreadsheet ที่เปิดแล้วไว้ในการทำงานครั้งนี้ กันเปิดซ้ำ (openById มีต้นทุน)
@@ -94,7 +134,7 @@ function centralObjects(name) {
   if (_objMemo[name]) return _objMemo[name];
   if (SHEET_CACHE_TABLES[name]) {
     try {
-      var raw = CacheService.getScriptCache().get(_sheetCacheKey(name));
+      var raw = _cacheBigGet(_sheetCacheKey(name));
       if (raw) { _objMemo[name] = JSON.parse(raw); return _objMemo[name]; }
     } catch (e) { /* แคชมีปัญหา → อ่านชีตตามปกติ */ }
   }
@@ -102,15 +142,17 @@ function centralObjects(name) {
   if (SHEET_CACHE_TABLES[name]) {
     rows = _normalizeRowDates(rows);
     try {
-      var json = JSON.stringify(rows);
-      if (json.length < 90000) CacheService.getScriptCache().put(_sheetCacheKey(name), json, SHEET_CACHE_TTL);
-    } catch (e) { /* ใหญ่เกินหรือแคชล่ม — ไม่เป็นไร */ }
+      _cacheBigPut(_sheetCacheKey(name), JSON.stringify(rows), SHEET_CACHE_TTL);
+    } catch (e) { /* แคชล่ม/เกินโควตา — ไม่เป็นไร อ่านชีตสดต่อ */ }
   }
   _objMemo[name] = rows;
   return rows;
 }
 function centralAppend(name, obj) { centralInvalidate(name); return appendRowToSheet(centralSheet(name), obj); }
 function centralUpdate(name, recordId, obj) { centralInvalidate(name); return updateRowInSheet(centralSheet(name), recordId, obj); }
+/** เขียนแถวโดย **ไม่ล้างแคช** — ใช้กับค่าที่ "ช้าไปไม่เกิน TTL ก็ไม่เป็นไร" และถูกเขียนถี่มาก (เช่น last_sale_at ทุกบิล)
+ *  ถ้าล้างแคชทุกครั้ง ตารางลูกค้า 1.7 MB จะถูกอ่านสดใหม่หลังทุกบิล แคชก็ไม่มีความหมาย */
+function centralUpdateQuiet(name, recordId, obj) { delete _objMemo[name]; return updateRowInSheet(centralSheet(name), recordId, obj, true); }
 function centralNextId(name) { return nextIdOf(centralSheet(name)); }
 
 // ── TENANT ──
@@ -281,19 +323,23 @@ function deleteRowsWhere(sh, colName, value) {
 }
 
 // อัปเดตบางฟิลด์ของแถวที่ record_id ตรงกับที่ระบุ (partial update ตาม key ที่ส่งมาใน obj)
-function updateRowInSheet(sh, recordId, obj) {
-  try { centralInvalidate(sh.getName()); } catch (e) {}
+function updateRowInSheet(sh, recordId, obj, quiet) {
+  if (!quiet) { try { centralInvalidate(sh.getName()); } catch (e) {} }
   var data = sh.getDataRange().getValues();
   var headers = data[0];
   var idCol = headers.indexOf('record_id');
   if (idCol === -1) throw new Error('Sheet ' + sh.getName() + ' ไม่มีคอลัมน์ record_id');
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][idCol]) === String(recordId)) {
-      var rowNum = i + 1;
-      Object.keys(obj).forEach(function(key) {
-        var col = headers.indexOf(key);
-        if (col !== -1) sh.getRange(rowNum, col + 1).setValue(obj[key]);
-      });
+      /* ★ เขียนครั้งเดียวต่อแถว (setValues ช่วงที่ครอบคอลัมน์ที่แก้) — เดิม setValue ทีละช่อง บิลที่แก้ 20 คอลัมน์ = เรียก Sheets API 20 ครั้ง
+         ค่าของคอลัมน์ที่ไม่ได้แก้ในช่วงเดียวกันเขียนกลับด้วยค่าที่เพิ่งอ่านมา (ไม่เปลี่ยน) */
+      var cols = [];
+      Object.keys(obj).forEach(function(key) { var col = headers.indexOf(key); if (col !== -1) cols.push(col); });
+      if (!cols.length) return true;
+      var lo = Math.min.apply(null, cols), hi = Math.max.apply(null, cols);
+      var rowVals = data[i].slice(lo, hi + 1);
+      Object.keys(obj).forEach(function(key) { var col = headers.indexOf(key); if (col !== -1) rowVals[col - lo] = obj[key]; });
+      sh.getRange(i + 1, lo + 1, 1, hi - lo + 1).setValues([rowVals]);
       return true;
     }
   }

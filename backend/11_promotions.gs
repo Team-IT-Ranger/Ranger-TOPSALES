@@ -153,7 +153,8 @@ function applyPromotions(items, customerId) {
 // ── Admin CRUD (ฝั่งบริษัทเจ้าของสินค้าเท่านั้น) ──
 function listPromotions(session) {
   var err = _requirePermission(session, 'promotions', 'view'); if (err) return err;
-  return { success: true, data: centralObjects('discount_rules') };
+  var idx = packageTenantIndex();
+  return { success: true, data: centralObjects('discount_rules').filter(function(r) { return _pkgVisible(session, PKG_PROMO, r.record_id, idx); }) };
 }
 
 function addPromotion(session, payload) {

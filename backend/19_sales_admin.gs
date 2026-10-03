@@ -97,7 +97,11 @@ function getSalesOrderAdmin(session, payload) {
       deliveredAt: safeDateStr(order.delivered_at), paidAt: safeDateStr(order.paid_at),
       nextStatuses: (SO_TRANSITIONS[status] || []).filter(function(x) { return x !== 'cancelled'; })
         .map(function(x) { return { code: x, label: SO_STATUS_LABELS[x] }; }),
-      saleBy: order.sale_by, note: order.note || '', createdAt: safeDateStr(order.created_at)
+      saleBy: order.sale_by, note: order.note || '', createdAt: safeDateStr(order.created_at),
+      requestedDeliveryDate: safeDateStr(order.requested_delivery_date).substring(0, 10),
+      centerEditedAt: safeDateStr(order.center_edited_at), centerEditedBy: order.center_edited_by || '',
+      // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
+      canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && hasPermission(session, 'sales', 'edit')
     },
     issuer: _docIssuer(session, tenantId),
     statusLog: orderStatusLog(tenantId, order.record_id),

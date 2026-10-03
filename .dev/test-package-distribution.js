@@ -192,5 +192,18 @@ console.log('\n-- ฝั่งตัวแทนเปิดดูได้ว�
   eq('บริษัทเปิดดูแทนตัวแทนรายอื่นได้', nkn.priceLists.map(p => p.id), [11]);
 }
 
+console.log('\n-- ฝั่งตัวแทนเปิดดูชุดราคา/โปรได้แบบ viewer แต่เห็นเฉพาะที่ได้รับ (3 ต.ค. 2026) --');
+{
+  const NKN_AGENT = Object.assign({}, AGENT, { tenant_id: 'NKN' });
+  eq('ตัวแทน BDC เห็นชุดราคาที่ได้รับ (10,11)', ctx.listPriceLists(AGENT).data.map(l => l.id).sort(), [10, 11]);
+  eq('  ตัวแทน NKN เห็นแค่ชุดที่จ่ายให้ตัวเอง (11)', ctx.listPriceLists(NKN_AGENT).data.map(l => l.id), [11]);
+  eq('  ฝั่งบริษัทเห็นครบ', ctx.listPriceLists(OWNER).data.map(l => l.id).sort(), [10, 11]);
+  fails('ตัวแทน NKN เปิดดูรายละเอียดชุด 10 ที่ไม่ได้รับ → ไม่พบ', ctx.getPriceList(NKN_AGENT, { id: 10 }), /ไม่พบชุดราคา/);
+  eq('  โปรโมชั่นก็กรองเหมือนกัน (ตัวแทน NKN ไม่เห็นโปรที่ไม่ได้จ่ายให้)', ctx.listPromotions(NKN_AGENT).data.every(r => ctx.packageAllowedForTenant(ctx.packageTenantIndex(), 'promo', r.record_id, 'NKN')), true);
+  const lt = ctx.listPackageTenants(NKN_AGENT, { packageType: 'price_list', packageId: 11 });
+  eq('ตัวแทนไม่เห็นรายชื่อตัวแทนอื่นที่ได้ชุดเดียวกัน (เห็นแค่ตัวเอง)', [lt.success, lt.assigned, lt.tenants.map(t => t.tenantId)], [true, ['NKN'], ['NKN']]);
+  fails('ชุดที่ไม่ได้รับ ดูรายชื่อผู้รับไม่ได้', ctx.listPackageTenants(NKN_AGENT, { packageType: 'price_list', packageId: 10 }), /ไม่พบ/);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

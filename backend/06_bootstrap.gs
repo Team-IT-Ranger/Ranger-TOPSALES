@@ -216,6 +216,8 @@ function getSaleDetail(user, payload) {
          ตัดสินจากค่าคงที่ฝั่ง backend (34_sales_status.gs) ไม่ให้หน้าจอตั้งกติกาชุดที่สองขึ้นมาเอง */
       customerId: order.customer_id,   // ใช้ตอน "แก้ไขร่าง" เพื่อเลือกร้านเดิมกลับให้ในหน้าขาย
       requestedDeliveryDate: safeDateStr(order.requested_delivery_date).substring(0, 10),
+      // ศูนย์แก้ไขรายการในใบนี้หลังรับงาน (editSalesOrderAdmin) — มือถือแจ้งพนักงานให้ตรวจกับลูกค้า
+      centerEditedAt: safeDateStr(order.center_edited_at), centerEditedBy: order.center_edited_by || '',
       customerAddress: cust ? (cust.address || '') : '',   // พิมพ์ลงใบที่ให้ลูกค้าถือไว้
       statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
       canConfirm: _soStatusOf(order) === SO_DRAFT,

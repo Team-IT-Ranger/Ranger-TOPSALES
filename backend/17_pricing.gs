@@ -53,6 +53,8 @@ function listPriceLists(session) {
     var k = String(l.record_id);
     return _priceListDto(l, groups[String(l.customer_group_id)], itemCount[k], Object.keys(lineSets[k] || {}).length);
   });
+  var pkgIdx = packageTenantIndex();
+  out = out.filter(function(l) { return _pkgVisible(session, PKG_PRICE_LIST, l.id, pkgIdx); });   // ฝั่งตัวแทนเห็นเฉพาะชุดที่ได้รับ
   out.sort(function(a, b) { return String(b.validFrom).localeCompare(String(a.validFrom)) || (b.id - a.id); });
   return { success: true, data: out };
 }
@@ -62,7 +64,7 @@ function getPriceList(session, payload) {
   var err = _requirePermission(session, 'pricing', 'view'); if (err) return err;
   var list = null;
   centralObjects('price_lists').forEach(function(l) { if (String(l.record_id) === String(payload.id)) list = l; });
-  if (!list) return { success: false, message: 'ไม่พบชุดราคานี้' };
+  if (!list || !_pkgVisible(session, PKG_PRICE_LIST, list.record_id)) return { success: false, message: 'ไม่พบชุดราคานี้' };
   var groupName = '';
   centralObjects('customer_groups').forEach(function(g) { if (String(g.record_id) === String(list.customer_group_id)) groupName = g.name; });
   var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
@@ -312,6 +314,7 @@ function _logPriceChange(list, session, action, detail) {
 function listPriceListChanges(session, payload) {
   var err = _requirePermission(session, 'pricing', 'view'); if (err) return err;
   payload = payload || {};
+  if (!_pkgVisible(session, PKG_PRICE_LIST, payload.priceListId)) return { success: true, data: [] };
   var rows = centralObjects('price_list_change_log')
     .filter(function(r) { return String(r.price_list_id) === String(payload.priceListId); })
     .sort(function(a, b) { return safeDateStr(b.changed_at).localeCompare(safeDateStr(a.changed_at)); })

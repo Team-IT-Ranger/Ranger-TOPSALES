@@ -297,7 +297,8 @@ function touchCustomerLastSale(customerId, dateStr) {
     if (!row) return;
     var d = String(dateStr || '').substring(0, 10) || nowStr().substring(0, 10);
     if (String(row.last_sale_at || '').substring(0, 10) >= d) return;   // มีวันที่ใหม่กว่าอยู่แล้ว
-    centralUpdate('customers', row.record_id, { last_sale_at: d });
+    // ★ ไม่ล้างแคชลูกค้า — เขียนทุกบิลใหม่ของร้านในแต่ละวัน ถ้าล้างทุกครั้งแคช 1.7 MB ไม่เคยได้ใช้ · วันที่ซื้อล่าสุดช้าไปไม่เกิน 5 นาที (อายุแคช) ไม่เป็นไร
+    centralUpdateQuiet('customers', row.record_id, { last_sale_at: d });
   } catch (e) {
     Logger.log('touchCustomerLastSale: ' + e);
   }

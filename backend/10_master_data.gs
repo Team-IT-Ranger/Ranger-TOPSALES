@@ -26,7 +26,24 @@ function listCustomersAdmin(session, payload) {
   // ★ ส่งรูป camelCase ชุดเดียว (28 ก.ย. 2026) — เดิมส่ง `data` (แถวดิบ) ควบมาด้วยอีกชุด
   // เป็นข้อมูลชุดเดียวกันเป๊ะ payload จึงโตเป็นสองเท่าฟรีๆ (2,039 ร้าน = เกือบ 1 MB ที่ไม่มีใครอ่าน)
   // และเป็นสองรูปให้หน้าเว็บสับสนว่าจะอ่านอันไหน — ตัดออกแล้ว ทุกหน้าอ่าน `customers` ทางเดียว
+  /* ★ payload.slim = ส่งเฉพาะช่องที่ตาราง/ช่องค้นหา/ตัวเลือกลูกค้าใช้ (ลดจาก ~1.7 MB เหลือราวหนึ่งในสี่) — ที่อยู่ ภาษี พิกัด ฯลฯ ไม่ส่ง
+     ฟอร์มแก้ไขลูกค้าดึงของเต็มรายเดียวทาง getCustomerAdmin แทนการโหลดทั้งลิสต์ (3 ต.ค. 2026 — เปิดหน้าลูกค้าช้ามาก) */
+  if (payload && payload.slim) return { success: true, slim: true, customers: rows.map(function(c) { return _customerSlim(customerToApi(c)); }) };
   return { success: true, customers: rows.map(customerToApi) };
+}
+
+var CUSTOMER_SLIM_KEYS = ['id','code','name','fullName','tenantId','groupId','channelId','salesMode','areaCode',
+  'phone','taxId','paymentType','paymentTermsDays','lastSaleAt','status','isActive'];
+function _customerSlim(api) { var o = {}; CUSTOMER_SLIM_KEYS.forEach(function(k) { o[k] = api[k]; }); return o; }
+
+/** ลูกค้า 1 ราย เต็มรูป (ใช้เปิดฟอร์มแก้ไขหลังโหลดลิสต์แบบ slim) — ตัวแทนเปิดได้เฉพาะลูกค้าของตัวเอง */
+function getCustomerAdmin(session, payload) {
+  var err = _requirePermission(session, 'customers', 'view'); if (err) return err;
+  var tenantId = _salesTenantId(session, payload || {});
+  var found = null;
+  centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String((payload || {}).id)) found = c; });
+  if (!found || (tenantId && String(found.tenant_id) !== String(tenantId))) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
+  return { success: true, customer: customerToApi(found) };
 }
 
 function addCustomerAdmin(session, payload) {

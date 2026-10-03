@@ -15,6 +15,8 @@ var TENANT_SHEET_TABS = {
     /* วันนัดส่งโดยประมาณ (1 ต.ค. 2026) — พนักงานกรอกตอนเปิดใบนัดส่ง แล้วพิมพ์ลงใบที่ลูกค้าถือไว้เป็นหลักฐาน
        เป็น "ประมาณการที่ตกลงกับลูกค้า" คนละช่องกับ `delivered_at` ซึ่งคือวันที่ส่งจริง */
     'requested_delivery_date',
+    // ธง "ศูนย์แก้ไขรายการในใบนี้แล้ว" (3 ต.ค. 2026 — editSalesOrderAdmin, 34_sales_status.gs) ให้มือถือบอกพนักงาน
+    'center_edited_at', 'center_edited_by',
     // ภาพนิ่งภาษี ณ วันที่ออกบิล — ห้ามคำนวณใหม่ตอนเปิดดู ไม่งั้นวันที่อัตราภาษีเปลี่ยน ใบเก่าทั้งหมดขยับตาม
     // และงบที่ปิดไปแล้วจะเคลื่อน · apply_vat: ใบนี้คิด VAT ไหม · vat_type: inclusive/exclusive ณ ตอนออก
     'apply_vat','vat_type','vat_rate','subtotal_ex_vat','vat_amount','exempt_amount'],

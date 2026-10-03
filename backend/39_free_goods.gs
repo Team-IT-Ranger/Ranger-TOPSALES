@@ -122,13 +122,13 @@ function computeFreeGoods(cartLines, sets, unitBase) {
 
 function listFreeGoodsSets(session, payload) {
   var err = _requirePermission(session, 'promotions', 'view'); if (err) return err;
-  var itemsBySet = _fgItemsBySet();
-  var data = centralObjects('free_goods_sets').map(function(s) {
+  var itemsBySet = _fgItemsBySet(), pkgIdx = packageTenantIndex();
+  var data = centralObjects('free_goods_sets').filter(function(s) { return _pkgVisible(session, 'free_goods', s.record_id, pkgIdx); }).map(function(s) {
     return { id: s.record_id, name: s.name, status: s.status || FG_STATUS_DRAFT,
       validFrom: _dOnly(s.valid_from), validTo: _dOnly(s.valid_to),
       customerGroupId: s.customer_group_id || '', note: s.note || '',
       tierCount: (itemsBySet[String(s.record_id)] || []).length,
-      tenants: packageTenantsOf(PKG_FREE_GOODS, s.record_id) };
+      tenants: _pkgTenantsFor(session, PKG_FREE_GOODS, s.record_id) };
   });
   return { success: true, data: data };
 }
@@ -138,7 +138,7 @@ function getFreeGoodsSet(session, payload) {
   payload = payload || {};
   var set = null;
   centralObjects('free_goods_sets').forEach(function(s) { if (String(s.record_id) === String(payload.id)) set = s; });
-  if (!set) return { success: false, message: 'ไม่พบชุดแถมนี้' };
+  if (!set || !_pkgVisible(session, 'free_goods', set.record_id)) return { success: false, message: 'ไม่พบชุดแถมนี้' };
   var items = (_fgItemsBySet()[String(set.record_id)] || []).map(function(it) {
     return { id: it.record_id, tierGroup: it.tier_group || '', note: it.note || '',
       triggerProductIds: _fgIdList(it.trigger_product_ids), triggerGroupIds: _fgIdList(it.trigger_group_ids),
@@ -150,7 +150,7 @@ function getFreeGoodsSet(session, payload) {
     set: { id: set.record_id, name: set.name, status: set.status || FG_STATUS_DRAFT,
       validFrom: _dOnly(set.valid_from), validTo: _dOnly(set.valid_to),
       customerGroupId: set.customer_group_id || '', note: set.note || '' },
-    items: items, tenants: packageTenantsOf(PKG_FREE_GOODS, set.record_id) };
+    items: items, tenants: _pkgTenantsFor(session, PKG_FREE_GOODS, set.record_id) };
 }
 
 function saveFreeGoodsSet(session, payload) {

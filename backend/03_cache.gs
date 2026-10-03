@@ -4,8 +4,15 @@
 var CACHE_TTL = 600; // วินาที (10 นาที) — สำหรับ getBootstrap
 var CACHE_TTL_DASHBOARD = 120; // 2 นาที — dashboard เปลี่ยนบ่อยกว่า
 
+/* ★ แคช bootstrap ของแอปมือถือ (แคตตาล็อกสินค้า/ลูกค้า/โปร) เป็นรายคน อายุ 10 นาที และเดิมไม่หมดอายุเมื่อมีการเพิ่ม/แก้สินค้า
+   สินค้าที่เพิ่งเพิ่ม (เช่น 10185) จึงไม่โผล่ในรายการเลือกสินค้าขายของพนักงานจนกว่าจะครบ 10 นาที — ใส่ "เลขเวอร์ชันแคตตาล็อก" ต่อท้ายคีย์
+   เปลี่ยนสินค้า/หน่วยขาย/ลูกค้า/โปร → bumpCatalogVersion() (เรียกจาก centralInvalidate) → คีย์เดิมไม่ถูกใช้อีก ทุกคนได้ของสดทันที */
+var CATALOG_VER_KEY = 'topshop_catalog_ver';
+function _catalogVersion() { try { return CacheService.getScriptCache().get(CATALOG_VER_KEY) || '0'; } catch (e) { return '0'; } }
+function bumpCatalogVersion() { try { CacheService.getScriptCache().put(CATALOG_VER_KEY, String(new Date().getTime()), 21600); } catch (e) {} }
+
 function getCacheKey(key, scopeId) {
-  return 'topshop_' + key + '_' + (scopeId || 'all');
+  return 'topshop_' + key + '_' + (scopeId || 'all') + (key === 'bootstrap' ? '_v' + _catalogVersion() : '');
 }
 
 function cacheGet(key, scopeId) {

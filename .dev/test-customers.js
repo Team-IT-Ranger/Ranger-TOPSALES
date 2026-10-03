@@ -38,6 +38,7 @@ const ctx = {
   centralAppendMany: (n, os) => os.forEach(o => sheetOf(n).push(Object.assign({}, o))),
   centralUpdate: (n, id, f) => { const r = sheetOf(n).find(x => String(x.record_id) === String(id));
     if (!r) return false; Object.assign(r, f); return true; },
+  centralUpdateQuiet: (n, id, f) => ctx.centralUpdate(n, id, f),   // เขียนแบบไม่ล้างแคช (touchCustomerLastSale) — ในเทสต์ไม่มีแคช ใช้ตัวเดียวกัน
   centralNextId: n => sheetOf(n).reduce((m, o) => Math.max(m, parseInt(o.record_id) || 0), 0) + 1,
   cacheClear: () => {},
   nowStr: () => '2026-09-26 09:00:00', safeDateStr: v => String(v || ''),
@@ -46,7 +47,7 @@ const ctx = {
 };
 vm.createContext(ctx);
 const fakes = {};
-['centralObjects','centralSheet','centralAppend','centralAppendMany','centralUpdate','centralNextId','nowStr','safeDateStr','cacheClear']
+['centralObjects','centralSheet','centralAppend','centralAppendMany','centralUpdate','centralUpdateQuiet','centralNextId','nowStr','safeDateStr','cacheClear']
   .forEach(k => fakes[k] = ctx[k]);
 vm.runInContext(B('02_helpers.gs'), ctx, { filename: '02_helpers.gs' });
 Object.keys(fakes).forEach(k => { ctx[k] = fakes[k]; });

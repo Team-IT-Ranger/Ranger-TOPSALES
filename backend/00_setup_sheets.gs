@@ -15,7 +15,9 @@ var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_r
 // ★ 2 ต.ค. 2026 — โมดูลที่ฝั่งตัวแทนได้ "ดูอย่างเดียว" (seed can_view=TRUE, can_edit=FALSE เสมอ) ต่างจาก
 // TENANT_MODULES ข้างบนที่ seed ทั้งดู+แก้คู่กัน — แยกลิสต์ต่างหากเพราะ 'products' ยังอยู่ใน OWNER_MODULES ด้วย
 // (บริษัทดู+แก้ได้เต็ม) การให้ตัวแทนแก้เองไม่ได้ตามกติกาเดิม (บริษัทเจ้าของสินค้าคุมราคา/สินค้าส่วนกลาง)
-var TENANT_VIEW_ONLY_MODULES = ['products'];
+// 3 ต.ค. 2026 เพิ่ม pricing/promotions/settings — เจ้าของระบบสั่งให้แอดมินศูนย์เปิดดูเมนูที่เคยล็อกไว้ได้ทุกเมนู (ดูได้อย่างเดียว)
+// ชุดราคา/โปรโมชั่น/ชุดแถมที่ศูนย์เห็นถูกกรองเหลือเฉพาะที่บริษัทจ่ายให้ศูนย์นั้น (38_package_distribution.gs · _pkgVisible)
+var TENANT_VIEW_ONLY_MODULES = ['products', 'pricing', 'promotions', 'settings'];
 
 var CENTRAL_SHEETS = {
   liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],

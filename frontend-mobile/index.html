@@ -682,12 +682,13 @@ function renderSaleDetail(r){
       '<div class="row"><b>ราคารวมภาษีมูลค่าเพิ่ม</b><span class="mono"><b>฿' + baht(o.total) + '</b></span></div>' +
     '</div>' +
     /* ปุ่มยืนยัน/ยกเลิก — โชว์ตามสิทธิ์ที่ backend คำนวณมาให้ (canConfirm/canCancel)
-       ร่าง = ยืนยันได้+ยกเลิกได้ · ยืนยันแล้ว = ยกเลิกได้ · ศูนย์รับงานแล้ว = ไม่มีปุ่ม ต้องแจ้งศูนย์ */
+       ร่าง = ยืนยันได้+ยกเลิกได้ · ยืนยันแล้ว = ยกเลิกได้ · บันทึกรับงานแล้ว = ไม่มีปุ่ม ต้องแจ้งศูนย์ */
     (o.canConfirm ? '<button class="btn btn-primary btn-block no-print" style="margin-top:12px" onclick="confirmThisSale(\'' + esc(o.code) + '\')">✓ ยืนยันใบสั่งขาย — ส่งให้ศูนย์รับงาน</button>' : '') +
     (o.canConfirm ? '<button class="btn btn-block no-print" style="margin-top:8px" onclick="editThisDraft(\'' + esc(o.code) + '\')">✎ แก้ไขรายการ</button>' : '') +
     (o.canCancel ? '<button class="btn btn-block no-print" style="margin-top:8px" onclick="cancelThisSale(\'' + esc(o.code) + '\')">ยกเลิกใบสั่งขายนี้</button>' : '') +
+    (o.centerEditedAt ? '<div class="note" style="margin-top:12px;border-left:4px solid var(--amber,#d99a00)">⚠️ ศูนย์แก้ไขรายการในใบนี้แล้ว (' + esc(o.centerEditedAt) + (o.centerEditedBy ? ' โดย ' + esc(o.centerEditedBy) : '') + ') — ตรวจรายการ/ยอดล่าสุดกับลูกค้าก่อนส่งของ</div>' : '') +
     (!o.canConfirm && !o.canCancel && o.status && o.status !== 'completed' && o.fulfillmentType !== 'immediate'
-      ? '<div class="note no-print" style="margin-top:12px">ศูนย์รับงานแล้ว — แก้ไขหรือยกเลิกเองไม่ได้ กรุณาแจ้งศูนย์</div>' : '') +
+      ? '<div class="note no-print" style="margin-top:12px">บันทึกรับงานแล้ว — แก้ไขหรือยกเลิกเองไม่ได้ กรุณาแจ้งศูนย์</div>' : '') +
     /* ★ ปุ่มพิมพ์ให้ลูกค้า — เฉพาะใบที่ยืนยันแล้ว (เจ้าของระบบสั่ง 1 ต.ค. 2026)
        ใบร่างยังแก้ได้และศูนย์ยังไม่เห็น ยื่นให้ลูกค้าไปคือให้หลักฐานที่ยังเปลี่ยนได้ ซึ่งแย่กว่าไม่ให้เลย */
     (o.status === 'draft'

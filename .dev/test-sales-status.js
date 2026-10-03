@@ -32,6 +32,7 @@ const ctx = {
   Logger: { log: () => {} },
   CacheService: { getScriptCache: () => ({ get: k => (CACHE[k] === undefined ? null : CACHE[k]),
     put: (k, v) => { CACHE[k] = v; }, remove: k => { delete CACHE[k]; } }) },
+  centralInvalidate: () => {},
   LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
   SpreadsheetApp: { openById: () => { throw new Error('no'); }, flush() {} },
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => '' }) },
@@ -318,6 +319,59 @@ t.sales_orders.push({ record_id: 32, order_code: 'SO-M-3', customer_id: 1, total
   fulfillment_type: 'immediate', status: 'completed', sale_by: 'U-SALES-1', created_at: '2026-10-01 09:20:00' });
 fails('บิลขายจากรถยกเลิกเองไม่ได้ (ของออกจากรถไปแล้ว)',
   ctx.cancelMySalesOrder(U1, { orderCode: 'SO-M-3' }), /แจ้งศูนย์/);
+
+/* ── แอดมินศูนย์แก้ไขรายการในใบที่รับงานแล้ว (3 ต.ค. 2026) ── */
+console.log('\n== editSalesOrderAdmin: แก้รายการ/วันนัดส่งหลังรับงาน ==');
+const origSheet = ctx.tenantSheet;
+ctx.tenantSheet = (tid, n) => Object.assign(origSheet(tid, n), { __n: n });
+ctx.deleteRowsWhere = (sh, col, val) => { const rows = sheetOf(sh.__n); for (let i = rows.length - 1; i >= 0; i--) if (String(rows[i][col]) === String(val)) rows.splice(i, 1); };
+ctx._round2 = n => Math.round(n * 100) / 100;
+ctx._dOnly = v => String(v || '').substring(0, 10);
+ctx.isFlagOn = v => v === true || String(v).toUpperCase() === 'TRUE';
+ctx.centralUpdate = () => true;
+ctx.centralInvalidate = () => {};
+const DAILY = [];
+ctx.bumpSalesDaily = (tid, d, b, r2) => DAILY.push([d, b, r2]);
+ctx._customerInTenant = id => (String(id) === '1' ? { record_id: 1 } : null);
+// ราคาจำลอง: 100 ต่อหน่วย · ลัง = 12 หน่วยฐาน (ของจริงอยู่ที่ 07_sales.gs/_priceSaleCart มีเทสต์ของตัวเองแล้ว)
+ctx._priceSaleCart = (cust, raw, pay, isVan) => {
+  if (raw.some(i => String(i.productId) === '999')) return { success: false, message: 'สินค้านี้ไม่อยู่ในชุดราคา' };
+  const items = raw.map(i => ({ productId: String(i.productId), unitCode: i.unitCode, unitFactor: 12, qty: i.qty, baseQty: i.qty * 12, price: 100, lineTotal: 100 * i.qty }));
+  const total = items.reduce((s, i) => s + i.lineTotal, 0);
+  return { success: true, items, calc: { subtotal: total, discount: 0, total, freeGoods: [], appliedRules: [],
+    vat: { applyVat: true, vatType: 'inclusive', rate: 0.07, exVat: Math.round(total / 1.07 * 100) / 100, vat: 0, exemptAmount: 0, taxOf: () => 'vat' } } };
+};
+t.sales_orders.push({ record_id: 40, order_code: 'SO-ED-1', customer_id: 1, total: 800, payment_method: 'credit_term',
+  fulfillment_type: 'office_delivery', status: 'accepted', payment_status: 'unpaid', paid_amount: 0,
+  sale_by: 'U-SALES-1', created_at: '2026-10-01 09:00:00', requested_delivery_date: '2026-10-05' });
+t.sales_orders.push({ record_id: 41, order_code: 'SO-ED-2', customer_id: 1, total: 300, payment_method: 'cash',
+  fulfillment_type: 'office_delivery', status: 'accepted', payment_status: 'partial', paid_amount: 100, created_at: '2026-10-01 09:05:00' });
+t.order_items.push({ record_id: 400, order_id: 40, product_id: '101', qty: 2, unit_code: 'CT', base_qty: 24, is_free: 0 });
+ctx.reserveStockForSale('T1', 'W1', { '101': 24 }, 40);
+const resOf = oid => WH.stock_reservations.filter(x => String(x.order_id) === String(oid) && x.status === 'active').map(x => [String(x.product_id), x.qty]);
+eq('ตั้งต้น: ใบ 40 จองของ 101 ไว้ 24 หน่วยฐาน', resOf(40), [['101', 24]]);
+
+fails('ใบที่ยังไม่อยู่ขั้น "บันทึกรับงานแล้ว" แก้ไม่ได้', ctx.editSalesOrderAdmin(S, { id: 2, items: [{ productId: '101', unitCode: 'CT', qty: 1 }] }), /เฉพาะใบที่/);
+fails('ใบที่รับชำระแล้วแก้ไม่ได้', ctx.editSalesOrderAdmin(S, { id: 41, items: [{ productId: '101', unitCode: 'CT', qty: 1 }] }), /รับชำระเงินแล้ว/);
+fails('ไม่มีรายการ → ปฏิเสธ', ctx.editSalesOrderAdmin(S, { id: 40, items: [] }), /อย่างน้อย 1/);
+fails('วันนัดส่งรูปแบบผิด → ปฏิเสธ', ctx.editSalesOrderAdmin(S, { id: 40, items: [{ productId: '101', unitCode: 'CT', qty: 1 }], requestedDeliveryDate: '5/10/2026' }), /yyyy-MM-dd/);
+fails('สินค้าที่ไม่อยู่ในชุดราคา → ปฏิเสธ (ผ่านเครื่องคิดราคาตัวเดียวกับตอนเปิดบิล) และไม่แตะอะไรเลย',
+  ctx.editSalesOrderAdmin(S, { id: 40, items: [{ productId: '999', unitCode: 'CT', qty: 1 }] }), /ชุดราคา/);
+eq('  ปฏิเสธแล้วของเดิมยังอยู่ครบ (บรรทัด/ยอดจอง/ยอดบิล)', [t.order_items.filter(i => i.order_id === 40).length, resOf(40), row(40).total], [1, [['101', 24]], 800]);
+
+let e = ctx.editSalesOrderAdmin(S, { id: 40, items: [{ productId: '102', unitCode: 'CT', qty: 3 }, { productId: '101', unitCode: 'CT', qty: 1 }], requestedDeliveryDate: '2026-10-09' });
+eq('แก้ได้: เปลี่ยนรหัสสินค้า/จำนวน/วันนัดส่ง แล้วคิดราคาใหม่ (4 ลัง × 100)', [e.success, e.total, e.previousTotal], [true, 400, 800]);
+eq('  บรรทัดบิลถูกแทนที่ทั้งชุด (ไม่ใช่พ่วง)', t.order_items.filter(i => i.order_id === 40).map(i => [i.product_id, i.qty, i.base_qty]).sort(), [['101', 1, 12], ['102', 3, 36]]);
+eq('  ยอดจองเดิมถูกปลด · จองใหม่ตามรายการใหม่ (หน่วยฐาน)', resOf(40).sort(), [['101', 12], ['102', 36]]);
+eq('  เลขที่เอกสาร/สถานะคงเดิม · วันนัดส่งใหม่ · ยอดบิลใหม่', [row(40).order_code, row(40).status, row(40).requested_delivery_date, row(40).total], ['SO-ED-1', 'accepted', '2026-10-09', 400]);
+eq('  ติดธง "ศูนย์แก้ไขแล้ว" (ชื่อผู้แก้ + เวลา)', [row(40).center_edited_by, row(40).center_edited_at], ['แอดมินบริษัท', '2026-09-26 12:00:00']);
+eq('  ยอดขายรายวัน: ขยับเฉพาะส่วนต่าง (−400) ที่วันที่เปิดบิล ไม่นับจำนวนใบเพิ่ม', DAILY[DAILY.length - 1], ['2026-10-01', 0, -400]);
+eq('  ประวัติสถานะ: สถานะเดิม→เดิม พร้อมสรุปก่อน-หลัง', (() => { const l = logs(40).pop(); return [l.from_status, l.to_status, /ศูนย์แก้ไขรายการ/.test(l.note), /101×2 CT/.test(l.note), /102×3 CT/.test(l.note), /วันนัดส่ง 2026-10-09/.test(l.note)]; })(),
+  ['accepted', 'accepted', true, true, true, true]);
+e = ctx.editSalesOrderAdmin(S, { id: 40, items: [{ productId: '101', unitCode: 'CT', qty: 1 }], requestedDeliveryDate: '' });
+eq('ส่งวันนัดว่าง = ล้างวันนัด · ไม่ส่ง = ไม่แตะ', [e.success, row(40).requested_delivery_date], [true, '']);
+e = ctx.editSalesOrderAdmin(S, { id: 40, items: [{ productId: '101', unitCode: 'CT', qty: 2 }] });
+eq('  (ไม่ส่งวันนัดมา → วันนัดเดิมไม่ถูกแตะ)', [e.success, row(40).requested_delivery_date], [true, '']);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

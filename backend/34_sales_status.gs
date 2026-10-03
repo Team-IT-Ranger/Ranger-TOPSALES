@@ -20,7 +20,7 @@
 /* ═══ สายงานรับ-ส่งใบสั่งขาย (เจ้าของระบบกำหนด 1 ต.ค. 2026) ═══
  *   draft ใหม่ ──(มือถือกดยืนยัน)──▶ confirmed ยืนยัน ──(ศูนย์กดรับงาน)──▶ accepted รับงาน
  *     ──(ศูนย์แจ้งพร้อมส่ง)──▶ ready_to_ship พร้อมจัดส่ง ──▶ delivering กำลังจัดส่ง ──▶ completed จัดส่งแล้ว
- *   ศูนย์ปฏิเสธไม่ขาย = rejected · ยกเลิก = cancelled
+ *   ปฏิเสธการขาย = rejected · ยกเลิก = cancelled
  *
  * ★ `pending_delivery` คือชื่อเดิมก่อน 1 ต.ค. 2026 — **ห้ามลบ** บิลเก่าทั้ง UAT/prod ยังเป็นค่านี้อยู่
  *   ให้ความหมายเท่ากับ `confirmed` ทุกประการ จะได้ไม่ต้อง migrate ข้อมูลเก่า */
@@ -28,9 +28,9 @@ var SO_DRAFT = 'draft', SO_CONFIRMED = 'confirmed', SO_ACCEPTED = 'accepted', SO
     SO_READY = 'ready_to_ship', SO_PENDING = 'pending_delivery',
     SO_DELIVERING = 'delivering', SO_COMPLETED = 'completed', SO_CANCELLED = 'cancelled';
 var SO_STATUS_LABELS = {
-  draft: 'ใหม่ (ร่าง)', confirmed: 'ยืนยันแล้ว — รอศูนย์รับงาน', pending_delivery: 'ยืนยันแล้ว — รอศูนย์รับงาน',
-  accepted: 'ศูนย์รับงานแล้ว', ready_to_ship: 'พร้อมจัดส่ง', delivering: 'กำลังจัดส่ง',
-  completed: 'จัดส่งแล้ว', rejected: 'ศูนย์ปฏิเสธไม่ขาย', cancelled: 'ยกเลิกแล้ว'
+  draft: 'ใหม่ (ร่าง)', confirmed: 'ยืนยันแล้ว → รอแอดมินกดรับงาน', pending_delivery: 'ยืนยันแล้ว → รอแอดมินกดรับงาน',
+  accepted: 'บันทึกรับงานแล้ว → รอการจัดส่ง', ready_to_ship: 'พร้อมจัดส่ง', delivering: 'กำลังจัดส่ง',
+  completed: 'จัดส่งแล้ว', rejected: 'ปฏิเสธการขาย', cancelled: 'ยกเลิกแล้ว'
 };
 /* ไปไหนต่อได้บ้างจากสถานะปัจจุบัน — ย้อนกลับได้หนึ่งขั้น (กดผิดเป็นเรื่องปกติ) แต่บิลที่ยกเลิกแล้วเปิดคืนไม่ได้
  * **ห้ามข้ามขั้น** (guide ข้อ 1.1): pending_delivery ไป completed ตรงๆ ไม่ได้ เพราะ delivering คือจุดที่ตัด
@@ -208,6 +208,7 @@ function releaseStockReservation(tenantId, orderId) {
       sh.getRange(i + 1, relCol + 1).setValue(nowStr());
     }
   }
+  centralInvalidate('stock_reservations');   // เขียนชีตแบบดิบ — ล้าง memo ในคำขอนี้ ไม่งั้นการตรวจของหลังปลดจองยังเห็นยอดจองเก่า
 }
 
 var PAY_UNPAID = 'unpaid', PAY_PARTIAL = 'partial', PAY_PAID = 'paid';
@@ -452,4 +453,115 @@ function cancelMySalesOrder(user, payload) {
     }
     return { success: true, status: SO_CANCELLED, statusLabel: SO_STATUS_LABELS[SO_CANCELLED], message: 'ยกเลิกใบสั่งขายแล้ว' };
   });
+}
+
+/* ═══════════ แอดมินศูนย์แก้ไขรายการในใบที่ "บันทึกรับงานแล้ว" (3 ต.ค. 2026, เจ้าของระบบสั่ง) ═══════════
+ * เปลี่ยนรหัสสินค้า · แก้จำนวน · แก้วันนัดส่ง · คิดราคาใหม่ — ได้เฉพาะขั้น `accepted` เท่านั้น
+ *   (ขั้นก่อนหน้า = ยังเป็นของพนักงาน/ยังไม่รับงาน · ขั้นถัดไป = ของถูกตัดออกจากคลังไปแล้ว แก้แล้วต้องคืน/ตัดสต็อกใหม่ ยังไม่รองรับ)
+ * ★ เขียนทับใบเดิม ไม่ออกเลขใหม่ — คิดราคาผ่าน _priceSaleCart ตัวเดียวกับตอนเปิดบิล (ชุดราคา/ส่วนลด/ของแถม/VAT ตรงกันเป๊ะ)
+ * ★ ยอดจอง (SO_RESERVED_STATUSES) ปลดของเดิมแล้วจองตามรายการใหม่ · ยอดขายรายวันขยับเฉพาะส่วนต่าง · เขียนประวัติทุกครั้ง
+ * ★ ติดธง `center_edited_at/by` ให้แอปมือถือบอกพนักงานว่า "ศูนย์แก้ไขใบนี้แล้ว" (ข้อ 3 ของเจ้าของระบบ 1 ต.ค. 2026)
+ * ใบที่รับชำระแล้ว (paid_amount > 0) แก้ไม่ได้ — ยอดใหม่อาจไม่ตรงกับเงินที่รับไปแล้ว ให้ยกเลิกการรับชำระก่อน
+ * payload: { id, tenantId?, items:[{productId,unitCode,qty}], requestedDeliveryDate? ('' = ล้างวันนัด · ไม่ส่ง = ไม่แตะ) }
+ */
+function editSalesOrderAdmin(session, payload) {
+  var err = _requirePermission(session, 'sales', 'edit'); if (err) return err;
+  payload = payload || {};
+  var tenantId = _salesTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+  ensureTenantSheetsCurrent(tenantId);
+  return _withDocLock(function() { return _editSalesOrderCore(session, payload, tenantId); });
+}
+
+function _editSalesOrderCore(session, payload, tenantId) {
+  var order = null;
+  tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+  if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
+  var from = _soStatusOf(order);
+  if (from !== SO_ACCEPTED) {
+    return { success: false, message: 'แก้ไขรายการได้เฉพาะใบที่ "' + SO_STATUS_LABELS[SO_ACCEPTED] + '" — ตอนนี้ใบนี้อยู่ขั้น "' + SO_STATUS_LABELS[from] + '"' };
+  }
+  if ((parseFloat(order.paid_amount) || 0) > 0) {
+    return { success: false, message: 'ใบนี้มีการรับชำระเงินแล้ว แก้ไขรายการไม่ได้ — ยกเลิกการรับชำระก่อนแล้วค่อยแก้' };
+  }
+  var items = (payload.items || []).map(function(it) {
+    return { productId: String(it.productId || ''), unitCode: it.unitCode, qty: parseInt(it.qty) || 0 };
+  }).filter(function(it) { return it.productId; });
+  if (!items.length) return { success: false, message: 'ต้องมีรายการสินค้าอย่างน้อย 1 รายการ' };
+  var wantDate = payload.requestedDeliveryDate;
+  if (wantDate !== undefined && wantDate !== null && String(wantDate) !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(String(wantDate))) {
+    return { success: false, message: 'วันนัดส่งต้องเป็นรูปแบบ yyyy-MM-dd' };
+  }
+  if (!_customerInTenant(order.customer_id, tenantId)) return { success: false, message: 'ไม่พบลูกค้าของใบนี้ในตัวแทนที่เลือก' };
+
+  var priced = _priceSaleCart(order.customer_id, items, order.payment_method, false);
+  if (!priced.success) return priced;
+  var newItems = priced.items, calc = priced.calc, freeGoods = calc.freeGoods;
+
+  // รายการเดิม — ไว้สรุปในประวัติ (เทียบก่อน/หลัง) ก่อนจะถูกล้างทิ้ง
+  var productMap = {};
+  centralObjects('products').forEach(function(p) { productMap[String(p.record_id)] = p; });
+  var oldLines = tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id) && String(it.is_free) !== '1'; });
+  var lineText = function(code, qty, unit) { return code + '×' + qty + ' ' + (unit || ''); };
+  var oldSummary = oldLines.map(function(it) { var p = productMap[String(it.product_id)]; return lineText((p && p.product_code) || it.product_id, it.qty, it.unit_code); }).join(', ');
+  var newSummary = newItems.map(function(it) { var p = productMap[it.productId]; return lineText((p && p.product_code) || it.productId, it.qty, it.unitCode); }).join(', ');
+
+  // ยอดจอง: ปลดของเดิม → ตรวจของที่ขายได้จริงตามรายการใหม่ → จองใหม่ (ของไม่พอ = เตือน ไม่บล็อก เหมือนตอนเปิดบิล)
+  var need = {};
+  newItems.forEach(function(it) { need[it.productId] = (need[it.productId] || 0) + it.baseQty; });
+  freeGoods.forEach(function(f) { need[String(f.productId)] = (need[String(f.productId)] || 0) + (Number(f.baseQty) || Number(f.qty) || 0); });
+  releaseStockReservation(tenantId, order.record_id);
+  var stockCheck = checkOfficeDeliveryStock(tenantId, need);
+  reserveStockForSale(tenantId, stockCheck.warehouseId, need, order.record_id);
+
+  // เขียนทับแถวบิล (เลขที่เอกสาร/วันที่เปิดบิล/สถานะ คงเดิม)
+  var vatSplit = calc.vat, by = session.displayName || session.username, at = nowStr();
+  var oldTotal = parseFloat(order.total) || 0;
+  var row = {
+    subtotal: calc.subtotal, discount: calc.discount, total: calc.total,
+    apply_vat: vatSplit.applyVat ? 'TRUE' : 'FALSE', vat_type: vatSplit.vatType,
+    vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat, exempt_amount: vatSplit.exemptAmount,
+    updated_at: at, updated_by: String(session.adminUserId || ''), center_edited_at: at, center_edited_by: String(by || '')
+  };
+  if (wantDate !== undefined && wantDate !== null) row.requested_delivery_date = String(wantDate);
+  tenantUpdate(tenantId, 'sales_orders', order.record_id, row);
+
+  // ล้างบรรทัด/ส่วนลดเดิมแล้วเขียนชุดใหม่
+  deleteRowsWhere(tenantSheet(tenantId, 'order_items'), 'order_id', order.record_id);
+  deleteRowsWhere(tenantSheet(tenantId, 'order_discounts'), 'order_id', order.record_id);
+  newItems.forEach(function(it) {
+    tenantAppend(tenantId, 'order_items', {
+      record_id: tenantNextId(tenantId, 'order_items'), order_id: order.record_id, product_id: it.productId,
+      unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
+      price: it.price, line_total: it.lineTotal, unit_discount: it.unitDiscount || 0, line_discount: it.lineDiscount || 0,
+      list_price_ex_vat: it.listPriceExVat != null ? it.listPriceExVat : '',
+      is_free: 0, tax_status: calc.vat.taxOf(it.productId)
+    });
+  });
+  freeGoods.forEach(function(f) {
+    var fBase = Number(f.baseQty) || Number(f.qty) || 0, fQty = Number(f.qty) || 0;
+    tenantAppend(tenantId, 'order_items', {
+      record_id: tenantNextId(tenantId, 'order_items'), order_id: order.record_id, product_id: f.productId,
+      unit_code: f.unitCode || UNIT_PC, unit_factor: fQty ? (fBase / fQty) : 1, qty: fQty, base_qty: fBase,
+      price: 0, line_total: 0, is_free: 1
+    });
+  });
+  calc.appliedRules.forEach(function(r) {
+    tenantAppend(tenantId, 'order_discounts', { record_id: tenantNextId(tenantId, 'order_discounts'), order_id: order.record_id,
+      rule_id: r.ruleId, rule_name: r.ruleName, type: r.type, value: r.value, free_product_id: '', free_qty: '' });
+  });
+
+  // ยอดขายรายวัน: จำนวนใบเท่าเดิม ขยับเฉพาะส่วนต่างของยอด (นับที่วันที่เปิดบิลเหมือนตอนยืนยัน/ยกเลิก)
+  var delta = _round2((calc.total || 0) - oldTotal);
+  if (delta) bumpSalesDaily(tenantId, _dOnly(order.created_at), 0, delta);
+
+  // ล็อกรหัสสินค้าที่เพิ่งถูกใช้ขายจริง (เหมือนตอนเปิดบิล)
+  newItems.forEach(function(it) { var p = productMap[it.productId]; if (p && !isFlagOn(p.has_transactions)) centralUpdate('products', it.productId, { has_transactions: 'TRUE' }); });
+
+  logOrderStatus(tenantId, order.record_id, from, from, orderPaymentStatus(order), orderPaymentStatus(order),
+    'ศูนย์แก้ไขรายการ: [' + oldSummary + '] → [' + newSummary + '] ยอด ฿' + oldTotal + ' → ฿' + calc.total +
+      (wantDate !== undefined && wantDate !== null ? ' · วันนัดส่ง ' + (String(wantDate) || '(ล้าง)') : ''),
+    by, _adminRoleLabel(session));
+  return { success: true, total: calc.total, discount: calc.discount, previousTotal: oldTotal, stockWarning: stockCheck.warning || '',
+    message: 'แก้ไขใบ ' + order.order_code + ' แล้ว — ยอดใหม่ ฿' + calc.total + (stockCheck.warning ? ' · ⚠️ ' + stockCheck.warning : '') };
 }

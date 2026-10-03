@@ -72,6 +72,22 @@ function packageAllowedForTenant(idx, type, id, tenantId) {
   return set[t] === 1;
 }
 
+/**
+ * ★ ฝั่งตัวแทนเปิดดูชุดราคา/โปรโมชั่น/ชุดแถมได้ (3 ต.ค. 2026 — viewer) แต่เห็น "เฉพาะชุดที่บริษัทจ่ายให้ตัวแทนนั้น"
+ * ไม่เห็นชุดที่จ่ายให้ตัวแทนอื่น และไม่เห็นรายชื่อตัวแทนอื่นที่ได้ชุดเดียวกัน · ฝั่งบริษัทเห็นทั้งหมด
+ */
+function _myTenantOnly(session) { return _isCompanySide(session) ? null : String(_salesTenantId(session, {}) || session.tenant_id || ''); }
+function _pkgVisible(session, type, id, idx) {
+  var mine = _myTenantOnly(session);
+  if (mine === null) return true;
+  return packageAllowedForTenant(idx || packageTenantIndex(), type, id, mine);
+}
+/** รายชื่อตัวแทนที่ได้รับชุดนี้ ตามสิทธิ์ผู้ดู — ฝั่งตัวแทนเห็นแค่ตัวเอง */
+function _pkgTenantsFor(session, type, id) {
+  var all = packageTenantsOf(type, id), mine = _myTenantOnly(session);
+  return mine === null ? all : all.filter(function(t) { return t === mine || (mine === OWNER_TENANT_ID && t === 'HOUSE'); });
+}
+
 /** รายชื่อตัวแทนที่ได้รับชุดนี้ (เรียงตามรหัส) */
 function packageTenantsOf(type, id) {
   var set = packageTenantIndex().map[_pkgKey(type, id)] || {};
@@ -106,9 +122,11 @@ function listPackageTenants(session, payload) {
   var type = String(payload.packageType || PKG_PRICE_LIST);
   if (!PKG_TYPES[type]) return { success: false, message: 'ชนิดชุดไม่ถูกต้อง' };
   var err = _requirePermission(session, type === PKG_PROMO ? 'promotions' : 'pricing', 'view'); if (err) return err;
+  if (!_pkgVisible(session, type, payload.packageId)) return { success: false, message: 'ไม่พบ' + PKG_TYPES[type].label + 'นี้' };
+  var mine = _myTenantOnly(session);
   return { success: true, packageType: type, packageId: payload.packageId,
-    assigned: packageTenantsOf(type, payload.packageId),
-    tenants: _pkgAssignableTenants() };
+    assigned: _pkgTenantsFor(session, type, payload.packageId),
+    tenants: _pkgAssignableTenants().filter(function(t) { return mine === null || t.tenantId === mine; }) };
 }
 
 /**
