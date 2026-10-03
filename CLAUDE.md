@@ -1423,6 +1423,28 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
   QUCOD=SQUCOD=PC (Pao Pao=PK) SFACTOR=1 · CQUCOD/PQUCOD=CT + factor ลัง · SELLPR1/2 = ราคาเงินสด/เครดิต **ก่อน VAT** ต่อหน่วยขาย (ชุดราคา BDC ขั้น 1 ลัง ÷ 1.07 ÷ factor, ทศนิยม 4 ตำแหน่ง)
   · 10820-22 ใช้ราคาเดียวกับ 10815/10816/10813 · บาร์โค้ด Pao Pao มาจาก PDF · **CDX ต้องสร้างใหม่ (REINDEX) ก่อนใช้กับ Express** ผมแก้ CDX ไม่ได้ · สคริปต์สร้างไฟล์อยู่ใน scratchpad ของ session (ไม่ได้ commit)
 
+## ตารางหน่วย 3 ชั้น CT → PK → PC (เจ้าของระบบยืนยัน 3 ต.ค. 2026)
+
+**PC = หน่วยที่ร้านค้าขายจริง (ซองเล็ก/ชิ้น) และเป็นหน่วยฐานที่เก็บสต็อก — ไม่ใช่แผ่น** · 1 CT = ? PK, 1 PK = ? PC:
+
+| สินค้า | 1 CT | 1 PK | 1 CT |
+|---|---|---|---|
+| 10185 10188 10189 10190 | 12 PK | 5 PC | 60 PC |
+| 10328 10329 10331 · เครื่องไล่ยุงไฟฟ้า/รีฟิล (10813 10815 10816 10820-22) | 4 PK | 3 PC | 12 PC |
+| กาว 10503 10504 (10 ซองใหญ่ × 5 ซองเล็ก; 1 ซองเล็ก = 10 แผ่น) | 10 PK | 5 PC | **50 PC** |
+| กาว 10505 (20 ซองใหญ่ × 5 ซองเล็ก; 1 ซองเล็ก = 5 แผ่น) | 20 PK | 5 PC | 100 PC |
+| Pao Pao (Mini 6 / Regular 8 / Jumbo 4) | 6/8/4 PK | 1 PC | 6/8/4 PC |
+
+- **10503/10504 เคยผิด (CT=500, PK=50)** — ชีต `unitofitem` นับเป็น "แผ่น" · แก้เป็น CT=50 / PK=5 แล้วทั้ง UAT และ prod (`.dev/fix-glue-units.js`: product_units + factor ใน line ของชุดราคาที่ยังไม่หมดอายุ · ชุด Q3 ที่หมดอายุไม่แตะ)
+  ตรวจบน prod แล้ว: ลัง 1 = 985, แพ็ค 2 = 198, นับขั้นรวม 10503+10504 ถูก
+- **★ แก้ factor อย่างเดียวไม่พอ — ตัวเลขที่เก็บเป็นหน่วยฐานไว้แล้วต้องปรับตาม** ไม่งั้นสต็อกเพี้ยน 10 เท่าเงียบๆ: BDC มีสต็อก 10504 อยู่ 5,000 (ทั้ง UAT และ prod; = 10 ลัง × 500 เดิม → ถ้าไม่แก้จะกลายเป็น 100 ลัง)
+  `backend/45_unit_rescale.gs` `rescaleProductBaseUnit()` หาร qty ÷10 / คูณต้นทุน ×10 (มูลค่าคงเดิม) ใน warehouse_stock · stock_ledger · stock_reservations · gr_items · po_items (เฉพาะสินค้าที่ระบุ) · กันรันซ้ำด้วย Script Property `RESCALED_<รหัส>`
+  · **รันจาก Apps Script editor ของแต่ละ env (ไม่ต้อง Deploy)**: `runRescaleGlueUnitsDryRun` (ดูก่อน) → `runRescaleGlueUnits` (เขียนจริง) · เทสต์: `.dev/test-unit-rescale.js`
+  · **สถานะ: backend push แล้วทั้งสอง env แต่ยังไม่ได้รันใน editor** → จนกว่าจะรัน สต็อก 10504 ของ BDC ยังแสดง 5,000 (ผิด 10 เท่า)
+  · ไม่ได้ปรับ van_stock/order_items ในไฟล์ตัวแทน (ตรวจแล้วไม่มียอดขายของสองรหัสนี้)
+- **ไฟล์ Express (`reference/dbf_new/`)**: SELLPR1 = SELLPR2 = ราคาตั้งก่อนหักส่วนลด ไม่รวม VAT ต่อหน่วยขาย (ราคาตั้งต่อลัง ÷ factor ลัง เป็น PC; Pao Pao เป็น PK) · 10503/10504 CFACTOR=50 ราคา 20.5608/PC
+  (เจ้าของระบบสั่ง 3 ต.ค. 2026 — แสดงส่วนลดในช่องส่วนลดของเอกสารเพื่อให้ร้านค้าเห็นว่าได้ส่วนลด)
+
 ## Environment gotchas
 
 - Windows + Git Bash: `.gs`/`.js`/`.html` files are CRLF. Prefer the `Edit`/`Write` tools over shell

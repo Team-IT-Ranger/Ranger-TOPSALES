@@ -63,10 +63,12 @@ function rescaleProductBaseUnit(productCodes, oldCaseFactor, divisor, dryRun) {
   return report;
 }
 
-/** กาวดักแมลงวัน 10503/10504: 1 ลัง 500 → 50 (หาร 10) — แก้ DRY_RUN เป็น false แล้ว Run จริงหลังดูผลรอบแรก */
-function runRescaleGlueUnits() {
-  var DRY_RUN = true;
-  var rep = rescaleProductBaseUnit(['10503', '10504'], 500, 10, DRY_RUN);
-  Logger.log((DRY_RUN ? '[ดูอย่างเดียว] ' : '[เขียนจริง] ') + 'แก้ ' + rep.length + ' แถว');
+function _runGlueRescale(dry) {
+  var rep = rescaleProductBaseUnit(['10503', '10504'], 500, 10, dry);
+  Logger.log((dry ? '[ดูอย่างเดียว ยังไม่เขียน] ' : '[เขียนจริงแล้ว] ') + 'แก้ ' + rep.length + ' แถว');
   rep.forEach(function(l) { Logger.log(l); });
 }
+/** 1) Run ตัวนี้ก่อน — แค่รายงานว่าจะแก้อะไร ไม่เขียน */
+function runRescaleGlueUnitsDryRun() { _runGlueRescale(true); }
+/** 2) ดูผลข้อ 1 แล้วถูกต้อง ค่อย Run ตัวนี้ — เขียนจริง รันได้ครั้งเดียวต่อ env (รันซ้ำถูกปฏิเสธ) */
+function runRescaleGlueUnits() { _runGlueRescale(false); }
