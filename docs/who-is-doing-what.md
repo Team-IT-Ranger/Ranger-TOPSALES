@@ -590,6 +590,12 @@ factor ตามหน่วยสินค้าปัจจุบัน (แ�
 รายละเอียดใน CLAUDE.md หัวข้อ "ความเร็วอ่านชีต + viewer ศูนย์ + แก้ใบหลังรับงาน…" · backend: `clasp push` ขึ้น UAT+prod แล้ว **รอ Deploy → New version ทั้งสอง env**
 (ต้อง deploy ก่อนถึงจะเห็นผลเร็วขึ้น + ปุ่มแก้ใบ + viewer) · หลัง deploy: ศูนย์ต้อง **ล็อกอินใหม่หนึ่งครั้ง** ให้ระบบ seed สิทธิ์ viewer ของ tenant_admin
 
+## ★★ 2026-10-04: ส่งต่องานให้ team 1 — อ่าน [`docs/handoff-2026-10-04.md`](handoff-2026-10-04.md)
+
+Claude อีกบัญชีหมด token กลางงาน · **กุญแจทุกดอกว่าง** (clasp push ล่าสุด 4 ต.ค. 2026: เพิ่ม `45_unit_rescale.gs` ขึ้น UAT+prod — ไม่ต้อง Deploy) ·
+**ของค้างที่สำคัญสุด**: (A) เจ้าของระบบต้อง Run `runRescaleGlueUnitsDryRun` → `runRescaleGlueUnits` ใน Apps Script editor ของ UAT และ prod (สต็อกกาว 10504 ของ BDC ยังเพี้ยน 10 เท่า) ·
+(B) Deploy → New version · (C) ไฟล์ Express `reference\dbf_new\` ต้อง REINDEX ก่อนใช้ — รายละเอียดทั้งหมดในไฟล์ส่งต่อ
+
 ## งานถัดไป เรียงตามลำดับที่ควรทำ
 
 **1. แอดมินแก้บรรทัดบิลหลังรับงาน + ธง "ศูนย์แก้ไขแล้ว"** — เจ้าของระบบสั่งไว้ตั้งแต่ออกแบบ flow แต่ยังไม่ได้ทำ

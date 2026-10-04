@@ -15,3 +15,6 @@ reference/
 
 # Drive shortcut ไม่ใช่ไฟล์จริง แค่ตัวชี้ไป Google Sheet บนไดรฟ์
 *.gsheet
+
+# ข้อมูลที่ดึงจาก prod ให้ .dev/express-dbf
+.dev/express-dbf/data/
