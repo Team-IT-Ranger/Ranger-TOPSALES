@@ -593,8 +593,7 @@ factor ตามหน่วยสินค้าปัจจุบัน (แ�
 ## ★★ 2026-10-04: ส่งต่องานให้ team 1 — อ่าน [`docs/handoff-2026-10-04.md`](handoff-2026-10-04.md)
 
 Claude อีกบัญชีหมด token กลางงาน · **กุญแจทุกดอกว่าง** (clasp push ล่าสุด 4 ต.ค. 2026: เพิ่ม `45_unit_rescale.gs` ขึ้น UAT+prod — ไม่ต้อง Deploy) ·
-**ของค้างที่สำคัญสุด**: (A) เจ้าของระบบต้อง Run `runRescaleGlueUnitsDryRun` → `runRescaleGlueUnits` ใน Apps Script editor ของ UAT และ prod (สต็อกกาว 10504 ของ BDC ยังเพี้ยน 10 เท่า) ·
-(B) Deploy → New version · (C) ไฟล์ Express `reference\dbf_new\` ต้อง REINDEX ก่อนใช้ — รายละเอียดทั้งหมดในไฟล์ส่งต่อ
+**ของค้างที่สำคัญสุด**: (A) ~~ปรับสต็อกกาว 10504~~ เสร็จแล้วทั้ง UAT+prod (4 ต.ค.) · (B) Deploy → New version · (C) ไฟล์ Express `reference\dbf_new\` ต้อง REINDEX ก่อนใช้ — รายละเอียดทั้งหมดในไฟล์ส่งต่อ
 
 ## งานถัดไป เรียงตามลำดับที่ควรทำ
 
