@@ -104,6 +104,16 @@ function getDashboard(user) {
  * tenant จริง หรือ Ultra Admin ที่สวมสิทธิ์ตัวแทน → สรุปของตัวแทนนั้นรายเดียว
  * บริษัทเจ้าของสินค้า (ไม่ได้สวมสิทธิ์ตัวแทนไหน) → สรุปรวมทุกตัวแทนที่ active
  */
+/* จำนวนคำขอเปิดร้านใหม่ที่ยังรออนุมัติ (46_customer_requests.gs) — ขึ้นเป็นการ์ดบนหน้าภาพรวม
+   นับที่นี่แทนที่จะให้หน้าเว็บยิงคำขอเพิ่ม เพราะหน้าแรกยิงคำขอเดียวตามกติกาความเร็วข้อ 1
+   scope ว่าง (ฝั่งบริษัทที่ไม่ได้สวมสิทธิ์ตัวแทน) = เห็นของทุกตัวแทน */
+function _dashPendingCustomerRequests(scope) {
+  return centralObjects('customer_requests').filter(function(r) {
+    if (scope && String(r.tenant_id) !== String(scope)) return false;
+    return String(r.status || 'pending') === 'pending';
+  }).length;
+}
+
 function getAdminDashboard(session, payload) {
   var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
@@ -135,6 +145,7 @@ function getAdminDashboard(session, payload) {
       pendingStaff: staff.filter(function(u) { return String(u.status) !== 'Yes'; }).length,
       pendingDeliveryCount: pendingSO.length,
       pendingDeliveryValue: pendingSO.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0),
+      pendingCustomerRequests: _dashPendingCustomerRequests(effTenantId),
       recentOrders: recentOrders
     };
   }
@@ -156,6 +167,7 @@ function getAdminDashboard(session, payload) {
     bills: totalBills, revenue: totalRevenue,
     productCount: centralObjects('products').filter(function(p) { return isNotOff(p.is_active); }).length,
     activePromoCount: centralObjects('discount_rules').filter(function(r) { return isFlagOn(r.is_active); }).length,
+    pendingCustomerRequests: _dashPendingCustomerRequests(null),
     perTenant: perTenant
   };
 }

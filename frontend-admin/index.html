@@ -210,7 +210,7 @@
   .btn-ghost{ border-color:transparent; background:none; color:var(--ink-soft); }
   .btn-sm{ padding:5px 11px; font-size:12px; }
 
-  .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  .kpi-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:20px; }
   .kpi{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; border-top:3px solid var(--blue); }
   .kpi:nth-child(2){ border-top-color:var(--green); }
   .kpi:nth-child(3){ border-top-color:var(--red); }
@@ -218,6 +218,15 @@
   .kpi .lbl{ font-size:11.5px; color:var(--ink-soft); margin-bottom:6px; }
   .kpi .val{ font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; }
   .kpi .sub{ font-size:11px; color:var(--ink-faint); margin-top:3px; }
+  /* การ์ดที่กดได้ — ต้องดูออกว่ากดได้ก่อนเอาเมาส์ไปชี้ ไม่งั้นไม่มีใครรู้ว่ามันเป็นทางลัด */
+  .kpi-link{ cursor:pointer; transition:border-color .12s, box-shadow .12s, transform .12s; }
+  .kpi-link:hover{ border-color:var(--blue); box-shadow:0 2px 10px rgba(43,99,217,.14); transform:translateY(-1px); }
+  .kpi-link:active{ transform:translateY(0); }
+  .kpi-link:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+  .kpi-link .go{ font-size:11px; color:var(--blue); margin-top:3px; }
+  /* มีของค้าง = ขอบบนเป็นสีเตือน · ไม่มี = ปล่อยเทาเหมือนการ์ดเฉยๆ ไม่ต้องเรียกร้องความสนใจ */
+  .kpi.kpi-alert, .kpi.kpi-alert:nth-child(2), .kpi.kpi-alert:nth-child(3), .kpi.kpi-alert:nth-child(4){ border-top-color:var(--amber); }
+  .kpi.kpi-quiet, .kpi.kpi-quiet:nth-child(2), .kpi.kpi-quiet:nth-child(3), .kpi.kpi-quiet:nth-child(4){ border-top-color:var(--ink-faint); }
   .two-col{ display:grid; grid-template-columns:1.3fr 1fr; gap:14px; }
   .panel{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
   .panel h3{ font-size:13.5px; margin:0 0 12px; }
@@ -2805,6 +2814,7 @@ function renderDashboard(r, fromSnapshot){
   if (r.scope === 'tenant'){
     document.getElementById('dash-kpis').innerHTML =
       kpi('ยอดขายวันนี้', '฿' + baht(r.revenue), r.bills + ' บิล') +
+      kpiCustReq(r.pendingCustomerRequests) +
       kpi('พนักงานอนุมัติแล้ว', r.activeStaff, '') +
       kpi('รออนุมัติ', r.pendingStaff, 'พนักงานลงทะเบียนใหม่') +
       kpi('SO รอจัดส่ง', r.pendingDeliveryCount, 'มูลค่า ฿' + baht(r.pendingDeliveryValue));
@@ -2818,6 +2828,7 @@ function renderDashboard(r, fromSnapshot){
   } else {
     document.getElementById('dash-kpis').innerHTML =
       kpi('ยอดขายวันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue), r.bills + ' บิล') +
+      kpiCustReq(r.pendingCustomerRequests) +
       kpi('ตัวแทนที่ใช้งาน', r.tenantCount, '') +
       kpi('สินค้าทั้งหมด', r.productCount, '') +
       kpi('โปรโมชั่นที่ใช้งาน', r.activePromoCount, '');
@@ -2831,6 +2842,16 @@ function renderDashboard(r, fromSnapshot){
   }
 }
 function kpi(lbl, val, sub){ return '<div class="kpi"><div class="lbl">'+esc(lbl)+'</div><div class="val">'+esc(val)+'</div><div class="sub">'+esc(sub||'')+'</div></div>'; }
+/* การ์ดคำขอเปิดร้านใหม่ — กดแล้วไปหน้า 1.4.6 (เมนูอยู่ลึกสามชั้น คนไม่รู้ว่ามีจะไม่เคยเจอ)
+   เป็น <button> ไม่ใช่ <div onclick> เพื่อให้ Tab ถึงและ Enter ทำงานได้เอง */
+function kpiCustReq(count){
+  const n = Number(count) || 0;
+  return '<button type="button" class="kpi kpi-link ' + (n ? 'kpi-alert' : 'kpi-quiet') + '" ' +
+    'style="text-align:left;font:inherit" onclick="gotoView(\'custrequests\')" ' +
+    'title="ไปที่ 1.4.6 คำขอเปิดร้านใหม่">' +
+    '<div class="lbl">คำขอเปิดร้านใหม่</div><div class="val">' + n + '</div>' +
+    '<div class="' + (n ? 'go' : 'sub') + '">' + (n ? 'รออนุมัติ — กดเพื่อตรวจ' : 'ไม่มีคำขอค้าง') + '</div></button>';
+}
 function activityRow(left, right){ return '<div class="activity-row"><span>'+left+'</span><span class="amt mono-data">'+right+'</span></div>'; }
 
 /* ══════════════ STAFF ══════════════ */
