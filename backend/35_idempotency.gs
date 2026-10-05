@@ -28,6 +28,8 @@ var IDEMPOTENT_ACTIONS = {
   createApBillFromGr: 1, createApBillManual: 1, payApBills: 1,
   createArInvoice: 1, receiveArPayment: 1,
   createTenant: 1, addCustomerAdmin: 1, addCustomer: 1,
+  // คำขอเปิดร้าน: กดส่งซ้ำ = คิวมีคำขอร้านเดียวกันสองใบ แอดมินอนุมัติทั้งคู่ = ร้านซ้ำสองรหัส
+  submitCustomerRequest: 1, approveCustomerRequest: 1,
   importExternalSalesInvoices: 1, confirmExternalGoodsReceipt: 1
 };
 

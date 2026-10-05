@@ -20,7 +20,14 @@ var ACTION_MAP = {
   checkInVisit:   checkInVisit,
   addVisitNote:   addVisitNote,
   addCompetitor:  addCompetitor,
-  addCustomer:    addCustomer
+  // ── คำขอเปิดร้านใหม่ (46_customer_requests.gs) ──
+  // `addCustomer` เดิมสร้างร้านทันทีโดยไม่ผ่านการอนุมัติ — ปิดทางแล้ว 5 ต.ค. 2026 ทุกร้านใหม่ต้องผ่านคิวนี้
+  // คง action ไว้เพื่อตอบข้อความที่อ่านรู้เรื่องให้แอปรุ่นเก่าที่ยังค้างในเครื่องพนักงาน (ไม่ใช่ "ไม่พบ action")
+  addCustomer:             addCustomer,
+  submitCustomerRequest:   submitCustomerRequest,
+  listMyCustomerRequests:  listMyCustomerRequests,
+  markCustomerRequestSeen: markCustomerRequestSeen,
+  listShopTypesMobile:     listShopTypesMobile
 };
 
 // เรียกจาก doPost() หลังตรวจแล้วว่า action อยู่ใน ACTION_MAP
@@ -64,6 +71,11 @@ var ADMIN_ACTION_MAP = {
 
   listCustomersAdmin:     listCustomersAdmin,
   addCustomerAdmin:       addCustomerAdmin,
+  // คิวคำขอเปิดร้านใหม่จากมือถือ (46)
+  listCustomerRequests:   listCustomerRequests,
+  approveCustomerRequest: approveCustomerRequest,
+  rejectCustomerRequest:  rejectCustomerRequest,
+  listShopTypes:          listShopTypes,
   updateCustomerAdmin:    updateCustomerAdmin,
 
   listSalesOrdersAdmin:   listSalesOrdersAdmin,

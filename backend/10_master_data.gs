@@ -4,15 +4,18 @@
  * สินค้า/กลุ่มสินค้า/กลุ่มร้านค้า บริษัทเจ้าของสินค้าคุมจากศูนย์กลาง ใช้ร่วมกันทุกตัวแทน
  */
 
-// ── Mobile App: เพิ่มลูกค้าใหม่หน้างาน ──
+/* ── Mobile App: เพิ่มลูกค้าใหม่หน้างาน — ★ เลิกใช้แล้ว 5 ต.ค. 2026 ──
+   เดิมฟังก์ชันนี้สร้างร้านเข้าระบบ **ทันทีโดยไม่ผ่านการอนุมัติ** เซลส์กรอกแค่ชื่อ/เบอร์/เลขภาษี/ที่อยู่
+   แล้วร้านนั้นก็อยู่ในทะเบียนลูกค้าเลย — ไม่มีใครตรวจเครดิต ไม่มีใครตั้งกลุ่มราคา (= เปิดบิลไม่ได้จริง)
+   เจ้าของระบบสั่งให้เปลี่ยนเป็นคำขอทั้งหมด → ใช้ `submitCustomerRequest` (46_customer_requests.gs)
+
+   ★ ทำไมไม่ลบทิ้งเลย: แอปมือถือเป็นหน้าเว็บที่ค้างอยู่ในเครื่องพนักงานได้นานมาก (มีแถบ "มีเวอร์ชันใหม่"
+   แต่ผู้ใช้ไม่กดก็ไม่รีเฟรช) ถ้าถอด action ออกจาก router เลย คนที่ยังใช้ของเก่าจะได้ "ไม่พบ action"
+   ซึ่งอ่านแล้วเหมือนระบบพัง และเขาจะกดซ้ำอยู่นั่น — ตอบข้อความที่บอกวิธีทำต่อดีกว่า */
 function addCustomer(user, payload) {
-  var built = buildCustomerFields(payload, { tenantId: user.tenantId, actor: user.lineUserId });
-  if (!built.ok) return { success: false, message: built.message };
-  var custId = centralNextId('customers');
-  built.fields.record_id = custId;
-  centralAppend('customers', built.fields);
-  cacheClear('bootstrap', user.lineUserId);
-  return { success: true, customerId: custId, customerCode: built.fields.customer_code };
+  return { success: false, needsRefresh: true,
+    message: 'ตอนนี้การเปิดร้านใหม่ต้องส่งคำขอให้แอดมินอนุมัติก่อน — กรุณารีเฟรชแอป (ปิดแล้วเปิดใหม่) '
+           + 'แล้วใช้ปุ่ม "ขอเปิดร้านใหม่" อีกครั้ง' };
 }
 
 // ── Admin App: ลูกค้า (ตัวแทน/Ultra Admin ที่สวมสิทธิ์ จัดการของตัวเอง, บริษัทเห็นทั้งหมด) ──

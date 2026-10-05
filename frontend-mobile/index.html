@@ -307,16 +307,27 @@
 
   <!-- ลูกค้า -->
   <section class="screen" id="tab-cust">
-    <div style="display:flex;gap:8px;margin-bottom:12px"><input class="inp" id="c-q" placeholder="ค้นหาลูกค้า..." oninput="renderCustomers()"><button class="btn btn-primary" onclick="toggleAddCust(true)">+ เพิ่ม</button></div>
+    <!-- ผลการพิจารณาคำขอที่เซลส์ยังไม่ได้รับทราบ — ขึ้นบนสุดเพราะเป็นข่าวที่เขารอ (ยังไม่ push เข้า LINE) -->
+    <div id="c-alerts" class="stack" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px"><input class="inp" id="c-q" placeholder="ค้นหาลูกค้า..." oninput="renderCustomers()"><button class="btn btn-primary" onclick="toggleAddCust(true)">+ ขอเปิดร้าน</button></div>
     <div class="card stack hidden" id="c-add" style="margin-bottom:12px">
-      <h3>เพิ่มลูกค้าใหม่</h3>
-      <input class="inp" id="c-name" placeholder="ชื่อร้าน / ลูกค้า *">
-      <input class="inp" id="c-phone" type="tel" placeholder="เบอร์โทร">
-      <input class="inp" id="c-tax" inputmode="numeric" placeholder="เลขประจำตัวผู้เสียภาษี">
-      <textarea class="inp" id="c-addr" rows="2" placeholder="ที่อยู่"></textarea>
+      <h3>ขอเปิดร้านใหม่</h3>
+      <div class="muted" style="margin-top:-4px">ส่งให้แอดมินอนุมัติก่อน อนุมัติแล้วจะแจ้งกลับมาที่หน้านี้</div>
+      <input class="inp" id="c-name" placeholder="ชื่อร้าน *">
+      <textarea class="inp" id="c-addr" rows="2" placeholder="ที่อยู่ร้าน"></textarea>
+      <input class="inp" id="c-tax" inputmode="numeric" maxlength="13" placeholder="เลขผู้เสียภาษี / บัตรประชาชน (13 หลัก)">
+      <input class="inp" id="c-contact" placeholder="ชื่อผู้ติดต่อ">
+      <input class="inp" id="c-phone" type="tel" placeholder="เบอร์ติดต่อ">
+      <select class="inp" id="c-shoptype"></select>
+      <select class="inp" id="c-pay" onchange="syncCustPay()">
+        <option value="cash">ชำระเงินสด</option>
+        <option value="credit">ชำระเครดิต</option>
+      </select>
+      <input class="inp hidden" id="c-credit" inputmode="numeric" placeholder="วงเงินเครดิตที่ขอ (บาท) *">
       <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" onclick="captureCustGps()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>จับพิกัด</button><span class="muted" id="c-gps">ยังไม่จับพิกัด</span></div>
-      <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="toggleAddCust(false)">ยกเลิก</button><button class="btn btn-green" style="flex:2" id="c-save" onclick="submitCust()">บันทึกลูกค้า</button></div>
+      <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="toggleAddCust(false)">ยกเลิก</button><button class="btn btn-green" style="flex:2" id="c-save" onclick="submitCust()">ส่งคำขอ</button></div>
     </div>
+    <div id="c-reqs" class="stack" style="margin-bottom:12px"></div>
     <div class="stack" id="c-list"></div>
   </section>
 
@@ -378,7 +389,7 @@ let DATA = { products: [], customers: [] };
      2) action เดียวกันที่ยังค้างอยู่ ถูกบล็อกก่อนถึง network
      3) บิล/สต็อกแนบ requestId ที่สร้าง "ตอนประกอบข้อมูล" ครั้งเดียว — ส่งซ้ำกี่รอบเซิร์ฟเวอร์ก็บันทึกใบเดียว
         สำคัญมากกับคิวออฟไลน์: บิลในคิวพก requestId เดิมติดตัวไปด้วย การส่งซ้ำจึงไม่เกิดใบที่สอง */
-const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder']);
+const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder','submitCustomerRequest']);
 const INFLIGHT = new Set();
 const newRequestId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 function pressBusy(btn, on){ if (!btn) return; btn.disabled = on; btn.classList.toggle('is-busy', on); }
@@ -568,7 +579,7 @@ function renderCurrentTab(){
   if (TAB === 'sell') { renderCustSelect(); renderProducts(); renderCartBar(); renderSellMode(); }
   if (TAB === 'stock') renderStock();
   if (TAB === 'visit') renderVisit();
-  if (TAB === 'cust') renderCustomers();
+  if (TAB === 'cust') { renderCustomers(); renderCustRequests(); renderCustAlerts(); }
   $('cartbar').classList.toggle('hidden', TAB !== 'sell' || !CART.length);
 }
 
@@ -1119,21 +1130,92 @@ function renderCustomers(){
     (c.lat ? '<a class="btn btn-sm" href="https://maps.google.com/?q='+encodeURIComponent(c.lat+','+c.lng)+'" target="_blank" rel="noopener"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>แผนที่</a>' : '') + '</div></div>').join('')
     : '<div class="empty">' + (DATA.customers.length ? 'ไม่พบลูกค้า' : 'ยังไม่มีลูกค้า — กด + เพิ่ม หรือ Sync ที่หน้าแรก') + '</div>';
 }
-function toggleAddCust(on){ $('c-add').classList.toggle('hidden', !on); if (on) $('c-name').focus(); }
+function toggleAddCust(on){
+  $('c-add').classList.toggle('hidden', !on);
+  if (!on) return;
+  fillShopTypes();
+  $('c-name').focus();
+}
+/* ตัวเลือกประเภทร้านมากับ bootstrap (ไม่ยิงคำขอเพิ่ม) · ว่าง = ยังไม่ได้ seed ชีต shop_types
+   ปล่อยให้ส่งคำขอได้ต่อโดยไม่ระบุประเภท ดีกว่าบล็อกเซลส์ที่ยืนอยู่หน้าร้าน */
+function fillShopTypes(){
+  const sel = $('c-shoptype'), types = DATA.shopTypes || [];
+  if (sel.options.length && sel.dataset.filled === String(types.length)) return;
+  sel.innerHTML = '<option value="">ประเภทร้านค้า (ถ้าทราบ)</option>' +
+    types.map(t => '<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>').join('');
+  sel.dataset.filled = String(types.length);
+}
+function syncCustPay(){ $('c-credit').classList.toggle('hidden', $('c-pay').value !== 'credit'); }
 async function captureCustGps(){ $('c-gps').textContent = 'กำลังจับพิกัด...'; const g = await getGPS(); if (g.lat) { CUST_GPS = g; $('c-gps').textContent = 'บันทึกพิกัดแล้ว ' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5); } else $('c-gps').textContent = 'จับพิกัดไม่ได้'; }
+
+const CR_PILL = { pending: 'warn', approved: 'good', rejected: 'bad' };
+
+/* คำขอของเซลส์คนนี้ — รออนุมัติอยู่ด้านบน เสร็จแล้วอยู่ล่าง */
+function renderCustRequests(){
+  const reqs = DATA.customerRequests || [];
+  $('c-reqs').innerHTML = !reqs.length ? '' :
+    '<div class="muted" style="margin-bottom:4px">คำขอเปิดร้านของฉัน</div>' + reqs.map(r =>
+      '<div class="prod"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">' +
+        '<div><div class="nm">'+esc(r.name)+'</div>' +
+        '<div class="sub">'+esc(r.requestNo)+(r.customerCode ? ' · รหัสร้าน '+esc(r.customerCode) : '')+'</div>' +
+        (r.rejectReason ? '<div class="sub" style="color:var(--red)">เหตุผล: '+esc(r.rejectReason)+'</div>' : '') +
+        '</div><span class="pill '+(CR_PILL[r.status]||'')+'">'+esc(r.statusLabel)+'</span>' +
+      '</div></div>').join('');
+}
+
+/* ★ ข่าวที่เซลส์รออยู่ — ต้องกดรับทราบถึงจะหาย (ไม่หายเองตอนรีเฟรช ไม่งั้นพลาดข่าวได้ง่ายๆ) */
+function renderCustAlerts(){
+  const alerts = DATA.customerRequestAlerts || [];
+  $('c-alerts').innerHTML = alerts.map(a => {
+    const ok = a.status === 'approved';
+    return '<div class="card" style="border-left:4px solid var(--'+(ok?'green':'red')+')">' +
+      '<div class="nm">'+(ok ? 'เปิดร้าน '+esc(a.name)+' ให้แล้ว ขายได้เลย' : 'คำขอเปิดร้าน '+esc(a.name)+' ไม่ผ่าน')+'</div>' +
+      '<div class="sub">'+(ok ? 'รหัสร้าน '+esc(a.customerCode) : esc(a.rejectReason || '-'))+'</div>' +
+      '<button class="btn btn-sm" style="margin-top:8px" onclick="ackCustReq('+a.id+')">รับทราบ</button></div>';
+  }).join('');
+}
+
+async function ackCustReq(id){
+  DATA.customerRequestAlerts = (DATA.customerRequestAlerts || []).filter(a => String(a.id) !== String(id));
+  renderCustAlerts();                       // ตอบสนองทันที ไม่รอเซิร์ฟเวอร์ (กติกาข้อ 4)
+  saveBootCache();
+  try { await api('markCustomerRequestSeen', { requestIds: [id] }); } catch (e) {}
+}
+
+function saveBootCache(){
+  lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
+}
+
 async function submitCust(){
-  const name = $('c-name').value.trim(); if (!name) return toast('กรอกชื่อลูกค้าก่อน', 'err');
+  const name = $('c-name').value.trim(); if (!name) return toast('กรอกชื่อร้านก่อน', 'err');
+  const paymentType = $('c-pay').value;
+  const creditLimit = Number(String($('c-credit').value).replace(/[^0-9.]/g, '')) || 0;
+  // กันที่หน้าจอด้วย ไม่ใช่รอเซิร์ฟเวอร์ตอบ — เซลส์ยืนอยู่หน้าร้าน รอบ round-trip หนึ่งคือ ~2 วินาที
+  if (paymentType === 'credit' && !creditLimit) return toast('ร้านเครดิตต้องระบุวงเงินที่ขอ', 'err');
+  const taxId = $('c-tax').value.replace(/[^0-9]/g, '');
+  if (taxId && taxId.length !== 13) return toast('เลขผู้เสียภาษี/บัตรประชาชน ต้องมี 13 หลัก', 'err');
+
   const btn = $('c-save'); btn.disabled = true;
-  const payload = { name, phone: $('c-phone').value.trim(), taxId: $('c-tax').value.trim(), address: $('c-addr').value.trim(), lat: CUST_GPS.lat, lng: CUST_GPS.lng };
+  // requestId สร้างตอน "ประกอบข้อมูล" ครั้งเดียวตามกติกา — เน็ตกระตุกแล้วกดซ้ำจะไม่ได้คำขอสองใบ
+  // (สร้างใหม่ทุกครั้งที่ยิง = การกันซ้ำไม่ทำงานเลย)
+  const payload = { requestId: newRequestId(), name, address: $('c-addr').value.trim(), taxId,
+    contactName: $('c-contact').value.trim(), phone: $('c-phone').value.trim(),
+    paymentType, creditLimit, shopTypeId: $('c-shoptype').value,
+    lat: CUST_GPS.lat, lng: CUST_GPS.lng };
   try {
-    const r = await api('addCustomer', payload);
+    const r = await api('submitCustomerRequest', payload);
     if (!r.success) return toast(r.message, 'err');
-    // เพิ่มเข้า cache ในเครื่องเลย ไม่ต้องโหลดข้อมูลตั้งต้นใหม่ทั้งก้อน
-    DATA.customers.push({ id: r.customerId, name, groupId: 0, phone: payload.phone, address: payload.address, lat: Number(payload.lat) || 0, lng: Number(payload.lng) || 0 });
-    lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
-    ['c-name', 'c-phone', 'c-tax', 'c-addr'].forEach(id => { $(id).value = ''; }); CUST_GPS = { lat: '', lng: '' }; $('c-gps').textContent = 'ยังไม่จับพิกัด';
-    toggleAddCust(false); renderCustomers(); toast('เพิ่มลูกค้าแล้ว', 'ok');
-  } catch (e) { toast('บันทึกไม่ได้: ' + e.message, 'err'); }
+    // ใส่เข้ารายการในเครื่องเลย ไม่ต้องโหลด bootstrap ใหม่ทั้งก้อน (กติกาข้อ 4)
+    (DATA.customerRequests = DATA.customerRequests || []).unshift({
+      id: r.requestId, requestNo: r.requestNo, name, status: 'pending', statusLabel: 'รออนุมัติ',
+      customerCode: '', rejectReason: '' });
+    saveBootCache();
+    ['c-name', 'c-addr', 'c-tax', 'c-contact', 'c-phone', 'c-credit'].forEach(id => { $(id).value = ''; });
+    $('c-pay').value = 'cash'; syncCustPay(); $('c-shoptype').value = '';
+    CUST_GPS = { lat: '', lng: '' }; $('c-gps').textContent = 'ยังไม่จับพิกัด';
+    toggleAddCust(false); renderCustRequests();
+    toast('ส่งคำขอ ' + r.requestNo + ' ให้แอดมินแล้ว', 'ok');
+  } catch (e) { toast('ส่งคำขอไม่ได้: ' + e.message, 'err'); }
   finally { btn.disabled = false; }
 }
 

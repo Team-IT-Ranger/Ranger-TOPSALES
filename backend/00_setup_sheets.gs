@@ -105,7 +105,10 @@ var CENTRAL_SHEETS = {
   // status: active | inactive | blocked (ระงับเครดิต ขายสดได้) · is_active คงไว้เพราะโค้ดเดิมทั้งระบบอ่านคอลัมน์นี้
   //   — buildCustomerFields() เขียนสองคอลัมน์นี้ให้ตรงกันเสมอ ห้ามเขียนแยกกันเอง
   // attributes: JSON สำหรับฟิลด์ที่ยังไม่ตกผลึก (แทนคอลัมน์สำรอง rs1..rs5 ของระบบเดิมที่กลายเป็นขยะ)
-  customers: ['record_id','customer_code','name_prefix','name','name_2','tenant_id','group_id','channel_id','sales_mode',
+  // shop_type_id: ประเภทร้าน (มินิมาร์ท/โชห่วย/ค้าส่ง) — **คนละแกนกับ channel_id** ซึ่งเป็น "ช่องทางขาย"
+  //   (Cash Van / Credit / ขายหน้าคลัง) และคนละแกนกับ group_id ซึ่งเป็น "กลุ่มราคา" (บน prod แบ่งตามภาค)
+  //   สามแกนนี้เคยถูกยุบรวมกันมาแล้วตอนนำเข้า BDC — ดู CLAUDE.md หัวข้อทะเบียนลูกค้า
+  customers: ['record_id','customer_code','name_prefix','name','name_2','tenant_id','group_id','channel_id','shop_type_id','sales_mode',
     'area_code','salesman_line_user_id','contact_name','phone','email','tax_id','tax_branch_code','tax_type',
     'address','subdistrict_id','district_id','province_id','postcode','lat','lng','ship_to_address',
     'payment_type','payment_terms_days','credit_limit','status','is_active','inactive_at',
@@ -114,7 +117,18 @@ var CENTRAL_SHEETS = {
   customer_groups: ['record_id','name','description'],
   // ข้อมูลอ้างอิงกลางเพิ่มเติม จัดการได้เฉพาะโหมด "บริษัทเจ้าของสินค้า" (module 'settings')
   distribution_channels: ['record_id','name','description','is_active'],
+  shop_types: ['record_id','code','name','description','is_active'],
   payment_types: ['record_id','code','name','is_active'],
+
+  /* ═══ คำขอเปิดร้านใหม่จากแอปมือถือ (46_customer_requests.gs) ═══
+     เซลส์กรอกจากหน้าร้าน → แอดมินอนุมัติ → ระบบสร้างลูกค้าจริงแล้วออก customer_code ให้
+     ★ เก็บ "ค่าที่ขอ" แยกจากตาราง customers โดยตั้งใจ — คำขอที่ยังไม่อนุมัติต้องไม่โผล่ในรายการลูกค้า
+       ไม่งั้นเซลส์เปิดบิลใส่ร้านที่ยังไม่ได้ตรวจเครดิต (เคยเป็นแบบนั้นจริง: addCustomer เดิมสร้างทันที)
+     decided_* = ใครอนุมัติ/ปฏิเสธ เมื่อไหร่ · seen_at = เซลส์รับทราบผลแล้ว (ใช้ตีตราแจ้งเตือนในแอป) */
+  customer_requests: ['record_id','request_no','tenant_id','status','requested_by','requested_by_name','requested_at',
+    'name','address','tax_id','contact_name','phone','payment_type','credit_limit','shop_type_id','lat','lng','note',
+    'group_id','customer_id','customer_code','reject_reason','decided_by','decided_by_name','decided_at','seen_at',
+    'created_at','updated_at'],
 
   // trigger_product_ids: รายการ product_id คั่นด้วย , — ใบอนุมัติโปรจริงคิดเป็น "ตระกูลสินค้า" (เช่น Ranger 12hrs
   //   ซึ่งมี 6 SKU) ซึ่งละเอียดกว่า product_group_id (กลุ่ม 7 = ยาจุดทั้งหมด รวม Extreme ที่คนละโปร)
@@ -294,6 +308,7 @@ function setupCentralSheet() {
   _seedProductGroups();
   _seedCustomerGroups();
   _seedDistributionChannels();
+  _seedShopTypes();
   _seedPaymentTypes();
   _seedProvinces();
   _seedRolesAndPermissions();
@@ -404,6 +419,22 @@ function _seedDefaultWarehouse() {
   // เขียนด้วยชื่อคอลัมน์ ไม่ใช่ตำแหน่ง — ชีตเก่าที่เพิ่ง migrate จะมี tenant_id ต่อท้ายแถวหัว ไม่ได้อยู่คอลัมน์ที่ 2
   centralAppend('warehouses', { record_id: 1, tenant_id: '', code: 'MAIN', name: 'คลังกลาง', address: '',
     is_active: 'TRUE', is_default: 'TRUE', created_at: nowStr() });
+}
+
+/* ประเภทร้านค้า — เจ้าของระบบระบุ 3 ค่าตั้งต้น 5 ต.ค. 2026 (ตอนสั่งทำคำขอเปิดร้านจากมือถือ)
+   ★ เป็นแกนที่สามของการจัดประเภทลูกค้า เพิ่มมาเพราะไม่มีที่เก็บมาก่อน — `channel_id` เป็นช่องทางขาย
+   (Cash Van/Credit/ขายหน้าคลัง) และ `group_id` เป็นกลุ่มราคา ซึ่งบน prod แบ่งตามภาค ไม่ใช่ตามชนิดร้าน
+   เอาประเภทร้านไปใส่สองช่องนั้นเมื่อไหร่ = ราคาเพี้ยนหรือรายงานช่องทางเพี้ยนทันที
+   เพิ่มค่าใหม่ได้ที่ชีตนี้ตรงๆ (ยังไม่มีหน้าจอจัดการ — ทำเมื่อมีคนขอ) · ค่าเดิมของ BDC (`ShopTypeCode`
+   PS/MM/ไม่แน่ใจ) ยังไม่ได้ map มาที่นี่ รอเจ้าของระบบบอกว่ารหัสไหนตรงกับอะไร */
+function _seedShopTypes() {
+  var sh = centralSheet('shop_types');
+  if (sh.getLastRow() > 1) return;
+  [
+    [1, 'MINIMART', 'มินิมาร์ท', 'ร้านสะดวกซื้อ/มินิมาร์ท', 'TRUE'],
+    [2, 'GROCERY', 'โชห่วย', 'ร้านขายของชำแบบดั้งเดิม', 'TRUE'],
+    [3, 'WHOLESALE', 'ค้าส่ง', 'ร้านค้าส่ง', 'TRUE']
+  ].forEach(function(r) { sh.appendRow(r); });
 }
 
 function _seedPaymentTypes() {

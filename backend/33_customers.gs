@@ -127,9 +127,11 @@ function buildCustomerFields(payload, opts) {
   pick('namePrefix', 'name_prefix');
   pick('name2', 'name_2');
 
-  // ── การจัดกลุ่ม: กลุ่มลูกค้า (คุมราคา) · ประเภทร้าน/ช่องทาง · รูปแบบการขาย · เขต ──
+  // ── การจัดกลุ่ม: กลุ่มราคา (คุมราคา) · ช่องทางขาย · ประเภทร้าน · รูปแบบการขาย · เขต ──
   if (has('groupId')) f.group_id = _custNum(payload.groupId, 0);
   if (has('channelId')) f.channel_id = _custStr(payload.channelId);
+  // ประเภทร้าน (มินิมาร์ท/โชห่วย/ค้าส่ง — ตาราง shop_types) · แกนที่สาม ไม่เกี่ยวกับราคาและช่องทาง
+  if (has('shopTypeId')) f.shop_type_id = _custStr(payload.shopTypeId);
   if (has('salesMode')) {
     var mode = _custStr(payload.salesMode).toLowerCase();
     if (mode && CUSTOMER_SALES_MODES.indexOf(mode) === -1) return { ok: false, message: 'รูปแบบการขายต้องเป็น van หรือ preorder' };
@@ -246,6 +248,7 @@ function customerToApi(c) {
     id: c.record_id, recordId: c.record_id, code: c.customer_code || '',
     namePrefix: c.name_prefix || '', name: c.name || '', name2: c.name_2 || '', fullName: customerFullName(c),
     tenantId: c.tenant_id || '', groupId: _custNum(c.group_id, 0), channelId: c.channel_id || '',
+    shopTypeId: c.shop_type_id || '',
     salesMode: c.sales_mode || '', areaCode: c.area_code || '', salesmanLineUserId: c.salesman_line_user_id || '',
     contactName: c.contact_name || '', phone: c.phone || '', email: c.email || '',
     taxId: c.tax_id || '', taxBranchCode: c.tax_branch_code || '', taxBranchLabel: customerTaxBranchLabel(c), taxType: c.tax_type || '',

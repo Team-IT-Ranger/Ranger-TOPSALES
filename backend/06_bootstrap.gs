@@ -45,7 +45,16 @@ function getBootstrap(user) {
 
   var rules = _activeRules();
 
-  var result = { success: true, products: products, customers: customers, rules: rules };
+  /* คำขอเปิดร้านใหม่ของเซลส์คนนี้ + ประเภทร้านให้เลือกตอนกรอก (46_customer_requests.gs)
+     ★ ยัดมากับ bootstrap ตามกติกาข้อ 1 ("หน้าแรกยิงคำขอเดียว") แทนที่จะให้แอปยิงเพิ่มอีกสองคำขอตอนเปิด —
+     ค่าคงที่ของ Apps Script ~2 วิ/คำขอ แค่ป้ายแจ้งเตือนไม่คุ้มที่จะจ่ายเพิ่มขนาดนั้น
+     แคช bootstrap ถูกล้างตอนแอดมินอนุมัติอยู่แล้ว ผลจึงมาถึงเซลส์ในรอบถัดไปที่เปิดแอป */
+  var myReq = listMyCustomerRequests(user, {});
+
+  var result = { success: true, products: products, customers: customers, rules: rules,
+    shopTypes: _crShopTypes(),
+    customerRequests: myReq.requests || [],
+    customerRequestAlerts: myReq.unseenDecided || [] };
   cachePut('bootstrap', user.lineUserId, result, CACHE_TTL);
   return result;
 }

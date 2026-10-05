@@ -1184,6 +1184,22 @@
           <div id="cl-members" style="margin-top:14px"></div>
         </section>
 
+        <!-- ═══ คำขอเปิดร้านใหม่จากแอปมือถือ (46_customer_requests.gs) ═══ -->
+        <section class="view" id="view-custrequests">
+          <div class="view-head">
+            <div><h1>คำขอเปิดร้านใหม่</h1><p>เซลส์กรอกจากหน้าร้านแล้วส่งมาให้ตรวจ · อนุมัติแล้วระบบสร้างร้านและออกรหัสให้ทันที
+              แล้วแจ้งกลับไปที่แอปมือถือของคนที่ขอ ·
+              <b>ต้องเลือกกลุ่มลูกค้า (กลุ่มราคา) ก่อนอนุมัติ</b> — ร้านที่ไม่มีกลุ่มจะหาชุดราคาไม่เจอและเปิดบิลไม่ได้</p></div>
+            <select id="cr-filter" onchange="loadCustRequests()">
+              <option value="pending">รออนุมัติ</option>
+              <option value="approved">อนุมัติแล้ว</option>
+              <option value="rejected">ไม่อนุมัติ</option>
+              <option value="all">ทั้งหมด</option>
+            </select>
+          </div>
+          <div id="cr-list"></div>
+        </section>
+
         <!-- ═══ ชุดแถม (ของแถม) ═══ -->
         <section class="view" id="view-freegoods">
           <div class="view-head">
@@ -2217,7 +2233,8 @@ const NAV_GROUPS = [
       {n:'1.4.2', label:'รายชื่อร้านค้า (สำหรับกฎ/โปร)', view:'custlists', mod:'customers', ready:true, scope:'both'},
       {n:'1.4.3', label:'กลุ่มลูกค้า', view:'custgroups', mod:'settings', ready:true, scope:'both'},
       {n:'1.4.4', label:'ช่องทางการจัดจำหน่าย', view:'distchannels', mod:'settings', ready:true, scope:'both'},
-      {n:'1.4.5', label:'ประเภทการชำระเงิน', view:'paytypes', mod:'settings', ready:true, scope:'both'}
+      {n:'1.4.5', label:'ประเภทการชำระเงิน', view:'paytypes', mod:'settings', ready:true, scope:'both'},
+      {n:'1.4.6', label:'คำขอเปิดร้านใหม่', view:'custrequests', mod:'customers', ready:true, scope:'both'}
     ]},
     { n:'1.5', label:'พนักงานและเขตขาย', items:[
       /* รายชื่อพนักงานขายย้ายไปรวมกับ "ผู้ใช้งานและอนุมัติ" (9.4.1) แล้ว 2026-09-29 — คนละหน้าที่ทับซ้อนกันเดิม */
@@ -2629,8 +2646,109 @@ async function loadRepProd(){
     '<td class="mono-data">฿'+bahtPlain(g.revenue)+'</td></tr>').join(''), 4, '—');
 }
 
+/* ═══ คำขอเปิดร้านใหม่จากแอปมือถือ (46_customer_requests.gs) ═══ */
+let CR_ROWS = [], CR_SHOPTYPES = [], CR_GROUPS = [];
+// ชื่อคลาสต้องตรงกับ CSS ของแอดมิน (.pill.ok / .pill.wait / .pill.off) — ชุดเดียวกับ SO_PILL/PAY_PILL
+const CR_PILL = { pending: 'wait', approved: 'ok', rejected: 'off' };
+
+async function loadCustRequests(){
+  const box = document.getElementById('cr-list');
+  const status = document.getElementById('cr-filter').value;
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const r = await callApi('listCustomerRequests', { status });
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  CR_ROWS = r.requests || []; CR_SHOPTYPES = r.shopTypes || []; CR_GROUPS = r.groups || [];
+  renderCustRequests();
+}
+
+function renderCustRequests(){
+  const box = document.getElementById('cr-list');
+  if (!CR_ROWS.length) { box.innerHTML = '<p class="form-hint">ไม่มีคำขอในสถานะนี้</p>'; return; }
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>เลขคำขอ</th><th>ชื่อร้าน</th><th>ผู้ติดต่อ</th><th>ประเภทร้าน</th><th>การชำระ</th>' +
+    '<th>วงเงินที่ขอ</th><th>เซลส์</th><th>สถานะ</th><th></th></tr></thead><tbody>' +
+    CR_ROWS.map(q =>
+      '<tr><td class="mono-data">'+esc(q.requestNo)+'</td>' +
+      '<td class="wrap"><div>'+esc(q.name)+'</div>' +
+        (q.address ? '<div class="form-hint">'+esc(q.address)+'</div>' : '') +
+        (q.taxId ? '<div class="form-hint">เลขภาษี '+esc(q.taxId)+'</div>' : '') +
+        (q.customerCode ? '<div class="form-hint">รหัสร้าน '+esc(q.customerCode)+'</div>' : '') +
+        (q.rejectReason ? '<div class="form-hint">เหตุผล: '+esc(q.rejectReason)+'</div>' : '') + '</td>' +
+      '<td class="wrap">'+esc(q.contactName||'-')+'<div class="form-hint">'+esc(q.phone||'-')+'</div></td>' +
+      '<td>'+esc(q.shopTypeName||'-')+'</td>' +
+      '<td>'+(q.paymentType === 'credit' ? '<span class="tag">เครดิต</span>' : 'เงินสด')+'</td>' +
+      '<td class="num">'+(q.creditLimit ? '฿'+bahtPlain(q.creditLimit) : '—')+'</td>' +
+      '<td class="wrap">'+esc(q.requestedByName||'-')+'</td>' +
+      '<td><span class="pill '+(CR_PILL[q.status]||'')+'">'+esc(q.statusLabel)+'</span></td>' +
+      '<td style="white-space:nowrap">' +
+        (q.status === 'pending'
+          ? '<button class="btn btn-sm btn-primary" onclick="openCrApprove('+q.id+')">ตรวจและอนุมัติ</button> ' +
+            '<button class="btn btn-sm" onclick="openCrReject('+q.id+')">ไม่อนุมัติ</button>'
+          : '—') +
+      '</td></tr>').join('') + '</tbody></table></div>';
+}
+
+const crRow = id => CR_ROWS.find(x => String(x.id) === String(id));
+
+/* ★ กล่องอนุมัติ: แอดมินแก้ข้อมูลที่เซลส์กรอกมาได้ก่อนสร้างจริง
+   (เซลส์กรอกหน้าร้าน พิมพ์ผิดเป็นเรื่องปกติ) และ **ต้องเลือกกลุ่มลูกค้า** — เหตุผลอยู่หัวไฟล์ 46_customer_requests.gs */
+function openCrApprove(id){
+  const q = crRow(id); if (!q) return;
+  plModal('<h3>ตรวจและอนุมัติ ' + esc(q.requestNo) + '</h3>' +
+    plField('ชื่อร้าน', '<input id="cr-name" value="'+esc(q.name)+'">') +
+    plField('ที่อยู่', '<input id="cr-addr" value="'+esc(q.address||'')+'">') +
+    plField('เลขผู้เสียภาษี / บัตรประชาชน', '<input id="cr-tax" value="'+esc(q.taxId||'')+'" maxlength="13">') +
+    plField('ชื่อผู้ติดต่อ', '<input id="cr-contact" value="'+esc(q.contactName||'')+'">') +
+    plField('เบอร์ติดต่อ', '<input id="cr-phone" value="'+esc(q.phone||'')+'">') +
+    plField('ประเภทร้าน', '<select id="cr-shoptype"><option value="">— ไม่ระบุ —</option>' +
+      CR_SHOPTYPES.map(t => '<option value="'+esc(t.id)+'"'+(String(t.id)===String(q.shopTypeId)?' selected':'')+'>'+esc(t.name)+'</option>').join('') + '</select>') +
+    plField('การชำระเงิน', '<select id="cr-pay">' +
+      '<option value="cash"'+(q.paymentType!=='credit'?' selected':'')+'>เงินสด</option>' +
+      '<option value="credit"'+(q.paymentType==='credit'?' selected':'')+'>เครดิต</option></select>') +
+    plField('วงเงินเครดิต', '<input id="cr-credit" type="number" min="0" value="'+(q.creditLimit||0)+'">') +
+    plField('กลุ่มลูกค้า (กลุ่มราคา) *', '<select id="cr-group"><option value="">— เลือกกลุ่ม —</option>' +
+      CR_GROUPS.map(g => '<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>').join('') + '</select>') +
+    '<p class="form-hint">ระบบจะลองหาชุดราคาของกลุ่มที่เลือกให้ก่อน — ' +
+    'ถ้าไม่เจอจะไม่อนุมัติและไม่สร้างร้าน เพราะร้านนั้นจะเปิดบิลไม่ได้ทั้งที่ดูเหมือนเปิดให้แล้ว</p>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
+    '<button class="btn btn-primary" onclick="doCrApprove('+id+')">อนุมัติและเปิดร้าน</button></div>');
+}
+
+async function doCrApprove(id){
+  const groupId = document.getElementById('cr-group').value;
+  if (!groupId) return toast('กรุณาเลือกกลุ่มลูกค้าก่อน', 'err');
+  const r = await callApi('approveCustomerRequest', { requestId: id, groupId: Number(groupId),
+    name: document.getElementById('cr-name').value.trim(),
+    address: document.getElementById('cr-addr').value.trim(),
+    taxId: document.getElementById('cr-tax').value.trim(),
+    contactName: document.getElementById('cr-contact').value.trim(),
+    phone: document.getElementById('cr-phone').value.trim(),
+    shopTypeId: document.getElementById('cr-shoptype').value,
+    paymentType: document.getElementById('cr-pay').value,
+    creditLimit: Number(document.getElementById('cr-credit').value) || 0 });
+  if (!r.success) return toast(r.message, 'err');
+  plModalClose(); toast(r.message); loadCustRequests();
+}
+
+function openCrReject(id){
+  const q = crRow(id); if (!q) return;
+  plModal('<h3>ไม่อนุมัติ ' + esc(q.requestNo) + '</h3>' +
+    plField('เหตุผล (เซลส์จะเห็นข้อความนี้)', '<input id="cr-reason" placeholder="เช่น เลขผู้เสียภาษีไม่ตรงกับชื่อร้าน">') +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
+    '<button class="btn" onclick="doCrReject('+id+')">ตีกลับคำขอ</button></div>');
+}
+
+async function doCrReject(id){
+  const reason = document.getElementById('cr-reason').value.trim();
+  if (!reason) return toast('กรุณาระบุเหตุผล', 'err');
+  const r = await callApi('rejectCustomerRequest', { requestId: id, reason });
+  if (!r.success) return toast(r.message, 'err');
+  plModalClose(); toast(r.message); loadCustRequests();
+}
+
 const LOADERS = {
   dashboard: loadDashboard, customers: loadCustomers, docnum: loadDocnum, freegoods: loadFreeGoods, custlists: loadCustLists,
+  custrequests: loadCustRequests,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
   companyprofile: loadCompanyProfile, adminusers: loadUserDirectory, pricelists: loadPriceLists,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
