@@ -236,5 +236,27 @@ r = ctx.addCustomer(SALES, GOOD);
 eq('★ addCustomer เดิม (สร้างทันทีไม่ต้องอนุมัติ) ต้องไม่สร้างร้านอีกแล้ว', [r.success, !!r.needsRefresh], [false, true]);
 eq('  และต้องไม่มีลูกค้าเพิ่ม', sheets.customers.length, 0);
 
+console.log('\n── หน้าทะเบียนลูกค้า: กลุ่มต้องบอกได้ว่ามีชุดราคาไหม ──');
+// dropdown กลุ่มลูกค้าในฟอร์มลูกค้าใช้ธงนี้กรอง — ตัวคุมราคาตัวเดียวกับที่ใช้ตอนอนุมัติคำขอ
+reset();
+sheets.customer_groups = [
+  { record_id: 7, name: 'ร้านค้า ตะวันออก' },                   // มีชุดราคา 50 จ่ายให้ T1 แล้ว
+  { record_id: 8, name: 'ร้านค้า เหนือ/อีสาน/ตะวันออก/ใต้' }     // ชื่อคล้าย แต่ไม่มีชุดราคา
+];
+{
+  const g = ctx.listCustomerGroups({ tenant_id: 'T1' }, {});
+  const by = {}; g.data.forEach(x => { by[x.record_id] = x; });
+  eq('กลุ่มที่มีชุดราคา ติดธงและบอกชื่อชุด',
+    [by[7].hasPriceList, by[7].priceListName], [true, 'Q4 ตะวันออก']);
+  eq('กลุ่มที่ไม่มีชุดราคา ติดธงว่าไม่มี', [by[8].hasPriceList, by[8].priceListName], [false, '']);
+  eq('  ยังคืนคอลัมน์เดิมครบ (หน้าจัดการกลุ่มลูกค้าใช้ชื่ออยู่)', by[8].name, 'ร้านค้า เหนือ/อีสาน/ตะวันออก/ใต้');
+
+  // ขึ้นกับตัวแทน: ตัวแทนที่ไม่ได้รับจ่ายชุด ต้องไม่ติดธงว่ามี
+  sheets.package_tenants = [{ record_id: 1, package_type: 'price_list', package_id: 50, tenant_id: 'T9' }];
+  const g2 = ctx.listCustomerGroups({ tenant_id: 'T1' }, {});
+  eq('★ ตัวแทนที่ยังไม่ได้รับจ่ายชุดราคา เห็นว่ากลุ่มนั้นยังใช้ไม่ได้ (ชั้น A นับด้วย)',
+    g2.data.filter(x => x.hasPriceList).length, 0);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

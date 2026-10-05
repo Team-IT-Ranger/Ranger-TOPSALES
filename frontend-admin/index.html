@@ -1767,11 +1767,17 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'saveFreeGoodsSet','saveFreeGoodsItem','deleteFreeGoodsItem','setFreeGoodsSetStatus',
   'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
   'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive',
-  'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','syncProductCategories','editSalesOrderAdmin','addProductUnit','updateProductUnit']);
+  'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','syncProductCategories','editSalesOrderAdmin','addProductUnit','updateProductUnit',
+  'approveCustomerRequest','rejectCustomerRequest',
+  /* ไล่เก็บ action ที่เขียนข้อมูลแต่ตกหล่นมานาน (ตรวจด้วยการไล่ชื่อใน router เทียบกับลิสต์นี้ 5 ต.ค. 2026)
+     ตกหล่น = ไม่มีวงหมุน ปุ่มไม่ถูกปิด และกดซ้ำได้ — เงียบสนิทจนกว่าจะมีคนกดสองที */
+  'resetAdminUserPasswordByAdmin','uploadTenantLogo','addProductGroup','addDistributionChannel','addPaymentType',
+  'importPriceList','updatePriceList','addPromotion','updatePromotion','deactivatePromotion',
+  'backfillUserAffiliations','cancelPurchaseRequisition','cancelGoodsReceipt','saveGlAccount','postManualJournal']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin',
-  'importExternalSalesInvoices','confirmExternalGoodsReceipt']);
+  'importExternalSalesInvoices','confirmExternalGoodsReceipt','approveCustomerRequest']);
 const INFLIGHT = new Set();
 const newRequestId = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 // ปุ่มที่ผู้ใช้เพิ่งกด (ตอน callApi ถูกเรียกจาก onclick ปุ่มนั้นยังเป็น activeElement อยู่)
@@ -2959,6 +2965,34 @@ async function ensureDistChannels(){
   if (r.success) distChannelsCache = r.data.filter(x => String(x.is_active) !== 'FALSE');
 }
 /* ฟอร์มลูกค้าเต็มรูปแบบ — ใช้โมดัลตัวเดียวกับหน้าชุดราคา (plModal/plModalErr/plBusy) */
+/* ★ ตัวเลือกกลุ่มลูกค้า — กรองแบบเดียวกับกล่องอนุมัติคำขอเปิดร้าน (5 ต.ค. 2026)
+   `group_id` คือตัวคุมราคา: อยู่กลุ่มที่ไม่มีชุดราคา = เปิดบิลไม่ได้ แต่แถวดูปกติทุกอย่าง
+   UAT มีสองกลุ่มต่างกันแค่ / กับ , ([8] ไม่มีชุดราคา · [12] มี) เคยเลือกผิดมาแล้วจริง
+
+   ★★ ต่างจากกล่องอนุมัติหนึ่งข้อ: **กลุ่มปัจจุบันของร้านต้องอยู่ในรายการเสมอ แม้จะไม่มีชุดราคา**
+   ถ้ากรองทิ้งไปด้วย พอเปิดฟอร์มแก้ลูกค้าเก่าแล้วกดบันทึก กลุ่มเดิมจะถูกเปลี่ยนเป็น "ไม่ระบุ" เงียบๆ
+   (บทเรียนเดียวกับ custCachePartial ที่เคยลบที่อยู่/เลขภาษีทิ้งตอนบันทึกจากแถวที่ย่อแล้ว) */
+function custGroupOptions(currentId){
+  const all = customerGroupsCache || [];
+  const cur = String(currentId || '');
+  // ยังไม่รู้สถานะชุดราคา (แคชเก่าจากก่อนอัปเดต) = แสดงทั้งหมดไปก่อน ดีกว่าโชว์เมนูว่าง
+  if (!all.length || all.every(g => g.hasPriceList === undefined)) {
+    return { list: all.map(g => [g.record_id, g.name]), hint: '' };
+  }
+  const list = [], dropped = [];
+  all.forEach(g => {
+    const id = String(g.record_id);
+    if (g.hasPriceList) { list.push([g.record_id, g.name + (g.priceListName ? '  →  ' + g.priceListName : '')]); return; }
+    if (id === cur && cur) { list.push([g.record_id, g.name + '  (ไม่มีชุดราคา — ร้านนี้เปิดบิลไม่ได้)']); return; }
+    dropped.push(g.name);
+  });
+  const hint = dropped.length
+    ? '<p class="form-hint">แสดงเฉพาะกลุ่มที่<b>มีชุดราคาใช้งานอยู่</b> พร้อมบอกว่าได้ชุดไหน · ' +
+      'ซ่อนกลุ่มที่ยังไม่มีชุดราคาไว้ ' + dropped.length + ' กลุ่ม (เลือกไปแล้วร้านจะเปิดบิลไม่ได้)</p>'
+    : '';
+  return { list, hint };
+}
+
 async function openCustomerModal(id){
   // แถวที่กู้มาจาก localStorage ย่อไว้ — ต้องได้ของเต็มก่อนถึงเปิดฟอร์มได้ (ดูหมายเหตุที่ custCachePartial)
   const cur = id ? custMasterCache.find(x => String(x.id) === String(id)) : null;
@@ -2973,14 +3007,14 @@ async function openCustomerModal(id){
   const v = (k, d) => esc(c && c[k] !== undefined && c[k] !== null ? c[k] : (d === undefined ? '' : d));
   const sel = (list, cur, blank) => (blank ? '<option value="">'+blank+'</option>' : '') +
     list.map(o => '<option value="'+esc(o[0])+'"'+(String(cur||'')===String(o[0])?' selected':'')+'>'+esc(o[1])+'</option>').join('');
-  const groups = customerGroupsCache.map(g => [g.record_id, g.name]);
+  const groupOpts = custGroupOptions(c ? c.groupId : '');
   const channels = distChannelsCache.map(x => [x.record_id, x.name]);
   plModal('<h3>'+(c ? 'แก้ไขลูกค้า ' + esc(c.code) : 'เพิ่มลูกค้าใหม่')+'</h3>' +
     '<p class="form-hint">'+(c ? 'รหัสลูกค้าเปลี่ยนไม่ได้ (เอกสารเก่าอ้างถึงอยู่)' : 'ระบบออกรหัสลูกค้าให้อัตโนมัติ (C0001, C0002, …) แยกเล่มของแต่ละตัวแทน')+'</p>' +
     '<div class="form-grid g2">' +
       plField('คำนำหน้า', '<input id="cm-prefix" value="'+v('namePrefix')+'" placeholder="บริษัท / ร้าน / คุณ / หจก.">') +
       plField('ชื่อร้าน / ชื่อนิติบุคคล', '<input id="cm-name" value="'+v('name')+'" placeholder="เช่น ป้าแดง มินิมาร์ท">') +
-      plField('กลุ่มลูกค้า <span class="unit">(กำหนดชุดราคา)</span>', '<select id="cm-group">'+sel(groups, c?c.groupId:'', '— ไม่ระบุ —')+'</select>') +
+      plField('กลุ่มลูกค้า <span class="unit">(กำหนดชุดราคา)</span>', '<select id="cm-group">'+sel(groupOpts.list, c?c.groupId:'', '— ไม่ระบุ —')+'</select>'+groupOpts.hint) +
       plField('ประเภทร้าน / ช่องทาง', '<select id="cm-channel">'+sel(channels, c?c.channelId:'', '— ไม่ระบุ —')+'</select>') +
       plField('รูปแบบการขาย', '<select id="cm-mode">'+sel([['van','รถเร่ (ขายจากรถทันที)'],['preorder','พรีออเดอร์ (ส่งทีหลัง)']], c?c.salesMode:'', '— ไม่ระบุ —')+'</select>') +
       plField('เขต / สายวิ่ง', '<input id="cm-area" value="'+v('areaCode')+'">') +

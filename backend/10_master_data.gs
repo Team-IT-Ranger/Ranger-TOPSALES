@@ -333,9 +333,28 @@ function addProductGroup(session, payload) {
 
 // ── Admin App: ข้อมูลกลาง (Ultra Admin ขณะอยู่ในโหมด "บริษัทเจ้าของสินค้า") ──
 // กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน — ทั้งหมดใช้ร่วมกันทุกตัวแทน
-function listCustomerGroups(session) {
+/**
+ * กลุ่มลูกค้า + **บอกด้วยว่ากลุ่มไหนมีชุดราคาใช้งานอยู่จริง** (เพิ่ม 5 ต.ค. 2026)
+ *
+ * ★ ทำไมต้องบอก: `group_id` คือตัวคุมราคา — ร้านที่อยู่กลุ่มที่ไม่มีชุดราคาจะ **เปิดบิลไม่ได้**
+ *   แต่ในตารางลูกค้ามันดูเหมือนแถวปกติทุกอย่าง · UAT มีสองกลุ่มชื่อต่างกันแค่ `/` กับ `,`
+ *   ([8] ไม่มีชุดราคา · [12] มี) เลือกผิดแล้วไม่มีอะไรฟ้องจนกว่าเซลส์จะเปิดบิลไม่ได้หน้าร้าน
+ *   — ตรงกับกติกาใน CLAUDE.md "เลือกกลุ่มปลายทางจากกลุ่มที่มีชุดราคาเปิดใช้งานอยู่ ไม่ใช่จากชื่อกลุ่ม"
+ * ★ คิดด้วย `resolvePriceListForCustomer` ตัวเดียวกับเส้นทางขายจริงและด่านอนุมัติคำขอเปิดร้าน
+ *   จะได้ไม่มีวันขัดกันเอง · ขึ้นกับตัวแทนด้วย เพราะชั้น A (จ่ายชุดให้ตัวแทนรายไหน) เป็นส่วนหนึ่งของคำตอบ
+ */
+function listCustomerGroups(session, payload) {
   var err = _requirePermission(session, 'settings', 'view'); if (err) return err;
-  return { success: true, data: centralObjects('customer_groups') };
+  var scope = _effectiveTenantId(session, payload || {}) || '';
+  var rows = centralObjects('customer_groups').map(function(g) {
+    var hit = resolvePriceListForCustomer({ tenant_id: scope, group_id: g.record_id });
+    var o = {};
+    for (var k in g) if (Object.prototype.hasOwnProperty.call(g, k)) o[k] = g[k];
+    o.hasPriceList = !!hit;
+    o.priceListName = hit && hit.list ? (hit.list.name || '') : '';
+    return o;
+  });
+  return { success: true, data: rows };
 }
 function addCustomerGroup(session, payload) {
   var err = _requirePermission(session, 'settings', 'edit'); if (err) return err;
