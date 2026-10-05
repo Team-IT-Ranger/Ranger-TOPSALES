@@ -50,7 +50,10 @@ r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PK', qty: 2 }], 'credit_te
 eq('แพ็คแบบเครดิตถูกปฏิเสธแม้ลูกค้าไม่มีชุดราคา (บั๊กเดิม: ผ่านฉลุย)', [r.success, r.code], [false, 'PACK_CASH_ONLY']);
 
 r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PK', qty: 2 }], 'cash', true);
-eq('แพ็ค Cash Van เงินสด ผ่านปกติ (ราคาต่อแพ็ค × 2)', [r.success, r.items[0].lineTotal], [true, 202]);
+// ★ 101 ในข้อมูลจำลองคือราคา "ก่อน VAT" (product_units.price เปลี่ยนความหมาย 3 ต.ค. 2026)
+// ราคาที่คิดเงินต้องรวม VAT แล้ว: 101 × 1.07 = 108.07 ต่อแพ็ค × 2 = 216.14
+// **อย่าแก้กลับเป็น 202** — นั่นคือค่าที่เทสต์นี้เคยคาดไว้ตอนราคาในทะเบียนยังรวม VAT อยู่ ปล่อยไว้ = เก็บเงินขาด VAT ทั้งก้อน
+eq('แพ็ค Cash Van เงินสด ผ่านปกติ (ราคาต่อแพ็ค รวม VAT × 2)', [r.success, r.items[0].lineTotal], [true, 216.14]);
 
 r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'credit_term', false);
 eq('ขายเป็นลัง (ไม่ใช่แพ็ค) ด้วยเครดิตนอก Cash Van ยังขายได้ปกติ (กติกานี้จำเพาะแพ็คเท่านั้น)', r.success, true);
@@ -77,8 +80,9 @@ console.log('\n── quoteSale(): ร้านที่ยังไม่มี
 // recordSale จริง แอปเลยตกไปใช้ราคาประมาณการจากเครื่อง (estimate()) ซึ่งไม่มีส่วนลด/ของแถมของ discount_rules เลย
 // (harness นี้ตั้ง getPricingContextForCustomer ให้คืน null เป็นค่าเริ่มต้นอยู่แล้ว — ไม่ต้อง stub เพิ่ม)
 r = ctx.quoteSale({ role: 'van_sales' }, { customerId: 1, paymentType: 'cash', items: [{ productId: 1, unitCode: '', qty: 1 }] });
+// base_price 20 = ราคาก่อน VAT → คิดเงินจริง 20 × 1.07 = 21.40 (เหตุผลเดียวกับหมายเหตุแพ็คด้านบน)
 eq('ได้ราคาจริงจากเส้นทางโปรโมชั่นเดิม ไม่ใช่ {priceList:null} เปล่าๆ',
-  [r.success, r.priceList, r.lines.length, r.lines[0].lineTotal], [true, null, 1, 20]);
+  [r.success, r.priceList, r.lines.length, r.lines[0].lineTotal], [true, null, 1, 21.4]);
 
 console.log('\n── _priceSaleCart(): "ราคาก่อนภาษีเป็นตัวตั้งต้น" (2026-09-30 (2)) — listBreakdown ต่อบรรทัด + ยอดสรุปไม่รวมภาษี ──');
 {
@@ -101,6 +105,44 @@ console.log('\n── _priceSaleCart(): "ราคาก่อนภาษีเ
   r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'cash', false);
   eq('เส้นทางโปรโมชั่นเดิม (ไม่มีชุดราคา) → listBreakdown เป็น null ทุกบรรทัด (ไม่มีราคาตั้งให้ถอด)',
     r.items[0].listBreakdown, null);
+}
+
+console.log('\n── _priceSaleCart(): ราคาในทะเบียนเป็น "ก่อน VAT" → ทางสำรองต้องบวก VAT กลับเข้าไป (5 ต.ค. 2026) ──');
+// บั๊กจริง: 3 ต.ค. 2026 products.base_price / product_units.price เปลี่ยนจาก "รวม VAT" เป็น "ก่อน VAT"
+// แต่ทางสำรอง (ร้านที่ยังไม่มีชุดราคาที่ใช้งานอยู่) ยังเอาค่านั้นไปใช้เป็นราคารวม VAT ตรงๆ แล้วถูกหาร 1.07
+// ซ้ำตอนถอดภาษี → เก็บเงินลูกค้าขาดไปเท่ากับ VAT ทั้งก้อน โดยไม่มีอะไรฟ้อง
+// (prod ยังไม่เกิดเพราะทุกกลุ่มมีชุดราคา active — จะเกิดวันที่เปิดกลุ่มลูกค้า/ตัวแทนใหม่)
+{
+  PRODUCTS.push({ record_id: 2, name: 'สินค้ายกเว้นภาษี', group_id: 0, base_price: 500, tax_status: 'exempt' });
+  CUSTOMERS.push({ record_id: 2, name: 'ร้านนอกระบบ VAT', tax_type: 'exempt' });
+
+  // ★ หัวใจของเรื่องนี้: ราคาก่อน VAT ที่เก็บไว้ ต้องโผล่บนบิลเป็น "มูลค่าก่อนภาษี" เป๊ะ
+  // (CT ของสินค้า 1 เก็บไว้ 1,200 ก่อน VAT → คิดเงิน 1,284 → ถอดภาษีได้ 1,200 กลับมาพอดี)
+  r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'cash', false);
+  eq('ราคาที่คิดเงินรวม VAT แล้ว (1,200 ก่อน VAT → 1,284)', [r.success, r.items[0].lineTotal], [true, 1284]);
+  eq('★ ถอดภาษีกลับแล้วได้ราคาก่อน VAT ที่เก็บไว้เป๊ะ — ไม่ใช่ 1,121.50 (อาการของบั๊ก)',
+    [r.calc.vat.exVat, r.calc.vat.vat, r.calc.vat.rate], [1200, 84, 0.07]);
+  eq('  ยอดสรุปก่อนภาษีก็ต้องตรงกัน (ตัวเลขบนบิลกับในบัญชีมาจากชุดเดียวกัน)',
+    r.calc.vat.subtotalAfterProductDiscountExVat, 1200);
+
+  // สินค้ายกเว้นภาษี: ไม่มี VAT ให้บวก ราคาที่เก็บคือราคาที่คิดเงิน
+  r = ctx._priceSaleCart(1, [{ productId: 2, unitCode: '', qty: 1 }], 'cash', false);
+  eq('สินค้ายกเว้นภาษี ไม่ถูกบวก VAT เข้าไป (500 → 500)',
+    [r.success, r.items[0].lineTotal, r.calc.vat.exVat, r.calc.vat.vat], [true, 500, 500, 0]);
+
+  // ลูกค้านอกระบบ VAT: ทั้งใบไม่มีภาษี → ไม่บวกแม้สินค้าจะเป็นสินค้าคิด VAT
+  r = ctx._priceSaleCart(2, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'cash', false);
+  eq('ลูกค้านอกระบบ VAT: สินค้าคิด VAT ก็ไม่ถูกบวก (ทั้งใบไม่มีภาษี)',
+    [r.success, r.items[0].lineTotal, r.calc.vat.exVat, r.calc.vat.vat], [true, 1200, 1200, 0]);
+
+  // บิลผสม: ของคิดภาษี + ของยกเว้น ในใบเดียวกัน ต้องบวกเฉพาะตัวที่เสียภาษี
+  r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }, { productId: 2, unitCode: '', qty: 1 }], 'cash', false);
+  eq('บิลผสม: บวก VAT เฉพาะบรรทัดที่เสียภาษี (1,284 + 500)',
+    [r.items[0].lineTotal, r.items[1].lineTotal], [1284, 500]);
+  eq('  แยกภาษีถูก: ฐานรายได้ 1,700 · ภาษี 84 · ยกเว้น 500 · ส่วนที่เสียภาษี 1,200',
+    [r.calc.vat.exVat, r.calc.vat.vat, r.calc.vat.exemptAmount, r.calc.vat.taxableExVat], [1700, 84, 500, 1200]);
+
+  PRODUCTS.pop(); CUSTOMERS.pop();
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

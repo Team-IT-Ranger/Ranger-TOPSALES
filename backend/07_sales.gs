@@ -38,6 +38,15 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
   var unitMap = {};
   centralObjects('product_units').forEach(function(u) { unitMap[String(u.product_id) + '_' + normUnitCode(u.unit_code)] = u; });
 
+  /* สถานะภาษีของลูกค้า + อัตรา VAT — ต้องรู้ "ก่อน" ตั้งราคา ไม่ใช่แค่ตอนถอดภาษีท้ายฟังก์ชันเหมือนเดิม
+     เพราะราคาที่เก็บในทะเบียนสินค้าเป็นราคา "ก่อน VAT" แล้ว ต้องบวกภาษีกลับเข้าไปตอนตั้งราคา (ดูในลูป)
+     ลูกค้าที่ไม่อยู่ในระบบ VAT = ทั้งใบไม่มีภาษี ไม่ต้องดูรายสินค้าอีก */
+  var custRow = null;
+  if (customerId) centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(customerId)) custRow = c; });
+  var custTax = String((custRow && custRow.tax_type) || '').trim().toLowerCase();
+  var customerApplyVat = !(custTax === 'exempt' || custTax === 'zero');
+  var vatRate = currentVatRate();
+
   var items = [];
   for (var ri = 0; ri < rawItems.length; ri++) {
     var raw = rawItems[ri];
@@ -57,6 +66,17 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
     } else {
       unitCode = UNIT_PC;                 // หน่วยฐานของทั้งระบบ = ชิ้น
     }
+
+    /* ★★ ราคาในทะเบียนสินค้าเป็น "ก่อน VAT" ตั้งแต่ 3 ต.ค. 2026 — ต้องบวก VAT กลับเข้าไปตรงนี้
+       (`products.base_price` = ราคาต่อลังก่อน VAT · `product_units.price` ก็ก่อน VAT · เดิมทั้งคู่รวม VAT)
+       ทั้งระบบคิดเงินด้วยราคา **รวม VAT**: `it.price`/`it.lineTotal` ถูกถอดภาษีออกทีหลังด้วย `/(1+rate)`
+       ทั้งใน saleVatBreakdown() และตอนคิด subtotalAfterProductDiscountExVat ท้ายฟังก์ชันนี้
+       → ใส่ราคาก่อน VAT ลงไปตรงๆ = โดนหาร 1.07 ซ้ำ = **เก็บเงินลูกค้าขาดไปเท่ากับ VAT ทั้งก้อน** เงียบๆ
+       เส้นทางชุดราคาไม่โดน เพราะ priceCart() คืน cash_price_incl_vat ซึ่งรวม VAT มาแล้ว — โดนเฉพาะ
+       ทางสำรองนี้ (ร้าน/ตัวแทนที่ยังไม่มีชุดราคาที่ใช้งานอยู่) ซึ่งบน prod ยังไม่มีใครตก จึงไม่มีอะไรฟ้อง
+       ★ ต้องตัดสินสถานะภาษีด้วยตรรกะ**เดียวกันเป๊ะ**กับตอนถอดภาษี (ลูกค้าก่อน → แล้วจึงรายสินค้า)
+       ไม่งั้นบวกเข้าแล้วไม่ถูกถอดออก (หรือกลับกัน) จะเพี้ยนคนละทางแทนที่จะหายเพี้ยน */
+    if (customerApplyVat && productTaxStatus(p) === TAX_VAT) unitPrice = _round2(unitPrice * (1 + vatRate));
 
     // ★ แพ็คขายได้เฉพาะ Cash Van + เงินสด — ต้องเช็คตรงนี้ (ไม่ใช่แค่ใน priceCart) เพราะลูกค้าที่ยังไม่มีชุดราคา
     // ที่ใช้งานอยู่ (เช่น ตัวแทนที่เพิ่งเปิดใหม่ ยังไม่ได้จ่ายชุดราคาให้) จะข้าม priceCart() ไปใช้ discount_rules
@@ -116,12 +136,11 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
   /* แยกภาษีจากรายการจริง — ทำหลังได้ราคาสุดท้ายแล้ว ใช้ได้ทั้งสองทาง (ชุดราคา / โปรโมชั่นแบบเดิม)
      ภาษีตัดสินจากสองชั้น: ลูกค้า (customers.tax_type) แล้วจึงรายสินค้า (products.tax_status)
      ลูกค้าที่ไม่อยู่ในระบบ VAT = ทั้งใบไม่มีภาษี ไม่ต้องดูรายสินค้าอีก */
-  var custRow = null;
-  if (customerId) centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(customerId)) custRow = c; });
-  var custTax = String((custRow && custRow.tax_type) || '').trim().toLowerCase();
-  var customerApplyVat = !(custTax === 'exempt' || custTax === 'zero');
+  /* custRow/customerApplyVat/vatRate อ่านไว้ตั้งแต่ต้นฟังก์ชันแล้ว (ต้องใช้ตอนตั้งราคา)
+     ★ ส่ง vatRate ตัวเดียวกันเข้าไปด้วย ไม่ปล่อยให้ saleVatBreakdown ไปเรียก currentVatRate() เอง —
+     อัตราที่ใช้ "บวกเข้า" กับที่ใช้ "ถอดออก" ต้องเป็นค่าเดียวกันเสมอ ไม่งั้นยอดไม่ลงกัน */
   calc.vat = saleVatBreakdown(items, calc.discount,
-    function(pid) { return customerApplyVat ? productTaxStatus(productMap[String(pid)]) : TAX_EXEMPT; });
+    function(pid) { return customerApplyVat ? productTaxStatus(productMap[String(pid)]) : TAX_EXEMPT; }, vatRate);
   calc.vat.applyVat = customerApplyVat && calc.vat.vat > 0;
   calc.vat.vatType = currentVatType();
   calc.vat.taxOf = function(pid) { return customerApplyVat ? productTaxStatus(productMap[String(pid)]) : TAX_EXEMPT; };
