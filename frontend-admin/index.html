@@ -2656,7 +2656,7 @@ async function loadRepProd(){
 }
 
 /* ═══ คำขอเปิดร้านใหม่จากแอปมือถือ (46_customer_requests.gs) ═══ */
-let CR_ROWS = [], CR_SHOPTYPES = [], CR_GROUPS = [];
+let CR_ROWS = [], CR_SHOPTYPES = [], CR_GROUPS = [], CR_GROUP_TOTAL = 0;
 // ชื่อคลาสต้องตรงกับ CSS ของแอดมิน (.pill.ok / .pill.wait / .pill.off) — ชุดเดียวกับ SO_PILL/PAY_PILL
 const CR_PILL = { pending: 'wait', approved: 'ok', rejected: 'off' };
 
@@ -2667,6 +2667,7 @@ async function loadCustRequests(){
   const r = await callApi('listCustomerRequests', { status });
   if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   CR_ROWS = r.requests || []; CR_SHOPTYPES = r.shopTypes || []; CR_GROUPS = r.groups || [];
+  CR_GROUP_TOTAL = Number(r.groupTotal) || 0;
   renderCustRequests();
 }
 
@@ -2715,12 +2716,37 @@ function openCrApprove(id){
       '<option value="cash"'+(q.paymentType!=='credit'?' selected':'')+'>เงินสด</option>' +
       '<option value="credit"'+(q.paymentType==='credit'?' selected':'')+'>เครดิต</option></select>') +
     plField('วงเงินเครดิต', '<input id="cr-credit" type="number" min="0" value="'+(q.creditLimit||0)+'">') +
-    plField('กลุ่มลูกค้า (กลุ่มราคา) *', '<select id="cr-group"><option value="">— เลือกกลุ่ม —</option>' +
-      CR_GROUPS.map(g => '<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>').join('') + '</select>') +
-    '<p class="form-hint">ระบบจะลองหาชุดราคาของกลุ่มที่เลือกให้ก่อน — ' +
-    'ถ้าไม่เจอจะไม่อนุมัติและไม่สร้างร้าน เพราะร้านนั้นจะเปิดบิลไม่ได้ทั้งที่ดูเหมือนเปิดให้แล้ว</p>' +
+    plField('กลุ่มลูกค้า (กลุ่มราคา) *', crGroupSelect(q)) +
+    crGroupHint(q) +
     '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button>' +
     '<button class="btn btn-primary" onclick="doCrApprove('+id+')">อนุมัติและเปิดร้าน</button></div>');
+}
+
+/* ★★ เสนอเฉพาะกลุ่มที่ "มีชุดราคาใช้งานอยู่จริงสำหรับตัวแทนรายนี้"
+   บั๊กจริง 5 ต.ค. 2026: รอบแรกเอากลุ่มทั้งหมดมาให้เลือก แต่ UAT มีสองกลุ่มชื่อแทบเหมือนกัน
+   [8] 'ร้านค้า เหนือ/อีสาน/ตะวันออก/ใต้' (ไม่มีชุดราคา) กับ [12] 'ร้านค้า เหนือ, อีสาน, ตะวันออก, ใต้' (มี)
+   ต่างกันแค่ / กับ , — แอดมินเลือกผิดแล้วระบบตอบว่า "ไม่มีชุดราคา" ทั้งที่ของมีอยู่จริง
+   รายการนี้มาจาก backend ที่คิดด้วย resolvePriceListForCustomer ตัวเดียวกับด่านตอนอนุมัติ
+   รายการที่ให้เลือกกับด่านที่ตัดสินจึงขัดกันเองไม่ได้ */
+function crGroupList(q){ return (q && q.groupChoices) || CR_GROUPS || []; }
+
+function crGroupSelect(q){
+  const gs = crGroupList(q);
+  if (!gs.length) return '<select id="cr-group" disabled><option value="">— ไม่มีกลุ่มที่ใช้ได้ —</option></select>';
+  return '<select id="cr-group"><option value="">— เลือกกลุ่ม —</option>' +
+    gs.map(g => '<option value="'+esc(g.id)+'">'+esc(g.name)+(g.listName ? '  →  '+esc(g.listName) : '')+'</option>').join('') +
+    '</select>';
+}
+
+function crGroupHint(q){
+  const gs = crGroupList(q), hidden = Math.max(0, CR_GROUP_TOTAL - gs.length);
+  if (!gs.length) {
+    return '<p class="form-hint" style="color:var(--red)">ตัวแทนรายนี้ยังไม่มีกลุ่มไหนที่มีชุดราคาใช้งานอยู่เลย — ' +
+      'ต้องเปิดใช้งานชุดราคา และจ่ายชุดนั้นให้ตัวแทนก่อน (เมนู 1.2.1) จึงจะอนุมัติได้</p>';
+  }
+  return '<p class="form-hint">แสดงเฉพาะกลุ่มที่<b>มีชุดราคาใช้งานอยู่จริง</b>สำหรับตัวแทนรายนี้ ' +
+    'และบอกไว้ว่าแต่ละกลุ่มจะได้ชุดไหน' +
+    (hidden ? ' · ซ่อนกลุ่มที่ยังไม่มีชุดราคาไว้ '+hidden+' กลุ่ม (เลือกไปก็เปิดบิลไม่ได้)' : '') + '</p>';
 }
 
 async function doCrApprove(id){

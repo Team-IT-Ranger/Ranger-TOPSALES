@@ -136,6 +136,42 @@ r = ctx.approveCustomerRequest(ADMIN, { requestId: 1, groupId: 7 });
 eq('อนุมัติซ้ำใบเดิม = ปฏิเสธ (กันร้านซ้ำสองรหัส)', r.success, false);
 eq('  และยังมีลูกค้าแค่แถวเดียว', sheets.customers.length, 1);
 
+console.log('\n── ★★ กลุ่มที่ให้เลือก ต้องมีแต่กลุ่มที่มีชุดราคาจริง (บั๊กจริง 5 ต.ค. 2026) ──');
+// UAT มีสองกลุ่มชื่อแทบเหมือนกัน ต่างแค่ / กับ ,  — [8] ไม่มีชุดราคา · [12] มี
+// รอบแรกส่งกลุ่มทั้งหมดไปให้เลือก แอดมินเลือก [8] แล้วระบบตอบว่า "ไม่มีชุดราคา" ทั้งที่ของมีจริง
+reset();
+sheets.customer_groups = [
+  { record_id: 8, name: 'ร้านค้า เหนือ/อีสาน/ตะวันออก/ใต้' },   // ขยะจากการนำเข้ารอบเก่า ไม่มีชุดราคา
+  { record_id: 7, name: 'ร้านค้า ตะวันออก' },                    // มีชุดราคา 50 (active, จ่ายให้ T1 แล้ว)
+  { record_id: 9, name: 'กลุ่มไม่มีชุดราคา' }
+];
+ctx.submitCustomerRequest(SALES, GOOD);
+{
+  const r1 = ctx.listCustomerRequests(ADMIN, {});
+  eq('เสนอเฉพาะกลุ่มที่มีชุดราคาใช้งานอยู่ — กลุ่มชื่อคล้ายที่ไม่มีชุดราคาต้องไม่โผล่',
+    r1.requests[0].groupChoices.map(g => g.id), ['7']);
+  eq('  บอกด้วยว่ากลุ่มนั้นจะได้ชุดราคาไหน (กันเลือกผิดซ้ำ)',
+    r1.requests[0].groupChoices[0].listName, 'Q4 ตะวันออก');
+  eq('  ส่งจำนวนกลุ่มทั้งหมดไปด้วย ให้หน้าจอบอกได้ว่าซ่อนไปกี่กลุ่ม', r1.groupTotal, 3);
+
+  // ★ รายการที่ให้เลือก ต้องตรงกับด่านตอนอนุมัติเสมอ — ทุกตัวที่เสนอต้องอนุมัติผ่านจริง
+  const okGroup = ctx.approveCustomerRequest(ADMIN, { requestId: 1, groupId: Number(r1.requests[0].groupChoices[0].id) });
+  eq('★ ทุกกลุ่มที่เสนอให้เลือก ต้องอนุมัติผ่านจริง (รายการกับด่านใช้ตัวตัดสินเดียวกัน)', okGroup.success, true);
+}
+{
+  /* ชั้น A: ชุดถูกจ่ายให้ "ตัวแทนรายอื่น" → ตัวแทนของคำขอนี้ต้องไม่มีกลุ่มให้เลือกเลย
+     ไม่ใช่เสนอไปแล้วไปตายตอนกดอนุมัติ
+     ★ ต้องมีแถวจ่ายชุดอยู่ในระบบอย่างน้อยหนึ่งแถว — ตารางว่างทั้งตารางแปลว่า "ยังไม่ได้เริ่มใช้เรื่องนี้"
+       ซึ่ง packageAllowedForTenant จงใจไม่กั้น (ไม่งั้นช่วงก่อนรัน migrate ทุกร้านจะเปิดบิลไม่ได้พร้อมกัน) */
+  reset();
+  sheets.package_tenants = [{ record_id: 1, package_type: 'price_list', package_id: 50, tenant_id: 'T9' }];
+  ctx.submitCustomerRequest(SALES, GOOD);
+  const r2 = ctx.listCustomerRequests(ADMIN, {});
+  eq('ชุดราคาถูกจ่ายให้ตัวแทนรายอื่น = ตัวแทนนี้ไม่มีกลุ่มให้เลือกเลย', r2.requests[0].groupChoices.length, 0);
+  eq('  และกดอนุมัติก็ต้องไม่ผ่าน (ด่านกับรายการตรงกัน)',
+    ctx.approveCustomerRequest(ADMIN, { requestId: 1, groupId: 7 }).success, false);
+}
+
 console.log('\n── ไม่อนุมัติ / ขอบเขตตัวแทน ──');
 reset();
 ctx.submitCustomerRequest(SALES, GOOD);

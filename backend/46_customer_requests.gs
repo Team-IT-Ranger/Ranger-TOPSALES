@@ -185,11 +185,18 @@ function listCustomerRequests(session, payload) {
   var scope = _effectiveTenantId(session, payload);
   var want = _crStr(payload.status) || CR_PENDING;
 
+  /* ★ กลุ่มที่เลือกได้คิดต่อ "ตัวแทนของคำขอใบนั้น" ไม่ใช่ชุดเดียวใช้ทั้งหน้า — ฝั่งบริษัทเห็นคำขอ
+     ของหลายตัวแทนพร้อมกัน และชุดราคาที่จ่ายให้แต่ละตัวแทนไม่เหมือนกัน (ชั้น A) */
+  var groupMemo = {};
   var rows = centralObjects('customer_requests').filter(function(r) {
     if (scope && String(r.tenant_id) !== String(scope)) return false;
     if (want !== 'all' && String(r.status || CR_PENDING) !== want) return false;
     return true;
-  }).map(_crToApi);
+  }).map(function(r) {
+    var dto = _crToApi(r);
+    dto.groupChoices = _crGroupChoicesFor(r.tenant_id, groupMemo);
+    return dto;
+  });
   rows.sort(function(a, b) { return Number(b.id) - Number(a.id); });
 
   // นับของที่รออยู่เสมอ (ไม่ขึ้นกับตัวกรองที่เลือก) — เอาไปขึ้นตัวเลขบนเมนู
@@ -199,15 +206,42 @@ function listCustomerRequests(session, payload) {
   }).length;
 
   return { success: true, requests: rows, pendingCount: pending,
-    shopTypes: _crShopTypes(), groups: _crGroupChoices() };
+    shopTypes: _crShopTypes(),
+    groups: _crGroupChoicesFor(scope, groupMemo),   // ฝั่งที่ดูตัวแทนเดียว ใช้ชุดนี้ได้เลย
+    groupTotal: _crGroupTotal() };
 }
 
-/** กลุ่มราคาให้แอดมินเลือกตอนอนุมัติ */
-function _crGroupChoices() {
-  return centralObjects('customer_groups').map(function(g) {
-    return { id: String(g.record_id), name: g.name || String(g.record_id) };
+/**
+ * กลุ่มราคาให้แอดมินเลือกตอนอนุมัติ — **เฉพาะกลุ่มที่มีชุดราคาใช้งานอยู่จริงสำหรับตัวแทนรายนั้น**
+ *
+ * ★★ เคยพลาดมาแล้ว 5 ต.ค. 2026: รอบแรกส่งกลุ่มทั้งหมดไปให้เลือก แอดมินเลยเห็นสองชื่อที่แทบเหมือนกัน
+ *   [8] `ร้านค้า เหนือ/อีสาน/ตะวันออก/ใต้`  (ไม่มีชุดราคา — ขยะจากการนำเข้ารอบเก่า)
+ *   [12] `ร้านค้า เหนือ, อีสาน, ตะวันออก, ใต้` (มีชุดราคา active)
+ *   ต่างกันแค่ `/` กับ `,` · เลือกผิดแล้วระบบปฏิเสธการอนุมัติพร้อมบอกว่า "ไม่มีชุดราคา" ทั้งที่มี
+ *   — CLAUDE.md เขียนกติกานี้ไว้แล้วที่หัวข้อ "เลือกกลุ่มปลายทางจากกลุ่มที่มีชุดราคาเปิดใช้งานอยู่
+ *   ไม่ใช่จากชื่อกลุ่ม" แต่รอบแรกไม่ได้ทำตาม
+ *
+ * ★ ใช้ `resolvePriceListForCustomer` ตัวเดียวกับด่านตอนอนุมัติ — รายการที่ให้เลือกกับด่านที่ตัดสิน
+ *   จึงขัดกันเองไม่ได้ (ถ้าคิดเองคนละสูตร วันหนึ่งจะมีกลุ่มที่เลือกได้แต่อนุมัติไม่ผ่าน)
+ * ★ ขึ้นกับตัวแทนด้วย เพราะชั้น A (บริษัทจ่ายชุดให้ตัวแทนรายไหน) เป็นส่วนหนึ่งของการตัดสิน
+ *   ชุดเดียวกันตัวแทน A ได้ ตัวแทน B ไม่ได้ จึงคิดแยกต่อตัวแทน แล้วจำไว้กันคิดซ้ำ
+ */
+function _crGroupChoicesFor(tenantId, memo) {
+  var key = String(tenantId || '');
+  if (memo && memo[key]) return memo[key];
+  var out = [];
+  centralObjects('customer_groups').forEach(function(g) {
+    var hit = resolvePriceListForCustomer({ tenant_id: key, group_id: g.record_id });
+    if (!hit) return;
+    out.push({ id: String(g.record_id), name: g.name || String(g.record_id),
+      listName: (hit.list && hit.list.name) || '' });
   });
+  if (memo) memo[key] = out;
+  return out;
 }
+
+/** จำนวนกลุ่มทั้งหมด — ไว้บอกแอดมินว่าซ่อนไปกี่กลุ่ม จะได้ไม่งงว่ากลุ่มที่เคยเห็นหายไปไหน */
+function _crGroupTotal() { return centralObjects('customer_groups').length; }
 
 /**
  * ประกอบ "แถวลูกค้าที่จะสร้าง" จากคำขอ + สิ่งที่แอดมินแก้/เติมตอนอนุมัติ
