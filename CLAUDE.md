@@ -1455,6 +1455,14 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
 - `node --check` on the concatenated `backend/*.gs` files and on the extracted inline `<script>`
   from `frontend-admin/index.html` is a fast, cheap syntax check — do this after every backend/
   frontend edit before pushing.
+  **★ ตั้งแต่ Node 25 ต้องเปลี่ยนนามสกุลเป็น `.js` ก่อน** (เจอ 5 ต.ค. 2026) — `node --check x.gs` ตายด้วย
+  `ERR_UNKNOWN_FILE_EXTENSION` ซึ่ง **ไม่ใช่ syntax error** แต่หน้าตาเหมือนโค้ดพัง · และถ้าเขียนเป็น
+  `node --check … | tail -3 && echo OK` จะยิ่งหลอก เพราะ `&&` อ่าน exit code ของ `tail` ซึ่งเป็น 0 เสมอ
+  = ขึ้น OK ทั้งที่ไม่ได้ตรวจอะไรเลย · ท่าที่ใช้ได้จริง:
+  ```bash
+  cat backend/*.gs > /tmp/all_backend.js && node --check /tmp/all_backend.js && echo OK
+  ```
+  หน้าเว็บตรวจด้วยการดึง `<script>` ที่ไม่มี `src=` มาใส่ `new Function()` (ทั้งสองแอปมีบล็อกเดียว)
 - Local preview: run `.dev/serve_utf8.py <port> frontend-admin` (must be run with the repo root as
   cwd, or via `.claude/launch.json`'s `frontend-admin` config through `preview_start`). The script
   was made multi-threaded (`ThreadingTCPServer`) because the single-threaded version could hang on

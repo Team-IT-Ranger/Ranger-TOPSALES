@@ -595,6 +595,25 @@ factor ตามหน่วยสินค้าปัจจุบัน (แ�
 Claude อีกบัญชีหมด token กลางงาน · **กุญแจทุกดอกว่าง** (clasp push ล่าสุด 4 ต.ค. 2026: เพิ่ม `45_unit_rescale.gs` ขึ้น UAT+prod — ไม่ต้อง Deploy) ·
 **ของค้างที่สำคัญสุด**: (A) ~~ปรับสต็อกกาว 10504~~ เสร็จแล้วทั้ง UAT+prod (4 ต.ค.) · (B) Deploy → New version · (C) ไฟล์ Express `reference\dbf_new\` ต้อง REINDEX ก่อนใช้ — รายละเอียดทั้งหมดในไฟล์ส่งต่อ
 
+## ★★ 2026-10-05: team 1 รับงานต่อ — ตรวจรับของที่ส่งมาแล้ว
+
+รับ 30 คอมมิต (`f242def` → `4993a18`) เข้า clone ของ team 1 แบบ fast-forward · **ไม่มีงานค้างที่ไหนที่ยังไม่ขึ้น origin**
+
+- **เทสต์ 26/27 ผ่าน** · ตัวที่ไม่ผ่านคือ `test-pricelist-parser.js` ซึ่ง **ไม่ใช่บั๊ก** — มันอ่านโฟลเดอร์ `reference/`
+  ที่ถูก gitignore ไว้ จึงมีแต่ใน Drive เท่านั้น ไม่มีใน clone บนดิสก์ (`ENOENT … \reference`)
+  **ถ้าจะรันตัวนี้ต้องรันจากที่ที่มี `reference/`** ไม่งั้นมันจะแดงตลอดไปและกลบของจริงที่พังในอนาคต
+- syntax ผ่านหมด: backend 47 ไฟล์ 11,517 บรรทัด · inline script ของทั้งสองหน้าเว็บ
+- **★ (B) Deploy → New version — ตรวจแล้วว่าทำไปแล้วทั้งสอง env ไม่ต้องทำอีก** ยิงสดเข้า `BACKENDS.uat`
+  และ `BACKENDS.prod` ทุก action ใหม่ (`editSalesOrderAdmin`, `syncProductCategories`, `getCustomerAdmin`,
+  `listPendingExternalGoodsReceipts`, `salesReportByStaff`) ตอบ "ไม่ได้เข้าสู่ระบบ" = router รู้จัก action แล้ว
+  · คุมผลด้วย action ปลอมที่ยิงไปพร้อมกัน ซึ่งตอบ "ไม่พบ action" ตามคาด — **ถ้าไม่มีตัวคุมนี้ การทดสอบไม่มีความหมาย**
+  เพราะ "ไม่ได้เข้าสู่ระบบ" อาจมาจาก session guard ที่อยู่ก่อนตาราง action ก็ได้
+  · **ท่านี้ต้องใช้ `fetch` ของ node ไม่ใช่ `curl -L`** — Apps Script ตอบ 302 ไป googleusercontent แล้ว curl
+  ยิง POST ต่อโดยไม่มี Content-Length ได้ `411 Length Required` เป็นหน้า HTML ซึ่งอ่านผิดเป็น "ยังไม่ deploy" ได้ง่ายๆ
+- **⚠ clone บน `G:\Shared drives\…` ค้างอยู่ที่ `cd6ea76` (28 ก.ย.) และมีไฟล์ backend ที่แก้ค้างไว้ยังไม่ commit**
+  ของพวกนี้เก่ากว่า origin ทั้งหมด ไม่มีอะไรจะเสีย **แต่ถ้าใครเผลอ `clasp push` จากโฟลเดอร์นั้น = ทับ UAT/prod
+  ด้วยโค้ดเดือนกันยายน** · ทำงานจาก `C:\Users\dev-administrator\appdev\Ranger-TOPSALES` เท่านั้นตามกติกาเดิม
+
 ## งานถัดไป เรียงตามลำดับที่ควรทำ
 
 **1. แอดมินแก้บรรทัดบิลหลังรับงาน + ธง "ศูนย์แก้ไขแล้ว"** — เจ้าของระบบสั่งไว้ตั้งแต่ออกแบบ flow แต่ยังไม่ได้ทำ
