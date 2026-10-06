@@ -848,7 +848,7 @@
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>เลขที่บิล</th><th>ลูกค้า</th><th>พนักงานขาย</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>วันที่</th><th></th></tr></thead>
+            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
             <tbody id="salesorders-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
@@ -3305,17 +3305,24 @@ function soFilteredRows(){
     || (o.saleByName||'').toLowerCase().indexOf(q) !== -1);
   return rows;
 }
+/* วันที่อย่างเดียว ไม่เอาเวลา — createdAt มาจาก safeDateStr() เป็น 'yyyy-mm-dd hh:mm'
+   ตัดด้วย substring ไม่ใช่ new Date() เพราะค่าที่ไม่ใช่วันที่ (ว่าง/ข้อมูลเก่า) จะกลายเป็น Invalid Date
+   และเรียงคอลัมน์ยังถูกอยู่ เพราะ 'yyyy-mm-dd' เรียงแบบข้อความได้ตรงกับเรียงตามเวลาพอดี */
+function soDateOnly(v){ return String(v || '').substring(0, 10); }
+
 function renderSalesOrdersTable(){
   const body = document.getElementById('salesorders-body');
   const rows = soFilteredRows();
   if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="10">ไม่พบบิลขาย</td></tr>'; return; }
   body.innerHTML = rows.map(o =>
-    '<tr class="clickable-row" onclick="openSaleOrderDetail('+o.id+')"><td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
-    // ★ แอดมินขอมา 6 ต.ค. 2026 — ต้องรู้ว่าบิลมาจากพนักงานคนไหน · backend แปลง LINE user id เป็นชื่อให้แล้ว
-    '<td class="wrap">'+esc(o.saleByName || o.saleBy || '-')+'</td>' +
+    '<tr class="clickable-row" onclick="openSaleOrderDetail('+o.id+')">' +
+    // วันที่อยู่หน้าสุดและตัดเวลาออก (เจ้าของระบบสั่ง 6 ต.ค. 2026) — เวลายังดูได้ในหน้ารายละเอียด
+    '<td class="mono-data">'+esc(soDateOnly(o.createdAt))+'</td>' +
+    '<td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
     '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
     '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
-    '<td class="mono-data">'+esc(o.createdAt)+'</td>' +
+    // ★ แอดมินขอมา 6 ต.ค. 2026 — ต้องรู้ว่าบิลมาจากพนักงานคนไหน · backend แปลง LINE user id เป็นชื่อให้แล้ว
+    '<td class="wrap">'+esc(o.saleByName || o.saleBy || '-')+'</td>' +
     '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'salesorder\')">พิมพ์</button></td></tr>'
   ).join('');
 }
@@ -3330,11 +3337,12 @@ function printSalesOrderList(){
   if (!rows.length) { toast('ไม่มีรายการให้พิมพ์', true); return; }
   ensureDocPrint().then(() => DocPrint.table({
     title: 'รายงานบิลขาย', subtitle: scopeLabelForPrint(), issuerName: (SESSION && SESSION.displayName) || '',
-    headers: ['เลขที่บิล','ลูกค้า','พนักงานขาย','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','วันที่'],
-    weights: [1.5,2.6,1.8,1.2,1,1.3,1.4,1.2,1.5],
-    align: ['','','','r','c','c','c','c','c'],
-    rows: rows.map(o => [o.code, o.customer, o.saleByName || o.saleBy || '-', baht(o.total), payLabel(o.paymentMethod),
-      soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-', o.createdAt]),
+    headers: ['วันที่','เลขที่บิล','ลูกค้า','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','พนักงานขาย'],
+    weights: [1.1,1.5,2.6,1.2,1,1.3,1.4,1.2,1.8],
+    align: ['c','','','r','c','c','c','c',''],
+    rows: rows.map(o => [soDateOnly(o.createdAt), o.code, o.customer, baht(o.total), payLabel(o.paymentMethod),
+      soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-',
+      o.saleByName || o.saleBy || '-']),
     note: 'รวมยอดสุทธิ ' + baht(rows.reduce((t,o) => t + (o.status === 'cancelled' ? 0 : (o.total||0)), 0)) + ' บาท (ไม่รวมบิลที่ยกเลิก)',
     filename: 'รายงานบิลขาย'
   }));
@@ -3343,9 +3351,11 @@ function exportSalesOrderList(){
   const rows = soFilteredRows();
   if (!rows.length) { toast('ไม่มีรายการให้ส่งออก', true); return; }
   ensureDocPrint().then(() => DocPrint.xlsx({
-    filename: 'บิลขาย', headers: ['เลขที่บิล','ลูกค้า','พนักงานขาย','ยอดก่อนส่วนลด','ส่วนลด','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','วันที่'],
-    rows: rows.map(o => [o.code, o.customer, o.saleByName || o.saleBy || '-', baht(o.subtotal), baht(o.discount), baht(o.total), payLabel(o.paymentMethod),
-      soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-', o.createdAt])
+    // ★ ไฟล์ส่งออกคงวันที่+เวลาไว้ตามเดิม (ต่างจากบนจอ) — เป็นข้อมูลเอาไปวิเคราะห์ต่อ ตัดเวลาทิ้งแล้วเอาคืนไม่ได้
+    filename: 'บิลขาย', headers: ['วันที่','เลขที่บิล','ลูกค้า','ยอดก่อนส่วนลด','ส่วนลด','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','พนักงานขาย'],
+    rows: rows.map(o => [o.createdAt, o.code, o.customer, baht(o.subtotal), baht(o.discount), baht(o.total), payLabel(o.paymentMethod),
+      soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-',
+      o.saleByName || o.saleBy || '-'])
   }));
 }
 async function loadSalesOrders(){
