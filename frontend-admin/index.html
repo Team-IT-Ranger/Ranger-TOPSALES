@@ -3578,7 +3578,11 @@ function renderSaleOrderHistory(r){
 async function applySaleOrderStatus(payload){
   const r = await callApi('updateSalesOrderStatus', Object.assign({ id: currentSaleOrderId }, payload));
   if (!r.success) { toast(r.message, true); return; }
-  toast(r.message);
+  /* ★ สถานะเปลี่ยนสำเร็จ "แต่" ตั้งลูกหนี้อัตโนมัติไม่ผ่าน — ของขึ้นรถไปแล้ว ย้อนสถานะไม่ได้
+     จึงไม่ล้มทั้งใบ แต่ต้องเด้งให้เห็นเป็นคำเตือน ไม่ใช่กลืนหายไปกับ toast เขียวว่าสำเร็จ
+     (ฝ่ายบัญชีออกใบเองได้จากหน้าลูกหนี้ ซึ่งกันซ้ำให้อยู่แล้ว) */
+  if (r.warning) { toast(r.message + ' · ' + r.warning, true); alert('⚠️ ' + r.warning); }
+  else toast(r.message);
   const row = salesOrdersCache.find(x => x.id === currentSaleOrderId);
   if (row) { row.status = r.status; row.paymentStatus = r.paymentStatus; row.deliveredAt = r.deliveredAt; }
   openSaleOrderDetail(currentSaleOrderId);   // โหลดใบเดิมใหม่เพื่อให้ได้ประวัติและปุ่มขั้นถัดไปที่ถูกต้อง

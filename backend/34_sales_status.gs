@@ -298,7 +298,7 @@ function updateSalesOrderStatus(session, payload) {
 
     var fromStatus = _soStatusOf(order), fromPay = orderPaymentStatus(order);
     var toStatus = fromStatus, toPay = fromPay;
-    var fields = {}, changes = [];
+    var fields = {}, changes = [], justBecameReady = false;
 
     // ── แกนการส่งของ ──
     if (payload.status !== undefined && payload.status !== null && String(payload.status) !== '') {
@@ -352,6 +352,7 @@ function updateSalesOrderStatus(session, payload) {
           fields.delivery_order_at = nowStr();
           changes.push('ออกใบส่งสินค้า ' + fields.delivery_order_no);
         }
+        justBecameReady = (toStatus === SO_READY);
         changes.push(SO_STATUS_LABELS[fromStatus] + ' → ' + SO_STATUS_LABELS[toStatus]);
       }
     }
@@ -385,8 +386,23 @@ function updateSalesOrderStatus(session, payload) {
     logOrderStatus(tenantId, order.record_id, fromStatus, toStatus, fromPay, toPay, payload.note,
       session.displayName || session.username, _adminRoleLabel(session));
 
+    /* ★ ตั้งลูกหนี้ + ออกใบแจ้งหนี้/ใบกำกับภาษีอัตโนมัติตอนเข้าสถานะ "พร้อมจัดส่ง" (เจ้าของระบบสั่ง)
+       จุดนี้คือจุดที่ของถูกตัดออกจากคลังแล้วและเอกสารกำลังจะออกไปกับรถ — ภาระหนี้เกิดตรงนี้
+       ★ เฉพาะบิลเครดิต: ขายสดเก็บเงินหน้าร้านแล้ว ไม่มีลูกหนี้ให้ตั้ง (กติกาเดียวกับ listUninvoicedSalesOrders)
+       ★★ ออกใบไม่สำเร็จ "ห้ามล้มการเปลี่ยนสถานะ" — ของแพ็คขึ้นรถไปแล้ว ย้อนสถานะกลับไม่ได้
+          รายงานเป็นคำเตือนแทน แล้วให้ฝ่ายบัญชีออกเองจากหน้าลูกหนี้ (ปุ่มเดิมยังอยู่ และกันซ้ำให้อยู่แล้ว)
+       ★ ลงสมุดของเจ้าของบิล — `_normBook(tenantId)` ไม่ใช่สมุดของคนกด (ฝ่ายคลังอาจเป็นคนบริษัท) */
+    var arNote = '';
+    if (justBecameReady && isCreditPayment(order.payment_method)) {
+      var ar = _createArInvoiceCore(session, { tenantId: tenantId, salesOrderId: order.record_id },
+        typeof _normBook === 'function' ? _normBook(tenantId) : '');
+      if (ar && ar.success) changes.push('ตั้งลูกหนี้ ' + ar.invoiceNo);
+      else arNote = 'ยังไม่ได้ตั้งลูกหนี้: ' + ((ar && ar.message) || 'ไม่ทราบสาเหตุ');
+    }
+
     return { success: true, status: toStatus, statusLabel: SO_STATUS_LABELS[toStatus],
       deliveryOrderNo: fields.delivery_order_no || order.delivery_order_no || '',
+      warning: arNote || undefined,
       paymentStatus: toPay, paymentLabel: SO_PAYMENT_LABELS[toPay],
       paidAmount: fields.paid_amount !== undefined ? fields.paid_amount : (parseFloat(order.paid_amount) || 0),
       deliveredAt: fields.delivered_at !== undefined ? fields.delivered_at : safeDateStr(order.delivered_at),

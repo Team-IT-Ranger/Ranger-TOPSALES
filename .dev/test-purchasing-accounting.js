@@ -375,8 +375,10 @@ r = ctx.createArInvoice(FIN, { customerId: 500, invoiceDate: '2026-08-01', dueDa
 ok('ออกใบแจ้งหนี้เองได้ (ไม่ผูกบิลขาย)', r);
 
 console.log('\n-- ★★ ตัวแทนซื้อขาด: รายได้จากการขายต่อเป็นของเขา ลงสมุดบริษัทไม่ได้ (6 ต.ค. 2026) --');
-/* ฝั่งซื้อ (createApBillFromGr) กั้นไว้ตั้งแต่ต้น แต่ฝั่งขายไม่เคยกั้น — ตั้งลูกหนี้จากบิลของตัวแทนได้
-   และ _postJournal ลงสมุดบริษัทให้ทุกใบ = รับรู้รายได้ซ้ำ (บริษัทรับรู้ตอนขายให้ตัวแทนไปแล้วรอบหนึ่ง) */
+/* เดิมฝั่งขายไม่เคยกั้นเลย — ตั้งลูกหนี้จากบิลของตัวแทนได้ และ _postJournal ลงสมุดบริษัทให้ทุกใบ
+   = รับรู้รายได้ซ้ำ (บริษัทรับรู้ตอนขายให้ตัวแทนไปแล้วรอบหนึ่ง)
+   ★ ตอนนี้ไม่ได้ "ห้าม" แล้ว แต่ "บังคับให้ลงถูกเล่ม": นั่งอยู่สมุดบริษัทแล้วออกใบให้ตัวแทนไม่ได้
+   ต้องสวมสิทธิ์เข้าไปในตัวแทนก่อน แล้วใบนั้นจะไปอยู่ในสมุดของเขา ไม่ใช่ของบริษัท */
 const beforeJv = sheets.gl_journals.rows.length;
 fails('ตั้งลูกหนี้จากบิลขายของตัวแทน → ปฏิเสธ',
   ctx.createArInvoice(FIN, { tenantId: 'T9', salesOrderId: 77 }), /ซื้อขาด|สมุดของบริษัท/);
@@ -387,6 +389,31 @@ fails('ตัวแทนที่ไม่มีในระบบ → ปฏ�
   ctx.createArInvoice(FIN, { tenantId: 'T404', salesOrderId: 77 }), /ไม่พบตัวแทน/);
 eq('อายุหนี้ลูกหนี้ ณ 20 ต.ค. (เกินกำหนด 50 วัน → ช่วง 31-60)',
    ctx.getArAging(FIN, { asOf: '2026-10-20' }).data.map(a => [a.total, a.d31_60, a.docs[0].overdueDays]), [[2140, 2140, 50]]);
+
+/* ★ อีกครึ่งของกติกาเดียวกัน: สวมสิทธิ์เข้าไปแล้ว "ต้องออกให้ได้" และต้องไปอยู่ในสมุดของตัวแทน
+   ถ้าเทสต์มีแต่ฝั่ง "ปฏิเสธ" ใครมาปิดทางทั้งหมดทีหลังก็ยังเขียว ทั้งที่ตัวแทนทำบัญชีไม่ได้เลย */
+const ownerTbBeforeAr = ctx.getTrialBalance(FIN, {}).totalDebit;
+r = ctx.createArInvoice(BOSS, { tenantId: 'T9', customerId: 509, invoiceDate: '2026-08-01', subtotalExVat: 1000 });
+ok('สวมสิทธิ์เข้าไปในตัวแทนแล้ว ออกใบแจ้งหนี้ให้ลูกค้าของเขาได้', r);
+const T9INV = r.invoiceId;
+eq('  ใบนี้อยู่ในสมุดของตัวแทน · เลขที่แยกเล่ม · งบบริษัทไม่ขยับเลย',
+   [objs(sheets.ar_invoices).find(iv => String(iv.record_id) === String(T9INV)).tenant_id,
+    /^INV-T9-/.test(r.invoiceNo), ctx.getTrialBalance(FIN, {}).totalDebit], ['T9', true, ownerTbBeforeAr]);
+eq('  รายได้เข้างบกำไรขาดทุนของตัวแทน ไม่ใช่ของบริษัท',
+   [ctx.getIncomeStatement(BOSS, { tenantId: 'T9' }).totalIncome,
+    ctx.getIncomeStatement(FIN, {}).totalIncome], [1000, 12000]);
+eq('  บริษัทไม่เห็นใบนี้ในรายการลูกหนี้ของตัวเอง',
+   ctx.listArInvoices(FIN, {}).data.some(iv => String(iv.id) === String(T9INV)), false);
+fails('  รับชำระใบของตัวแทนจากสมุดบริษัทไม่ได้',
+  ctx.receiveArPayment(FIN, { customerId: 509, receiptDate: '2026-08-10', allocations: [{ invoiceId: T9INV, amount: 100 }] }),
+  /ไม่พบใบแจ้งหนี้/);
+r = ctx.receiveArPayment(BOSS, { tenantId: 'T9', customerId: 509, receiptDate: '2026-08-10', method: 'cash',
+  allocations: [{ invoiceId: T9INV, amount: 1070 }] });
+ok('  รับชำระในสมุดของตัวแทนได้', r);
+eq('  ใบสำคัญรับอยู่ในสมุดตัวแทน · ลูกหนี้ของเขาถูกตัดจนหมด · งบบริษัทยังไม่ขยับ',
+   [objs(sheets.ar_receipts).find(x => String(x.record_id) === String(r.receiptId)).tenant_id,
+    ctx.getTrialBalance(BOSS, { tenantId: 'T9' }).data.find(x => x.code === '1200').balance,
+    ctx.getTrialBalance(FIN, {}).totalDebit], ['T9', 0, ownerTbBeforeAr]);
 
 console.log('\n── แยกประเภท (GL) ──');
 fails('ใบสำคัญไม่สมดุล → ปฏิเสธ', ctx.postManualJournal(FIN, { date: '2026-09-30', memo: 'x',

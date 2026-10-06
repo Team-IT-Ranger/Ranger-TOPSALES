@@ -40,6 +40,19 @@ const ctx = {
   // เลขที่เอกสาร — นับเพิ่มทุกครั้งที่เรียก เพื่อจับได้ว่าโค้ดเรียกซ้ำโดยไม่ตั้งใจ (เลขเอกสารกินตัวนับทุกครั้ง)
   docNoCalls: 0,
   getNextDocNumber: function (tenantId, type) { ctx.docNoCalls++; return type + '-TEST-' + String(ctx.docNoCalls).padStart(4, '0'); },
+  /* ★ 6 ต.ค. 2026 — เข้าสถานะ "พร้อมจัดส่ง" แล้วระบบตั้งลูกหนี้ให้อัตโนมัติ (23_accounting.gs)
+     ไฟล์นี้เป็นเทสต์ของ "สถานะ" ไม่ใช่ของบัญชี จึงไม่โหลดโมดูลบัญชีทั้งก้อนมา แต่ดักไว้แทน
+     เพื่อตรวจสิ่งที่เป็นหน้าที่ของไฟล์นี้จริงๆ: **เรียกตอนไหน ด้วยสมุดของใคร และล้มแล้วต้องไม่ล้มทั้งใบ**
+     (ตรรกะการลงบัญชีมีเทสต์ของตัวเองใน .dev/test-purchasing-accounting.js) */
+  isCreditPayment: c => { c = String(c || '').toLowerCase(); return c === 'credit_term' || c === 'credit'; },
+  _normBook: t => String(t || ''),
+  arCalls: [],
+  arShouldFail: false,
+  _createArInvoiceCore: function (session, payload, book) {
+    ctx.arCalls.push({ tenantId: payload.tenantId, salesOrderId: payload.salesOrderId, book: book });
+    return ctx.arShouldFail ? { success: false, message: 'ลูกค้ารายนี้ยังไม่ได้ตั้งเครดิต' }
+      : { success: true, invoiceNo: 'INV-TEST-0001', invoiceId: 1 };
+  },
   tenantObjects: (tid, n) => sheetOf(n).map(o => Object.assign({}, o)),
   // tab ที่เพิ่มเข้ามาทีหลัง: ไฟล์ตัวแทนเก่ายังไม่มี → ต้องคืน [] ไม่ใช่ throw (ของจริงอยู่ใน 02_helpers.gs)
   tenantObjectsIfExists: (tid, n) => (t[n] ? t[n].map(o => Object.assign({}, o)) : []),
@@ -411,6 +424,45 @@ console.log('\n── ★ ใบส่งสินค้ามีเลขขอ
   ctx.updateSalesOrderStatus(S, { id: 50, status: 'completed' });
   eq('  เดินต่อจนจัดส่งแล้ว ก็ยังเป็นเลขเดิมและไม่ออกใหม่',
     [row(50).delivery_order_no, ctx.docNoCalls - mid2], [issued, 0]);
+}
+
+console.log('\n── ★ ตั้งลูกหนี้อัตโนมัติตอน "พร้อมจัดส่ง" (เจ้าของระบบสั่ง 6 ต.ค. 2026) ──');
+{
+  // ใบ 50 ข้างบนเป็นเครดิต และเพิ่งเดินผ่าน "พร้อมจัดส่ง" ไปสองรอบ (ครั้งแรก + ถอยกลับแล้วเดินใหม่)
+  const call50 = ctx.arCalls.filter(c => String(c.salesOrderId) === '50');
+  eq('บิลเครดิตเข้าพร้อมจัดส่ง → เรียกตั้งลูกหนี้ให้ พร้อมสมุดของเจ้าของบิล',
+    [call50.length > 0, call50[0] && call50[0].tenantId, call50[0] && call50[0].book], [true, 'T1', 'T1']);
+  /* ★ กันซ้ำเป็นหน้าที่ของ createArInvoice (เช็ค sales_order_id ในสมุดนั้น) ไม่ใช่ของตัวเรียก
+     ตัวเรียกจึงเรียกทุกครั้งที่ "เพิ่งเข้า" สถานะนี้ได้ โดยไม่ต้องรู้ว่าเคยออกไปแล้วหรือยัง
+     — ที่ต้องไม่เกิดคือเรียกตอนเดินสถานะอื่น ซึ่งเช็คด้วยสองเคสถัดไป */
+  const n0 = ctx.arCalls.length;
+  ctx.updateSalesOrderStatus(S, { id: 50, status: 'delivering' });
+  ctx.updateSalesOrderStatus(S, { id: 50, status: 'completed' });
+  eq('  เดินสถานะอื่นต่อไม่เรียกซ้ำ', ctx.arCalls.length - n0, 0);
+
+  // ขายสด: เก็บเงินหน้าร้านแล้ว ไม่มีลูกหนี้ให้ตั้ง
+  t.sales_orders.push({ record_id: 51, order_code: 'SO-51', customer_id: 1, total: 100,
+    payment_method: 'cash', fulfillment_type: 'office_delivery', status: 'accepted',
+    payment_status: 'paid', paid_amount: 100, created_at: '2026-09-26 09:00:00' });
+  t.order_items.push({ record_id: 501, order_id: 51, product_id: '101', unit_code: 'CT', qty: 1, base_qty: 1 });
+  const n1 = ctx.arCalls.length;
+  let dc = ctx.updateSalesOrderStatus(S, { id: 51, status: 'ready_to_ship' });
+  eq('บิลขายสดไม่ตั้งลูกหนี้ แต่ยังได้เลขใบส่งของตามปกติ',
+    [ctx.arCalls.length - n1, dc.success, /^DO-/.test(row(51).delivery_order_no || '')], [0, true, true]);
+
+  /* ★★ ออกใบแจ้งหนี้ไม่สำเร็จ ต้อง "ไม่ล้มการเปลี่ยนสถานะ" — ของแพ็คขึ้นรถไปแล้ว ย้อนกลับไม่ได้
+     ถ้าปล่อยให้ล้มทั้งใบ คนหน้างานจะกดไม่ผ่านแล้วไปหาทางลัดแทน ซึ่งแย่กว่าการค้างใบแจ้งหนี้ไว้ */
+  ctx.arShouldFail = true;
+  t.sales_orders.push({ record_id: 52, order_code: 'SO-52', customer_id: 1, total: 100,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'accepted',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-09-26 09:00:00' });
+  t.order_items.push({ record_id: 502, order_id: 52, product_id: '101', unit_code: 'CT', qty: 1, base_qty: 1 });
+  let df = ctx.updateSalesOrderStatus(S, { id: 52, status: 'ready_to_ship' });
+  eq('ตั้งลูกหนี้ล้ม → สถานะยังเปลี่ยนสำเร็จ และบอกเหตุผลกลับไปเป็นคำเตือน',
+    [df.success, row(52).status, /ยังไม่ได้ตั้งลูกหนี้/.test(df.warning || ''),
+     /เครดิต/.test(df.warning || '')], [true, 'ready_to_ship', true, true]);
+  eq('  และยังได้เลขใบส่งของตามปกติ', /^DO-/.test(row(52).delivery_order_no || ''), true);
+  ctx.arShouldFail = false;
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

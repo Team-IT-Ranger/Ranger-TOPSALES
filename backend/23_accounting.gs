@@ -510,39 +510,54 @@ function listArInvoices(session, payload) {
  * ลงบัญชี: Dr ลูกหนี้ / Cr รายได้ + Cr ภาษีขาย
  */
 /**
- * สมุดบัญชีนี้เป็นของบริษัทเจ้าของสินค้าเท่านั้น — ตัวแทนจำหน่าย **ซื้อขาด** ไปจากบริษัท
- * เขาขายต่อให้ลูกค้าของเขา รายได้ก้อนนั้นเป็นของเขา ต้องออกบิลและลงบัญชีในสมุดของเขาเอง
+ * ★ รายได้ของตัวแทนต้องลง "สมุดของตัวแทน" ไม่ใช่สมุดบริษัท — ตัวแทน **ซื้อขาด** ไปจากบริษัท
  * เอาเข้างบบริษัท = รับรู้รายได้ซ้ำ (บริษัทรับรู้ตอนขายให้ตัวแทนไปแล้วรอบหนึ่ง)
  *
- * ★ ฝั่งซื้อ (`createApBillFromGr`) กั้นไว้ตั้งแต่ต้น แต่ฝั่งขายไม่เคยกั้น — ตั้งลูกหนี้จากบิลของตัวแทนได้
- *   และ `_postJournal` ลงสมุดบริษัทให้ทุกใบโดยไม่ถามว่าเป็นของใคร (เจอ 6 ต.ค. 2026)
+ * เดิม (6 ต.ค. 2026 เช้า) ปฏิเสธบิลของตัวแทนทุกใบ เพราะยังไม่มีสมุดของเขาให้ลง · ตอนนี้มีแล้ว
+ * หน้าที่ของตัวนี้จึงเปลี่ยนจาก "ห้าม" เป็น **"ตรวจว่ากำลังลงถูกเล่ม"**
+ *   คืน null = ลงได้ · คืน object = ปฏิเสธพร้อมเหตุผล
+ *
+ * ★ สองข้อที่ห้ามหาย ไม่ว่าจะแก้ตัวนี้อีกกี่รอบ:
+ *   1. **หาตัวแทนไม่เจอ = ปฏิเสธ ไม่ใช่ปล่อยผ่าน** — `centralObjects` คืนค่าว่างเป็นระยะได้จริง
+ *      ในโปรเจกต์นี้ (Apps Script สะดุด) ปล่อยผ่านจังหวะนั้น = รายได้ไหลผิดเล่มเงียบๆ
+ *      ปฏิเสธแล้วแค่กดใหม่ ซึ่งแก้ได้
+ *   2. **ต้องสวมสิทธิ์เข้าไปในตัวแทนก่อน** ถึงจะออกใบแจ้งหนี้ให้เขาได้ — นั่งอยู่สมุดบริษัท
+ *      แล้วออกใบให้ตัวแทนไม่ได้ ไม่งั้นพลาดทีเดียวรายได้เข้าผิดนิติบุคคล
  */
-function _arTenantBlocked(tenantId) {
+function _arBookGate(tenantId, book) {
   var tid = String(tenantId || '');
-  if (!tid) return null;                       // ไม่ระบุตัวแทน = ของบริษัทเอง
+  if (!tid) return _normBook(book) ? { success: false, message: 'ใบนี้ไม่ได้ระบุตัวแทน แต่กำลังทำงานในสมุดของตัวแทนอยู่' } : null;
   var t = null;
   centralObjects('tenants').forEach(function(x) { if (String(x.tenant_id) === tid) t = x; });
-  if (t && isFlagOn(t.is_house)) return null;  // ตัวแทนบ้าน = ขายตรงในนามบริษัท ลงบัญชีได้
-  /* ★ หาไม่เจอ = ปฏิเสธ ไม่ใช่ปล่อยผ่าน — กติกาเรื่องเงินต้องล้มไปทางปลอดภัย
-     `centralObjects` คืนค่าว่างเป็นระยะได้จริงในโปรเจกต์นี้ (Apps Script สะดุด) ถ้าปล่อยผ่าน
-     จังหวะนั้นรายได้ของตัวแทนจะไหลเข้างบบริษัทเงียบๆ · ปฏิเสธแล้วแค่กดใหม่ ซึ่งแก้ได้ */
   if (!t) return { success: false, message: 'ไม่พบตัวแทน ' + tid + ' ในระบบ — ตรวจสอบก่อนออกใบแจ้งหนี้' };
-  return { success: false, message: 'บิลขายนี้เป็นของ ' + (t.name || tid) +
-    ' ซึ่งซื้อขาดไปจากบริษัท — รายได้เป็นของตัวแทน ต้องออกบิลและลงบัญชีในสมุดของเขาเอง ' +
-    'ระบบบัญชีนี้เป็นสมุดของบริษัทเจ้าของสินค้าเท่านั้น' };
+  if (_normBook(tid) !== _normBook(book))
+    return { success: false, message: 'บิลนี้เป็นของ ' + (t.name || tid) + ' ซึ่งซื้อขาดไปจากบริษัท — รายได้เป็นของตัวแทน ' +
+      'ต้องลงในสมุดของเขา · เลือกบริษัทให้เป็น "' + (t.name || tid) + '" ก่อนออกใบแจ้งหนี้' };
+  return null;
 }
 
 function createArInvoice(session, payload) {
   var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
+  payload = payload || {};
+  return _withDocLock(function() { return _createArInvoiceCore(session, payload, _bookScope(session, payload)); });
+}
+
+/* ตัวจริงของการออกใบแจ้งหนี้ — **ไม่ตรวจสิทธิ์และไม่จับ lock เอง** ผู้เรียกต้องทำมาก่อนแล้ว
+   หลักเดียวกับ `_reverseJournalCore`: เอกสารต้นทางกับการลงบัญชีเป็นคนละสิทธิ์กัน
+   เส้นทางอัตโนมัติตอนบิลเข้าสถานะ "พร้อมจัดส่ง" (`34_sales_status.gs`) เรียกตัวนี้ตรงๆ เพราะ
+   (ก) อยู่ใต้ lock ของ `updateSalesOrderStatus` อยู่แล้ว จับซ้ำ = ค้างตัวเอง
+   (ข) คนกด "พร้อมจัดส่ง" คือฝ่ายคลัง/ขาย ไม่ควรต้องมีสิทธิ์บัญชีเพื่อจะส่งของ
+   `book` ส่งเข้ามาจากผู้เรียก ไม่คิดเองจาก session — เส้นทางอัตโนมัติรู้เล่มจากตัวบิล ไม่ใช่จากคนกด */
+function _createArInvoiceCore(session, payload, book) {
   var invDate = payload.invoiceDate || _todayStr();
   if (!_validDate(invDate)) return { success: false, message: 'วันที่ใบแจ้งหนี้ต้องเป็น yyyy-mm-dd' };
-  return _withDocLock(function() {
+  return (function() {
     var customerId, tenantId = '', salesOrderId = '', subtotal, vat, note = String(payload.note || '');
     if (payload.salesOrderId) {
       tenantId = payload.tenantId || _salesTenantId(session, payload);
       if (!tenantId) return { success: false, message: 'ไม่ทราบตัวแทนของบิลขายนี้' };
-      // กั้นก่อนเปิดไฟล์ตัวแทน — ไม่มีเหตุต้องอ่านไฟล์ของคนที่กำลังจะปฏิเสธ (และเปิดไฟล์ตัวแทนแพง ~1.5 วิ)
-      var blocked = _arTenantBlocked(tenantId); if (blocked) return blocked;
+      // ตรวจก่อนเปิดไฟล์ตัวแทน — ไม่มีเหตุต้องอ่านไฟล์ของคนที่กำลังจะปฏิเสธ (และเปิดไฟล์ตัวแทนแพง ~1.5 วิ)
+      var blocked = _arBookGate(tenantId, book); if (blocked) return blocked;
       var order = null;
       tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.salesOrderId)) order = o; });
       if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
@@ -571,8 +586,12 @@ function createArInvoice(session, payload) {
     var customer = null;
     centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(customerId)) customer = c; });
     if (!customer) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
-    // ออกใบแจ้งหนี้เองโดยเลือกลูกค้า ก็ต้องกั้นเหมือนกัน — ลูกค้าของตัวแทนคือลูกค้าของเขา ไม่ใช่ของบริษัท
-    var cBlocked = _arTenantBlocked(customer.tenant_id); if (cBlocked) return cBlocked;
+    // ออกใบแจ้งหนี้เองโดยเลือกลูกค้า ก็ต้องตรวจเหมือนกัน — ลูกค้าของตัวแทนคือลูกค้าของเขา ไม่ใช่ของบริษัท
+    var cBlocked = _arBookGate(customer.tenant_id, book); if (cBlocked) return cBlocked;
+    /* ★ ใบที่กรอกเอง (ไม่ผูกบิลขาย) ต้องติดเจ้าของสมุดลงแถวด้วย — ไม่งั้นใบสำคัญไปอยู่สมุดตัวแทน
+       แต่ตัวใบแจ้งหนี้เองยังเป็นของบริษัท: บริษัทเห็นใบที่ไม่ใช่ของตัวเอง ตัวแทนรับชำระใบของตัวเองไม่ได้
+       และงบทดลองกับรายการลูกหนี้จะบอกคนละเรื่องกัน (เทสต์จับได้ตอนเขียนเคสสวมสิทธิ์) */
+    if (!tenantId) tenantId = String(customer.tenant_id || '');
     // วันครบกำหนด: ระบุมาเอง → ใช้ตามนั้น · ไม่ระบุ → เครดิตประจำร้าน (customers.payment_terms_days) · ไม่ได้ตั้งไว้ → 30 วัน
     var custTerms = customerTermsDays(customer, null);
     var dueDays = _int(payload.dueDays) || (custTerms === null ? 30 : custTerms);
@@ -580,8 +599,8 @@ function createArInvoice(session, payload) {
     if (!_validDate(dueDate)) return { success: false, message: 'วันครบกำหนดต้องเป็น yyyy-mm-dd' };
     var total = _money(subtotal + vat);
     var invId = centralNextId('ar_invoices');
-    var invNo = _nextCentralDocNo('INV');
-    var jr = _postJournal({ date: invDate, source: 'AR', refType: 'AR_INVOICE', refId: invId,
+    var invNo = _nextCentralDocNo('INV', book || undefined);
+    var jr = _postJournal({ date: invDate, source: 'AR', refType: 'AR_INVOICE', refId: invId, tenantId: book,
       memo: 'ใบแจ้งหนี้ ' + invNo + ' ' + customerFullName(customer), createdBy: session.adminUserId, lines: [
         { accountCode: GL_ACCT.AR, description: 'ลูกหนี้ ' + customerFullName(customer), debit: total, credit: 0, partyType: 'customer', partyId: customer.record_id },
         { accountCode: GL_ACCT.SALES, description: note || 'รายได้จากการขาย', debit: 0, credit: _money(subtotal) },
@@ -593,7 +612,7 @@ function createArInvoice(session, payload) {
       total: total, received_amount: 0, status: 'open', journal_id: jr.journalId, note: note, created_by: session.adminUserId, created_at: nowStr() });
     return { success: true, invoiceId: invId, invoiceNo: invNo, total: total, journalNo: jr.journalNo,
       message: 'ออกใบแจ้งหนี้ ' + invNo + ' ยอด ' + total.toLocaleString() + ' บาท' };
-  });
+  })();
 }
 
 // รับชำระจากลูกค้า: payload { customerId, receiptDate?, method, bankAccount?, note?, allocations:[{invoiceId, amount}] }
