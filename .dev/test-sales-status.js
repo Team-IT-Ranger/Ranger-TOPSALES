@@ -37,6 +37,9 @@ const ctx = {
   SpreadsheetApp: { openById: () => { throw new Error('no'); }, flush() {} },
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => '' }) },
   nowStr: () => '2026-09-26 12:00:00', safeDateStr: v => String(v || ''),
+  // เลขที่เอกสาร — นับเพิ่มทุกครั้งที่เรียก เพื่อจับได้ว่าโค้ดเรียกซ้ำโดยไม่ตั้งใจ (เลขเอกสารกินตัวนับทุกครั้ง)
+  docNoCalls: 0,
+  getNextDocNumber: function (tenantId, type) { ctx.docNoCalls++; return type + '-TEST-' + String(ctx.docNoCalls).padStart(4, '0'); },
   tenantObjects: (tid, n) => sheetOf(n).map(o => Object.assign({}, o)),
   // tab ที่เพิ่มเข้ามาทีหลัง: ไฟล์ตัวแทนเก่ายังไม่มี → ต้องคืน [] ไม่ใช่ throw (ของจริงอยู่ใน 02_helpers.gs)
   tenantObjectsIfExists: (tid, n) => (t[n] ? t[n].map(o => Object.assign({}, o)) : []),
@@ -48,8 +51,12 @@ const ctx = {
   // ชีตจำลองแบบ getDataRange/getRange เท่าที่ _updateOrderRow ใช้จริง
   tenantSheet: (tid, n) => {
     const rows = sheetOf(n);
+    /* ★ หัวชีตต้องมีครบทุกคอลัมน์ที่โค้ดจะเขียน — `_updateOrderRow` เขียนเฉพาะคอลัมน์ที่มีในหัว
+       ขาดคอลัมน์ไหน ค่าจะถูกทิ้งเงียบๆ (ของจริงกันด้วย ensureTenantSheetsCurrent ที่เติมคอลัมน์ให้ก่อนเขียน)
+       เพิ่มคอลัมน์ใน TENANT_SHEET_TABS เมื่อไหร่ ต้องมาเพิ่มที่นี่ด้วย ไม่งั้นเทสต์จะผ่านทั้งที่ของจริงไม่ได้เขียน */
     const hdr = ['record_id','order_code','customer_id','total','payment_method','fulfillment_type','status',
-      'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by','sale_by','created_at'];
+      'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by','sale_by','created_at',
+      'requested_delivery_date','center_edited_at','center_edited_by','delivery_order_no','delivery_order_at'];
     const values = [hdr].concat(rows.map(r => hdr.map(h => (r[h] === undefined ? '' : r[h]))));
     return { getDataRange: () => ({ getValues: () => values }),
       getRange: (row, col) => ({ setValue: v => { rows[row - 2][hdr[col - 1]] = v; } }) };
@@ -372,6 +379,39 @@ e = ctx.editSalesOrderAdmin(S, { id: 40, items: [{ productId: '101', unitCode: '
 eq('ส่งวันนัดว่าง = ล้างวันนัด · ไม่ส่ง = ไม่แตะ', [e.success, row(40).requested_delivery_date], [true, '']);
 e = ctx.editSalesOrderAdmin(S, { id: 40, items: [{ productId: '101', unitCode: 'CT', qty: 2 }] });
 eq('  (ไม่ส่งวันนัดมา → วันนัดเดิมไม่ถูกแตะ)', [e.success, row(40).requested_delivery_date], [true, '']);
+
+console.log('\n── ★ ใบส่งสินค้ามีเลขของตัวเอง ออกตอน "พร้อมจัดส่ง" (แอดมินขอ 6 ต.ค. 2026) ──');
+{
+  // ใบใหม่ office_delivery เดินถึง "พร้อมจัดส่ง"
+  t.sales_orders.push({ record_id: 50, order_code: 'SO-50', customer_id: 1, total: 100,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'accepted',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-09-26 09:00:00' });
+  t.order_items.push({ record_id: 500, order_id: 50, product_id: '101', unit_code: 'CT', qty: 1, base_qty: 1 });
+
+  eq('ก่อนถึงพร้อมจัดส่ง ยังไม่มีเลขใบส่งของ', !row(50).delivery_order_no, true);
+
+  const before = ctx.docNoCalls;
+  let d = ctx.updateSalesOrderStatus(S, { id: 50, status: 'ready_to_ship' });
+  eq('เข้าสถานะพร้อมจัดส่ง → ได้เลขใบส่งของ', [d.success, /^DO-/.test(row(50).delivery_order_no || '')], [true, true]);
+  eq('  ตอบกลับหน้าจอพร้อมเลขเลย ไม่ต้องโหลดใหม่', d.deliveryOrderNo, row(50).delivery_order_no);
+  eq('  ติดเวลาที่ออกเลขไว้ด้วย', !!row(50).delivery_order_at, true);
+  eq('  เรียกตัวออกเลขครั้งเดียว', ctx.docNoCalls - before, 1);
+
+  const issued = row(50).delivery_order_no;
+  // ★ ถอยกลับแล้วเดินหน้าใหม่ — ใบที่พิมพ์ส่งไปกับรถแล้วต้องยังอ้างเลขเดิมได้
+  ctx.updateSalesOrderStatus(S, { id: 50, status: 'accepted' });
+  const mid = ctx.docNoCalls;
+  ctx.updateSalesOrderStatus(S, { id: 50, status: 'ready_to_ship' });
+  eq('★★ ถอยกลับแล้วเดินหน้าใหม่ ต้องได้เลขเดิม ไม่ใช่เลขใหม่', row(50).delivery_order_no, issued);
+  eq('  และต้องไม่กินตัวนับเลขเอกสารเพิ่ม', ctx.docNoCalls - mid, 0);
+
+  // เดินต่อไปสถานะถัดๆ ไปก็ไม่ออกเลขใหม่
+  const mid2 = ctx.docNoCalls;
+  ctx.updateSalesOrderStatus(S, { id: 50, status: 'delivering' });
+  ctx.updateSalesOrderStatus(S, { id: 50, status: 'completed' });
+  eq('  เดินต่อจนจัดส่งแล้ว ก็ยังเป็นเลขเดิมและไม่ออกใหม่',
+    [row(50).delivery_order_no, ctx.docNoCalls - mid2], [issued, 0]);
+}
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

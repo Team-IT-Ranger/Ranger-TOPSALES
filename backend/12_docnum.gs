@@ -24,6 +24,11 @@
 var DOC_SERIES_TYPES = [
   { code: 'SO',  label: 'ใบขาย / ใบสั่งขาย', note: 'ใช้กับบิลขายทั้งจากแอปมือถือและแอดมิน',
     defaults: { prefix: 'SO',  date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily',   separator: '-' } },
+  /* ★ ใบส่งสินค้ามีเลขของตัวเอง ไม่ใช้เลขใบสั่งขาย (แอดมินขอ 6 ต.ค. 2026)
+     ใช้ตัวนับ "ในไฟล์ของตัวแทน" เหมือน SO ไม่ใช่ตัวนับกลาง เพราะใบส่งของออกในนามตัวแทนที่ส่งของ
+     ออกเลขอัตโนมัติตอนบิลเข้าสถานะ "พร้อมจัดส่ง" (34_sales_status.gs) */
+  { code: 'DO',  label: 'ใบส่งสินค้า', note: 'ออกเลขอัตโนมัติเมื่อบิลขายเข้าสถานะ "พร้อมจัดส่ง"',
+    defaults: { prefix: 'DO',  date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily',   separator: '-' } },
   { code: 'PR',  label: 'ใบขอซื้อ',          central: true },
   { code: 'PO',  label: 'ใบสั่งซื้อ',         central: true },
   { code: 'GR',  label: 'ใบรับของ',           central: true },

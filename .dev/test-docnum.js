@@ -111,8 +111,9 @@ eq('รายการเรียงใหม่สุดขึ้นก่อ�
    "บันทึกสำเร็จแต่ไม่มีผล" แย่กว่าปฏิเสธ เพราะคนตั้งค่าไม่มีทางรู้ */
 console.log('\n-- ประเภทเอกสารที่ตั้งได้ --');
 series = [];
+// DO = ใบส่งสินค้า (6 ต.ค. 2026) — ใช้ตัวนับของตัวแทนเหมือน SO จึงอยู่ติดกัน ไม่ใช่กลุ่มตัวนับกลาง
 eq('ครบทุกหมวดที่ต้องมีเลขกำกับ', ctx.listDocSeries(SESSION, {}).types.map(t => t.code),
-  ['SO', 'PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
+  ['SO', 'DO', 'PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
 eq('  หมวดที่ใช้ตัวนับกลางถูกติดธงไว้', ctx.listDocSeries(SESSION, {}).types.filter(t => t.central).map(t => t.code),
   ['PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
 r = ctx.saveDocSeries(SESSION, { docType: 'PO', prefix: 'PO' });

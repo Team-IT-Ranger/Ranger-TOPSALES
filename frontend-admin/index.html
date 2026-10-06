@@ -3605,7 +3605,10 @@ const SO_DOC_KINDS = {
   salesorder:  { title: 'ใบสั่งขาย', signers: ['ผู้สั่งซื้อ','ผู้ขาย','ผู้อนุมัติ'], showPrice: true, showBank: true },
   receipt:     { title: 'ใบเสร็จรับเงิน', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false },
   receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true },
-  delivery:    { title: 'ใบส่งสินค้า', signers: ['ผู้จัดของ','ผู้จัดส่ง','ผู้รับสินค้า'], showPrice: false, showBank: false },
+  /* ★ useDeliveryNo — ใบส่งสินค้ามีเลขของตัวเอง (DO) ไม่ใช้เลขใบสั่งขายซ้ำ (แอดมินขอ 6 ต.ค. 2026)
+     เลขออกอัตโนมัติตอนบิลเข้าสถานะ "พร้อมจัดส่ง" · ใบที่ยังไม่ถึงสถานะนั้นยังไม่มีเลข จึงตกกลับไปใช้เลขใบสั่งขาย
+     ไม่งั้นช่อง "เลขที่" ว่างเปล่าบนเอกสารที่ลูกค้าเซ็นรับของ */
+  delivery:    { title: 'ใบส่งสินค้า', signers: ['ผู้จัดของ','ผู้จัดส่ง','ผู้รับสินค้า'], showPrice: false, showBank: false, useDeliveryNo: true },
   parcel:      { title: 'ใบปะหน้าพัสดุ', label: true },
   picking:     { title: 'ใบจัดของ', signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false }
 };
@@ -3614,6 +3617,8 @@ const SO_DOC_MENU = ['salesorder', 'receipt', 'receiptdlv', 'delivery', 'parcel'
 function printSaleDoc(r, kind){
   const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.salesorder;
   const o = r.order, iss = r.issuer || {};
+  // ยังไม่ถึง "พร้อมจัดส่ง" = ยังไม่มีเลขใบส่งของ → ใช้เลขใบสั่งขายไปก่อน ดีกว่าช่องเลขที่ว่าง
+  const docNo = (k.useDeliveryNo && o.deliveryOrderNo) ? o.deliveryOrderNo : o.code;
   if (k.label) return printParcelLabel(r);
   ensureDocPrint().then(() => {
     const cols = [
@@ -3646,10 +3651,13 @@ function printSaleDoc(r, kind){
         ['คงค้าง', DocPrint.money(Math.max(0, (o.total||0) - (o.paidAmount||0)))]] : [])
     ] : [];
     DocPrint.doc({
-      title: k.title, docNo: o.code, issuer: iss,
+      title: k.title, docNo: docNo, issuer: iss,
       subLabel: k.showPrice ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : '',
-      metaRight: [['เลขที่', o.code], ['วันที่', (o.createdAt || '').substring(0, 10)],
-        ['สถานะ', SO_LABELS[o.status] || o.status], ['การชำระเงิน', PAY_LABELS[o.paymentStatus || 'unpaid'] || '-']],
+      metaRight: [['เลขที่', docNo]]
+        // ใบส่งสินค้าที่มีเลขของตัวเอง ต้องอ้างกลับไปที่ใบสั่งขายได้ ไม่งั้นสองใบนี้โยงกันไม่ได้เลย
+        .concat(docNo !== o.code ? [['อ้างอิงใบสั่งขาย', o.code]] : [])
+        .concat([['วันที่', (o.createdAt || '').substring(0, 10)],
+        ['สถานะ', SO_LABELS[o.status] || o.status], ['การชำระเงิน', PAY_LABELS[o.paymentStatus || 'unpaid'] || '-']]),
       parties: [
         { label: 'ลูกค้า', name: o.customer, code: o.customerCode, address: o.customerAddress,
           taxId: o.customerTaxId, branchCode: o.customerTaxBranch, phone: o.customerPhone },

@@ -244,6 +244,7 @@ function getSaleDetail(user, payload) {
       requestedDeliveryDate: safeDateStr(order.requested_delivery_date).substring(0, 10),
       // ศูนย์แก้ไขรายการในใบนี้หลังรับงาน (editSalesOrderAdmin) — มือถือแจ้งพนักงานให้ตรวจกับลูกค้า
       centerEditedAt: safeDateStr(order.center_edited_at), centerEditedBy: order.center_edited_by || '',
+      deliveryOrderNo: order.delivery_order_no || '',
       customerAddress: cust ? (cust.address || '') : '',   // พิมพ์ลงใบที่ให้ลูกค้าถือไว้
       statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
       canConfirm: _soStatusOf(order) === SO_DRAFT,

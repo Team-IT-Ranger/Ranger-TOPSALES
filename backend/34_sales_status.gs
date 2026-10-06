@@ -341,6 +341,17 @@ function updateSalesOrderStatus(session, payload) {
         fields.status = toStatus;
         if (toStatus === SO_COMPLETED) fields.delivered_at = nowStr();
         if (toStatus === SO_PENDING || toStatus === SO_DELIVERING) fields.delivered_at = '';
+
+        /* ★ ออกเลขใบส่งสินค้าตอนเข้าสถานะ "พร้อมจัดส่ง" (แอดมินขอ 6 ต.ค. 2026)
+           ใบส่งของเป็นคนละเอกสารกับใบสั่งขาย เดิมพิมพ์โดยใช้เลขใบสั่งขายซ้ำ ทำให้อ้างอิงกันไม่ได้
+           ★★ ออกครั้งเดียวต่อใบ: ถ้ามีเลขแล้วไม่ออกใหม่ — ถอยกลับไป "รับงาน" แล้วเดินหน้ามาใหม่
+           ต้องได้เลขเดิม ไม่งั้นใบที่พิมพ์ส่งไปกับรถแล้วจะอ้างเลขที่ไม่มีอยู่ในระบบอีกต่อไป
+           (เลขเอกสารกินตัวนับทุกครั้งที่เรียก ออกซ้ำ = เลขกระโดดโดยไม่มีเอกสารรองรับ) */
+        if (toStatus === SO_READY && !String(order.delivery_order_no || '').trim()) {
+          fields.delivery_order_no = getNextDocNumber(tenantId, 'DO');
+          fields.delivery_order_at = nowStr();
+          changes.push('ออกใบส่งสินค้า ' + fields.delivery_order_no);
+        }
         changes.push(SO_STATUS_LABELS[fromStatus] + ' → ' + SO_STATUS_LABELS[toStatus]);
       }
     }
@@ -375,6 +386,7 @@ function updateSalesOrderStatus(session, payload) {
       session.displayName || session.username, _adminRoleLabel(session));
 
     return { success: true, status: toStatus, statusLabel: SO_STATUS_LABELS[toStatus],
+      deliveryOrderNo: fields.delivery_order_no || order.delivery_order_no || '',
       paymentStatus: toPay, paymentLabel: SO_PAYMENT_LABELS[toPay],
       paidAmount: fields.paid_amount !== undefined ? fields.paid_amount : (parseFloat(order.paid_amount) || 0),
       deliveredAt: fields.delivered_at !== undefined ? fields.delivered_at : safeDateStr(order.delivered_at),

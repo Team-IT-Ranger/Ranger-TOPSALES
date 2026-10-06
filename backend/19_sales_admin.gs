@@ -36,6 +36,7 @@ function listSalesOrdersAdmin(session, payload) {
       // ★ แอดมินขอมา 6 ต.ค. 2026: ต้องรู้ว่าบิลมาจากพนักงานคนไหน · sale_by เก็บเป็น LINE user id
       // ซึ่งอ่านไม่ออก จึงแปลงเป็นชื่อด้วย _saleByLabel() ตัวเดียวกับที่รายงานการขายใช้ (41_sales_reports.gs)
       saleBy: o.sale_by, saleByName: _saleByLabel(o.sale_by),
+      deliveryOrderNo: o.delivery_order_no || '',
       note: o.note || '', createdAt: safeDateStr(o.created_at)
     }; });
   return { success: true, data: data };
@@ -105,6 +106,8 @@ function getSalesOrderAdmin(session, payload) {
       note: order.note || '', createdAt: safeDateStr(order.created_at),
       requestedDeliveryDate: safeDateStr(order.requested_delivery_date).substring(0, 10),
       centerEditedAt: safeDateStr(order.center_edited_at), centerEditedBy: order.center_edited_by || '',
+      // เลขที่ใบส่งสินค้า — เอกสารคนละใบกับใบสั่งขาย ออกตอน "พร้อมจัดส่ง" (6 ต.ค. 2026)
+      deliveryOrderNo: order.delivery_order_no || '', deliveryOrderAt: safeDateStr(order.delivery_order_at),
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
       canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && hasPermission(session, 'sales', 'edit')
     },
