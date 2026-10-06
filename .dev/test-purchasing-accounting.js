@@ -455,15 +455,28 @@ ok('  ส่งใบสั่งซื้อ', ctx.issuePurchaseOrder(TADMIN, {
 r = ctx.receiveGoods(TADMIN, { poId: TPO, receiveDate: '2026-09-25',
   items: [{ poItemId: ctx.getPurchaseOrder(TADMIN, { id: TPO }).po.items[0].id, qty: 20 }] });
 ok('ตัวแทนรับของเข้าคลังตัวเองได้', r);
-eq('  ใบรับของของตัวแทนไม่ลงบัญชีบริษัท (journal_id ว่าง)', r.journalId, '');
+/* ★ 6 ต.ค. 2026 เปลี่ยนกติกา: เดิมใบรับของของตัวแทน "ไม่ลงบัญชีเลย" (journal_id ว่าง)
+   ตอนนี้ลง **สมุดของตัวแทนเอง** — ตัวแทนซื้อขาดไปจากบริษัท สินค้าในคลังเขาเป็นสินทรัพย์ของเขา
+   สิ่งที่ต้องไม่เปลี่ยนคือ "ไม่แตะสมุดบริษัท" ซึ่งยังคุมอยู่ด้วยสองบรรทัดถัดไป */
+const TGRJV = r.journalId;
+eq('  ใบรับของของตัวแทนลงบัญชีในสมุดของตัวแทน ไม่ใช่สมุดบริษัท',
+   [!!TGRJV, objs(sheets.gl_journals).find(j => String(j.record_id) === String(TGRJV)).tenant_id], [true, TEN]);
 eq('  สต็อกของตัวแทนเพิ่มขึ้น 20 ม้วน @50', ctx.listWarehouseStock(TADMIN, {}).data.map(x => [x.productCode, x.qty, x.avgCost]), [['P-300', 20, 50]]);
 eq('  สต็อกของบริษัทไม่ถูกแตะ', ctx.listWarehouseStock(FIN, {}).totalValue, ownerStockValue);
 eq('  งบทดลองของบริษัทไม่ขยับ', ctx.getTrialBalance(FIN, {}).totalDebit, ownerTbBefore);
 eq('  บริษัทไม่เห็นใบรับของ/สต็อกของตัวแทนในรายการตัวเอง',
    [ctx.listGoodsReceipts(FIN, {}).data.some(g => String(g.id) === String(r.grId)),
     ctx.listStockLedger(FIN, {}).data.some(l => String(l.productId) === '12')], [false, false]);
-fails('  ตั้งหนี้เจ้าหนี้จากใบรับของของตัวแทนไม่ได้ (สมุดบัญชีเป็นของบริษัท)',
-  ctx.createApBillFromGr(FIN, { grId: r.grId, billDate: '2026-09-25', vendorBillNo: 'X-1' }), /ตัวแทน/);
+const TGR = r.grId;
+fails('  บริษัทตั้งหนี้จากใบรับของของตัวแทนตรงๆ ไม่ได้ (ต้องสวมสิทธิ์เข้าไปก่อน)',
+  ctx.createApBillFromGr(FIN, { grId: TGR, billDate: '2026-09-25' }), /ไม่พบใบรับของ/);
+r = ctx.createApBillFromGr(BOSS, { grId: TGR, tenantId: TEN, billDate: '2026-09-25', vendorInvoiceNo: 'T-991' });
+ok('  สวมสิทธิ์เข้าไปแล้วตั้งหนี้ให้ตัวแทนได้ (ลงสมุดของเขา)', r);
+eq('  ใบตั้งหนี้อยู่ในสมุดของตัวแทน · เลขที่แยกเล่ม · งบบริษัทไม่ขยับ',
+   [objs(sheets.ap_bills).find(b => String(b.record_id) === String(r.billId)).tenant_id,
+    /^AP-TNKN-/.test(r.billNo), ctx.getTrialBalance(FIN, {}).totalDebit], [TEN, true, ownerTbBefore]);
+eq('  ล้าง GR-NI ของตัวแทนหมดพอดี (รับของ 1,000 → ตั้งหนี้ 1,000)',
+   ctx.getTrialBalance(TADMIN, {}).data.find(x => x.code === '2150').balance, 0);
 fails('  ตัวแทนยกเลิกใบสั่งซื้อของบริษัทไม่ได้', ctx.cancelPurchaseOrder(TADMIN, { id: PO1 }), /ไม่พบใบสั่งซื้อ/);
 
 console.log('\n── สมุดบัญชีแยกเล่มต่อตัวแทน (ข้อมูลต้องไม่รั่วข้ามสมุด) ──');
@@ -480,11 +493,15 @@ r = ctx.postManualJournal(TADMIN, { date: '2026-10-01', memo: 'ตัวแท�
   lines: [{ accountCode: '1110', debit: 500, credit: 0 }, { accountCode: '1120', debit: 0, credit: 500 }] });
 ok('ตัวแทนลงใบสำคัญในสมุดของตัวเองได้', r);
 const TJV = r.journalId;
-eq('  เลขใบสำคัญแยกเล่มของตัวแทน', /^JV-TNKN-\d{6}-0001$/.test(r.journalNo), true);
+eq('  เลขใบสำคัญแยกเล่มของตัวแทน', /^JV-TNKN-\d{6}-\d{4}$/.test(r.journalNo), true);
 eq('  ใบนี้ถูกเก็บไว้ในสมุดของตัวแทน (tenant_id)',
    objs(sheets.gl_journals).find(j => String(j.record_id) === String(TJV)).tenant_id, TEN);
 
-eq('  ตัวแทนเห็นแต่ใบของตัวเอง', ctx.listJournals(TADMIN, {}).data.map(j => j.id), [TJV]);
+const tenJournalIds = ctx.listJournals(TADMIN, {}).data.map(j => String(j.id));
+eq('  ตัวแทนเห็นใบของตัวเองครบ (รวมใบที่ระบบลงให้จากงานซื้อ) และไม่มีใบของบริษัทปนเลย',
+   [tenJournalIds.indexOf(String(TJV)) >= 0,
+    ctx.listJournals(TADMIN, {}).data.every(j =>
+      objs(sheets.gl_journals).find(x => String(x.record_id) === String(j.id)).tenant_id === TEN)], [true, true]);
 eq('  รายการใบสำคัญของบริษัทไม่มีใบของตัวแทนเพิ่มเข้ามา', ctx.listJournals(FIN, {}).total, ownerJvCount);
 fails('  ตัวแทนเปิดใบสำคัญของบริษัทไม่ได้ (ตอบเหมือนไม่มี ไม่บอกว่ามีอยู่)',
   ctx.getJournal(TADMIN, { id: JV }), /ไม่พบใบสำคัญ/);
@@ -493,8 +510,11 @@ eq('  แต่ฝั่งบริษัทสวมสิทธิ์เข�
    ctx.getJournal(BOSS, { id: TJV, tenantId: TEN }).journal.journalNo.indexOf('JV-TNKN-'), 0);
 
 const tenTb = ctx.getTrialBalance(TADMIN, {});
-eq('  งบทดลองของตัวแทนมีแต่รายการของตัวเอง และสมดุล',
-   [tenTb.totalDebit, tenTb.totalCredit, tenTb.data.find(x => x.code === '1110').balance], [500, 500, 500]);
+eq('  งบทดลองของตัวแทนสมดุล และมีแต่รายการของตัวเอง (สินค้าคงเหลือ 1,000 จากงานซื้อ + เงินสด 500 จากใบสำคัญนี้)',
+   [tenTb.totalDebit === tenTb.totalCredit, tenTb.data.find(x => x.code === '1110').balance,
+    tenTb.data.find(x => x.code === '1300').balance], [true, 500, 1000]);
+eq('  สินค้าคงเหลือในบัญชีของตัวแทน = มูลค่าสต็อกจริงในคลังของเขา',
+   tenTb.data.find(x => x.code === '1300').balance, ctx.listWarehouseStock(TADMIN, {}).totalValue);
 eq('  งบทดลองของบริษัทไม่ขยับเลย',
    [ctx.getTrialBalance(FIN, {}).totalDebit, ctx.getTrialBalance(FIN, {}).data.find(x => x.code === '1110').balance],
    [ownerBook.totalDebit, ownerBook.data.find(x => x.code === '1110').balance]);
@@ -518,8 +538,14 @@ r = ctx.createApBillManual(TADMIN, { vendorId: TVENDOR, billDate: '2026-10-01', 
 ok('  ตัวแทนตั้งหนี้ในสมุดของตัวเองได้', r);
 const TBILL = r.billId;
 eq('  เลขที่ตั้งหนี้แยกเล่ม', /^AP-TNKN-/.test(r.billNo), true);
-eq('  บริษัทไม่เห็นใบตั้งหนี้ของตัวแทน · ตัวแทนไม่เห็นใบของบริษัท',
-   [ctx.listApBills(FIN, {}).data.length, ctx.listApBills(TADMIN, {}).data.map(b => b.id)], [ownerBillCount, [TBILL]]);
+/* ตัวแทนมี 2 ใบแล้ว: ใบที่ตั้งจากใบรับของ (ระบบลงให้) + ใบค่าใช้จ่ายที่เพิ่งตั้งเอง
+   เช็คด้วย "ทุกใบที่เห็นเป็นของสมุดตัวเอง" แทนการนับจำนวนตายตัว — เพิ่มเคสทีหลังแล้วไม่ต้องตามแก้เลข */
+eq('  บริษัทไม่เห็นใบตั้งหนี้ของตัวแทน · ทุกใบที่ตัวแทนเห็นเป็นของสมุดตัวเอง',
+   [ctx.listApBills(FIN, {}).data.length,
+    ctx.listApBills(TADMIN, {}).data.map(b => b.id).indexOf(TBILL) >= 0,
+    ctx.listApBills(TADMIN, {}).data.every(b =>
+      objs(sheets.ap_bills).find(x => String(x.record_id) === String(b.id)).tenant_id === TEN)],
+   [ownerBillCount, true, true]);
 fails('  ตัวแทนจ่ายหนี้ใบของบริษัทไม่ได้',
   ctx.payApBills(TADMIN, { vendorId: TVENDOR, allocations: [{ billId: BILL2, amount: 100 }] }), /ไม่พบใบแจ้งหนี้/);
 fails('  บริษัทจ่ายหนี้ใบของตัวแทนไม่ได้ (ต้องสวมสิทธิ์เข้าไปก่อน)',
@@ -529,9 +555,12 @@ ok('  ตัวแทนจ่ายหนี้ของตัวเองไ�
 eq('  ใบสำคัญจ่ายของตัวแทนอยู่ในสมุดตัวเอง และงบบริษัทยังไม่ขยับ',
    [objs(sheets.ap_payments).find(p => String(p.record_id) === String(r.paymentId)).tenant_id,
     ctx.getTrialBalance(FIN, {}).totalDebit], [TEN, ownerBook.totalDebit]);
-eq('  อายุหนี้: ของใครของมัน (ตัวแทนจ่ายครบแล้วจึงไม่มีค้าง)',
-   [ctx.getApAging(TADMIN, { asOf: '2026-10-20' }).data.length,
-    ctx.getApAging(FIN, { asOf: '2026-10-20' }).data.length], [0, ownerApAging]);
+/* ตัวแทนจ่ายใบค่าใช้จ่ายครบแล้ว เหลือค้างแต่ใบที่ตั้งจากใบรับของ — และต้องเป็นของผู้ขายของเขาเอง
+   ไม่ใช่ผู้ขายของบริษัท (ชื่อผู้ขายคนละชุดกันคนละสมุด) */
+const tenAging = ctx.getApAging(TADMIN, { asOf: '2026-10-20' }).data;
+eq('  อายุหนี้: ของใครของมัน',
+   [tenAging.length, tenAging[0].partyName,
+    ctx.getApAging(FIN, { asOf: '2026-10-20' }).data.length], [1, 'ร้านค้าส่งเชียงใหม่', ownerApAging]);
 
 // ลูกหนี้: ยังไม่เปิดให้ตัวแทนตั้งลูกหนี้ (ข้อ 4 ของแผน) แต่ห้ามแตะใบของบริษัทได้แล้ววันนี้
 eq('  ตัวแทนไม่เห็นใบแจ้งหนี้ลูกค้าของบริษัท',

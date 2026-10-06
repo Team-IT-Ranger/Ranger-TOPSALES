@@ -11,7 +11,8 @@
  * ตั้งหนี้เจ้าหนี้จากใบรับของทำที่ createApBillFromGr (23_accounting.gs)
  *
  * ตัวแทนจำหน่าย: ใช้ PO/GR/สต็อกได้เหมือนกัน แยกข้อมูลด้วย tenant_id (ดู _purchaseScope ใน 20_purchasing_master.gs)
- * แต่ "ไม่ลงบัญชี" — สมุดบัญชี/เจ้าหนี้เป็นของบริษัทเจ้าของสินค้าเท่านั้น ใบรับของของตัวแทนจึงมี journal_id ว่าง
+ * และ "ลงบัญชีในสมุดของตัวเอง" (6 ต.ค. 2026 — ดู CLAUDE.md หัวข้อ "บัญชีแยกเล่มต่อตัวแทน")
+ * เดิมข้ามการลงบัญชีไปเลยเพราะโมดูลบัญชียังเป็นสมุดเดียวของบริษัท
  * (ตัวแทนเป็นคนละนิติบุคคล จะเอาเข้างบบริษัทไม่ได้ — ถ้าจะทำบัญชีให้ตัวแทนต้องเป็นชุดสมุดแยกของเขาเอง)
  */
 
@@ -300,12 +301,15 @@ function receiveGoods(session, payload) {
     var some = after.some(function(it) { return (Number(it.received_qty) || 0) > 0; });
     centralUpdate('purchase_orders', po.record_id, { status: done ? 'received' : (some ? 'partial' : po.status), closed_at: done ? nowStr() : '' });
 
-    // ลงบัญชี: เดบิตสินค้าคงเหลือ / เครดิต GR/NI (ยังไม่ได้รับใบแจ้งหนี้จากผู้ขาย)
-    // เฉพาะของบริษัทเจ้าของสินค้า — ของตัวแทนเข้าสต็อกอย่างเดียว ไม่แตะสมุดบัญชีบริษัท
+    /* ลงบัญชี: เดบิตสินค้าคงเหลือ / เครดิต GR/NI (ยังไม่ได้รับใบแจ้งหนี้จากผู้ขาย)
+       ★ 6 ต.ค. 2026 — ของตัวแทนลงบัญชีด้วยแล้ว แต่ลง**สมุดของตัวแทนเอง** (`tenantId: scope`)
+       ไม่ใช่สมุดบริษัท · เดิมข้ามการลงบัญชีไปเลยเพราะยังไม่มีมิติสมุด (ดู CLAUDE.md หัวข้อ
+       "บัญชีแยกเล่มต่อตัวแทน") · ตัวแทนซื้อขาดไปจากบริษัท สินค้าในคลังเขาจึงเป็นสินทรัพย์ของเขา */
     var journalId = '';
     inventoryValue = _money(inventoryValue);
-    if (inventoryValue > 0 && !scope) {
-      var jr = _postJournal({ date: receiveDate, source: 'INV', refType: 'GR', refId: grId, memo: 'รับของเข้าคลัง ' + grNo + ' (' + (po.po_no || '') + ')',
+    if (inventoryValue > 0) {
+      var jr = _postJournal({ date: receiveDate, source: 'INV', refType: 'GR', refId: grId, tenantId: scope,
+        memo: 'รับของเข้าคลัง ' + grNo + ' (' + (po.po_no || '') + ')',
         createdBy: session.adminUserId, lines: [
           { accountCode: GL_ACCT.INVENTORY, description: 'สินค้าคงเหลือเพิ่มจาก ' + grNo, debit: inventoryValue, credit: 0 },
           { accountCode: GL_ACCT.GRNI, description: 'รอรับใบแจ้งหนี้จากผู้ขาย', debit: 0, credit: inventoryValue, partyType: 'vendor', partyId: po.vendor_id }
@@ -435,7 +439,8 @@ function cancelGoodsReceipt(session, payload) {
       _applyStockIn(scope, gr.warehouse_id, pid, -byProduct[pid], cost, 'gr_cancel', 'GR', gr.record_id, 'ยกเลิก ' + gr.gr_no, session.adminUserId);
     });
 
-    // กลับรายการใบสำคัญ (ถ้ามี — ของตัวแทนไม่ลงบัญชีตั้งแต่แรกอยู่แล้ว journal_id จะว่าง)
+    // กลับรายการใบสำคัญ (ถ้ามี — ใบที่รับก่อน 6 ต.ค. 2026 ฝั่งตัวแทนยังไม่ได้ลงบัญชี journal_id จะว่าง)
+    // _reverseJournalCore ลงใบกลับรายการในสมุดเดียวกับใบเดิมให้เอง ไม่ต้องส่ง scope มาที่นี่
     if (gr.journal_id) {
       var rev = _reverseJournalCore(session, gr.journal_id, 'ยกเลิกใบรับของ ' + gr.gr_no + (payload.reason ? ' — ' + payload.reason : ''), _todayStr());
       if (!rev.success) return rev;

@@ -329,10 +329,11 @@ function listApBills(session, payload) {
 function createApBillFromGr(session, payload) {
   var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
   return _withDocLock(function() {
+    var book = _bookScope(session, payload);
     var gr = _findById('goods_receipts', payload.grId);
-    if (!gr) return { success: false, message: 'ไม่พบใบรับของนี้' };
-    // สมุดบัญชีเป็นของบริษัทเจ้าของสินค้าเท่านั้น — ใบรับของของตัวแทน (มี tenant_id) ตั้งหนี้ในระบบนี้ไม่ได้
-    if (String(gr.tenant_id || '')) return { success: false, message: 'ใบรับของนี้เป็นของตัวแทนจำหน่าย — ระบบบัญชีนี้เป็นสมุดของบริษัทเจ้าของสินค้าเท่านั้น' };
+    /* ตั้งหนี้ได้ทั้งของบริษัทและของตัวแทน แต่ "ลงสมุดของเจ้าของใบรับของ" เท่านั้น (6 ต.ค. 2026)
+       ใบของสมุดอื่นตอบเหมือนไม่มี — ฝั่งบริษัทต้องสวมสิทธิ์เข้าไปในตัวแทนก่อนถึงจะตั้งหนี้ให้เขาได้ */
+    if (!gr || !_inBook(gr, book)) return { success: false, message: 'ไม่พบใบรับของนี้' };
     if (gr.status !== 'posted') return { success: false, message: 'ใบรับของนี้ถูกยกเลิกแล้ว' };
     var dup = centralObjects('ap_bills').filter(function(b) { return String(b.gr_id) === String(gr.record_id) && b.status !== 'void'; })[0];
     if (dup) return { success: false, message: 'ใบรับของนี้ตั้งหนี้ไปแล้ว (' + dup.bill_no + ')' };
@@ -354,8 +355,8 @@ function createApBillFromGr(session, payload) {
     if (!_validDate(dueDate)) return { success: false, message: 'วันครบกำหนดต้องเป็น yyyy-mm-dd' };
 
     var billId = centralNextId('ap_bills');
-    var billNo = _nextCentralDocNo('AP');
-    var jr = _postJournal({ date: billDate, source: 'AP', refType: 'AP_BILL', refId: billId, tenantId: '',
+    var billNo = _nextCentralDocNo('AP', book || undefined);
+    var jr = _postJournal({ date: billDate, source: 'AP', refType: 'AP_BILL', refId: billId, tenantId: book,
       memo: 'ตั้งหนี้ ' + billNo + ' ' + vendor.name + (gr.gr_no ? ' (' + gr.gr_no + ')' : ''), createdBy: session.adminUserId,
       lines: [
         { accountCode: GL_ACCT.GRNI, description: 'ล้าง GR/NI จาก ' + gr.gr_no, debit: subtotal, credit: 0, partyType: 'vendor', partyId: vendor.record_id },
@@ -363,7 +364,7 @@ function createApBillFromGr(session, payload) {
         { accountCode: GL_ACCT.AP, description: 'เจ้าหนี้ ' + vendor.name, debit: 0, credit: total, partyType: 'vendor', partyId: vendor.record_id }
       ] });
     if (!jr.success) return jr;
-    centralAppend('ap_bills', { record_id: billId, tenant_id: '', bill_no: billNo, vendor_invoice_no: String(payload.vendorInvoiceNo || ''),
+    centralAppend('ap_bills', { record_id: billId, tenant_id: book, bill_no: billNo, vendor_invoice_no: String(payload.vendorInvoiceNo || ''),
       vendor_id: vendor.record_id, po_id: gr.po_id || '', gr_id: gr.record_id, bill_date: billDate, due_date: dueDate,
       subtotal_ex_vat: subtotal, vat_amount: vat, total: total, paid_amount: 0, status: 'open', journal_id: jr.journalId,
       note: String(payload.note || ''), created_by: session.adminUserId, created_at: nowStr() });
