@@ -80,6 +80,17 @@ def make_record(fs, values):
         out += enc_field(t, w, dec, values.get(name))
     return out
 
+NBSP = ' '          # cp874 0xA0 — "ช่องว่างแข็ง" ที่ Express ใช้ในข้อความไทย
+
+
+def hard_space(s):
+    """ช่องว่างในข้อความไทย → 0xA0 (เจ้าของระบบสั่ง 6 ต.ค. 2026)
+    Express ชดเชยสระ/วรรณยุกต์ตอนพิมพ์รายงาน ช่องว่างธรรมดาเลยทำให้ข้อความกระโดด
+    ยืนยันจากแฟ้ม ARMAS จริงว่าเขาใช้ 0xA0 คั่นคำไทย 2,969 ครั้ง · ดู build_armas.py
+    ★ ใช้กับช่องที่เป็น "ข้อความไทย" เท่านั้น — รหัส/บาร์โค้ด/ตัวเลข ต้องเป็น 0x20 ตามเดิม"""
+    return NBSP.join((s or '').split())
+
+
 def cut(s, w):
     s = (s or '').strip()
     while len(s.encode(CODEPAGE)) > w:
@@ -131,7 +142,7 @@ for p in sorted(active, key=lambda x: int(x['product_code'])):
     pu = p.get('purchase_unit_code') or 'CT'
     barcode = PAOPAO_BARCODE.get(code) if paopao else (p.get('barcode') or '')
     v = {
-        'STKCOD': cut(code, 20), 'STKDES': cut(p['name'], 50), 'STKDES2': cut(p.get('name_en'), 50),
+        'STKCOD': cut(code, 20), 'STKDES': cut(hard_space(p['name']), 50), 'STKDES2': cut(p.get('name_en'), 50),
         'STKTYP': '0', 'STKGRP': 'NFT', 'BARCOD': cut(barcode, 20), 'ACCCOD': 'ST01',
         'QUCOD': qucod, 'CQUCOD': 'CT', 'CFACTOR': ctf, 'PQUCOD': pu, 'PFACTOR': ctf if pu == 'CT' else 1,
         'SQUCOD': qucod, 'SFACTOR': 1, 'SELLPR1': sell1, 'SELLPR2': sell2,
