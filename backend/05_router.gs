@@ -72,6 +72,10 @@ var ADMIN_ACTION_MAP = {
   listCustomersAdmin:     listCustomersAdmin,
   addCustomerAdmin:       addCustomerAdmin,
   // คิวคำขอเปิดร้านใหม่จากมือถือ (46)
+  // จังหวัด/อำเภอของลูกค้า (47)
+  listAddressRefs:        listAddressRefs,
+  importAddressRefs:      importAddressRefs,
+  backfillCustomerAreas:  backfillCustomerAreas,
   listCustomerRequests:   listCustomerRequests,
   approveCustomerRequest: approveCustomerRequest,
   rejectCustomerRequest:  rejectCustomerRequest,

@@ -818,8 +818,8 @@
             <input id="c-search" placeholder="ค้นหา: รหัส / ชื่อร้าน / เบอร์โทร / เลขภาษี" oninput="renderCustomers()">
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>ชื่อร้าน</th><th>กลุ่ม / ประเภท</th><th>เบอร์โทร</th><th>เครดิต</th><th>ซื้อล่าสุด</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="customers-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>ชื่อร้าน</th><th>อำเภอ / จังหวัด</th><th>กลุ่ม / ประเภท</th><th>เบอร์โทร</th><th>เครดิต</th><th>ซื้อล่าสุด</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="customers-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -1768,7 +1768,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'saveCustomerList','deleteCustomerList','addCustomerListMembers','removeCustomerListMember',
   'ensureDefaultSalesUnit','saveHelpArticle','setHelpArticleActive',
   'importExternalSalesInvoices','confirmExternalGoodsReceipt','withdrawExternalGoodsReceipt','syncProductCategories','editSalesOrderAdmin','addProductUnit','updateProductUnit',
-  'approveCustomerRequest','rejectCustomerRequest',
+  'approveCustomerRequest','rejectCustomerRequest','importAddressRefs','backfillCustomerAreas',
   /* ไล่เก็บ action ที่เขียนข้อมูลแต่ตกหล่นมานาน (ตรวจด้วยการไล่ชื่อใน router เทียบกับลิสต์นี้ 5 ต.ค. 2026)
      ตกหล่น = ไม่มีวงหมุน ปุ่มไม่ถูกปิด และกดซ้ำได้ — เงียบสนิทจนกว่าจะมีคนกดสองที */
   'resetAdminUserPasswordByAdmin','uploadTenantLogo','addProductGroup','addDistributionChannel','addPaymentType',
@@ -2902,8 +2902,10 @@ let custMasterCache = [];
    ★ แถวที่ย่อแล้วห้ามหลุดเข้าฟอร์มแก้ไขเด็ดขาด — เปิดฟอร์มจากแถวที่ไม่มีที่อยู่แล้วกดบันทึก
      = ลบที่อยู่ลูกค้าทิ้งโดยไม่มีใครรู้ · `custCachePartial` จึงกั้นไว้ที่ openCustomerModal */
 let custCachePartial = false;
+// ★ เพิ่มช่องใหม่ในตารางลูกค้า = ต้องเพิ่มที่นี่ด้วย ไม่งั้นแถวที่กู้จาก snapshot จะโชว์คอลัมน์นั้นว่าง
 const CUST_SNAP_FIELDS = ['id','code','name','fullName','groupId','channelId','salesMode','areaCode',
-  'phone','taxId','paymentType','paymentTermsDays','lastSaleAt','status','isActive'];
+  'phone','taxId','paymentType','paymentTermsDays','lastSaleAt','status','isActive',
+  'provinceId','districtId'];
 const custSnapRow = c => { const o = {}; CUST_SNAP_FIELDS.forEach(k => { o[k] = c[k]; }); return o; };
 const CUST_STATUS = { active: ['ใช้งาน','ok'], blocked: ['ระงับเครดิต','wait'], inactive: ['ปิด','off'] };
 const CUST_MODES = { van: 'รถเร่', preorder: 'พรีออเดอร์' };
@@ -2920,6 +2922,60 @@ function renderUngroupedNotice(){
     '<span style="flex:1"><b>ลูกค้า ' + n + ' ร้านยังไม่ได้จัดกลุ่ม</b> — ร้านที่ไม่มีกลุ่มลูกค้าจะหาชุดราคาไม่เจอ จึงเปิดบิลขายไม่ได้</span>' +
     '<button class="btn btn-sm" onclick="openBulkAssign()">จัดกลุ่มเป็นชุด</button></div>';
 }
+/* ═══ จังหวัด / อำเภอ (47_address_refs.gs) ═══
+   ทะเบียนลูกค้ามีช่อง province_id/district_id มาตั้งแต่ต้นแต่ว่างมาตลอด เพราะตอนนำเข้าจาก BDC
+   เก็บที่อยู่เป็นก้อนเดียว · เติมแล้ว 6 ต.ค. 2026 (ดู CLAUDE.md) */
+let addrRefs = { provinces: [], districts: [] };
+const provName = {}, distName = {};
+
+async function ensureAddressRefs(){
+  if (addrRefs.provinces.length || addrRefs.districts.length) return;
+  const r = await callApi('listAddressRefs', {});
+  if (!r.success) return;
+  addrRefs = { provinces: r.provinces || [], districts: r.districts || [] };
+  addrRefs.provinces.forEach(p => { provName[String(p.id)] = p.name; });
+  addrRefs.districts.forEach(d => { distName[String(d.id)] = d.name; });
+}
+
+/** "อ.เมืองชลบุรี · จ.ชลบุรี" — ชื่ออำเภอ/จังหวัดในข้อมูลมี อ./จ. นำหน้ามาแล้ว ไม่ต้องเติมซ้ำ */
+function areaTextOf(c){
+  const d = distName[String(c.districtId || '')] || '';
+  const p = provName[String(c.provinceId || '')] || '';
+  return [d, p].filter(Boolean).join(' · ');
+}
+
+function custProvinceOptions(cur){
+  const list = addrRefs.provinces.slice().sort((a, b) => a.name.localeCompare(b.name, 'th'));
+  return '<option value="">— ไม่ระบุ —</option>' +
+    list.map(p => '<option value="'+esc(p.id)+'"'+(String(cur||'')===String(p.id)?' selected':'')+'>'+esc(p.name)+'</option>').join('');
+}
+
+/* อำเภอขึ้นกับจังหวัดที่เลือก — รายการทั้งประเทศมี 982 อำเภอ ถ้าโชว์หมดคนหาไม่เจอ
+   ★ ถ้าร้านนี้มีอำเภอเก็บไว้แต่ยังไม่ได้เลือกจังหวัด ต้องยังเห็นอำเภอเดิมอยู่ ไม่งั้นกดบันทึกแล้วหายเงียบๆ */
+function custDistrictOptions(provId, cur){
+  const p = String(provId || '');
+  let list = addrRefs.districts.filter(d => !p || String(d.provinceId) === p);
+  if (cur && !list.some(d => String(d.id) === String(cur))) {
+    const keep = addrRefs.districts.find(d => String(d.id) === String(cur));
+    if (keep) list = [keep].concat(list);
+  }
+  list = list.slice().sort((a, b) => a.name.localeCompare(b.name, 'th'));
+  return '<option value="">— ไม่ระบุ —</option>' +
+    list.map(d => '<option value="'+esc(d.id)+'"'+(String(cur||'')===String(d.id)?' selected':'')+'>'+esc(d.name)+'</option>').join('');
+}
+
+function custFillDistricts(){
+  const pv = document.getElementById('cm-province'), dv = document.getElementById('cm-district');
+  if (!pv || !dv) return;
+  const keep = dv.value;
+  /* ★ สร้างรายการของ "จังหวัดใหม่" ล้วนๆ — ส่ง cur เข้าไปไม่ได้ เพราะกฎคงอำเภอเดิมของ
+     custDistrictOptions มีไว้ตอน "เปิดฟอร์ม" (กันอำเภอที่เก็บไว้หายเงียบๆ) ถ้าใช้ตอนเปลี่ยนจังหวัดด้วย
+     อำเภอของจังหวัดเก่าจะค้างอยู่ในรายการและยังถูกเลือกไว้ = ได้คู่จังหวัด/อำเภอที่ไม่มีอยู่จริง */
+  dv.innerHTML = custDistrictOptions(pv.value, '');
+  dv.value = keep;                              // อำเภอเดิมยังอยู่ในจังหวัดใหม่ก็คงไว้
+  if (dv.value !== keep) dv.value = '';         // ไม่อยู่ = ล้างทิ้ง ให้เลือกใหม่
+}
+
 function renderCustomers(){
   renderUngroupedNotice();
   const body = document.getElementById('customers-body');
@@ -2927,13 +2983,14 @@ function renderCustomers(){
   const gName = {}; customerGroupsCache.forEach(g => gName[String(g.record_id)] = g.name);
   const chName = {}; distChannelsCache.forEach(x => chName[String(x.record_id)] = x.name);
   const rows = !q ? custMasterCache : custMasterCache.filter(c =>
-    [c.code, c.fullName, c.name, c.phone, c.taxId, c.areaCode].some(v => String(v||'').toLowerCase().includes(q)));
-  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">'+(custMasterCache.length?'ไม่พบลูกค้าที่ค้นหา':'ยังไม่มีลูกค้า')+'</td></tr>'; return; }
+    [c.code, c.fullName, c.name, c.phone, c.taxId, c.areaCode, areaTextOf(c)].some(v => String(v||'').toLowerCase().includes(q)));
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+(custMasterCache.length?'ไม่พบลูกค้าที่ค้นหา':'ยังไม่มีลูกค้า')+'</td></tr>'; return; }
   body.innerHTML = rows.map(c => {
     const st = CUST_STATUS[custStatusOf(c)] || CUST_STATUS.active;
     const kind = [gName[String(c.groupId)], chName[String(c.channelId)], CUST_MODES[c.salesMode]].filter(Boolean).join(' · ');
     const credit = c.paymentType === 'credit' ? ('เชื่อ ' + (c.paymentTermsDays||0) + ' วัน') : 'เงินสด';
     return '<tr><td class="mono-data">'+esc(c.code||'-')+'</td><td class="wrap">'+esc(c.fullName||c.name)+'</td>' +
+      '<td class="wrap">'+esc(areaTextOf(c)||'-')+'</td>' +
       '<td class="wrap">'+esc(kind||'-')+'</td><td class="mono-data">'+esc(c.phone||'-')+'</td>' +
       '<td>'+esc(credit)+'</td><td class="mono-data">'+esc(c.lastSaleAt||'-')+'</td>' +
       '<td><span class="pill '+st[1]+'">'+st[0]+'</span></td>' +
@@ -2946,8 +3003,8 @@ async function loadCustomers(){
     const cached = listSnapLoad('customers');
     if (cached && cached.length) { custMasterCache = cached; custCachePartial = true; renderCustomers(); }
   }
-  tblLoading(body, 8);
-  const [, , r] = await Promise.all([ensureCustomerGroups(), ensureDistChannels(), callApi('listCustomersAdmin', { slim: true })]);
+  tblLoading(body, 9);
+  const [, , , r] = await Promise.all([ensureCustomerGroups(), ensureDistChannels(), ensureAddressRefs(), callApi('listCustomersAdmin', { slim: true })]);
   if (!r.success) {
     if (!custMasterCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>';
     else toast(r.message, true);            // มีของเก่าให้ดูอยู่ — อย่าล้างทิ้งเพราะเน็ตสะดุดครั้งเดียว
@@ -3003,6 +3060,7 @@ async function openCustomerModal(id){
     const at = custMasterCache.findIndex(x => String(x.id) === String(id));
     if (at >= 0) custMasterCache[at] = full.customer; else custMasterCache.push(full.customer);
   }
+  await ensureAddressRefs();          // ไม่มีตารางอ้างอิง = dropdown จังหวัด/อำเภอว่างเปล่า
   const c = id ? custMasterCache.find(x => String(x.id) === String(id)) : null;
   const v = (k, d) => esc(c && c[k] !== undefined && c[k] !== null ? c[k] : (d === undefined ? '' : d));
   const sel = (list, cur, blank) => (blank ? '<option value="">'+blank+'</option>' : '') +
@@ -3026,6 +3084,8 @@ async function openCustomerModal(id){
       plField('รหัสไปรษณีย์', '<input id="cm-post" value="'+v('postcode')+'">') +
     '</div>' +
     plField('ที่อยู่ <span class="unit">(ตามที่พิมพ์บนใบกำกับภาษี)</span>', '<input id="cm-addr" value="'+v('address')+'">') +
+    plField('จังหวัด', '<select id="cm-province" onchange="custFillDistricts()">' + custProvinceOptions(c ? c.provinceId : '') + '</select>') +
+    plField('อำเภอ', '<select id="cm-district">' + custDistrictOptions(c ? c.provinceId : '', c ? c.districtId : '') + '</select>') +
     plField('ที่อยู่จัดส่ง <span class="unit">(เว้นว่าง = ส่งตามที่อยู่ด้านบน)</span>', '<input id="cm-shipto" value="'+v('shipToAddress')+'">') +
     '<div class="form-grid g2">' +
       plField('การชำระเงิน', '<select id="cm-paytype">'+sel([['cash','เงินสด'],['credit','เครดิต']], c?c.paymentType:'cash')+'</select>') +
@@ -3044,6 +3104,7 @@ function saveCustomerUI(id){ return plBusy(async () => {
     contactName: v('cm-contact'), phone: v('cm-phone'), email: v('cm-email'),
     taxId: v('cm-tax'), taxBranchCode: v('cm-taxbr'), postcode: v('cm-post'),
     address: v('cm-addr'), shipToAddress: v('cm-shipto'),
+    provinceId: v('cm-province'), districtId: v('cm-district'),
     paymentType: v('cm-paytype'), paymentTermsDays: v('cm-terms') || 0, creditLimit: v('cm-limit') || 0,
     status: v('cm-status'), note: v('cm-note') };
   if (id) payload.id = id;
