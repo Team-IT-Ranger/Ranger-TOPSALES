@@ -202,19 +202,23 @@ var CENTRAL_SHEETS = {
   // ผังบัญชีมาตรฐานอย่างย่อ seed ให้ตอน setup (แก้/เพิ่มเองได้) · acct_type: asset|liability|equity|income|expense
   gl_accounts: ['code','name','acct_type','parent_code','is_active','note'],
   // สมุดรายวัน: ทุกใบต้องเดบิต=เครดิต (postJournal บังคับ) · source: GL|AP|AR|INV
-  gl_journals: ['record_id','journal_no','journal_date','source','ref_type','ref_id','memo','status','total_debit','total_credit','created_by','created_at','voided_at'],
+  /* tenant_id = "สมุดของใคร" · ว่าง = สมุดบริษัทเจ้าของสินค้า (แถวเดิมทั้งหมดจึงถูกต้องอยู่แล้วไม่ต้อง migrate)
+     ตัวแทนซื้อขาดไปจากบริษัท รายได้จากการขายต่อเป็นของเขา ต้องลงสมุดของเขาเอง (ดู docs/tenant-books-design.md)
+     ★ เก็บที่ "หัวใบสำคัญ" ใบเดียว บรรทัด (gl_journal_lines) ไม่เก็บซ้ำ — สืบทอดจากใบเสมอ
+       เก็บสองที่เมื่อไหร่ก็มีวันไม่ตรงกัน แล้วงบจะเพี้ยนโดยไม่มีอะไรฟ้อง */
+  gl_journals: ['record_id','tenant_id','journal_no','journal_date','source','ref_type','ref_id','memo','status','total_debit','total_credit','created_by','created_at','voided_at'],
   gl_journal_lines: ['record_id','journal_id','line_no','account_code','description','debit','credit','party_type','party_id'],
 
   // เจ้าหนี้: ใบแจ้งหนี้จากผู้ขาย (ตั้งหนี้) + การจ่ายเงิน (1 การจ่าย ตัดได้หลายใบ)
-  ap_bills: ['record_id','bill_no','vendor_invoice_no','vendor_id','po_id','gr_id','bill_date','due_date',
+  ap_bills: ['record_id','tenant_id','bill_no','vendor_invoice_no','vendor_id','po_id','gr_id','bill_date','due_date',
     'subtotal_ex_vat','vat_amount','total','paid_amount','status','journal_id','note','created_by','created_at'],
-  ap_payments: ['record_id','payment_no','vendor_id','payment_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
+  ap_payments: ['record_id','tenant_id','payment_no','vendor_id','payment_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
   ap_payment_allocations: ['record_id','payment_id','bill_id','amount'],
 
   // ลูกหนี้: ใบแจ้งหนี้ลูกค้า (ออกจากบิลขายเครดิตได้) + การรับชำระ
   ar_invoices: ['record_id','invoice_no','customer_id','tenant_id','sales_order_id','invoice_date','due_date',
     'subtotal_ex_vat','vat_amount','total','received_amount','status','journal_id','note','created_by','created_at'],
-  ar_receipts: ['record_id','receipt_no','customer_id','receipt_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
+  ar_receipts: ['record_id','tenant_id','receipt_no','customer_id','receipt_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
   ar_receipt_allocations: ['record_id','receipt_id','invoice_id','amount'],
 
   // ตัวนับเลขที่เอกสารระดับบริษัท (เอกสารของตัวแทนใช้ doc_number_counters ใน tenant sheet — ดู 12_docnum.gs)

@@ -18,6 +18,38 @@ var GL_ACCT = {
   SALES: '4100', COGS: '5100', OTHER_EXPENSE: '5900'
 };
 // อัตราเดียวกับทั้งระบบ (ค่าตั้งของบริษัท) — ใบแจ้งหนี้ที่ออกจากบิลขายใช้อัตราที่บิลบันทึกไว้อยู่แล้ว
+/* ═══════════ สมุดบัญชี: ของบริษัท หรือของตัวแทน ═══════════
+   ตัวแทนซื้อขาดไปจากบริษัท รายได้จากการขายต่อเป็นของเขา ต้องลงสมุดของเขาเอง
+   (เจ้าของระบบยืนยัน 6 ต.ค. 2026 · ดู docs/tenant-books-design.md)
+
+   ★ `''` = สมุดบริษัทเจ้าของสินค้า — แถวเดิมทุกแถวมี tenant_id ว่าง จึงถูกต้องอยู่แล้ว ไม่ต้อง migrate
+   ★ ฝั่งบริษัทเปิดดูสมุดของตัวแทนได้ (เจ้าของระบบสั่ง) ผ่านกลไกสวมสิทธิ์เดิม — เลือกตัวแทนแล้ว
+     `_effectiveTenantId` คืนรหัสนั้นมาเอง · ตัวแทนข้ามไปดูสมุดตัวแทนอื่นยังไม่ได้เหมือนเดิม
+   ★ ไม่มี "รวมทุกสมุด" โดยตั้งใจ — คนละนิติบุคคล งบรวมกันไม่มีความหมายทางบัญชี */
+/**
+ * ★★ "ตัวแทนบ้าน" คือสมุดบริษัท ไม่ใช่สมุดที่สาม
+ * ยอดขายตรงของบริษัทเก็บผ่านตัวแทนบ้าน (`_ensureHouseTenant`) เอกสารจึงติด tenant_id = 'TNKI' มา
+ * ขณะที่แถวบัญชีเดิมทั้งหมดมี tenant_id ว่าง — ถ้าไม่ยุบสองค่านี้ให้เป็นสมุดเดียวกัน
+ * ใบแจ้งหนี้ขายตรงจะหายไปจากงบบริษัทโดยไม่มีอะไรฟ้อง
+ */
+function _normBook(tenantId) {
+  var t = String(tenantId || '');
+  if (!t) return '';
+  if (typeof OWNER_TENANT_ID !== 'undefined' && t === OWNER_TENANT_ID) return '';
+  if (typeof HOUSE_TENANT_ID !== 'undefined' && t === HOUSE_TENANT_ID) return '';
+  var hit = null;
+  centralObjects('tenants').forEach(function(x) { if (String(x.tenant_id) === t) hit = x; });
+  return (hit && isFlagOn(hit.is_house)) ? '' : t;
+}
+
+function _bookScope(session, payload) {
+  return _normBook(_effectiveTenantId(session, payload || {}));
+}
+/** แถวนี้อยู่ในสมุดที่กำลังดูอยู่ไหม — ทุกการอ่านต้องผ่านตัวนี้ตัวเดียว */
+function _inBook(row, scope) {
+  return _normBook(row && row.tenant_id) === _normBook(scope);
+}
+
 function _arVatRate() { return typeof currentVatRate === 'function' ? currentVatRate() : 0.07; }
 
 /* ═══════════════ ผังบัญชี ═══════════════ */
@@ -91,8 +123,10 @@ function _postJournal(opts) {
     return { success: false, message: 'เดบิตไม่เท่าเครดิต (เดบิต ' + totalDebit + ' / เครดิต ' + totalCredit + ')' };
 
   var jid = centralNextId('gl_journals');
-  var jno = _nextCentralDocNo('JV');
-  centralAppend('gl_journals', { record_id: jid, journal_no: jno, journal_date: opts.date, source: opts.source || 'GL',
+  // เลขใบสำคัญแยกเล่มต่อสมุด — ตัวแทนมีเล่มของตัวเอง (JV-TNKN-202610-0001) ไม่ปนกับของบริษัท
+  var book = _normBook(opts.tenantId);
+  var jno = _nextCentralDocNo('JV', book || undefined);
+  centralAppend('gl_journals', { record_id: jid, tenant_id: book, journal_no: jno, journal_date: opts.date, source: opts.source || 'GL',
     ref_type: opts.refType || '', ref_id: opts.refId == null ? '' : String(opts.refId), memo: String(opts.memo || ''),
     status: 'posted', total_debit: totalDebit, total_credit: totalCredit, created_by: opts.createdBy || '', created_at: nowStr(), voided_at: '' });
   var lid = centralNextId('gl_journal_lines');
@@ -108,7 +142,7 @@ function postManualJournal(session, payload) {
   var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
   return _withDocLock(function() {
     var r = _postJournal({ date: payload.date || _todayStr(), source: 'GL', refType: 'MANUAL', refId: '', memo: payload.memo,
-      createdBy: session.adminUserId, lines: payload.lines || [] });
+      createdBy: session.adminUserId, tenantId: _bookScope(session, payload), lines: payload.lines || [] });
     if (!r.success) return r;
     return { success: true, journalId: r.journalId, journalNo: r.journalNo, message: 'ลงบัญชีใบสำคัญ ' + r.journalNo + ' แล้ว' };
   });
@@ -122,7 +156,9 @@ function _reverseJournalCore(session, journalId, reason, date) {
   if (!j) return { success: false, message: 'ไม่พบใบสำคัญนี้' };
   if (j.status !== 'posted') return { success: false, message: 'ใบสำคัญนี้ถูกกลับรายการไปแล้ว' };
   var lines = _childrenOf('gl_journal_lines', 'journal_id', j.record_id);
-  var r = _postJournal({ date: date || _todayStr(), source: j.source, refType: 'VOID', refId: j.record_id,
+  // ★ ใบกลับรายการต้องอยู่ "สมุดเดียวกับใบเดิม" ไม่ใช่สมุดของคนที่กดยกเลิก
+  //   (ฝั่งบริษัทกลับรายการใบของตัวแทนแทนได้ ถ้าลงสมุดบริษัทจะเละทั้งสองสมุดพร้อมกัน)
+  var r = _postJournal({ date: date || _todayStr(), source: j.source, refType: 'VOID', refId: j.record_id, tenantId: j.tenant_id,
     memo: 'กลับรายการใบสำคัญ ' + j.journal_no + (reason ? ' — ' + reason : ''), createdBy: session.adminUserId,
     lines: lines.map(function(l) { return { accountCode: l.account_code, description: 'กลับรายการ: ' + (l.description || ''),
       debit: Number(l.credit) || 0, credit: Number(l.debit) || 0, partyType: l.party_type, partyId: l.party_id }; }) });
@@ -134,13 +170,18 @@ function _reverseJournalCore(session, journalId, reason, date) {
 // กลับรายการใบสำคัญ (ไม่ลบของเดิม) — เอกสารที่ผูกอยู่ต้องจัดการสถานะเองตามบริบท
 function voidJournal(session, payload) {
   var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
-  return _withDocLock(function() { return _reverseJournalCore(session, payload.id, payload.reason, payload.date); });
+  return _withDocLock(function() {
+    var j0 = _findById('gl_journals', payload.id);
+    if (!j0 || !_inBook(j0, _bookScope(session, payload))) return { success: false, message: 'ไม่พบใบสำคัญนี้' };
+    return _reverseJournalCore(session, payload.id, payload.reason, payload.date);
+  });
 }
 
 function listJournals(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
   payload = payload || {};
-  var rows = centralObjects('gl_journals');
+  var scope = _bookScope(session, payload);
+  var rows = centralObjects('gl_journals').filter(function(j) { return _inBook(j, scope); });
   if (payload.source) rows = rows.filter(function(j) { return String(j.source) === String(payload.source); });
   if (payload.dateFrom) rows = rows.filter(function(j) { return _dOnly(j.journal_date) >= payload.dateFrom; });
   if (payload.dateTo) rows = rows.filter(function(j) { return _dOnly(j.journal_date) <= payload.dateTo; });
@@ -157,6 +198,8 @@ function getJournal(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
   var j = _findById('gl_journals', payload.id);
   if (!j) return { success: false, message: 'ไม่พบใบสำคัญนี้' };
+  // ใบสำคัญของสมุดอื่น = ตอบเหมือนไม่มี ไม่บอกว่ามีอยู่แต่ดูไม่ได้ (เลขที่เอกสารเป็นข้อมูลทางธุรกิจ)
+  if (!_inBook(j, _bookScope(session, payload))) return { success: false, message: 'ไม่พบใบสำคัญนี้' };
   var accounts = _accountMap();
   return { success: true, journal: {
     id: j.record_id, journalNo: j.journal_no, journalDate: _dOnly(j.journal_date), source: j.source, refType: j.ref_type || '',
@@ -175,11 +218,18 @@ function getTrialBalance(session, payload) {
   payload = payload || {};
   // นับ "ทุก" ใบสำคัญรวมทั้งใบที่ถูกกลับรายการ — เพราะการกลับรายการออกเป็นใบใหม่ที่ตรงข้ามกัน
   // (ถ้าตัดใบเดิมออกแล้วยังนับใบกลับรายการ ยอดจะถูกหักซ้ำสองเท่า)
-  var journalDate = {};
-  centralObjects('gl_journals').forEach(function(j) { journalDate[String(j.record_id)] = _dOnly(j.journal_date); });
+  var scope = _normBook(payload.bookScope !== undefined ? payload.bookScope : _effectiveTenantId(session, payload));
+  /* บรรทัดใบสำคัญไม่ได้เก็บว่าอยู่สมุดไหน — สืบทอดจากหัวใบ จึงต้องทำดัชนีหัวใบก่อนแล้วค่อยกรองบรรทัด
+     บรรทัดที่หาหัวใบไม่เจอถูกตัดทิ้ง (ข้อมูลเสีย ไม่ควรไหลเข้างบของใครทั้งนั้น) */
+  var journalDate = {}, journalBook = {};
+  centralObjects('gl_journals').forEach(function(j) {
+    journalDate[String(j.record_id)] = _dOnly(j.journal_date);
+    journalBook[String(j.record_id)] = _normBook(j.tenant_id);
+  });
   var accounts = _accountMap(), agg = {};
   centralObjects('gl_journal_lines').forEach(function(l) {
     var jid = String(l.journal_id);
+    if (journalBook[jid] === undefined || journalBook[jid] !== scope) return;   // journalBook ผ่าน _normBook มาแล้วตอนสร้างดัชนี
     var d = journalDate[jid] || '';
     if (payload.dateFrom && d < payload.dateFrom) return;
     if (payload.dateTo && d > payload.dateTo) return;
@@ -203,8 +253,9 @@ function getTrialBalance(session, payload) {
 }
 
 // ยอดคงเหลือต่อบัญชี (ด้านปกติของบัญชีเป็นบวก) ในช่วงวันที่ — ใช้ร่วมกันทั้งงบทดลอง/งบกำไรขาดทุน/งบดุล
-function _accountBalances(dateFrom, dateTo) {
-  var tb = getTrialBalance({ role_code: 'super_admin' }, { dateFrom: dateFrom, dateTo: dateTo });
+function _accountBalances(dateFrom, dateTo, scope) {
+  // ส่ง bookScope ตรงๆ ไม่ให้ getTrialBalance ไปคิดเองจาก session ปลอมที่สร้างขึ้นมาตรงนี้
+  var tb = getTrialBalance({ role_code: 'super_admin' }, { dateFrom: dateFrom, dateTo: dateTo, bookScope: scope || '' });
   var map = {};
   tb.data.forEach(function(a) { map[a.code] = a; });
   return { map: map, rows: tb.data };
@@ -215,7 +266,7 @@ function _sumType(rows, type) { return _money(rows.filter(function(a) { return a
 function getIncomeStatement(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
   payload = payload || {};
-  var b = _accountBalances(payload.dateFrom, payload.dateTo);
+  var b = _accountBalances(payload.dateFrom, payload.dateTo, _bookScope(session, payload));
   var income = b.rows.filter(function(a) { return a.acctType === 'income'; });
   var expense = b.rows.filter(function(a) { return a.acctType === 'expense'; });
   var totalIncome = _sumType(b.rows, 'income'), totalExpense = _sumType(b.rows, 'expense');
@@ -229,7 +280,7 @@ function getBalanceSheet(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
   payload = payload || {};
   var asOf = payload.asOf || _todayStr();
-  var b = _accountBalances('', asOf);
+  var b = _accountBalances('', asOf, _bookScope(session, payload));
   var assets = b.rows.filter(function(a) { return a.acctType === 'asset'; });
   var liabilities = b.rows.filter(function(a) { return a.acctType === 'liability'; });
   var equity = b.rows.filter(function(a) { return a.acctType === 'equity'; });
@@ -255,12 +306,13 @@ function _apBillDto(b, extra) {
 
 function listApBills(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
+  var _scope = _bookScope(session, payload || {});
   payload = payload || {};
   var vendors = {}, pos = {}, grs = {};
   centralObjects('vendors').forEach(function(v) { vendors[String(v.record_id)] = v.name; });
   centralObjects('purchase_orders').forEach(function(p) { pos[String(p.record_id)] = p.po_no; });
   centralObjects('goods_receipts').forEach(function(g) { grs[String(g.record_id)] = g.gr_no; });
-  var rows = centralObjects('ap_bills');
+  var rows = centralObjects('ap_bills').filter(function(b) { return _inBook(b, _scope); });
   if (payload.vendorId) rows = rows.filter(function(b) { return String(b.vendor_id) === String(payload.vendorId); });
   if (payload.openOnly) rows = rows.filter(function(b) { return b.status === 'open' || b.status === 'partial'; });
   var out = rows.map(function(b) {
@@ -303,7 +355,7 @@ function createApBillFromGr(session, payload) {
 
     var billId = centralNextId('ap_bills');
     var billNo = _nextCentralDocNo('AP');
-    var jr = _postJournal({ date: billDate, source: 'AP', refType: 'AP_BILL', refId: billId,
+    var jr = _postJournal({ date: billDate, source: 'AP', refType: 'AP_BILL', refId: billId, tenantId: '',
       memo: 'ตั้งหนี้ ' + billNo + ' ' + vendor.name + (gr.gr_no ? ' (' + gr.gr_no + ')' : ''), createdBy: session.adminUserId,
       lines: [
         { accountCode: GL_ACCT.GRNI, description: 'ล้าง GR/NI จาก ' + gr.gr_no, debit: subtotal, credit: 0, partyType: 'vendor', partyId: vendor.record_id },
@@ -311,7 +363,7 @@ function createApBillFromGr(session, payload) {
         { accountCode: GL_ACCT.AP, description: 'เจ้าหนี้ ' + vendor.name, debit: 0, credit: total, partyType: 'vendor', partyId: vendor.record_id }
       ] });
     if (!jr.success) return jr;
-    centralAppend('ap_bills', { record_id: billId, bill_no: billNo, vendor_invoice_no: String(payload.vendorInvoiceNo || ''),
+    centralAppend('ap_bills', { record_id: billId, tenant_id: '', bill_no: billNo, vendor_invoice_no: String(payload.vendorInvoiceNo || ''),
       vendor_id: vendor.record_id, po_id: gr.po_id || '', gr_id: gr.record_id, bill_date: billDate, due_date: dueDate,
       subtotal_ex_vat: subtotal, vat_amount: vat, total: total, paid_amount: 0, status: 'open', journal_id: jr.journalId,
       note: String(payload.note || ''), created_by: session.adminUserId, created_at: nowStr() });
@@ -334,22 +386,24 @@ function createApBillManual(session, payload) {
   var billDate = payload.billDate || _todayStr();
   if (!_validDate(billDate)) return { success: false, message: 'วันที่ใบแจ้งหนี้ต้องเป็น yyyy-mm-dd' };
   return _withDocLock(function() {
-    var vendor = _findScoped('vendors', vendorId, '');   // บัญชีเป็นสมุดของบริษัท ใช้ได้เฉพาะผู้ขายของบริษัท
+    // ผู้ขายต้องเป็นของสมุดเดียวกับใบที่กำลังตั้ง — ตั้งหนี้กับผู้ขายของอีกบริษัทไม่ได้
+    var book = _bookScope(session, payload);
+    var vendor = _findScoped('vendors', vendorId, book);
     if (!vendor) return { success: false, message: 'ไม่พบผู้ขายรายนี้' };
     var expenseAcct = String(payload.expenseAccount || GL_ACCT.OTHER_EXPENSE);
     if (!_accountMap()[expenseAcct]) return { success: false, message: 'ไม่พบรหัสบัญชีค่าใช้จ่าย ' + expenseAcct };
     var dueDate = payload.dueDate || _addDays(billDate, _int(vendor.payment_terms_days));
     var total = _money(subtotal + vat);
     var billId = centralNextId('ap_bills');
-    var billNo = _nextCentralDocNo('AP');
-    var jr = _postJournal({ date: billDate, source: 'AP', refType: 'AP_BILL', refId: billId, memo: 'ตั้งหนี้ ' + billNo + ' ' + vendor.name,
-      createdBy: session.adminUserId, lines: [
+    var billNo = _nextCentralDocNo('AP', book || undefined);
+    var jr = _postJournal({ date: billDate, source: 'AP', refType: 'AP_BILL', refId: billId, tenantId: book,
+      memo: 'ตั้งหนี้ ' + billNo + ' ' + vendor.name, createdBy: session.adminUserId, lines: [
         { accountCode: expenseAcct, description: String(payload.note || 'ค่าใช้จ่าย'), debit: _money(subtotal), credit: 0 },
         { accountCode: GL_ACCT.VAT_INPUT, description: 'ภาษีซื้อ', debit: _money(vat), credit: 0 },
         { accountCode: GL_ACCT.AP, description: 'เจ้าหนี้ ' + vendor.name, debit: 0, credit: total, partyType: 'vendor', partyId: vendor.record_id }
       ] });
     if (!jr.success) return jr;
-    centralAppend('ap_bills', { record_id: billId, bill_no: billNo, vendor_invoice_no: String(payload.vendorInvoiceNo || ''),
+    centralAppend('ap_bills', { record_id: billId, tenant_id: book, bill_no: billNo, vendor_invoice_no: String(payload.vendorInvoiceNo || ''),
       vendor_id: vendor.record_id, po_id: '', gr_id: '', bill_date: billDate, due_date: dueDate,
       subtotal_ex_vat: _money(subtotal), vat_amount: _money(vat), total: total, paid_amount: 0, status: 'open',
       journal_id: jr.journalId, note: String(payload.note || ''), created_by: session.adminUserId, created_at: nowStr() });
@@ -370,12 +424,14 @@ function payApBills(session, payload) {
   var payDate = payload.paymentDate || _todayStr();
   if (!_validDate(payDate)) return { success: false, message: 'วันที่จ่ายต้องเป็น yyyy-mm-dd' };
   return _withDocLock(function() {
-    var vendor = _findScoped('vendors', payload.vendorId, '');
+    var book = _bookScope(session, payload);
+    var vendor = _findScoped('vendors', payload.vendorId, book);
     if (!vendor) return { success: false, message: 'ไม่พบผู้ขายรายนี้' };
     var bills = [];
     for (var i = 0; i < allocs.length; i++) {
       var b = _findById('ap_bills', allocs[i].billId);
-      if (!b) return { success: false, message: 'ไม่พบใบแจ้งหนี้ id ' + allocs[i].billId };
+      // ใบของสมุดอื่น = ตอบเหมือนไม่มี (จ่ายหนี้ข้ามสมุดไม่ได้)
+      if (!b || !_inBook(b, book)) return { success: false, message: 'ไม่พบใบแจ้งหนี้ id ' + allocs[i].billId };
       if (String(b.vendor_id) !== String(vendor.record_id)) return { success: false, message: 'ใบ ' + b.bill_no + ' ไม่ใช่ของผู้ขายรายนี้' };
       if (b.status === 'void') return { success: false, message: 'ใบ ' + b.bill_no + ' ถูกยกเลิกแล้ว' };
       var outstanding = _money((Number(b.total) || 0) - (Number(b.paid_amount) || 0));
@@ -387,14 +443,14 @@ function payApBills(session, payload) {
     var method = ['transfer', 'cash', 'cheque'].indexOf(payload.method) !== -1 ? payload.method : 'transfer';
     var creditAcct = method === 'cash' ? GL_ACCT.CASH : GL_ACCT.BANK;
     var payId = centralNextId('ap_payments');
-    var payNo = _nextCentralDocNo('PV');
-    var jr = _postJournal({ date: payDate, source: 'AP', refType: 'AP_PAYMENT', refId: payId,
+    var payNo = _nextCentralDocNo('PV', book || undefined);
+    var jr = _postJournal({ date: payDate, source: 'AP', refType: 'AP_PAYMENT', refId: payId, tenantId: book,
       memo: 'จ่ายเจ้าหนี้ ' + payNo + ' ' + vendor.name, createdBy: session.adminUserId, lines: [
         { accountCode: GL_ACCT.AP, description: 'ตัดเจ้าหนี้ ' + bills.map(function(b) { return b.bill.bill_no; }).join(', '), debit: amount, credit: 0, partyType: 'vendor', partyId: vendor.record_id },
         { accountCode: creditAcct, description: 'จ่ายโดย ' + method, debit: 0, credit: amount }
       ] });
     if (!jr.success) return jr;
-    centralAppend('ap_payments', { record_id: payId, payment_no: payNo, vendor_id: vendor.record_id, payment_date: payDate,
+    centralAppend('ap_payments', { record_id: payId, tenant_id: book, payment_no: payNo, vendor_id: vendor.record_id, payment_date: payDate,
       amount: amount, method: method, bank_account: String(payload.bankAccount || ''), note: String(payload.note || ''),
       status: 'posted', journal_id: jr.journalId, created_by: session.adminUserId, created_at: nowStr() });
     var allocId = centralNextId('ap_payment_allocations');
@@ -417,7 +473,7 @@ function getApAging(session, payload) {
   var asOf = (payload && payload.asOf) || _todayStr();
   var vendors = {};
   centralObjects('vendors').forEach(function(v) { vendors[String(v.record_id)] = v.name; });
-  return { success: true, asOf: asOf, data: _aging(centralObjects('ap_bills').filter(function(b) { return b.status === 'open' || b.status === 'partial'; })
+  return { success: true, asOf: asOf, data: _aging(centralObjects('ap_bills').filter(function(b) { return _inBook(b, _bookScope(session, payload)) && (b.status === 'open' || b.status === 'partial'); })
     .map(function(b) {
       return { partyId: String(b.vendor_id), partyName: vendors[String(b.vendor_id)] || '', docNo: b.bill_no, dueDate: _dOnly(b.due_date),
         outstanding: _money((Number(b.total) || 0) - (Number(b.paid_amount) || 0)) };
@@ -428,10 +484,11 @@ function getApAging(session, payload) {
 
 function listArInvoices(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
+  var _scope = _bookScope(session, payload || {});
   payload = payload || {};
   var customers = {};
   centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c.name; });
-  var rows = centralObjects('ar_invoices');
+  var rows = centralObjects('ar_invoices').filter(function(iv) { return _inBook(iv, _scope); });
   if (payload.customerId) rows = rows.filter(function(iv) { return String(iv.customer_id) === String(payload.customerId); });
   if (payload.openOnly) rows = rows.filter(function(iv) { return iv.status === 'open' || iv.status === 'partial'; });
   var out = rows.map(function(iv) {
@@ -547,13 +604,14 @@ function receiveArPayment(session, payload) {
   var date = payload.receiptDate || _todayStr();
   if (!_validDate(date)) return { success: false, message: 'วันที่รับชำระต้องเป็น yyyy-mm-dd' };
   return _withDocLock(function() {
+    var book = _bookScope(session, payload);
     var customer = null;
     centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(payload.customerId)) customer = c; });
     if (!customer) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
     var invs = [];
     for (var i = 0; i < allocs.length; i++) {
       var iv = _findById('ar_invoices', allocs[i].invoiceId);
-      if (!iv) return { success: false, message: 'ไม่พบใบแจ้งหนี้ id ' + allocs[i].invoiceId };
+      if (!iv || !_inBook(iv, book)) return { success: false, message: 'ไม่พบใบแจ้งหนี้ id ' + allocs[i].invoiceId };
       if (String(iv.customer_id) !== String(customer.record_id)) return { success: false, message: 'ใบ ' + iv.invoice_no + ' ไม่ใช่ของลูกค้ารายนี้' };
       if (iv.status === 'void') return { success: false, message: 'ใบ ' + iv.invoice_no + ' ถูกยกเลิกแล้ว' };
       var outstanding = _money((Number(iv.total) || 0) - (Number(iv.received_amount) || 0));
@@ -565,14 +623,14 @@ function receiveArPayment(session, payload) {
     var method = ['transfer', 'cash', 'cheque'].indexOf(payload.method) !== -1 ? payload.method : 'transfer';
     var debitAcct = method === 'cash' ? GL_ACCT.CASH : GL_ACCT.BANK;
     var rcpId = centralNextId('ar_receipts');
-    var rcpNo = _nextCentralDocNo('RV');
-    var jr = _postJournal({ date: date, source: 'AR', refType: 'AR_RECEIPT', refId: rcpId,
+    var rcpNo = _nextCentralDocNo('RV', book || undefined);
+    var jr = _postJournal({ date: date, source: 'AR', refType: 'AR_RECEIPT', refId: rcpId, tenantId: book,
       memo: 'รับชำระ ' + rcpNo + ' ' + customerFullName(customer), createdBy: session.adminUserId, lines: [
         { accountCode: debitAcct, description: 'รับชำระโดย ' + method, debit: amount, credit: 0 },
         { accountCode: GL_ACCT.AR, description: 'ตัดลูกหนี้ ' + invs.map(function(x) { return x.inv.invoice_no; }).join(', '), debit: 0, credit: amount, partyType: 'customer', partyId: customer.record_id }
       ] });
     if (!jr.success) return jr;
-    centralAppend('ar_receipts', { record_id: rcpId, receipt_no: rcpNo, customer_id: customer.record_id, receipt_date: date,
+    centralAppend('ar_receipts', { record_id: rcpId, tenant_id: book, receipt_no: rcpNo, customer_id: customer.record_id, receipt_date: date,
       amount: amount, method: method, bank_account: String(payload.bankAccount || ''), note: String(payload.note || ''),
       status: 'posted', journal_id: jr.journalId, created_by: session.adminUserId, created_at: nowStr() });
     var allocId = centralNextId('ar_receipt_allocations');
@@ -594,7 +652,7 @@ function getArAging(session, payload) {
   var asOf = (payload && payload.asOf) || _todayStr();
   var customers = {};
   centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c.name; });
-  return { success: true, asOf: asOf, data: _aging(centralObjects('ar_invoices').filter(function(iv) { return iv.status === 'open' || iv.status === 'partial'; })
+  return { success: true, asOf: asOf, data: _aging(centralObjects('ar_invoices').filter(function(iv) { return _inBook(iv, _bookScope(session, payload)) && (iv.status === 'open' || iv.status === 'partial'); })
     .map(function(iv) {
       return { partyId: String(iv.customer_id), partyName: customers[String(iv.customer_id)] || '', docNo: iv.invoice_no,
         dueDate: _dOnly(iv.due_date), outstanding: _money((Number(iv.total) || 0) - (Number(iv.received_amount) || 0)) };
