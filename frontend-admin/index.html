@@ -1624,7 +1624,7 @@
         <!-- ═══ บัญชี: เจ้าหนี้ ═══ -->
         <section class="view" id="view-apbills">
           <div class="view-head">
-            <div><h1>เจ้าหนี้ (AP)</h1><p>ตั้งหนี้จากใบรับของหรือค่าใช้จ่ายทั่วไป แล้วจ่ายเงินตัดได้หลายใบในครั้งเดียว</p></div>
+            <div><h1>เจ้าหนี้ (AP)</h1><p data-book-sub="ตั้งหนี้แล้วจ่ายเงินตัดได้หลายใบในครั้งเดียว · สมุดบัญชีของ">ตั้งหนี้จากใบรับของหรือค่าใช้จ่ายทั่วไป แล้วจ่ายเงินตัดได้หลายใบในครั้งเดียว</p></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
               <button class="btn" onclick="openApAging()">รายงานอายุหนี้</button>
               <button class="btn" onclick="openApManualForm()">+ ตั้งหนี้ค่าใช้จ่าย</button>
@@ -1641,7 +1641,7 @@
         <!-- ═══ บัญชี: ลูกหนี้ ═══ -->
         <section class="view" id="view-arinvoices">
           <div class="view-head">
-            <div><h1>ลูกหนี้ (AR)</h1><p>ออกใบแจ้งหนี้จากบิลขายเครดิต (หรือกรอกเอง) แล้วบันทึกรับชำระ</p></div>
+            <div><h1>ลูกหนี้ (AR)</h1><p data-book-sub="ออกใบแจ้งหนี้จากบิลขายเครดิตแล้วบันทึกรับชำระ · สมุดบัญชีของ">ออกใบแจ้งหนี้จากบิลขายเครดิต (หรือกรอกเอง) แล้วบันทึกรับชำระ</p></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
               <button class="btn" onclick="openArAging()">รายงานอายุหนี้</button>
               <button class="btn" onclick="openArInvoiceForm()">+ ออกใบแจ้งหนี้</button>
@@ -1658,7 +1658,7 @@
         <!-- ═══ บัญชี: แยกประเภท ═══ -->
         <section class="view" id="view-glbooks">
           <div class="view-head">
-            <div><h1>บัญชีแยกประเภท</h1><p>สมุดรายวันทุกใบ (ระบบลงให้อัตโนมัติจากงานซื้อ/รับของ/เจ้าหนี้/ลูกหนี้) และงบทดลอง</p></div>
+            <div><h1>บัญชีแยกประเภท</h1><p data-book-sub="สมุดรายวันทุกใบและงบการเงิน · สมุดบัญชีของ">สมุดรายวันทุกใบ (ระบบลงให้อัตโนมัติจากงานซื้อ/รับของ/เจ้าหนี้/ลูกหนี้) และงบทดลอง</p></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
               <button class="btn" onclick="loadTrialBalance()">งบทดลอง</button>
               <button class="btn" onclick="loadIncomeStatement()">งบกำไรขาดทุน</button>
@@ -2308,11 +2308,11 @@ const NAV_GROUPS = [
   ]},
   { n:'5', icon:'book', label:'งานบัญชีการเงิน', subs:[
     { n:'5.1', label:'บัญชีทั่วไป', items:[
-      {n:'5.1.1', label:'สมุดรายวัน / งบทดลอง', view:'glbooks', mod:'accounting', ready:true, scope:'owner'} ]},
+      {n:'5.1.1', label:'สมุดรายวัน / งบทดลอง', view:'glbooks', mod:'accounting', ready:true, scope:'owner', supervise:true} ]},
     { n:'5.2', label:'เจ้าหนี้', items:[
-      {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'owner'} ]},
+      {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'owner', supervise:true} ]},
     { n:'5.3', label:'ลูกหนี้', items:[
-      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'owner'} ]}
+      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'owner', supervise:true} ]}
   ]},
   /* กลุ่ม 6/7 สำรองไว้ (เจ้าของระบบสั่ง 2026-09-29 — ย้ายตัวแทนจำหน่าย + ผู้ใช้งาน/สิทธิ์ เข้าไปรวมกับ
      "ตั้งค่าระบบ" หมดแล้ว เพื่อลดจำนวนโมดูลบนสุดที่ต้องไล่ดู) — อย่าเอาไปใช้โดยไม่ถาม
@@ -2480,7 +2480,13 @@ function scheduleViewOnlyGuards(){ clearTimeout(_roGuardTimer); _roGuardTimer = 
  *   'hidden' ไม่ใช่งานของฝั่งนี้เลย ไม่ต้องโชว์ให้รก
  */
 function navState(it){
-  const mine = !it.scope || it.scope === 'both' || it.scope === SCOPE;
+  /* `supervise:true` = เมนูของฝั่งบริษัทที่ต้องตามเข้าไปใช้ "ในนามตัวแทน" ได้ด้วย
+     ใช้กับงานบัญชี (เจ้าของระบบ 6 ต.ค. 2026: บริษัทเปิดดูสมุดของตัวแทนได้) — ถ้าไม่มีข้อนี้
+     พอ Ultra Admin สวมสิทธิ์เข้าตัวแทน SCOPE จะกลายเป็น 'tenant' แล้วเมนูบัญชีหายไปทั้งกลุ่ม
+     = เปิดดูสมุดของตัวแทนไม่ได้เลยทั้งที่ backend ให้ดูแล้ว
+     ★ เทียบจาก SESSION.tenantId (บัญชี "สังกัด" ตัวแทนจริงไหม) ไม่ใช่ SCOPE — บัญชีของตัวแทนยังไม่เห็นเหมือนเดิม */
+  const supervising = it.supervise && !(SESSION && SESSION.tenantId);
+  const mine = !it.scope || it.scope === 'both' || it.scope === SCOPE || (it.scope === 'owner' && supervising);
   if (!mine) {
     return it.grey === SCOPE
       ? { s:'locked', why:'บริษัทเจ้าของสินค้าเป็นผู้ดูแลเมนูนี้' }
@@ -7355,6 +7361,7 @@ async function loadTrialBalance(){
   card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
   const r = await callApi('getTrialBalance', {});
   if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  card.querySelector('h3').textContent = 'งบทดลอง — ' + currentBookName();
   const balanced = Math.abs(r.totalDebit - r.totalCredit) < 0.01;
   document.getElementById('gl-tb').innerHTML =
     '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>ชื่อบัญชี</th><th>เดบิตรวม</th><th>เครดิตรวม</th><th>ยอดคงเหลือ</th></tr></thead><tbody>' +
@@ -7370,7 +7377,7 @@ async function loadIncomeStatement(){
   card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
   const r = await callApi('getIncomeStatement', {});
   if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
-  card.querySelector('h3').textContent = 'งบกำไรขาดทุน (ทุกงวดที่มีข้อมูล)';
+  card.querySelector('h3').textContent = 'งบกำไรขาดทุน (ทุกงวดที่มีข้อมูล) — ' + currentBookName();
   document.getElementById('gl-tb').innerHTML =
     '<h4 style="margin:6px 0">รายได้</h4>' + acctRows(r.income) +
     '<div class="activity-row"><b>รวมรายได้</b><span class="amt mono-data"><b>฿'+bahtPlain(r.totalIncome)+'</b></span></div>' +
@@ -7384,7 +7391,7 @@ async function loadBalanceSheet(){
   card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
   const r = await callApi('getBalanceSheet', {});
   if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
-  card.querySelector('h3').textContent = 'งบแสดงฐานะการเงิน ณ ' + r.asOf;
+  card.querySelector('h3').textContent = 'งบแสดงฐานะการเงิน ณ ' + r.asOf + ' — ' + currentBookName();
   document.getElementById('gl-tb').innerHTML =
     '<h4 style="margin:6px 0">สินทรัพย์</h4>' + acctRows(r.assets) +
     '<div class="activity-row"><b>รวมสินทรัพย์</b><span class="amt mono-data"><b>฿'+bahtPlain(r.totalAssets)+'</b></span></div>' +
