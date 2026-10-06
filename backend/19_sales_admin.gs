@@ -32,7 +32,11 @@ function listSalesOrdersAdmin(session, payload) {
       subtotal: parseFloat(o.subtotal) || 0, discount: parseFloat(o.discount) || 0, total: parseFloat(o.total) || 0,
       paymentMethod: o.payment_method, fulfillmentType: o.fulfillment_type, status: o.status,
       paymentStatus: orderPaymentStatus(o), paidAmount: parseFloat(o.paid_amount) || 0,
-      deliveredAt: safeDateStr(o.delivered_at), saleBy: o.sale_by, note: o.note || '', createdAt: safeDateStr(o.created_at)
+      deliveredAt: safeDateStr(o.delivered_at),
+      // ★ แอดมินขอมา 6 ต.ค. 2026: ต้องรู้ว่าบิลมาจากพนักงานคนไหน · sale_by เก็บเป็น LINE user id
+      // ซึ่งอ่านไม่ออก จึงแปลงเป็นชื่อด้วย _saleByLabel() ตัวเดียวกับที่รายงานการขายใช้ (41_sales_reports.gs)
+      saleBy: o.sale_by, saleByName: _saleByLabel(o.sale_by),
+      note: o.note || '', createdAt: safeDateStr(o.created_at)
     }; });
   return { success: true, data: data };
 }
@@ -97,7 +101,8 @@ function getSalesOrderAdmin(session, payload) {
       deliveredAt: safeDateStr(order.delivered_at), paidAt: safeDateStr(order.paid_at),
       nextStatuses: (SO_TRANSITIONS[status] || []).filter(function(x) { return x !== 'cancelled'; })
         .map(function(x) { return { code: x, label: SO_STATUS_LABELS[x] }; }),
-      saleBy: order.sale_by, note: order.note || '', createdAt: safeDateStr(order.created_at),
+      saleBy: order.sale_by, saleByName: _saleByLabel(order.sale_by),
+      note: order.note || '', createdAt: safeDateStr(order.created_at),
       requestedDeliveryDate: safeDateStr(order.requested_delivery_date).substring(0, 10),
       centerEditedAt: safeDateStr(order.center_edited_at), centerEditedBy: order.center_edited_by || '',
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)

@@ -18,18 +18,32 @@ function _salesReportOrders(tenantId, dateFrom, dateTo) {
   });
 }
 
+/* ดัชนีชื่อคนขาย — ทำครั้งเดียวต่อคำขอแล้วใช้ซ้ำ
+   ★ เดิม `_saleByLabel` ไล่ forEach ทั้งตาราง liff_users/admin_users ใหม่ทุกครั้งที่เรียก ซึ่งไม่เป็นไร
+   ตอนใช้ในรายงาน (เรียกต่อ "พนักงาน") แต่พอเอามาใช้ในรายการบิลขายซึ่งเรียกต่อ "บิล" จะกลายเป็น
+   O(จำนวนบิล × จำนวนพนักงาน) — บิล 300 ใบ × พนักงาน 100 คน = 30,000 รอบต่อการเปิดหน้าหนึ่งครั้ง
+   (centralObjects แคชตัวข้อมูลให้แล้ว แต่ไม่ได้แคชการไล่หา) */
+var _saleByIdxMemo = null;
+function _saleByIndex() {
+  if (_saleByIdxMemo) return _saleByIdxMemo;
+  var idx = { liff: {}, admin: {} };
+  centralObjects('liff_users').forEach(function(u) { idx.liff[String(u.line_user_id)] = u.display_name || ''; });
+  centralObjects('admin_users').forEach(function(u) { idx.admin[String(u.username)] = u.display_name || ''; });
+  _saleByIdxMemo = idx;
+  return idx;
+}
+
 // ป้ายชื่อของ "ใครขาย" — sale_by เป็น LINE user id ของพนักงานขับรถ หรือ 'admin:<username>' ถ้าเปิดจากแอดมิน (19_sales_admin.gs)
 function _saleByLabel(saleBy) {
   var s = String(saleBy || '');
   if (!s) return '(ไม่ระบุ)';
+  var idx = _saleByIndex();
   if (s.indexOf('admin:') === 0) {
-    var uname = s.substring(6), found = null;
-    centralObjects('admin_users').forEach(function(u) { if (String(u.username) === uname) found = u; });
-    return '[แอดมิน] ' + (found ? (found.display_name || uname) : uname);
+    var uname = s.substring(6);
+    return '[แอดมิน] ' + (idx.admin[uname] || uname);
   }
-  var liff = null;
-  centralObjects('liff_users').forEach(function(u) { if (String(u.line_user_id) === s) liff = u; });
-  return liff ? (liff.display_name || s) : s;
+  // ไม่เจอในทะเบียนพนักงาน (ลาออกแล้ว/ข้อมูลเก่า) = คืน id ดิบไว้ ดีกว่าโชว์ว่าง แล้วตามตัวไม่ได้
+  return idx.liff[s] || s;
 }
 
 function _validateReportDates(payload) {
