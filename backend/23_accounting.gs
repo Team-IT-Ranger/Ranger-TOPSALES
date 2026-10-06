@@ -451,6 +451,29 @@ function listArInvoices(session, payload) {
  *   หรือกรอกเอง     — payload { customerId, invoiceDate?, dueDate?, subtotalExVat, vatAmount?, note? }
  * ลงบัญชี: Dr ลูกหนี้ / Cr รายได้ + Cr ภาษีขาย
  */
+/**
+ * สมุดบัญชีนี้เป็นของบริษัทเจ้าของสินค้าเท่านั้น — ตัวแทนจำหน่าย **ซื้อขาด** ไปจากบริษัท
+ * เขาขายต่อให้ลูกค้าของเขา รายได้ก้อนนั้นเป็นของเขา ต้องออกบิลและลงบัญชีในสมุดของเขาเอง
+ * เอาเข้างบบริษัท = รับรู้รายได้ซ้ำ (บริษัทรับรู้ตอนขายให้ตัวแทนไปแล้วรอบหนึ่ง)
+ *
+ * ★ ฝั่งซื้อ (`createApBillFromGr`) กั้นไว้ตั้งแต่ต้น แต่ฝั่งขายไม่เคยกั้น — ตั้งลูกหนี้จากบิลของตัวแทนได้
+ *   และ `_postJournal` ลงสมุดบริษัทให้ทุกใบโดยไม่ถามว่าเป็นของใคร (เจอ 6 ต.ค. 2026)
+ */
+function _arTenantBlocked(tenantId) {
+  var tid = String(tenantId || '');
+  if (!tid) return null;                       // ไม่ระบุตัวแทน = ของบริษัทเอง
+  var t = null;
+  centralObjects('tenants').forEach(function(x) { if (String(x.tenant_id) === tid) t = x; });
+  if (t && isFlagOn(t.is_house)) return null;  // ตัวแทนบ้าน = ขายตรงในนามบริษัท ลงบัญชีได้
+  /* ★ หาไม่เจอ = ปฏิเสธ ไม่ใช่ปล่อยผ่าน — กติกาเรื่องเงินต้องล้มไปทางปลอดภัย
+     `centralObjects` คืนค่าว่างเป็นระยะได้จริงในโปรเจกต์นี้ (Apps Script สะดุด) ถ้าปล่อยผ่าน
+     จังหวะนั้นรายได้ของตัวแทนจะไหลเข้างบบริษัทเงียบๆ · ปฏิเสธแล้วแค่กดใหม่ ซึ่งแก้ได้ */
+  if (!t) return { success: false, message: 'ไม่พบตัวแทน ' + tid + ' ในระบบ — ตรวจสอบก่อนออกใบแจ้งหนี้' };
+  return { success: false, message: 'บิลขายนี้เป็นของ ' + (t.name || tid) +
+    ' ซึ่งซื้อขาดไปจากบริษัท — รายได้เป็นของตัวแทน ต้องออกบิลและลงบัญชีในสมุดของเขาเอง ' +
+    'ระบบบัญชีนี้เป็นสมุดของบริษัทเจ้าของสินค้าเท่านั้น' };
+}
+
 function createArInvoice(session, payload) {
   var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
   var invDate = payload.invoiceDate || _todayStr();
@@ -460,6 +483,8 @@ function createArInvoice(session, payload) {
     if (payload.salesOrderId) {
       tenantId = payload.tenantId || _salesTenantId(session, payload);
       if (!tenantId) return { success: false, message: 'ไม่ทราบตัวแทนของบิลขายนี้' };
+      // กั้นก่อนเปิดไฟล์ตัวแทน — ไม่มีเหตุต้องอ่านไฟล์ของคนที่กำลังจะปฏิเสธ (และเปิดไฟล์ตัวแทนแพง ~1.5 วิ)
+      var blocked = _arTenantBlocked(tenantId); if (blocked) return blocked;
       var order = null;
       tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.salesOrderId)) order = o; });
       if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
@@ -488,6 +513,8 @@ function createArInvoice(session, payload) {
     var customer = null;
     centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(customerId)) customer = c; });
     if (!customer) return { success: false, message: 'ไม่พบลูกค้ารายนี้' };
+    // ออกใบแจ้งหนี้เองโดยเลือกลูกค้า ก็ต้องกั้นเหมือนกัน — ลูกค้าของตัวแทนคือลูกค้าของเขา ไม่ใช่ของบริษัท
+    var cBlocked = _arTenantBlocked(customer.tenant_id); if (cBlocked) return cBlocked;
     // วันครบกำหนด: ระบุมาเอง → ใช้ตามนั้น · ไม่ระบุ → เครดิตประจำร้าน (customers.payment_terms_days) · ไม่ได้ตั้งไว้ → 30 วัน
     var custTerms = customerTermsDays(customer, null);
     var dueDays = _int(payload.dueDays) || (custTerms === null ? 30 : custTerms);

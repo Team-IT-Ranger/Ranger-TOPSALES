@@ -113,7 +113,13 @@ ctx._seedGlAccounts();
 append(sheets.warehouses, { record_id: 1, code: 'MAIN', name: 'คลังกลาง', is_active: 'TRUE', is_default: 'TRUE' });
 [[10, 'P-100', 'กล่องกระดาษ', 'ใบ'], [11, 'P-200', 'เทปกาว', 'ม้วน'], [12, 'P-300', 'ฟิล์มยืด', 'ม้วน']]
   .forEach(p => append(sheets.products, { record_id: p[0], product_code: p[1], name: p[2], unit: p[3], base_price: 0, is_active: true }));
+/* T1 = "ตัวแทนบ้าน" ของบริษัท (ขายตรงในนามบริษัท) — บิลของ T1 จึงลงสมุดบริษัทได้
+   T9 = ตัวแทนจำหน่ายจริง ซึ่งซื้อขาดไปจากบริษัท รายได้จากการขายต่อเป็นของเขา ลงสมุดบริษัทไม่ได้
+   ★ ตารางนี้ต้องมีจริง ไม่งั้น _arTenantBlocked หาตัวแทนไม่เจอแล้วปฏิเสธทุกใบ (ตั้งใจให้ล้มไปทางปลอดภัย) */
+append(sheets.tenants, { tenant_id: 'T1', name: 'บริษัท (ขายตรง)', is_house: 'TRUE', is_active: 'TRUE' });
+append(sheets.tenants, { tenant_id: 'T9', name: 'บูรพา ดีซี', is_house: 'FALSE', is_active: 'TRUE' });
 append(sheets.customers, { record_id: 500, name: 'ร้านค้าเครดิต', tenant_id: 'T1', is_active: true });
+append(sheets.customers, { record_id: 509, name: 'ร้านของตัวแทน', tenant_id: 'T9', is_active: true });
 [[1, 'ผู้จัดการฝ่ายจัดซื้อ', 'purchasing_mgr'], [2, 'ผู้จัดการบัญชี', 'finance_mgr'], [3, 'กรรมการ', 'owner_admin'], [4, 'พนักงานจัดซื้อ', 'staff_user']]
   .forEach(u => append(sheets.admin_users, { record_id: u[0], username: 'u' + u[0], display_name: u[1], role_code: u[2] }));
 const S = (id, role) => ({ adminUserId: String(id), role_code: role, tenant_id: '' });
@@ -367,6 +373,18 @@ r = ctx.receiveArPayment(FIN, { customerId: 500, receiptDate: '2026-11-01', meth
 eq('  รับครบ → paid', [r.success, ctx.listArInvoices(FIN, {}).data[0].status], [true, 'paid']);
 r = ctx.createArInvoice(FIN, { customerId: 500, invoiceDate: '2026-08-01', dueDate: '2026-08-31', subtotalExVat: 2000 });
 ok('ออกใบแจ้งหนี้เองได้ (ไม่ผูกบิลขาย)', r);
+
+console.log('\n-- ★★ ตัวแทนซื้อขาด: รายได้จากการขายต่อเป็นของเขา ลงสมุดบริษัทไม่ได้ (6 ต.ค. 2026) --');
+/* ฝั่งซื้อ (createApBillFromGr) กั้นไว้ตั้งแต่ต้น แต่ฝั่งขายไม่เคยกั้น — ตั้งลูกหนี้จากบิลของตัวแทนได้
+   และ _postJournal ลงสมุดบริษัทให้ทุกใบ = รับรู้รายได้ซ้ำ (บริษัทรับรู้ตอนขายให้ตัวแทนไปแล้วรอบหนึ่ง) */
+const beforeJv = sheets.gl_journals.rows.length;
+fails('ตั้งลูกหนี้จากบิลขายของตัวแทน → ปฏิเสธ',
+  ctx.createArInvoice(FIN, { tenantId: 'T9', salesOrderId: 77 }), /ซื้อขาด|สมุดของบริษัท/);
+fails('ออกใบแจ้งหนี้ให้ลูกค้าของตัวแทนเองก็ไม่ได้',
+  ctx.createArInvoice(FIN, { customerId: 509, invoiceDate: '2026-08-01', subtotalExVat: 1000 }), /ซื้อขาด|สมุดของบริษัท/);
+eq('  ★ ต้องไม่มีใบสำคัญบัญชีเกิดขึ้นเลย', sheets.gl_journals.rows.length, beforeJv);
+fails('ตัวแทนที่ไม่มีในระบบ → ปฏิเสธ (ล้มไปทางปลอดภัย ไม่ใช่ปล่อยผ่าน)',
+  ctx.createArInvoice(FIN, { tenantId: 'T404', salesOrderId: 77 }), /ไม่พบตัวแทน/);
 eq('อายุหนี้ลูกหนี้ ณ 20 ต.ค. (เกินกำหนด 50 วัน → ช่วง 31-60)',
    ctx.getArAging(FIN, { asOf: '2026-10-20' }).data.map(a => [a.total, a.d31_60, a.docs[0].overdueDays]), [[2140, 2140, 50]]);
 
