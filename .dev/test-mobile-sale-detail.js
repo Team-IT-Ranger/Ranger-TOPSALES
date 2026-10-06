@@ -70,5 +70,24 @@ eq('  แยกรายการที่คิดเงินกับขอ�
 r = ctx.getSaleDetail(DRIVER_B, { orderCode: 'SO-T1-202609-0002' });
 eq('บิลที่ไม่มี VAT (ลูกค้ายกเว้นภาษี) — applyVat ต้องเป็น false', [r.success, r.order.applyVat], [true, false]);
 
+console.log('\n── ★ ธง "ศูนย์แก้ไขแล้ว" ต้องถึงเซลส์ทั้งในรายการบิลและในใบ (6 ต.ค. 2026) ──');
+// ศูนย์แก้บรรทัดบิลหลังรับงานได้ (editSalesOrderAdmin) แล้วติดธงไว้ที่ใบ — คุมการเขียนธงใน test-sales-status.js
+// ที่นี่คุม "ธงเดินทางถึงมือถือ" ★ รายการบิลสำคัญกว่าหน้ารายละเอียด เพราะเซลส์ไม่มีเหตุให้เปิดใบที่เขาคิดว่ารู้แล้ว
+t.sales_orders.push({ record_id: 3, order_code: 'SO-T1-202609-0003', customer_id: 1, subtotal: 50, discount: 0, total: 50,
+  payment_method: 'cash', fulfillment_type: 'office_delivery', status: 'accepted',
+  sale_by: 'U_DRIVER_A', created_at: '2026-09-30 11:00:00',
+  center_edited_at: '2026-10-06 14:30:00', center_edited_by: 'แอดมินศูนย์' });
+
+const recent = ctx.getRecentSales(DRIVER_A, {});
+const edited = (recent.data || []).find(o => o.code === 'SO-T1-202609-0003');
+const plain = (recent.data || []).find(o => o.code === 'SO-T1-202609-0001');
+eq('★ รายการบิลบนมือถือ ส่งธงมาด้วย (ไม่งั้นเซลส์ไม่มีทางรู้ว่าต้องเปิดใบไหน)',
+  !!(edited && edited.centerEditedAt), true);
+eq('  ใบที่ศูนย์ไม่ได้แก้ ต้องไม่ติดธง', !!(plain && plain.centerEditedAt), false);
+
+const det = ctx.getSaleDetail(DRIVER_A, { orderCode: 'SO-T1-202609-0003' });
+eq('  หน้ารายละเอียดยังบอกว่าใครแก้ เมื่อไหร่',
+  [det.order.centerEditedAt, det.order.centerEditedBy], ['2026-10-06 14:30:00', 'แอดมินศูนย์']);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

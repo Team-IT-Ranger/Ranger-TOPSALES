@@ -613,7 +613,9 @@ function renderRecentSales(){
        ป้ายมาจาก backend (statusLabel) ไม่ตั้งชุดคำแปลที่สองในหน้าจอ */
     ? RECENT_SALES.map(o => '<div class="row" onclick="openSaleDetail(\'' + esc(o.code) + '\')" style="cursor:pointer">' +
         '<span>' + esc(o.time) + ' · ' + esc(o.customer) + '<br><span class="note">' + esc(showCode(o.code)) + ' · ' + (o.payment === 'cash' ? 'เงินสด' : 'เครดิต') +
-        (o.statusLabel ? ' · <b' + (o.status === 'draft' ? ' style="color:#C2410C"' : '') + '>' + esc(o.statusLabel) + '</b>' : '') + '</span></span>' +
+        (o.statusLabel ? ' · <b' + (o.status === 'draft' ? ' style="color:#C2410C"' : '') + '>' + esc(o.statusLabel) + '</b>' : '') +
+        /* ★ ใบที่ศูนย์แก้รายการแล้ว ต้องสะดุดตาตั้งแต่ในรายการ — เซลส์อาจถือใบที่พิมพ์ไปแล้วซึ่งไม่ตรงกับของจริง */
+        (o.centerEditedAt ? '<br><b style="color:#B45309">⚠️ ศูนย์แก้ไขรายการแล้ว — ตรวจก่อนส่งของ</b>' : '') + '</span></span>' +
         '<span class="mono">฿' + baht(o.total) + '</span></div>').join('')
     : '<div class="empty">ยังไม่มีรายการขาย</div>';
 }

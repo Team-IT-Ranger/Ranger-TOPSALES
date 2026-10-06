@@ -189,7 +189,11 @@ function getRecentSales(user, payload) {
       total: parseFloat(o.total) || 0,
       time: safeDateStr(o.created_at).substring(11, 16),
       // สถานะไปแสดงในรายการบิลล่าสุดบนมือถือ (เจ้าของระบบสั่ง 1 ต.ค. 2026) — ป้ายมาจาก 34_sales_status.gs ชุดเดียว
-      status: _soStatusOf(o), statusLabel: SO_STATUS_LABELS[_soStatusOf(o)] || ''
+      status: _soStatusOf(o), statusLabel: SO_STATUS_LABELS[_soStatusOf(o)] || '',
+      /* ★ ธง "ศูนย์แก้ไขแล้ว" ต้องมากับ "รายการ" ไม่ใช่เฉพาะตอนเปิดใบ (6 ต.ค. 2026)
+         หน้ารายละเอียดมีแถบเตือนอยู่แล้ว แต่เซลส์ไม่มีเหตุให้เปิดใบที่เขาคิดว่ารู้แล้วว่ามีอะไร
+         — ธงที่ต้องเปิดเข้าไปดูถึงจะเห็น ไม่ได้เตือนใครเลย เพราะเขาถือใบที่พิมพ์ไปแล้วอยู่ในมือ */
+      centerEditedAt: safeDateStr(o.center_edited_at)
     }; });
 
   return { success: true, data: orders };
