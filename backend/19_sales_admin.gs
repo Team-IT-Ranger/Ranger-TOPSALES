@@ -110,6 +110,10 @@ function getSalesOrderAdmin(session, payload) {
       deliveryOrderNo: order.delivery_order_no || '', deliveryOrderAt: safeDateStr(order.delivery_order_at),
       pickingNo: order.picking_no || '', receiptNo: order.receipt_no || '',
       taxInvoiceNo: order.tax_invoice_no || '', taxInvoiceAt: safeDateStr(order.tax_invoice_at),
+      /* ★ เลขใบแจ้งหนี้ (INV) มาจากตารางลูกหนี้กลาง ไม่ได้อยู่ในไฟล์ของตัวแทน — คนละเอกสารกับใบกำกับภาษี
+         ใบแจ้งหนี้ = "เรียกเก็บเงิน" (ขายเชื่อเท่านั้น) · ใบกำกับภาษี = "หลักฐานภาษีตอนส่งมอบของ"
+         แอดมินสับสนสองตัวนี้มาแล้ว เอกสารจึงต้องพิมพ์เลขให้ครบทั้งคู่ ไม่ใช่เลือกมาโชว์ตัวเดียว */
+      arInvoiceNo: _arInvoiceNoOf(tenantId, order.record_id),
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
       canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && hasPermission(session, 'sales', 'edit')
     },
@@ -123,6 +127,20 @@ function getSalesOrderAdmin(session, payload) {
  * หัวเอกสาร = "ใครเป็นคนออกบิลนี้" — ตัวแทนออกในนามตัวแทน · บริษัทขายตรง (HOUSE) ออกในนามบริษัท
  * รวมมากับ getSalesOrderAdmin เลย เพื่อไม่ให้หน้าพิมพ์ต้องยิงคำขอเพิ่ม (ค่าคงที่ต่อคำขอ ~1.6 วิ)
  */
+/* หาเลขใบแจ้งหนี้ลูกหนี้ของบิลขายใบนี้ (ถ้ามี) — ใบที่ถูกยกเลิกไม่นับ
+   ★ อ่านจาก ar_invoices ของสมุดที่บิลสังกัดเท่านั้น (เทียบ tenant_id ด้วย) ไม่งั้นบิลคนละตัวแทน
+     ที่บังเอิญ record_id ชนกันจะดึงเลขของอีกบริษัทมาพิมพ์ลงเอกสาร */
+function _arInvoiceNoOf(tenantId, salesOrderId) {
+  var hit = '';
+  centralObjects('ar_invoices').forEach(function(iv) {
+    if (hit || String(iv.status) === 'void') return;
+    if (String(iv.sales_order_id) !== String(salesOrderId)) return;
+    if (String(iv.tenant_id || '') !== String(tenantId || '')) return;
+    hit = String(iv.invoice_no || '');
+  });
+  return hit;
+}
+
 function _docIssuer(session, tenantId) {
   var tenant = null;
   centralObjects('tenants').forEach(function(t) { if (String(t.tenant_id) === String(tenantId)) tenant = t; });

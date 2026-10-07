@@ -3489,10 +3489,21 @@ function renderSaleOrderDetail(r){
     '<div class="sod-print-menu">' +
       '<button class="btn btn-sm" onclick="toggleSoPrintMenu(event)">พิมพ์เอกสาร ▾</button>' +
       '<div class="sod-print-list" id="sod-print-list">' +
-        SO_DOC_MENU.map(code => '<button class="btn btn-ghost btn-sm" onclick="closeSoPrintMenu();printSaleDoc(SOD_DATA,\''+code+'\')">' +
-          esc(SO_DOC_KINDS[code].title) + (SO_DOC_KINDS[code].showPrice === false || SO_DOC_KINDS[code].label
-            ? ' <span class="unit">(ไม่มีราคา)</span>' : '') +
-          (code === 'parcel' ? ' <span class="unit">100×150 มม.</span>' : '') + '</button>').join('') +
+        soDocMenu(o).map(code => {
+          const k = SO_DOC_KINDS[code];
+          /* ★ ใบที่เป็นหลักฐาน "ได้รับเงินแล้ว" พิมพ์ก่อนได้เงินไม่ได้ — ปิดปุ่มพร้อมบอกเหตุผล
+             ไม่ซ่อน เพราะแอดมินต้องเห็นว่ามีใบนี้อยู่และรู้ว่าต้องทำอะไรก่อนถึงจะพิมพ์ได้
+             (เลขใบเสร็จออกตอนรับเงินครั้งแรก — ยังไม่มีเลข = ยังไม่ได้บันทึกรับเงิน) */
+          const locked = k.needsPaid && !o.receiptNo;
+          const tail = (k.showPrice === false || k.label ? ' <span class="unit">(ไม่มีราคา)</span>' : '') +
+            (code === 'parcel' ? ' <span class="unit">100×150 มม.</span>' : '') +
+            (locked ? ' <span class="unit">— รอบันทึกรับเงินก่อน</span>' : '');
+          return locked
+            ? '<button class="btn btn-ghost btn-sm" disabled title="ใบนี้เป็นหลักฐานว่าได้รับเงินแล้ว ต้องบันทึกรับชำระที่การ์ดสถานะก่อนจึงจะพิมพ์ได้">' +
+              esc(k.title) + tail + '</button>'
+            : '<button class="btn btn-ghost btn-sm" onclick="closeSoPrintMenu();printSaleDoc(SOD_DATA,\''+code+'\')">' +
+              esc(k.title) + tail + '</button>';
+        }).join('') +
       '</div></div> ' +
     (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
   renderSaleOrderStatusCard(r);
@@ -3642,8 +3653,21 @@ const SO_DOC_KINDS = {
      จึงพิมพ์หัวเป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี" และโชว์ทั้งเลขใบเสร็จและเลขใบกำกับภาษีบนใบเดียว
      ★★ สองเลขนี้ออกคนละจังหวะ (ใบกำกับภาษีตอนส่งมอบของ · ใบเสร็จตอนได้เงิน) จึงต้องโชว์แยกบรรทัด
         ไม่ใช่ยุบเป็นเลขเดียว — ขายเชื่อจะมีใบกำกับภาษีก่อนใบเสร็จเป็นเดือน */
-  receipt:     { title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false, noField: 'receiptNo', withTaxNo: true },
-  receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true, noField: 'receiptNo', withTaxNo: true },
+  receipt:     { title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี (Receipt / Tax Invoice)', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'],
+                 showPrice: true, showBank: false, noField: 'receiptNo', withTaxNo: true, needsPaid: true },
+  receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า (Receipt / Delivery Note)', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'],
+                 showPrice: true, showBank: true, noField: 'receiptNo', needsPaid: true },
+  /* ★ สามแบบนี้เพิ่ม 7 ต.ค. 2026 — ของจริงรวมหน้าที่หลายอย่างไว้ในแผ่นเดียวตามรูปแบบการขาย
+     ★★ ติดชื่ออังกฤษไว้ด้วยเพราะแอดมินสับสนระหว่าง "ใบแจ้งหนี้ (Invoice)" กับ "ใบกำกับภาษี (Tax Invoice)" มาแล้ว
+        สองใบนี้คนละหน้าที่กัน: ใบแจ้งหนี้ = เรียกเก็บเงิน (ขายเชื่อเท่านั้น) ·
+        ใบกำกับภาษี = หลักฐานภาษีตอนส่งมอบของ (ออกทุกบิลที่มี VAT ไม่ว่าสดหรือเชื่อ) */
+  deliveryinv: { title: 'ใบส่งสินค้า / ใบแจ้งหนี้ (Delivery Note / Invoice)', signers: ['ผู้ส่งของ','ผู้รับสินค้า'],
+                 showPrice: true, showBank: true, noField: 'deliveryOrderNo', withInvNo: true },
+  receipttaxdlv: { title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี / ใบส่งสินค้า (Receipt / Tax Invoice / Delivery Note)',
+                 signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true,
+                 noField: 'receiptNo', withTaxNo: true, needsPaid: true },
+  taxinvoice:  { title: 'ใบกำกับภาษี (Tax Invoice)', signers: ['ผู้ออกใบกำกับภาษี','ผู้รับใบกำกับภาษี'],
+                 showPrice: true, showBank: false, noField: 'taxInvoiceNo' },
   /* ★ `noField` — เอกสารแต่ละชนิดมีเลขของตัวเอง ไม่ใช้เลขใบสั่งขายซ้ำกันหมด (แอดมินขอ 6-7 ต.ค. 2026)
      เลขออกอัตโนมัติจากฝั่ง backend (SALE_DOC_FIELDS ใน 34_sales_status.gs) ที่จุดงานจริงของเอกสารนั้น
      ★ ใบที่ยังไม่ถึงจุดออกเลข (เช่นพิมพ์ใบส่งของก่อนกด "พร้อมจัดส่ง") ยังไม่มีเลข → **ตกกลับไปใช้เลขใบสั่งขาย**
@@ -3653,11 +3677,28 @@ const SO_DOC_KINDS = {
   parcel:      { title: 'ใบปะหน้าพัสดุ', label: true },
   picking:     { title: 'ใบจัดของ', signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false, noField: 'pickingNo' }
 };
-/* ★ เรียงตามลำดับที่เอกสารถูกใช้จริงตลอดสายงาน (แอดมินสั่ง 7 ต.ค. 2026):
-   ใบสั่งขาย (ตอนรับออร์เดอร์) → ใบจัดของ (หยิบของในคลัง) → ใบส่งสินค้า (ติดไปกับของ) →
-   ใบส่งสินค้า/ใบเสร็จรับเงิน (ส่งพร้อมเก็บเงิน) → ใบเสร็จรับเงิน (เก็บเงินอย่างเดียว) → ใบปะหน้าพัสดุ (ส่งขนส่ง)
-   เอกสารที่ไม่มีราคาอยู่ติดกันตรงกลาง จะได้ไม่หยิบใบที่มีราคาติดไปกับของโดยพลาด */
-const SO_DOC_MENU = ['salesorder', 'picking', 'delivery', 'receiptdlv', 'receipt', 'parcel'];
+/* ★★ เมนูพิมพ์ "ขึ้นกับรูปแบบการขาย" ไม่ใช่ชุดเดียวใช้ทุกใบ (แอดมินสั่ง 7 ต.ค. 2026)
+   ชุดเดียวใช้ทุกใบทำให้แอดมินต้องจำเองว่าบิลแบบนี้ควรหยิบใบไหน แล้วหยิบผิดเป็นประจำ —
+   เช่นพิมพ์ "ใบแจ้งหนี้" ให้ลูกค้าเงินสด (ไม่มีหนี้ให้แจ้ง) หรือพิมพ์ใบจัดของให้บิลที่ขายจากรถ (ไม่มีใครจัดของ)
+
+   เรียงตามลำดับที่เอกสารถูกใช้จริงตลอดสายงาน และเอกสารที่ไม่มีราคาอยู่ติดกัน
+   จะได้ไม่หยิบใบที่มีราคาติดไปกับของโดยพลาด */
+const SO_DOC_MENUS = {
+  // ขายเชื่อ ส่งจากสำนักงาน — ใบแจ้งหนี้ไปกับของ แล้วค่อยออกใบเสร็จตอนเก็บเงินได้
+  credit_office: ['salesorder', 'picking', 'delivery', 'deliveryinv', 'receipt', 'parcel'],
+  // ขายสด ส่งจากสำนักงาน — เก็บเงินพร้อมส่งของ จึงรวมใบเสร็จ+ใบกำกับภาษี+ใบส่งสินค้าเป็นแผ่นเดียว
+  cash_office:   ['salesorder', 'picking', 'delivery', 'receipttaxdlv', 'parcel'],
+  /* ขายจากรถ — ไม่มีใบจัดของ/ใบปะหน้าพัสดุ เพราะไม่ได้หยิบของจากคลังและไม่ได้ส่งผ่านขนส่ง
+     พนักงานยกของลงจากรถให้ลูกค้าตรงนั้น */
+  credit_van:    ['salesorder', 'deliveryinv', 'receipt'],
+  cash_van:      ['salesorder', 'receiptdlv', 'taxinvoice']
+};
+function soDocMenuKey(o){
+  const credit = String((o && o.paymentMethod) || '').toLowerCase().indexOf('credit') === 0;
+  const van = String((o && o.fulfillmentType) || '') === 'immediate';
+  return (credit ? 'credit' : 'cash') + '_' + (van ? 'van' : 'office');
+}
+function soDocMenu(o){ return SO_DOC_MENUS[soDocMenuKey(o)] || SO_DOC_MENUS.credit_office; }
 function printSaleDoc(r, kind){
   const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.salesorder;
   const o = r.order, iss = r.issuer || {};
@@ -3699,7 +3740,9 @@ function printSaleDoc(r, kind){
       subLabel: k.showPrice ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : '',
       metaRight: [['เลขที่', docNo]]
         // ใบที่เป็นใบกำกับภาษีด้วย ต้องโชว์เลขใบกำกับภาษีของตัวเอง (ออกคนละจังหวะกับเลขใบเสร็จ)
-        .concat((k.withTaxNo && o.taxInvoiceNo) ? [['เลขที่ใบกำกับภาษี', o.taxInvoiceNo]] : [])
+        .concat((k.withTaxNo && o.taxInvoiceNo) ? [['เลขที่ใบกำกับภาษี (Tax Invoice)', o.taxInvoiceNo]] : [])
+        // ใบส่งสินค้า/ใบแจ้งหนี้ ต้องโชว์เลขใบแจ้งหนี้ลูกหนี้ (INV) ซึ่งเป็นคนละเลขกับใบส่งสินค้า
+        .concat((k.withInvNo && o.arInvoiceNo) ? [['เลขที่ใบแจ้งหนี้ (Invoice)', o.arInvoiceNo]] : [])
         // ใบส่งสินค้าที่มีเลขของตัวเอง ต้องอ้างกลับไปที่ใบสั่งขายได้ ไม่งั้นสองใบนี้โยงกันไม่ได้เลย
         .concat(docNo !== o.code ? [['อ้างอิงใบสั่งขาย', o.code]] : [])
         .concat([['วันที่', (o.createdAt || '').substring(0, 10)],
