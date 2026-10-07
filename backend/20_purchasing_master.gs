@@ -28,7 +28,8 @@ function _withDocLock(fn) {
  *   ของเดิมฮาร์ดโค้ดไว้หมด ตั้งค่าอะไรก็ไม่มีผล · ยังไม่เคยตั้ง = ได้ผลเหมือนเดิมเป๊ะ (ดู DOC_SERIES_TYPES)
  *   ค่าตั้งอยู่ใน `doc_number_series` ของ **สมุดที่เอกสารนั้นสังกัด**: ตัวแทน = ไฟล์ของตัวแทน ·
  *   บริษัท (scope ว่าง) = ไฟล์ของบริษัทเอง ซึ่งเป็นสมุดเดียวกับที่หน้าจอแก้อยู่
- * ★ รหัสตัวแทนยังแทรกหลัง prefix เหมือนเดิม (PO-TNKN-202610-0001) — ตัวนับแยกเล่มต่อตัวแทน
+ * ★ **ไม่แทรกรหัสตัวแทนลงในเลขแล้ว** (7 ต.ค. 2026) — ตัวนับยังแยกเล่มต่อตัวแทนเหมือนเดิม
+ *   แยกกันที่ "ตัวนับ" ไม่ใช่ที่ตัวเลขที่พิมพ์ออกมา · อยากได้รหัสบริษัทในเลข ให้ใส่ลงใน prefix เอง
  * ต้องเรียกใต้ _withDocLock เท่านั้น เพราะขยับตัวนับ
  */
 var _centralDocCfgMemo = {};   // ต่อ execution — ตั้งหนี้แล้วลง JV ต่อ จะได้ไม่เปิดไฟล์ตัวแทนซ้ำสองรอบ
@@ -42,10 +43,14 @@ function _nextCentralDocNo(docType, scope) {
   var cfg = _centralDocConfig(docType, scope);
   var sep = cfg.separator || '-';
   var period = _periodKey(cfg.reset_cycle);
-  // ตัวแทนแต่ละรายมีเลขรันของตัวเอง: คีย์ตัวนับ 'PO@TNKN' และเลขที่ออกมาเป็น PO-TNKN-202610-0001
+  /* ตัวแทนแต่ละรายมีเลขรันของตัวเอง: คีย์ตัวนับ 'PO@TNKN' แยกเล่มกันที่ "ตัวนับ" ไม่ใช่ที่ตัวเลขที่พิมพ์ออกมา
+     ★ 7 ต.ค. 2026 เอา "รหัสบริษัทคั่นอัตโนมัติ" ออก (เจ้าของระบบแจ้ง: ไม่ได้ใส่ไว้ใน prefix แต่มันโผล่มาเอง
+       แอดมินสับสน) — **สิ่งที่ตั้งต้องเป็นสิ่งที่ได้** ใครอยากได้รหัสบริษัทในเลข ให้ใส่ลงใน prefix ของตัวเอง
+       และนี่ทำให้หมวดงานซื้อ/บัญชีทำงานเหมือนหมวดงานขาย (SO/DO/RC/TAX-IV) ซึ่งไม่เคยแทรกอะไรให้เลย
+     ★★ เลขที่ออกไปแล้วก่อนหน้านี้มีรหัสคั่นอยู่ (PO-BDC-202610-0001) — ไม่ชนกับของใหม่เพราะคนละสตริง
+       และตัวนับเดินต่อตัวเดิม ไม่ได้รีเซ็ต */
   var key = String(docType) + (scope ? '@' + scope : '');
   var parts = [cfg.prefix || String(docType)];
-  if (scope) parts.push(scope);
   if (cfg.date_format) parts.push(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), cfg.date_format));
   var digits = parseInt(cfg.running_digits, 10) || 4;
   var build = function(n) { var s = String(n); while (s.length < digits) s = '0' + s; return parts.concat([s]).join(sep); };

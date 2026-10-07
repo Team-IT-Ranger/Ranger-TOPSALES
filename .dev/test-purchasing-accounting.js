@@ -403,7 +403,7 @@ ok('สวมสิทธิ์เข้าไปในตัวแทนแล�
 const T9INV = r.invoiceId;
 eq('  ใบนี้อยู่ในสมุดของตัวแทน · เลขที่แยกเล่ม · งบบริษัทไม่ขยับเลย',
    [objs(sheets.ar_invoices).find(iv => String(iv.record_id) === String(T9INV)).tenant_id,
-    /^INV-T9-/.test(r.invoiceNo), ctx.getTrialBalance(FIN, {}).totalDebit], ['T9', true, ownerTbBeforeAr]);
+    /^INV-/.test(r.invoiceNo), ctx.getTrialBalance(FIN, {}).totalDebit], ['T9', true, ownerTbBeforeAr]);
 eq('  รายได้เข้างบกำไรขาดทุนของตัวแทน ไม่ใช่ของบริษัท',
    [ctx.getIncomeStatement(BOSS, { tenantId: 'T9' }).totalIncome,
     ctx.getIncomeStatement(FIN, {}).totalIncome], [1000, 12000]);
@@ -467,7 +467,11 @@ fails('  บริษัทเปิดใบสั่งซื้อกับ�
 r = ctx.savePurchaseRequisition(TADMIN, { department: 'หน้าร้าน', items: [{ productId: 12, qty: 20, unitPrice: 50, unitCode: 'ม้วน' }] });
 ok('ตัวแทนเปิดใบขอซื้อได้', r);
 const TPR = r.pr.id;
-eq('  เลขที่เอกสารแยกเล่มของตัวแทน', /^PR-TNKN-\d{6}-0001$/.test(r.pr.prNo), true);
+/* ★ 7 ต.ค. 2026 เลิกแทรกรหัสบริษัทในเลขแล้ว (เจ้าของระบบ: ไม่ได้ใส่ไว้ใน prefix แต่มันโผล่มาเอง)
+   สิ่งที่ต้องจริงคือ **ตัวนับแยกเล่ม** ไม่ใช่รูปร่างข้อความ — ตัวแทนเพิ่งเปิดใบแรกจึงต้องได้ 0001
+   ทั้งที่ฝั่งบริษัทออก PR ไปหลายใบแล้ว ถ้าใช้ตัวนับร่วมกันจะไม่ใช่ 0001 */
+eq('  ตัวนับแยกเล่มของตัวแทน (ใบแรกของเขาต้องเป็น 0001 แม้บริษัทออกไปหลายใบแล้ว)',
+   /^PR-\d{6}-0001$/.test(r.pr.prNo), true);
 eq('  ใบขอซื้อของตัวแทนไม่โผล่ในรายการของบริษัท',
    ctx.listPurchaseRequisitions(MGR, {}).data.some(x => String(x.id) === String(TPR)), false);
 fails('  บริษัทเปิดใบขอซื้อของตัวแทนตรงๆ ไม่ได้', ctx.getPurchaseRequisition(MGR, { id: TPR }), /ไม่พบ/);
@@ -481,7 +485,8 @@ r = ctx.savePurchaseOrder(TADMIN, { vendorId: TVENDOR, orderDate: '2026-09-24', 
   items: [{ prItemId: ctx.listApprovedPrLines(TADMIN, {}).data[0].prItemId, productId: 12, qty: 20, unitCode: 'ม้วน', unitFactor: 1, unitPrice: 50 }] });
 ok('ตัวแทนออกใบสั่งซื้อจากใบขอซื้อของตัวเองได้', r);
 const TPO = r.po.id;
-eq('  เลขที่ใบสั่งซื้อแยกเล่ม', /^PO-TNKN-/.test(r.po.poNo), true);
+eq('  ใบสั่งซื้อก็เดินเล่มของตัวเอง (0001 ทั้งที่บริษัทออกไปหลายใบแล้ว)',
+   /^PO-\d{6}-0001$/.test(r.po.poNo), true);
 eq('  ระบบสร้างคลังของตัวแทนให้อัตโนมัติ', ctx.listWarehouses(TADMIN).data.map(w => [w.name, w.isDefault]), [['คลังของตัวแทน', true]]);
 ok('  ส่งใบสั่งซื้อ', ctx.issuePurchaseOrder(TADMIN, { id: TPO }));
 r = ctx.receiveGoods(TADMIN, { poId: TPO, receiveDate: '2026-09-25',
@@ -503,7 +508,7 @@ const TGR = r.grId;
 /* ★ 7 ต.ค. 2026 เปลี่ยนกติกา: ตัวแทนรับของ = ระบบตั้งหนี้ให้เลย ไม่ต้องกดเอง
    (ซื้อขาดจากบริษัท ของมาถึงพร้อมเอกสารขายของบริษัท ยอดรู้แน่ตั้งแต่วินาทีที่รับ ไม่มีอะไรให้รอ)
    สิ่งที่ยังต้องจริงเหมือนเดิม: ลงสมุดของเขา · เลขที่แยกเล่ม · งบบริษัทไม่ขยับ */
-eq('  ★ ตั้งหนี้ให้อัตโนมัติตั้งแต่ตอนรับของ — ไม่ต้องกดเอง', /^AP-TNKN-/.test(r.billNo || ''), true);
+eq('  ★ ตั้งหนี้ให้อัตโนมัติตั้งแต่ตอนรับของ — ไม่ต้องกดเอง', /^AP-\d{6}-\d{4}$/.test(r.billNo || ''), true);
 const TAUTOBILL = objs(sheets.ap_bills).find(b => String(b.gr_id) === String(TGR));
 eq('  ใบตั้งหนี้อยู่ในสมุดของตัวแทน · งบบริษัทไม่ขยับ',
    [TAUTOBILL.tenant_id, ctx.getTrialBalance(FIN, {}).totalDebit], [TEN, ownerTbBefore]);
@@ -529,7 +534,7 @@ r = ctx.postManualJournal(TADMIN, { date: '2026-10-01', memo: 'ตัวแท�
   lines: [{ accountCode: '1110', debit: 500, credit: 0 }, { accountCode: '1120', debit: 0, credit: 500 }] });
 ok('ตัวแทนลงใบสำคัญในสมุดของตัวเองได้', r);
 const TJV = r.journalId;
-eq('  เลขใบสำคัญแยกเล่มของตัวแทน', /^JV-TNKN-\d{6}-\d{4}$/.test(r.journalNo), true);
+eq('  เลขใบสำคัญเดินเล่มของตัวแทนเอง', /^JV-\d{6}-\d{4}$/.test(r.journalNo), true);
 eq('  ใบนี้ถูกเก็บไว้ในสมุดของตัวแทน (tenant_id)',
    objs(sheets.gl_journals).find(j => String(j.record_id) === String(TJV)).tenant_id, TEN);
 
@@ -543,7 +548,7 @@ fails('  ตัวแทนเปิดใบสำคัญของบริ�
   ctx.getJournal(TADMIN, { id: JV }), /ไม่พบใบสำคัญ/);
 fails('  บริษัทเปิดใบสำคัญของตัวแทนตรงๆ ไม่ได้', ctx.getJournal(FIN, { id: TJV }), /ไม่พบใบสำคัญ/);
 eq('  แต่ฝั่งบริษัทสวมสิทธิ์เข้าไปดูสมุดของตัวแทนได้ (กติกาข้อ 3)',
-   ctx.getJournal(BOSS, { id: TJV, tenantId: TEN }).journal.journalNo.indexOf('JV-TNKN-'), 0);
+   ctx.getJournal(BOSS, { id: TJV, tenantId: TEN }).journal.journalNo, r.journalNo);
 
 const tenTb = ctx.getTrialBalance(TADMIN, {});
 eq('  งบทดลองของตัวแทนสมดุล และมีแต่รายการของตัวเอง (สินค้าคงเหลือ 1,000 จากงานซื้อ + เงินสด 500 จากใบสำคัญนี้)',
@@ -573,7 +578,7 @@ fails('  ตัวแทนตั้งหนี้กับผู้ขาย�
 r = ctx.createApBillManual(TADMIN, { vendorId: TVENDOR, billDate: '2026-10-01', subtotalExVat: 1000, note: 'ค่าขนส่งของตัวแทน' });
 ok('  ตัวแทนตั้งหนี้ในสมุดของตัวเองได้', r);
 const TBILL = r.billId;
-eq('  เลขที่ตั้งหนี้แยกเล่ม', /^AP-TNKN-/.test(r.billNo), true);
+eq('  เลขที่ตั้งหนี้เดินเล่มของตัวแทนเอง', /^AP-\d{6}-\d{4}$/.test(r.billNo), true);
 /* ตัวแทนมี 2 ใบแล้ว: ใบที่ตั้งจากใบรับของ (ระบบลงให้) + ใบค่าใช้จ่ายที่เพิ่งตั้งเอง
    เช็คด้วย "ทุกใบที่เห็นเป็นของสมุดตัวเอง" แทนการนับจำนวนตายตัว — เพิ่มเคสทีหลังแล้วไม่ต้องตามแก้เลข */
 eq('  บริษัทไม่เห็นใบตั้งหนี้ของตัวแทน · ทุกใบที่ตัวแทนเห็นเป็นของสมุดตัวเอง',

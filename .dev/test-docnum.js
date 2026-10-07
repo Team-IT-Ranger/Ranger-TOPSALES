@@ -126,17 +126,18 @@ console.log('\n-- ประเภทอื่นไม่ถูกแตะ --')
 series.push({ record_id: 9, doc_type: 'INV', prefix: 'INV', date_format: '', running_digits: 3, reset_cycle: 'none', separator: '-', is_active: 'TRUE' });
 r = ctx.saveDocSeries(SESSION, { docType: 'SO', prefix: 'SO9', dateFormat: '', runningDigits: 3, resetCycle: 'none', separator: '-' });
 eq('ปิดเฉพาะ SO ไม่ยุ่งกับ INV', series.find(s => s.doc_type === 'INV').is_active, 'TRUE');
-/* ★ 7 ต.ค. 2026 — preview ของหมวดงานซื้อ/บัญชีมี "รหัสบริษัทคั่น" แล้ว ให้ตรงกับเลขที่ออกจริง
-   ของเดิมโชว์ INV-001 แต่เลขจริงที่ _nextCentralDocNo ออกให้คือ INV-BDC-001 — preview โกหกมาตลอด */
-eq('  INV ยังออกเลขได้ตามรูปแบบตัวเอง (มีรหัสบริษัทคั่นเหมือนเลขจริง)',
-   ctx.previewNextDocNumber('BDC', 'INV'), 'INV-BDC-001');
+/* ★★ 7 ต.ค. 2026 (รอบบ่าย) — เลิกแทรกรหัสบริษัทในเลขอัตโนมัติ (เจ้าของระบบแจ้งว่าสับสน:
+   ไม่ได้ใส่ไว้ใน prefix แต่ BDC โผล่มาเอง) · ตอนนี้เลขเป็นไปตาม prefix ที่ตั้งไว้ล้วนๆ
+   ซึ่งทำให้หมวดงานซื้อ/บัญชีทำงานเหมือนหมวดงานขายที่ไม่เคยแทรกอะไรให้เลย */
+eq('  INV ยังออกเลขได้ตามรูปแบบตัวเอง (ตาม prefix ล้วนๆ ไม่มีอะไรแทรก)',
+   ctx.previewNextDocNumber('BDC', 'INV'), 'INV-001');
 
 console.log('\n-- กันพลาด --');
 eq('ไม่ระบุประเภท → ปฏิเสธ', ctx.saveDocSeries(SESSION, { prefix: 'X' }).success, false);
 eq('  ประเภทเว้นวรรคล้วน → ปฏิเสธ', ctx.saveDocSeries(SESSION, { docType: '   ' }).success, false);
 // PO ยังไม่ได้ตั้ง → ใช้ค่าเริ่มต้นประจำหมวด (รายเดือน ไม่ใช่รายวันแบบ SO)
-eq('ไม่มีรูปแบบเลย → ใช้ค่าเริ่มต้นประจำหมวด (และมีรหัสบริษัทคั่น)',
-   ctx.previewNextDocNumber('BDC', 'PO'), 'PO-BDC-202610-0001');
+eq('ไม่มีรูปแบบเลย → ใช้ค่าเริ่มต้นประจำหมวด',
+   ctx.previewNextDocNumber('BDC', 'PO'), 'PO-202610-0001');
 eq('รายการเรียงใหม่สุดขึ้นก่อน', ctx.listDocSeries(SESSION, {}).data[0].record_id,
   series.reduce((m, o) => Math.max(m, o.record_id), 0));
 
@@ -244,9 +245,11 @@ console.log('\n── ★★ หมวดงานซื้อ/บัญชี�
   ctx.centralCounters.length = 0;
   ctx.centralCounters.push({ doc_type: 'AP@BDC', period_key: '202610', last_number: 7 });
 
-  eq('preview ของหมวดกลางอ่านจากตัวนับกลาง + มีรหัสบริษัทคั่น',
-    ctx.previewNextDocNumber('BDC', 'AP'), 'AP-BDC-202610-0008');
-  eq('  ★ สมุดของบริษัทเองใช้คีย์เปล่า ไม่มีรหัสคั่น (ยังไม่เคยออก → 0001)',
+  eq('preview ของหมวดกลางอ่านจากตัวนับกลาง (คีย์ AP@BDC → เลขที่ 8)',
+    ctx.previewNextDocNumber('BDC', 'AP'), 'AP-202610-0008');
+  /* ★ เลขหน้าตาเหมือนกันทั้งสองบริษัทได้ ไม่ใช่บั๊ก — คนละนิติบุคคล คนละเล่ม (เจ้าของระบบ: ต่างคนต่างทำธุรกิจ)
+     สิ่งที่ต้องต่างคือ "ตัวนับ" ซึ่งข้อนี้พิสูจน์: BDC เดินถึง 8 แล้ว แต่ของบริษัทยังเป็นใบแรก */
+  eq('  ★ สมุดของบริษัทเองเดินเลขของตัวเอง (ยังไม่เคยออก → 0001)',
     ctx.previewNextDocNumber('TNKI', 'AP'), 'AP-202610-0001');
 
   bad2('ตั้งต่ำกว่าที่ออกไปแล้ว → ปฏิเสธ (อ่านเลขล่าสุดจากตัวนับกลางได้ถูก)',
@@ -254,10 +257,12 @@ console.log('\n── ★★ หมวดงานซื้อ/บัญชี�
 
   const r2 = ctx.setDocCounter(SESSION, { docType: 'AP', nextNumber: 501 });
   eq('ตั้งเลขถัดไปของหมวดกลางได้ และตัวอย่างเลขถูกรูป',
-    [r2.success, r2.sample], [true, 'AP-BDC-202610-0501']);
+    [r2.success, r2.sample], [true, 'AP-202610-0501']);
   eq('  ★★ เขียนลง "ตัวนับกลาง" จริง ไม่ใช่ไฟล์บริษัท (ข้อที่เคยพลาด)',
     ctx.centralCounters.find(c => c.doc_type === 'AP@BDC').last_number, 500);
-  eq('  preview หลังตั้งตรงกับที่ตั้งไว้', ctx.previewNextDocNumber('BDC', 'AP'), 'AP-BDC-202610-0501');
+  eq('  preview หลังตั้งตรงกับที่ตั้งไว้', ctx.previewNextDocNumber('BDC', 'AP'), 'AP-202610-0501');
+  eq('  ★★ และต้องไม่ไปขยับตัวนับของบริษัท (คนละเล่มจริง)',
+    ctx.previewNextDocNumber('TNKI', 'AP'), 'AP-202610-0001');
 }
 
 console.log('\n── ★ listDocSeries ส่ง "เลขที่เอกสารถัดไป" มาให้ตารางด้วย (เจ้าของระบบสั่ง 7 ต.ค. 2026) ──');
@@ -276,7 +281,8 @@ console.log('\n── ★ listDocSeries ส่ง "เลขที่เอก�
     resetCycle: 'monthly', separator: '-' });
   const d2 = ctx.listDocSeries(SESSION, {}).data;
   const ap = d2.find(r => r.doc_type === 'AP' && String(r.is_active) === 'TRUE');
-  eq('  หมวดกลางมีรหัสบริษัทคั่น ตรงกับเลขที่ออกจริง', !!ap && /^AP-BDC-/.test(ap.next_number), true);
+  eq('  หมวดกลางประกอบเลขตาม prefix ที่ตั้งไว้ ไม่มีรหัสบริษัทแทรก',
+    !!ap && /^AP-\d{6}-\d{4}$/.test(ap.next_number), true);
   const inact = d.filter(r => String(r.is_active) !== 'TRUE');
   eq('  ★ แถวที่ปิดไปแล้วไม่โชว์เลข (เป็นประวัติของรูปแบบเก่า เลขไม่ได้ออกจากแถวนั้น)',
     inact.every(r => !r.next_number), true);

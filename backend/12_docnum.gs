@@ -21,7 +21,10 @@
      คีย์ตัวนับเป็น `PO@BDC` แยกจาก `PO` ของบริษัท และรูปแบบเลขอ่านจาก `doc_number_series`
      ของสมุดนั้นเอง (`_centralDocConfig` → `_docSeriesConfig(book, …)`)
      ชื่อ `central` หมายถึง "ที่เก็บ" ไม่ใช่ "ใช้ร่วมกัน" — เคยทำให้เข้าใจผิดมาแล้ว 7 ต.ค. 2026
-     และ **แทรกรหัสตัวแทนต่อท้าย prefix** เมื่อเป็นเอกสารของตัวแทน เช่น `PO-TNKN-202610-0001`
+     ★★ และ **เลขที่พิมพ์ออกมาเป็นไปตาม prefix ที่ตั้งไว้ล้วนๆ ไม่มีอะไรแทรกให้อัตโนมัติ**
+       (เลิกแทรกรหัสบริษัท 7 ต.ค. 2026 — เจ้าของระบบแจ้งว่าไม่ได้ใส่ไว้ใน prefix แต่มันโผล่มาเอง
+       ทำให้แอดมินสับสน · สิ่งที่ตั้งต้องเป็นสิ่งที่ได้)
+     ★ **ไม่แทรกอะไรลงในเลขให้เองทั้งนั้น** (เลิกแทรกรหัสตัวแทน 7 ต.ค. 2026) — เลขเป็นไปตาม prefix ล้วนๆ
      ส่วน SO ใช้ตัวนับในไฟล์ของตัวแทนเอง จึงไม่ต้องแทรกรหัส
 
    **เพิ่มเอกสารที่ต้องมีเลขกำกับเมื่อไหร่ ต้องมาเพิ่มที่นี่ด้วย** ไม่งั้นตั้งค่าไม่ได้และ `saveDocSeries` ปฏิเสธ */
@@ -125,7 +128,7 @@ function getNextDocNumber(tenantId, docType) {
 /* ★★ เอกสารในระบบนี้มีตัวนับอยู่ "สองที่" และนี่คือตัวบอกว่าหมวดไหนอยู่ที่ไหน (7 ต.ค. 2026)
  *   - หมวดงานขาย (SO/DO/PICK/RC/TAX-IV) → `doc_number_counters` ในไฟล์ของบริษัทนั้น
  *   - หมวดงานซื้อ/บัญชี (`central: true`) → `central_doc_counters` ในชีตกลาง คีย์ `PO@BDC`
- *     และเลขที่ออกมามีรหัสบริษัทคั่น (`PO-BDC-202610-0001`) — ดู `_nextCentralDocNo`
+ *     ส่วนเลขที่พิมพ์ออกมาเป็นไปตาม prefix ของสมุดนั้นล้วนๆ — ดู `_nextCentralDocNo`
  *
  * ★ ทั้งสองแบบ "เดินเลขแยกของแต่ละบริษัทเหมือนกัน" ต่างกันแค่ที่เก็บแถวตัวนับ
  *
@@ -144,17 +147,11 @@ function _docCounterRef(tenantId, docType) {
   return { central: false, scope: '', key: String(docType), cfg: _docSeriesConfig(tenantId, docType) };
 }
 
-// ประกอบเลขให้ตรงกับที่ตัวออกเลขจริงของหมวดนั้นทำ (หมวดกลางมีรหัสบริษัทคั่นหลัง prefix)
+/* ประกอบเลขให้ตรงกับที่ตัวออกเลขจริงของหมวดนั้นทำ
+   ★ 7 ต.ค. 2026 — ทั้งสองหมวดประกอบเหมือนกันแล้ว (เลิกแทรกรหัสบริษัทอัตโนมัติ ดู `_nextCentralDocNo`)
+     เหลือไว้เป็นฟังก์ชันแยกเพราะ `ref.cfg` ของหมวดกลางอ่านมาคนละทาง (`_centralDocConfig`) */
 function _buildDocNumber(ref, runningNo) {
-  if (!ref.central) return _formatDocNumber(ref.cfg, '', runningNo);
-  var cfg = ref.cfg, parts = [cfg.prefix || ''];
-  if (ref.scope) parts.push(ref.scope);
-  if (cfg.date_format) parts.push(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), cfg.date_format));
-  var digits = parseInt(cfg.running_digits, 10) || 4;
-  var padded = String(runningNo);
-  while (padded.length < digits) padded = '0' + padded;
-  parts.push(padded);
-  return parts.join(cfg.separator || '-');
+  return _formatDocNumber(ref.cfg, '', runningNo);
 }
 
 // อ่านเลขล่าสุดของงวดปัจจุบันจากตัวนับที่ถูกที่ — คืน { last, cfg, ref }
