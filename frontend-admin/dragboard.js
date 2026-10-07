@@ -21,7 +21,9 @@
     /* ★ `align-items:stretch` (ค่าเริ่มต้น) — คอลัมน์สูงเท่ากันหมดตามคอลัมน์ที่ยาวสุด
        ของเดิมใช้ flex-start คอลัมน์จึงสูงตามเนื้อหาตัวเอง คอลัมน์ว่างเตี้ยกว่าคอลัมน์ที่มีการ์ด
        มองแล้วกระโดกกระเดกและพื้นที่ปล่อยการ์ดของคอลัมน์ว่างก็เล็กลงไปด้วย (ผู้ใช้แจ้ง 7 ต.ค. 2026) */
-    '.dgb{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px}',
+    /* ★ overflow-y ต้องเขียนว่า hidden ให้ชัด — ตั้ง overflow-x:auto ไว้ข้างเดียว CSS จะเลื่อนแกน y
+       จาก visible เป็น auto ให้เอง กระดานก็กลายเป็นตัวเลื่อนอีกตัวซ้อนกับคอลัมน์ แล้วแถบเลื่อนมาสองชั้น */
+    '.dgb{display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding-bottom:4px}',
     /* ★★ ต้องมีบรรทัดนี้ — `.dgb{display:flex}` เป็นกฎของผู้เขียน ซึ่งชนะกฎ `[hidden]{display:none}`
        ของเบราว์เซอร์เสมอ · ตั้ง el.hidden = true แล้วกระดานยัง "โผล่อยู่" ทั้งที่ property บอกว่าซ่อนแล้ว
        (เจอจริง 7 ต.ค. 2026: กดดูตารางแล้วการ์ดไม่หาย) · แพทเทิร์นเดียวกับ .busy-chip[hidden] ในแอป
@@ -46,7 +48,12 @@
     '.dgb-colh b{font-size:.86rem;font-weight:600;display:block}',
     '.dgb-sub{font-size:.76rem;opacity:.72;font-variant-numeric:tabular-nums;display:block;margin-top:1px}',
     '.dgb-ct{font-size:.78rem;opacity:.6;font-variant-numeric:tabular-nums;flex:0 0 auto;padding-top:1px}',
-    '.dgb-colb{padding:10px;display:flex;flex-direction:column;gap:8px;flex:1}',
+    /* ★★ การ์ดเยอะ = คอลัมน์เลื่อนในตัวเอง ไม่ใช่ยืดลงไปจนล้นจอ (ผู้ใช้แจ้ง 7 ต.ค. 2026:
+       "การ์ดเยอะล้นลงไปด้านล่าง ไม่มี scroll ลงไปดูได้") · หัวคอลัมน์ flex:none จึงอยู่กับที่
+       เห็นชื่อสถานะ+ยอดรวมตลอดเวลาแม้เลื่อนการ์ดไปใบที่ยี่สิบ — หลักเดียวกับหัวตารางที่ตรึงไว้
+       ★ ต้องมี min-height:0 ด้วย ไม่งั้น flex item ไม่ยอมหดลงต่ำกว่าเนื้อหาตัวเอง overflow จึงไม่เคยทำงาน */
+    '.dgb-colb{padding:10px;display:flex;flex-direction:column;gap:8px;flex:1;',
+    '  min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}',
     /* ★ touch-action:none จำเป็น ไม่งั้นนิ้วที่ลากการ์ดจะเลื่อนหน้าแทน แล้วลากไม่ได้เลยบนมือถือ */
     '.dgb-card{background:var(--surface,#fff);border:1px solid var(--border,#E4E9F1);border-radius:8px;padding:9px 11px;',
     '  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}',
@@ -106,9 +113,41 @@
           (mine.length ? mine.map(cardHtml).join('') : '<div class="dgb-empty">' + E(spec.emptyText || 'ว่าง') + '</div>') +
         '</div></div>';
     }).join('');
+    fit(el);
+    if (boards.indexOf(el) < 0) boards.push(el);
     if (!el.__dgb) bind(el, spec);
     el.__dgb = spec;          // ผูก spec ล่าสุดไว้ ให้ตัวจับ event ใช้ของรอบปัจจุบันเสมอ
   }
+
+  /* ══ ผูกความสูงกระดานกับ "ตัวที่เลื่อนอยู่ใกล้ที่สุด" ══
+     กระดานต้องสูงไม่เกินพื้นที่ที่มองเห็น แล้วให้แต่ละคอลัมน์เลื่อนการ์ดของตัวเอง
+     ★ วัดจาก clientHeight ของตัวเลื่อน ไม่ใช่ innerHeight ของหน้าต่าง — กรอบของแอปนี้
+       (.app-shell สูงเท่าจอ · main.content{overflow:hidden} · .view-body เลื่อนตัวเดียว)
+       ทำให้พื้นที่จริงเหลือไม่เท่าจอ และเลขมายิกแบบ calc(100vh - 260px) จะผิดทุกครั้งที่แถบบนเปลี่ยน
+     ★ บวก scrollTop กลับเข้าไปด้วย ไม่งั้นพอผู้ใช้เลื่อนหน้าลง ระยะที่วัดได้จะโตขึ้นเรื่อยๆ
+     ★ หาตัวเลื่อนไม่เจอ = ไม่ตั้งเพดาน ปล่อยให้หน้าเลื่อนตามปกติ ดีกว่าตัดการ์ดหายโดยไม่มีแถบเลื่อน */
+  var boards = [];
+  function scrollerOf(el) {
+    for (var p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+      var ov = getComputedStyle(p).overflowY;
+      if (ov === 'auto' || ov === 'scroll') return p;
+    }
+    return null;
+  }
+  function fit(el) {
+    var sc = scrollerOf(el);
+    if (!sc) { el.style.maxHeight = ''; return; }
+    var top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+    var avail = sc.clientHeight - top - 10;
+    el.style.maxHeight = avail > 240 ? Math.floor(avail) + 'px' : '';
+  }
+  var fitTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(function () {
+      boards.forEach(function (b) { if (b.isConnected) fit(b); });
+    }, 120);
+  });
 
   function cardHtml(c) {
     return '<div class="dgb-card' + (c.busy ? ' dgb-busy' : '') + '" data-dgb-id="' + E(c.id) + '"' +

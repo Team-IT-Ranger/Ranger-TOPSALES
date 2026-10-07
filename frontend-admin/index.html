@@ -877,7 +877,7 @@
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
           <!-- กระดานลากการ์ด — มุมมองที่สองของหน้าเดียวกัน ใช้ข้อมูล/ตัวกรอง/snapshot ชุดเดียวกับตาราง -->
-          <div id="so-board" class="dgb"></div>
+          <div id="so-board" class="dgb" data-view-scroll></div>
           <p class="form-hint" id="so-board-note" style="margin:6px 0 10px"></p>
           <div class="table-wrap"><table>
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
@@ -3591,7 +3591,7 @@ function ensureDragBoard(){
        ไม่บัมป์แล้วผู้ใช้เดิมจะยังรันของเก่าจนกว่าแคชจะหมดอายุ โดยไม่มีอะไรฟ้องเลย
        (เจอจริง 7 ต.ค. 2026: แก้ความกว้างคอลัมน์แล้วไม่เปลี่ยน ตอนแรกนึกว่า CSS ผิด)
        กติกาเดียวกับ config.js ที่ CLAUDE.md เตือนไว้แล้ว */
-    s.src = 'dragboard.js?v=20261007d';
+    s.src = 'dragboard.js?v=20261007e';
     s.onload = () => resolve(window.DragBoard);
     s.onerror = () => { toast('โหลดกระดานไม่สำเร็จ', true); reject(new Error('dragboard')); };
     document.head.appendChild(s);
@@ -7812,7 +7812,12 @@ async function deleteRoleUI(code){
      ★ จำกัดความสูงไว้ ถ้าของเหนือตารางสูงเกิน MAX ก็ปล่อยให้เลื่อนตามปกติ — ไม่งั้นวันหนึ่งมีใคร
        วางการ์ดใหญ่ๆ ไว้เหนือตาราง แล้วมันกินจอจนเหลือที่ให้ข้อมูลไม่กี่แถวโดยไม่มีใครตั้งใจ */
   const PIN_MAX = 240;
-  const isTableBlock = el => el.classList.contains('table-wrap') || !!el.querySelector('.table-wrap');
+  /* "บล็อกข้อมูล" = ของที่ต้องอยู่ในกรอบที่เลื่อนและจัดการการเลื่อนของตัวเอง
+     ★ ไม่ใช่แค่ตาราง — กระดานลากการ์ดก็เป็นข้อมูล ติดป้าย data-view-scroll ไว้
+       ถ้าไม่นับมันเป็นบล็อกข้อมูล มันจะถูกตรึงออกไปนอกกรอบตอนยังว่าง (สูง 0 = ไม่เกินเพดาน)
+       แล้วพอการ์ดมาเต็มก็ล้นออกนอกจอโดยไม่มีแถบเลื่อน (เจอจริง 7 ต.ค. 2026) */
+  const isTableBlock = el => el.classList.contains('table-wrap') || el.hasAttribute('data-view-scroll')
+    || !!el.querySelector('.table-wrap, [data-view-scroll]');
 
   const wrap = () => {
     document.querySelectorAll('#content > .view').forEach(v => {
@@ -7824,6 +7829,17 @@ async function deleteRoleUI(code){
         body.className = 'view-body';
         v.insertBefore(body, kids[0]);
         kids.forEach(el => body.appendChild(el));
+      }
+      /* ★★ ตรึงแล้วต้องปล่อยคืนได้ด้วย — ของที่ถูกตรึงไว้ตอนยังเตี้ยอาจโตขึ้นทีหลัง
+         (แถบเตือนที่โผล่มา · การ์ดที่โหลดเสร็จ) ของเดิมคิดสมดุลจากลูกของ .view-body เท่านั้น
+         ของที่ย้ายออกไปแล้วจึงไม่มีใครคิดถึงอีก มันอยู่นอกกรอบที่เลื่อนและถูก
+         main.content{overflow:hidden} ตัดหายโดยไม่มีแถบเลื่อนให้เลื่อนลงไปดู
+         ★ เว้นไว้ถ้าผู้ใช้กำลังพิมพ์อยู่ในนั้น — ย้าย element ที่ถือ focus = focus หลุดกลางคำ */
+      const pinned = [...v.children].filter(el => el !== body && !el.classList.contains('view-head'));
+      if (pinned.length && pinned.reduce((n, el) => n + el.offsetHeight, 0) > PIN_MAX
+          && !pinned.some(el => el.contains(document.activeElement))) {
+        const first = body.firstChild;
+        pinned.forEach(el => body.insertBefore(el, first));
       }
       // จัดสมดุลใหม่ทุกครั้ง: อะไรที่อยู่ก่อนตารางและไม่สูงเกินไป ให้ย้ายออกมาตรึงไว้
       const inBody = [...body.children];
