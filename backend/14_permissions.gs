@@ -35,7 +35,9 @@ var MODULE_REGISTRY = [
   { code: 'vendors',        label: 'ผู้ขาย/ผู้จัดจำหน่าย',  scope: 'both'   },
   { code: 'purchasing',     label: 'ใบขอซื้อและใบสั่งซื้อ', scope: 'both'   },
   { code: 'inventory',      label: 'คลังสินค้า (รับเข้า/ยอดคงเหลือ)', scope: 'both' },
-  { code: 'accounting',     label: 'บัญชี (แยกประเภท/ลูกหนี้/เจ้าหนี้)', scope: 'owner' }
+  // ★ 7 ต.ค. 2026 owner -> both: ตัวแทนทำบัญชีของตัวเองได้แล้ว (ดู TENANT_MODULES ใน 00_setup_sheets.gs)
+  //   ตัวกั้นคือการกรองตามสมุด (_inBook ใน 23_accounting.gs) ไม่ใช่ scope ตรงนี้
+  { code: 'accounting',     label: 'บัญชี (แยกประเภท/ลูกหนี้/เจ้าหนี้)', scope: 'both' }
 ];
 
 /**
