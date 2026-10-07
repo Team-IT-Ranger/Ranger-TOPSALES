@@ -877,7 +877,8 @@
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
           <!-- กระดานลากการ์ด — มุมมองที่สองของหน้าเดียวกัน ใช้ข้อมูล/ตัวกรอง/snapshot ชุดเดียวกับตาราง -->
-          <div id="so-board" class="dgb" hidden></div>
+          <div id="so-board" class="dgb"></div>
+          <p class="form-hint" id="so-board-note" style="margin:6px 0 10px"></p>
           <div class="table-wrap"><table>
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
             <tbody id="salesorders-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
@@ -3482,9 +3483,12 @@ function renderSalesOrders(){
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
   if (wrap) wrap.hidden = soViewMode === 'board';
-  if (board) board.hidden = soViewMode !== 'board';
-  if (soViewMode === 'board') renderSalesOrderBoard();
-  else renderSalesOrdersTable();
+  /* ★ โหมดตารางไม่ซ่อนกระดานทั้งก้อน — เหลือหัวคอลัมน์ไว้เป็นแถบสรุป (เจ้าของระบบสั่ง 7 ต.ค. 2026)
+     ยอดเงินค้างต่อสถานะเป็นตัวเลขที่อยากเห็นตลอดเวลา ไม่ใช่เฉพาะตอนดูกระดาน
+     ★★ จึงต้องวาดกระดานทั้งสองโหมด เพราะยอดรวมคิดจากการ์ดที่กรองแล้ว */
+  if (board) board.classList.toggle('dgb-heads', soViewMode !== 'board');
+  renderSalesOrderBoard();
+  if (soViewMode !== 'board') renderSalesOrdersTable();
 }
 async function renderSalesOrderBoard(){
   const el = document.getElementById('so-board');

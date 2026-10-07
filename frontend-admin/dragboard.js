@@ -19,6 +19,15 @@
 
   var CSS = [
     '.dgb{display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:4px}',
+    /* ★★ ต้องมีบรรทัดนี้ — `.dgb{display:flex}` เป็นกฎของผู้เขียน ซึ่งชนะกฎ `[hidden]{display:none}`
+       ของเบราว์เซอร์เสมอ · ตั้ง el.hidden = true แล้วกระดานยัง "โผล่อยู่" ทั้งที่ property บอกว่าซ่อนแล้ว
+       (เจอจริง 7 ต.ค. 2026: กดดูตารางแล้วการ์ดไม่หาย) · แพทเทิร์นเดียวกับ .busy-chip[hidden] ในแอป
+       ★ เช็คว่าซ่อนจริงต้องดู getComputedStyle(el).display ไม่ใช่ el.hidden ซึ่งบอกแค่ว่าตั้งค่าไว้แล้ว */
+    '.dgb[hidden]{display:none}',
+    /* โหมด "เหลือแต่หัว" — ซ่อนเฉพาะตัวการ์ด เก็บหัวคอลัมน์ไว้เป็นแถบสรุป
+       ใช้ตอนผู้ใช้ดูตาราง: ยังเห็นว่าแต่ละสถานะมีกี่ใบและเงินค้างเท่าไหร่ โดยไม่เสียพื้นที่ให้การ์ด */
+    '.dgb.dgb-heads .dgb-colb{display:none}',
+    '.dgb.dgb-heads .dgb-col{min-height:0}',
     /* ★ ใช้ชื่อตัวแปรจริงของแอป (--ground/--surface/--border/--blue) ไม่ใช่ชื่อที่เดาเอง
        ของเดิมเขียน var(--bg) / var(--primary) ซึ่งไม่มีในธีมนี้ รอดมาเพราะค่า fallback เท่านั้น
        แปลว่าถ้าวันหนึ่งธีมเปลี่ยนสี กระดานจะไม่เปลี่ยนตามโดยไม่มีใครรู้ */
@@ -72,7 +81,10 @@
    */
   function mount(el, spec) {
     ensureShell();
-    el.className = 'dgb';
+    /* ★ เติมคลาส ไม่ใช่เขียนทับ — `el.className = 'dgb'` ลบคลาสที่หน้าเว็บใส่ไว้เองทิ้งทุกครั้งที่วาดใหม่
+       (เจอจริง 7 ต.ค. 2026: หน้าเว็บใส่ `dgb-heads` เพื่อซ่อนการ์ด แล้ว mount() ลบทิ้งทันที
+       ผลคือกดดูตารางแล้วการ์ดไม่หาย) · เครื่องมือไม่มีสิทธิ์ล้างคลาสของ element ที่ยืมเขามาใช้ */
+    el.classList.add('dgb');
     el.innerHTML = spec.columns.map(function (c) {
       var mine = spec.cards.filter(function (x) { return String(x.col) === String(c.key); });
       /* c.tone = สีหัวคอลัมน์ (ผู้เรียกเป็นคนเลือก เครื่องมือไม่รู้ว่าสีไหนแปลว่าอะไร)
