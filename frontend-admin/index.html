@@ -3591,7 +3591,7 @@ function ensureDragBoard(){
        ไม่บัมป์แล้วผู้ใช้เดิมจะยังรันของเก่าจนกว่าแคชจะหมดอายุ โดยไม่มีอะไรฟ้องเลย
        (เจอจริง 7 ต.ค. 2026: แก้ความกว้างคอลัมน์แล้วไม่เปลี่ยน ตอนแรกนึกว่า CSS ผิด)
        กติกาเดียวกับ config.js ที่ CLAUDE.md เตือนไว้แล้ว */
-    s.src = 'dragboard.js?v=20261007c';
+    s.src = 'dragboard.js?v=20261007d';
     s.onload = () => resolve(window.DragBoard);
     s.onerror = () => { toast('โหลดกระดานไม่สำเร็จ', true); reject(new Error('dragboard')); };
     document.head.appendChild(s);

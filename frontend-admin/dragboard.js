@@ -18,7 +18,10 @@
   'use strict';
 
   var CSS = [
-    '.dgb{display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:4px}',
+    /* ★ `align-items:stretch` (ค่าเริ่มต้น) — คอลัมน์สูงเท่ากันหมดตามคอลัมน์ที่ยาวสุด
+       ของเดิมใช้ flex-start คอลัมน์จึงสูงตามเนื้อหาตัวเอง คอลัมน์ว่างเตี้ยกว่าคอลัมน์ที่มีการ์ด
+       มองแล้วกระโดกกระเดกและพื้นที่ปล่อยการ์ดของคอลัมน์ว่างก็เล็กลงไปด้วย (ผู้ใช้แจ้ง 7 ต.ค. 2026) */
+    '.dgb{display:flex;gap:12px;overflow-x:auto;padding-bottom:4px}',
     /* ★★ ต้องมีบรรทัดนี้ — `.dgb{display:flex}` เป็นกฎของผู้เขียน ซึ่งชนะกฎ `[hidden]{display:none}`
        ของเบราว์เซอร์เสมอ · ตั้ง el.hidden = true แล้วกระดานยัง "โผล่อยู่" ทั้งที่ property บอกว่าซ่อนแล้ว
        (เจอจริง 7 ต.ค. 2026: กดดูตารางแล้วการ์ดไม่หาย) · แพทเทิร์นเดียวกับ .busy-chip[hidden] ในแอป
