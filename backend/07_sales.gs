@@ -231,6 +231,11 @@ function recordSale(user, payload) {
   var orderCode = editing ? editing.order_code
     : (fulfillmentType === 'immediate' ? getNextDocNumber(user.tenantId, 'SO') : ('DRAFT-' + orderId));
   var createdAt = editing ? safeDateStr(editing.created_at) : nowStr();
+  /* ★ ขายสดจากรถจบทั้ง "ส่งของ" และ "รับเงิน" ตั้งแต่กดบันทึก จึงต้องมีใบเสร็จ+ใบกำกับภาษีตรงนี้
+     (บิลพวกนี้ไม่เคยเดินผ่านสถานะ "พร้อมจัดส่ง" ซึ่งเป็นจุดออกเลขของฝั่งสำนักงาน) ·
+     ใบร่างและใบนัดส่งยังไม่ออก — ยังไม่ได้ส่งของและยังไม่ได้เงิน · แก้ใบร่างเดิมก็ไม่ออกซ้ำ */
+  var saleDocs = (!editing && fulfillmentType === 'immediate')
+    ? issueSaleDocNos(user.tenantId, null, ['receipt', 'tax']).fields : {};
 
   var vatSplit = calc.vat;   // แยกภาษีจากรายการจริง รองรับของยกเว้นภาษีปนในบิล (18_pricing_engine.gs)
   // แก้ไขใบร่าง = เขียนทับแถวเดิม (เลขที่เอกสารและวันที่เปิดบิลคงเดิม) · เปิดใบใหม่ = ต่อท้ายตามปกติ
@@ -247,6 +252,9 @@ function recordSale(user, payload) {
     payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),
     paid_amount: initialPaymentStatus(payload.paymentType, fulfillmentType) === 'paid' ? calc.total : 0,
     delivered_at: fulfillmentType === 'immediate' ? createdAt : '', paid_at: '',
+    picking_no: saleDocs.picking_no || '', picking_at: saleDocs.picking_at || '',
+    receipt_no: saleDocs.receipt_no || '', receipt_at: saleDocs.receipt_at || '',
+    tax_invoice_no: saleDocs.tax_invoice_no || '', tax_invoice_at: saleDocs.tax_invoice_at || '',
     sale_by: user.lineUserId, lat: payload.latitude || '', lng: payload.longitude || '',
     map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt,
     // วันนัดส่งโดยประมาณ รับเฉพาะรูปแบบ yyyy-MM-dd และเฉพาะใบนัดส่ง (ขายจากรถส่งของไปแล้ว ไม่มีวันนัด)

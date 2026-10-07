@@ -29,6 +29,14 @@ var DOC_SERIES_TYPES = [
      ออกเลขอัตโนมัติตอนบิลเข้าสถานะ "พร้อมจัดส่ง" (34_sales_status.gs) */
   { code: 'DO',  label: 'ใบส่งสินค้า', note: 'ออกเลขอัตโนมัติเมื่อบิลขายเข้าสถานะ "พร้อมจัดส่ง"',
     defaults: { prefix: 'DO',  date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily',   separator: '-' } },
+  /* ★ 7 ต.ค. 2026 — เอกสารขายทุกชนิดมีเลขของตัวเอง (แอดมินขอ) ใช้ตัวนับในไฟล์ของตัวแทนเหมือน SO/DO
+     เพราะออกในนามตัวแทนที่ขาย · **จุดที่ออกเลขอยู่ใน SALE_DOC_FIELDS (34_sales_status.gs) ที่เดียว** */
+  { code: 'PICK', label: 'ใบจัดของ', note: 'ออกเลขอัตโนมัติพร้อมใบส่งสินค้า เมื่อบิลเข้าสถานะ "พร้อมจัดส่ง"',
+    defaults: { prefix: 'PICK', date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' } },
+  { code: 'RC',  label: 'ใบเสร็จรับเงิน', note: 'ออกเลขอัตโนมัติเมื่อรับชำระครั้งแรก (ขายสดจากรถออกตั้งแต่เปิดบิล)',
+    defaults: { prefix: 'RC',  date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' } },
+  { code: 'TAX', label: 'ใบกำกับภาษี', note: 'ออกเลขอัตโนมัติตอนส่งมอบสินค้า ("พร้อมจัดส่ง" · ขายสดจากรถออกตั้งแต่เปิดบิล)',
+    defaults: { prefix: 'TAX', date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' } },
   { code: 'PR',  label: 'ใบขอซื้อ',          central: true },
   { code: 'PO',  label: 'ใบสั่งซื้อ',         central: true },
   { code: 'GR',  label: 'ใบรับของ',           central: true },

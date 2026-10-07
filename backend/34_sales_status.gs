@@ -347,10 +347,12 @@ function updateSalesOrderStatus(session, payload) {
            ★★ ออกครั้งเดียวต่อใบ: ถ้ามีเลขแล้วไม่ออกใหม่ — ถอยกลับไป "รับงาน" แล้วเดินหน้ามาใหม่
            ต้องได้เลขเดิม ไม่งั้นใบที่พิมพ์ส่งไปกับรถแล้วจะอ้างเลขที่ไม่มีอยู่ในระบบอีกต่อไป
            (เลขเอกสารกินตัวนับทุกครั้งที่เรียก ออกซ้ำ = เลขกระโดดโดยไม่มีเอกสารรองรับ) */
-        if (toStatus === SO_READY && !String(order.delivery_order_no || '').trim()) {
-          fields.delivery_order_no = getNextDocNumber(tenantId, 'DO');
-          fields.delivery_order_at = nowStr();
-          changes.push('ออกใบส่งสินค้า ' + fields.delivery_order_no);
+        if (toStatus === SO_READY) {
+          /* ★ ส่งมอบสินค้า = จุดที่เอกสารฝั่งคลังและภาระภาษีเกิดพร้อมกัน
+             ใบจัดของ (หยิบของ) · ใบส่งสินค้า (ติดไปกับของ) · ใบกำกับภาษี (tax point ของการขายสินค้าคือการส่งมอบ) */
+          var iss = issueSaleDocNos(tenantId, order, ['picking', 'delivery', 'tax']);
+          for (var kk in iss.fields) fields[kk] = iss.fields[kk];
+          iss.issued.forEach(function(t) { changes.push('ออก' + t); });
         }
         justBecameReady = (toStatus === SO_READY);
         changes.push(SO_STATUS_LABELS[fromStatus] + ' → ' + SO_STATUS_LABELS[toStatus]);
@@ -376,6 +378,14 @@ function updateSalesOrderStatus(session, payload) {
       fields.payment_status = toPay;
       fields.paid_at = toPay === PAY_UNPAID ? '' : nowStr();
       changes.push(SO_PAYMENT_LABELS[fromPay] + ' → ' + SO_PAYMENT_LABELS[toPay]);
+      /* ใบเสร็จรับเงินออกตอน "ได้รับเงินจริงครั้งแรก" (รวมรับบางส่วน — ผู้จ่ายต้องได้หลักฐานทันที)
+         ★ ออกครั้งเดียวต่อใบ: รับเพิ่มงวดถัดไปใช้เลขเดิม ไม่ใช่ออกใบใหม่ทุกครั้งที่รับเงิน
+           (ถ้าอยากได้ใบต่อครั้ง ต้องทำเป็นเอกสารรับชำระแยกใบ ซึ่งเป็นคนละเรื่องกับใบเสร็จของบิลนี้) */
+      if (toPay !== PAY_UNPAID) {
+        var issR = issueSaleDocNos(tenantId, order, ['receipt']);
+        for (var rk in issR.fields) fields[rk] = issR.fields[rk];
+        issR.issued.forEach(function(t) { changes.push('ออก' + t); });
+      }
     }
 
     if (!Object.keys(fields).length) return { success: false, message: 'ไม่มีอะไรเปลี่ยน' };
@@ -408,6 +418,44 @@ function updateSalesOrderStatus(session, payload) {
       deliveredAt: fields.delivered_at !== undefined ? fields.delivered_at : safeDateStr(order.delivered_at),
       message: changes.length ? changes.join(' · ') : 'บันทึกแล้ว' };
   });
+}
+
+/* ═══════════ เลขเอกสารของบิลขาย — เอกสารแต่ละชนิดมีเลขของตัวเอง (แอดมินขอ 7 ต.ค. 2026) ═══════════
+ * เดิมทุกใบใช้เลขใบสั่งขายซ้ำกันหมด อ้างอิงกันไม่ได้เลย (ใบส่งสินค้าแยกออกไปก่อนแล้วเมื่อ 6 ต.ค.)
+ *
+ * ★ ออกเลข "ครั้งเดียวต่อใบต่อชนิด" — ถอยสถานะกลับแล้วเดินหน้าใหม่ต้องได้เลขเดิม
+ *   ใบที่พิมพ์ส่งไปกับรถ/ให้ลูกค้าแล้วต้องอ้างเลขที่ยังมีอยู่จริงในระบบเสมอ
+ *   และเลขเอกสารกินตัวนับทุกครั้งที่เรียก ออกซ้ำ = เลขกระโดดโดยไม่มีเอกสารรองรับ อธิบายกับผู้ตรวจไม่ได้
+ *
+ * ★★ จุดที่ออกเลขมีสามจุด อย่ากระจายไปมากกว่านี้:
+ *   1. เข้าสถานะ "พร้อมจัดส่ง"  → ใบจัดของ + ใบส่งสินค้า + ใบกำกับภาษี (ส่งมอบสินค้า = tax point)
+ *   2. รับชำระครั้งแรก          → ใบเสร็จรับเงิน
+ *   3. เปิดบิลขายสดจากรถ        → ใบเสร็จรับเงิน + ใบกำกับภาษี (จบทั้งส่งของและรับเงินตั้งแต่กดบันทึก)
+ *      อยู่ที่ recordSale (07_sales.gs) และ recordSaleAdmin (19_sales_admin.gs)
+ */
+var SALE_DOC_FIELDS = {
+  picking:  { no: 'picking_no',        at: 'picking_at',        type: 'PICK', label: 'ใบจัดของ' },
+  delivery: { no: 'delivery_order_no', at: 'delivery_order_at', type: 'DO',   label: 'ใบส่งสินค้า' },
+  receipt:  { no: 'receipt_no',        at: 'receipt_at',        type: 'RC',   label: 'ใบเสร็จรับเงิน' },
+  tax:      { no: 'tax_invoice_no',    at: 'tax_invoice_at',    type: 'TAX',  label: 'ใบกำกับภาษี' }
+};
+
+/**
+ * ออกเลขเอกสารให้บิลขายตามชนิดที่ขอ — ข้ามชนิดที่ "มีเลขแล้ว" เสมอ
+ * @param order ของเดิม (ส่ง null ตอนเปิดบิลใหม่ที่ยังไม่มีแถว = ออกใหม่ทุกชนิดที่ขอ)
+ * @return { fields: {คอลัมน์ที่ต้องเขียน}, issued: ['ใบส่งสินค้า DO-...'] }
+ */
+function issueSaleDocNos(tenantId, order, kinds) {
+  var fields = {}, issued = [];
+  (kinds || []).forEach(function(k) {
+    var m = SALE_DOC_FIELDS[k];
+    if (!m) return;
+    if (order && String(order[m.no] || '').trim()) return;   // ออกไปแล้ว ใช้เลขเดิม
+    fields[m.no] = getNextDocNumber(tenantId, m.type);
+    fields[m.at] = nowStr();
+    issued.push(m.label + ' ' + fields[m.no]);
+  });
+  return { fields: fields, issued: issued };
 }
 
 /* ═══════════ ฝั่งแอปมือถือ: ยืนยันใบสั่งขาย / ยกเลิกใบของตัวเอง (1 ต.ค. 2026) ═══════════

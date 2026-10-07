@@ -85,6 +85,10 @@
     '.docsheet.dp-label .dp-lb-to .dp-lb-addr{font-size:1.15em}',
     '.docsheet.dp-label .dp-lb-to .dp-lb-tel{font-size:1.3em;font-weight:700;margin-top:.4em}',
     '.docsheet.dp-label .dp-lb-foot{display:flex;justify-content:space-between;gap:.6em;margin-top:.5em;font-size:.95em}',
+    /* บาร์โค้ด — วาดเป็น <svg> เอง ไม่พึ่งไลบรารีภายนอก (เอกสารถูกเปิดเป็นแท็บ blob ซึ่งอาจไม่มีเน็ต
+       และหน้านี้ตั้งใจไม่มี dependency ภายนอกเลย) · ต้องเป็นสีดำล้วนและห้ามมี gradient ไม่งั้นเครื่องสแกนอ่านไม่ออก */
+    '.docsheet .dp-bc{display:block;margin:.35em auto 0;shape-rendering:crispEdges}',
+    '.docsheet .dp-bc-wrap{text-align:center}',
     '.docsheet .dp-wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}',
     '.docsheet .dp-wm span{font-size:9em;font-weight:800;color:rgba(200,30,30,.13);transform:rotate(-24deg);letter-spacing:.1em}',
     /* ตอนสั่งพิมพ์: เหลือแค่กระดาษ */
@@ -99,6 +103,58 @@
     /* ขนาดกระดาษไม่ได้อยู่ตรงนี้ — setPaper() ฉีด @page ให้ตรงกับชนิดเอกสารตอนแสดง (A4 หรือสติกเกอร์) */
     '}'
   ].join('\n');
+
+  /* ── บาร์โค้ด Code 128 (ชุด B) ────────────────────────────────────────────
+     ตารางลายเส้นมาตรฐาน 107 ตัว ตัวละ 6 ช่วง (แท่ง-ช่องว่างสลับกัน) ยกเว้นตัวหยุดที่มี 7 ช่วง
+     ★ ทุกตัวต้องรวมได้ 11 โมดูล และผลรวมของ "แท่ง" (ช่องคู่ที่ 0,2,4) ต้องเป็นเลขคู่เสมอ
+       — สองข้อนี้เป็นคุณสมบัติของมาตรฐาน ใช้เป็นตัวจับว่าลอกตารางผิดหรือเปล่า (มีเทสต์คุมใน
+       .dev/test-barcode.js) · บาร์โค้ดที่ลายผิดจะสแกนไม่ออกหรืออ่านได้ผิดตัว ซึ่งแย่กว่าไม่มีบาร์โค้ด */
+  var C128 = ('212222,222122,222221,121223,121322,131222,122213,122312,132212,221213,221312,231212,112232,' +
+    '122132,122231,113222,123122,123221,223211,221132,221231,213212,223112,312131,311222,321122,321221,' +
+    '312212,322112,322211,212123,212321,232121,111323,131123,131321,112313,132113,132311,211313,231113,' +
+    '231311,112133,112331,132131,113123,113321,133121,313121,211331,231131,213113,213311,213131,311123,' +
+    '311321,331121,312113,312311,332111,314111,221411,431111,111224,111422,121124,121421,141122,141221,' +
+    '112214,112412,122114,122411,142112,142211,241211,221114,413111,241112,134111,111242,121142,121241,' +
+    '114212,124112,124211,411212,421112,421211,212141,214121,412121,111143,111341,131141,114113,114311,' +
+    '411113,411311,113141,114131,311141,411131,211412,211214,211232,2331112').split(',');
+
+  /* คืน <svg> ของข้อความที่ส่งมา · รองรับ ASCII 32-126 (รหัสเอกสารของเราเป็น A-Z 0-9 และ - ทั้งหมด)
+     อักขระนอกช่วง (เช่นภาษาไทย) = คืนค่าว่าง ไม่ใช่วาดมั่ว — ใบที่ไม่มีบาร์โค้ดยังใช้ได้ ใบที่บาร์โค้ดผิดใช้ไม่ได้ */
+  function barcodeSvg(text, opt) {
+    text = String(text === null || text === undefined ? '' : text);
+    if (!text) return '';
+    var vals = [], i, c;
+    for (i = 0; i < text.length; i++) {
+      c = text.charCodeAt(i);
+      if (c < 32 || c > 126) return '';
+      vals.push(c - 32);
+    }
+    var START_B = 104, STOP = 106;
+    var sum = START_B;
+    for (i = 0; i < vals.length; i++) sum += vals[i] * (i + 1);
+    var codes = [START_B].concat(vals, [sum % 103], [STOP]);
+    var mods = [];                                  // ความกว้างแต่ละช่วง เริ่มที่ "แท่ง" เสมอ
+    for (i = 0; i < codes.length; i++) {
+      var pat = C128[codes[i]];
+      for (var j = 0; j < pat.length; j++) mods.push(parseInt(pat.charAt(j), 10));
+    }
+    /* ★ ตัวหยุด (2331112) มี 7 ช่วงและจบด้วย "แท่ง" อยู่แล้ว ไม่ต้องเติมอะไรต่อท้ายอีก
+       ★★ ต้องเว้น quiet zone อย่างน้อย 10 โมดูลทั้งหัวและท้าย — มาตรฐานบังคับ และเครื่องสแกนหลายรุ่น
+          อ่านไม่ออกถ้าไม่มี · ตาคนมองไม่เห็นว่าขาด จะไปรู้เอาตอนสแกนหน้างานไม่ติดแล้วหาสาเหตุไม่เจอ */
+    var QUIET = 10;
+    var total = QUIET * 2;
+    for (i = 0; i < mods.length; i++) total += mods[i];
+    opt = opt || {};
+    var h = opt.height || 46, unit = opt.unit || 2, x = QUIET * unit, bars = [];
+    for (i = 0; i < mods.length; i++) {
+      var w = mods[i] * unit;
+      if (i % 2 === 0) bars.push('<rect x="' + x + '" y="0" width="' + w + '" height="' + h + '"/>');
+      x += w;
+    }
+    return '<svg class="dp-bc" width="' + (total * unit) + '" height="' + h + '" viewBox="0 0 ' +
+      (total * unit) + ' ' + h + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="' +
+      String(text).replace(/[&<>"]/g, '') + '" fill="#000">' + bars.join('') + '</svg>';
+  }
 
   var E = function (s) { return String(s === null || s === undefined ? '' : s)
     .replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
@@ -349,7 +405,11 @@
         '<div class="dp-lb-from"><b>ผู้ส่ง</b> ' + E(from.name || '') +
           (from.phone ? ' · โทร. ' + E(from.phone) : '') +
           (from.address ? '<div>' + E(from.address) + '</div>' : '') + '</div>' +
-        '<div class="dp-lb-code">' + E(spec.docNo || '') + (count > 1 ? '  (' + b + '/' + count + ')' : '') + '</div>' +
+        '<div class="dp-lb-code">' + E(spec.docNo || '') + (count > 1 ? '  (' + b + '/' + count + ')' : '') +
+          /* ★ บาร์โค้ดเลขใบสั่งขาย — ใบนี้ติดบนกล่องตลอดทาง คนที่รับของปลายทางสแกนเข้าระบบได้เลย
+             ไม่ต้องพิมพ์เลขตามที่อ่านจากกระดาษ (พิมพ์ผิดทีเดียวตามของไม่เจอทั้งกล่อง)
+             ★ ไม่ใส่หมายเลขกล่องลงบาร์โค้ด — ทุกกล่องของบิลเดียวกันสแกนได้เลขเดียวกัน ซึ่งคือสิ่งที่ต้องการ */
+          (barcodeSvg(spec.docNo, { height: 42, unit: 2 }) || '') + '</div>' +
         '<div class="dp-lb-to">' +
           '<div class="dp-lb-lbl">ผู้รับ</div>' +
           '<div class="dp-lb-name">' + E(to.name || '') + '</div>' +

@@ -43,7 +43,21 @@ const PRODUCTS = [
   { record_id: 102, name: 'สินค้า B', base_price: 50, tax_status: 'vat', is_stock: '', has_transactions: '' }
 ];
 
+/* ★ 7 ต.ค. 2026 — ขายสดจากรถออกเลขใบเสร็จ + ใบกำกับภาษีตั้งแต่กดบันทึก (34_sales_status.gs)
+   ไฟล์นี้เป็นเทสต์ของ recordSale ไม่ใช่ของเลขเอกสาร จึงดักไว้แล้วตรวจแค่ "เรียกไหม ขอชนิดไหน"
+   (กติกาการออกเลขซ้ำ/ไม่ซ้ำ มีเทสต์ของตัวเองใน .dev/test-sales-status.js) */
+const DOCNO_CALLS = [];
 const ctx = {
+  issueSaleDocNos: (tenantId, order, kinds) => {
+    DOCNO_CALLS.push({ tenantId, hasOrder: !!order, kinds });
+    const f = {};
+    (kinds || []).forEach(k => {
+      const m = { receipt: ['receipt_no', 'RC'], tax: ['tax_invoice_no', 'TAX'],
+                  picking: ['picking_no', 'PICK'], delivery: ['delivery_order_no', 'DO'] }[k];
+      if (m) { f[m[0]] = m[1] + '-TEST-0001'; f[m[0].replace(/_no$/, '_at')] = '2026-10-07 10:00:00'; }
+    });
+    return { fields: f, issued: [] };
+  },
   console, JSON, String, Number, Object, Array, Date, isNaN, isFinite, parseInt, parseFloat, Math,
   Logger: { log: () => {} },
   // ── ค่าคงที่ที่ปกติมาจาก 34_sales_status.gs / 28_units.gs (ไม่โหลดทั้งไฟล์ — mock เฉพาะที่ recordSale ใช้จริง) ──
@@ -120,6 +134,13 @@ reset();
 ctx._priceSaleCart = () => stubPriced([{ productId: 101, unitCode: 'PC', qty: 2, baseQty: 2, price: 100, lineTotal: 200, unitDiscount: 0, lineDiscount: 0 }]);
 let r = ctx.recordSale(U1, { customerId: 1, paymentType: 'cash', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 2 }] });
 eq('บันทึกสำเร็จ สถานะ completed ทันที', [r.success, sheets.sales_orders[0].status], [true, 'completed']);
+/* ★ 7 ต.ค. 2026 — ขายสดจากรถได้เลขใบเสร็จ + ใบกำกับภาษีตั้งแต่กดบันทึก
+   บิลพวกนี้ "ไม่เคย" เดินผ่านสถานะ "พร้อมจัดส่ง" ซึ่งเป็นจุดออกเลขของฝั่งสำนักงาน
+   ไม่ออกตรงนี้ = บิลที่ขายหน้าร้านทุกใบไม่มีเลขใบเสร็จ/ใบกำกับภาษีเลยทั้งระบบ
+   ★★ ตรวจว่าค่า "ถูกเขียนลงแถวจริง" ไม่ใช่แค่ถูกเรียก — คอลัมน์ใหม่หล่นหายระหว่างประกอบแถวได้ง่าย */
+eq('ขายสดจากรถได้เลขใบเสร็จ + ใบกำกับภาษี เขียนลงแถวจริง',
+  [/^RC-/.test(sheets.sales_orders[0].receipt_no || ''),
+   /^TAX-/.test(sheets.sales_orders[0].tax_invoice_no || '')], [true, true]);
 eq('ตัดสต็อกรถ 2 ชิ้น', sheets.van_stock.find(s => s.product_id === '101').qty, 48);
 eq('นับยอดขายรายวัน +1 ใบ', dailyBumps.length, 1);
 eq('เขียนบรรทัดสินค้า 1 บรรทัด', sheets.order_items.length, 1);
@@ -171,6 +192,21 @@ r = ctx.recordSale(U1, { customerId: 1, paymentType: 'cash', fulfillmentType: 'o
 eq('แก้ใบของคนอื่นไม่ได้ (sale_by ไม่ตรง)', [r.success, /ไม่ใช่บิลของท่าน/.test(r.message || '')], [false, true]);
 r = ctx.recordSale(U1, { customerId: 1, paymentType: 'cash', fulfillmentType: 'office_delivery', editOrderCode: 'SO-20261001-0003', items: [{ productId: 101, unitCode: 'PC', qty: 1 }] });
 eq('แก้ใบที่ไม่ใช่สถานะร่างแล้วไม่ได้', [r.success, /แก้ไขเองไม่ได้/.test(r.message || '')], [false, true]);
+
+console.log('\n── ★ ขายสดจากรถได้เลขใบเสร็จ + ใบกำกับภาษีตั้งแต่กดบันทึก (แอดมินขอ 7 ต.ค. 2026) ──');
+/* บิลขายสดจากรถ "ไม่เคย" เดินผ่านสถานะ "พร้อมจัดส่ง" ซึ่งเป็นจุดออกเลขของฝั่งสำนักงาน
+   ถ้าไม่ออกตรงนี้ บิลที่ขายหน้าร้านทุกใบจะไม่มีเลขใบเสร็จ/ใบกำกับภาษีเลยทั้งระบบ */
+{
+  const immediate = DOCNO_CALLS.filter(c => (c.kinds || []).indexOf('receipt') >= 0);
+  eq('ขายสดจากรถเรียกออกเลข และขอทั้งใบเสร็จและใบกำกับภาษี',
+    [immediate.length > 0, immediate[0] && immediate[0].kinds.sort().join(',')], [true, 'receipt,tax']);
+  eq('  ★ ส่ง order เป็น null (เปิดบิลใหม่ ยังไม่มีแถวให้เทียบ) — ไม่ใช่ความพลาด',
+    immediate[0].hasOrder, false);
+  const rows = sheets.sales_orders || [];
+  const drafts = rows.filter(o => String(o.order_code || '').indexOf('DRAFT-') === 0);
+  eq('  ★ ใบร่าง/ใบนัดส่งต้องยังไม่มีเลข (ยังไม่ได้ส่งของและยังไม่ได้เงิน)',
+    drafts.every(o => !o.receipt_no && !o.tax_invoice_no), true);
+}
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

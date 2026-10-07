@@ -19,6 +19,7 @@ var TENANT_SHEET_TABS = {
        แยกจาก order_code เพราะใบส่งของเป็นคนละเอกสารกับใบสั่งขาย และแอดมินต้องอ้างเลขนี้กับคนขับ/ลูกค้า
        ★ ออกครั้งเดียวต่อใบ — ถอยสถานะกลับแล้วเดินหน้าใหม่ต้องได้เลขเดิม ไม่ใช่เลขใหม่ */
     'delivery_order_no', 'delivery_order_at',
+    'picking_no', 'picking_at', 'receipt_no', 'receipt_at', 'tax_invoice_no', 'tax_invoice_at',
     // ธง "ศูนย์แก้ไขรายการในใบนี้แล้ว" (3 ต.ค. 2026 — editSalesOrderAdmin, 34_sales_status.gs) ให้มือถือบอกพนักงาน
     'center_edited_at', 'center_edited_by',
     // ภาพนิ่งภาษี ณ วันที่ออกบิล — ห้ามคำนวณใหม่ตอนเปิดดู ไม่งั้นวันที่อัตราภาษีเปลี่ยน ใบเก่าทั้งหมดขยับตาม

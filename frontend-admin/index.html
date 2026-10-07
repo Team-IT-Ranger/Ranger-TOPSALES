@@ -3610,14 +3610,16 @@ function ensureDocPrint(){
    ช่องลงชื่อสะท้อนหน้าที่ทางธุรกิจของเอกสารนั้น ไม่ใช่ของประดับ (ข้อ 2.4) */
 const SO_DOC_KINDS = {
   salesorder:  { title: 'ใบสั่งขาย', signers: ['ผู้สั่งซื้อ','ผู้ขาย','ผู้อนุมัติ'], showPrice: true, showBank: true },
-  receipt:     { title: 'ใบเสร็จรับเงิน', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false },
-  receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true },
-  /* ★ useDeliveryNo — ใบส่งสินค้ามีเลขของตัวเอง (DO) ไม่ใช้เลขใบสั่งขายซ้ำ (แอดมินขอ 6 ต.ค. 2026)
-     เลขออกอัตโนมัติตอนบิลเข้าสถานะ "พร้อมจัดส่ง" · ใบที่ยังไม่ถึงสถานะนั้นยังไม่มีเลข จึงตกกลับไปใช้เลขใบสั่งขาย
-     ไม่งั้นช่อง "เลขที่" ว่างเปล่าบนเอกสารที่ลูกค้าเซ็นรับของ */
-  delivery:    { title: 'ใบส่งสินค้า', signers: ['ผู้จัดของ','ผู้จัดส่ง','ผู้รับสินค้า'], showPrice: false, showBank: false, useDeliveryNo: true },
+  receipt:     { title: 'ใบเสร็จรับเงิน', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false, noField: 'receiptNo' },
+  receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true, noField: 'receiptNo' },
+  /* ★ `noField` — เอกสารแต่ละชนิดมีเลขของตัวเอง ไม่ใช้เลขใบสั่งขายซ้ำกันหมด (แอดมินขอ 6-7 ต.ค. 2026)
+     เลขออกอัตโนมัติจากฝั่ง backend (SALE_DOC_FIELDS ใน 34_sales_status.gs) ที่จุดงานจริงของเอกสารนั้น
+     ★ ใบที่ยังไม่ถึงจุดออกเลข (เช่นพิมพ์ใบส่งของก่อนกด "พร้อมจัดส่ง") ยังไม่มีเลข → **ตกกลับไปใช้เลขใบสั่งขาย**
+       ไม่ปล่อยช่อง "เลขที่" ว่างบนเอกสารที่ลูกค้าเซ็นรับของ · ★★ และ **ห้ามออกเลขจากหน้าเว็บตอนกดพิมพ์**
+       พิมพ์ซ้ำสิบครั้งต้องได้เลขเดิมสิบครั้ง เลขเอกสารกินตัวนับทุกครั้งที่ออก */
+  delivery:    { title: 'ใบส่งสินค้า', signers: ['ผู้จัดของ','ผู้จัดส่ง','ผู้รับสินค้า'], showPrice: false, showBank: false, noField: 'deliveryOrderNo' },
   parcel:      { title: 'ใบปะหน้าพัสดุ', label: true },
-  picking:     { title: 'ใบจัดของ', signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false }
+  picking:     { title: 'ใบจัดของ', signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false, noField: 'pickingNo' }
 };
 /* ★ เรียงตามลำดับที่เอกสารถูกใช้จริงตลอดสายงาน (แอดมินสั่ง 7 ต.ค. 2026):
    ใบสั่งขาย (ตอนรับออร์เดอร์) → ใบจัดของ (หยิบของในคลัง) → ใบส่งสินค้า (ติดไปกับของ) →
@@ -3628,7 +3630,7 @@ function printSaleDoc(r, kind){
   const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.salesorder;
   const o = r.order, iss = r.issuer || {};
   // ยังไม่ถึง "พร้อมจัดส่ง" = ยังไม่มีเลขใบส่งของ → ใช้เลขใบสั่งขายไปก่อน ดีกว่าช่องเลขที่ว่าง
-  const docNo = (k.useDeliveryNo && o.deliveryOrderNo) ? o.deliveryOrderNo : o.code;
+  const docNo = (k.noField && o[k.noField]) ? o[k.noField] : o.code;
   if (k.label) return printParcelLabel(r);
   ensureDocPrint().then(() => {
     const cols = [

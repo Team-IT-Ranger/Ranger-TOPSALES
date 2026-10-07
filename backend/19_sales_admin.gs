@@ -108,6 +108,8 @@ function getSalesOrderAdmin(session, payload) {
       centerEditedAt: safeDateStr(order.center_edited_at), centerEditedBy: order.center_edited_by || '',
       // เลขที่ใบส่งสินค้า — เอกสารคนละใบกับใบสั่งขาย ออกตอน "พร้อมจัดส่ง" (6 ต.ค. 2026)
       deliveryOrderNo: order.delivery_order_no || '', deliveryOrderAt: safeDateStr(order.delivery_order_at),
+      pickingNo: order.picking_no || '', receiptNo: order.receipt_no || '',
+      taxInvoiceNo: order.tax_invoice_no || '', taxInvoiceAt: safeDateStr(order.tax_invoice_at),
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
       canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && hasPermission(session, 'sales', 'edit')
     },
@@ -229,6 +231,9 @@ function recordSaleAdmin(session, payload) {
   var orderCode = getNextDocNumber(tenantId, 'SO');
   var orderId = tenantNextId(tenantId, 'sales_orders');
   var createdAt = nowStr();
+  // เหตุผลเดียวกับ recordSale (07_sales.gs): ขายสดจบตั้งแต่กดบันทึก จึงออกใบเสร็จ+ใบกำกับภาษีตรงนี้
+  var saleDocs = fulfillmentType === 'immediate'
+    ? issueSaleDocNos(tenantId, null, ['receipt', 'tax']).fields : {};
   var saleBy = soldByLineUserId || ('admin:' + session.username);
   var noteParts = [];
   if (priceListUsed) noteParts.push('ชุดราคา: ' + priceListUsed.name);
@@ -246,6 +251,8 @@ function recordSaleAdmin(session, payload) {
     payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),
     paid_amount: initialPaymentStatus(payload.paymentType, fulfillmentType) === 'paid' ? calc.total : 0,
     delivered_at: fulfillmentType === 'immediate' ? createdAt : '', paid_at: '',
+    receipt_no: saleDocs.receipt_no || '', receipt_at: saleDocs.receipt_at || '',
+    tax_invoice_no: saleDocs.tax_invoice_no || '', tax_invoice_at: saleDocs.tax_invoice_at || '',
     sale_by: saleBy, lat: '', lng: '', map: '', note: noteParts.join(' · '), created_at: createdAt
   });
   logOrderStatus(tenantId, orderId, '', fulfillmentType === 'immediate' ? 'completed' : 'pending_delivery',

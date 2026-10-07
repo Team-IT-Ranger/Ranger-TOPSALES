@@ -69,7 +69,8 @@ const ctx = {
        เพิ่มคอลัมน์ใน TENANT_SHEET_TABS เมื่อไหร่ ต้องมาเพิ่มที่นี่ด้วย ไม่งั้นเทสต์จะผ่านทั้งที่ของจริงไม่ได้เขียน */
     const hdr = ['record_id','order_code','customer_id','total','payment_method','fulfillment_type','status',
       'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by','sale_by','created_at',
-      'requested_delivery_date','center_edited_at','center_edited_by','delivery_order_no','delivery_order_at'];
+      'requested_delivery_date','center_edited_at','center_edited_by','delivery_order_no','delivery_order_at',
+      'picking_no','picking_at','receipt_no','receipt_at','tax_invoice_no','tax_invoice_at'];
     const values = [hdr].concat(rows.map(r => hdr.map(h => (r[h] === undefined ? '' : r[h]))));
     return { getDataRange: () => ({ getValues: () => values }),
       getRange: (row, col) => ({ setValue: v => { rows[row - 2][hdr[col - 1]] = v; } }) };
@@ -408,7 +409,11 @@ console.log('\n── ★ ใบส่งสินค้ามีเลขขอ
   eq('เข้าสถานะพร้อมจัดส่ง → ได้เลขใบส่งของ', [d.success, /^DO-/.test(row(50).delivery_order_no || '')], [true, true]);
   eq('  ตอบกลับหน้าจอพร้อมเลขเลย ไม่ต้องโหลดใหม่', d.deliveryOrderNo, row(50).delivery_order_no);
   eq('  ติดเวลาที่ออกเลขไว้ด้วย', !!row(50).delivery_order_at, true);
-  eq('  เรียกตัวออกเลขครั้งเดียว', ctx.docNoCalls - before, 1);
+  // ★ 7 ต.ค. 2026 — จุดนี้ออกเลขให้ 3 ชนิดพร้อมกัน (ใบจัดของ · ใบส่งสินค้า · ใบกำกับภาษี)
+  eq('  ออกเลขครบสามชนิดในครั้งเดียว ไม่เกินนั้น', ctx.docNoCalls - before, 3);
+  eq('  ★ ได้เลขของแต่ละชนิดจริง ไม่ใช่เลขใบสั่งขายซ้ำกัน',
+    [/^PICK-/.test(row(50).picking_no || ''), /^DO-/.test(row(50).delivery_order_no || ''),
+     /^TAX-/.test(row(50).tax_invoice_no || '')], [true, true, true]);
 
   const issued = row(50).delivery_order_no;
   // ★ ถอยกลับแล้วเดินหน้าใหม่ — ใบที่พิมพ์ส่งไปกับรถแล้วต้องยังอ้างเลขเดิมได้
@@ -416,7 +421,11 @@ console.log('\n── ★ ใบส่งสินค้ามีเลขขอ
   const mid = ctx.docNoCalls;
   ctx.updateSalesOrderStatus(S, { id: 50, status: 'ready_to_ship' });
   eq('★★ ถอยกลับแล้วเดินหน้าใหม่ ต้องได้เลขเดิม ไม่ใช่เลขใหม่', row(50).delivery_order_no, issued);
-  eq('  และต้องไม่กินตัวนับเลขเอกสารเพิ่ม', ctx.docNoCalls - mid, 0);
+  eq('  และต้องไม่กินตัวนับเลขเอกสารเพิ่ม (ทั้งสามชนิด)', ctx.docNoCalls - mid, 0);
+  /* ★★ ข้อนี้เคยจับบั๊กจริงตอนเพิ่มเลขเอกสารชนิดใหม่: หัวชีตจำลองไม่มีคอลัมน์ใหม่
+     `_updateOrderRow` จึงทิ้งค่าเงียบๆ แล้วรอบถัดไปออกเลขใหม่ซ้ำ — ของจริงจะเลขกระโดดทุกครั้งที่กด */
+  eq('  เลขทั้งสามถูกเขียนลงชีตจริง ไม่ได้หายไประหว่างทาง',
+    [!!row(50).picking_no, !!row(50).delivery_order_no, !!row(50).tax_invoice_no], [true, true, true]);
 
   // เดินต่อไปสถานะถัดๆ ไปก็ไม่ออกเลขใหม่
   const mid2 = ctx.docNoCalls;
@@ -463,6 +472,24 @@ console.log('\n── ★ ตั้งลูกหนี้อัตโนมั
      /เครดิต/.test(df.warning || '')], [true, 'ready_to_ship', true, true]);
   eq('  และยังได้เลขใบส่งของตามปกติ', /^DO-/.test(row(52).delivery_order_no || ''), true);
   ctx.arShouldFail = false;
+}
+
+console.log('\n── ★ ใบเสร็จรับเงินมีเลขของตัวเอง ออกตอนรับเงินครั้งแรก (แอดมินขอ 7 ต.ค. 2026) ──');
+{
+  t.sales_orders.push({ record_id: 60, order_code: 'SO-60', customer_id: 1, total: 1000,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'accepted',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-09-26 09:00:00' });
+  t.order_items.push({ record_id: 600, order_id: 60, product_id: '101', unit_code: 'CT', qty: 1, base_qty: 1 });
+  eq('ยังไม่ได้เงิน = ยังไม่มีเลขใบเสร็จ', !row(60).receipt_no, true);
+
+  ctx.updateSalesOrderStatus(S, { id: 60, paidAmount: 400 });
+  const firstRc = row(60).receipt_no;
+  eq('รับชำระบางส่วนครั้งแรก → ออกใบเสร็จให้ทันที (ผู้จ่ายต้องได้หลักฐานตั้งแต่ครั้งแรก)',
+    [/^RC-/.test(firstRc || ''), row(60).payment_status], [true, 'partial']);
+  const midRc = ctx.docNoCalls;
+  ctx.updateSalesOrderStatus(S, { id: 60, paidAmount: 1000 });
+  eq('★ รับงวดถัดไปใช้เลขเดิม ไม่ออกใบใหม่ และไม่กินตัวนับเพิ่ม',
+    [row(60).receipt_no, row(60).payment_status, ctx.docNoCalls - midRc], [firstRc, 'paid', 0]);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
