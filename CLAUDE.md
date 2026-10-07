@@ -1911,6 +1911,13 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
   through both the mobile and admin action surfaces). Refuses to run against the production URL as a
   safety check. Re-run this after any pricing-engine or sales-order backend change before calling it
   verified.
+- `BACKEND_URL='<uat exec url>' ADMIN_USER=… ADMIN_PASS=… node .dev/uat-sale-docs-e2e.js` — เดินบิลขายจริง
+  ครบสายบน UAT เพื่อดูว่าเลขเอกสารแต่ละชนิดออกตามจังหวะที่ออกแบบไว้ (PICK/DO/TAX ตอน "พร้อมจัดส่ง" ·
+  RC ตอนรับเงินครั้งแรก · ถอยกลับแล้วเดินใหม่ได้เลขเดิม) และตั้งลูกหนี้ให้อัตโนมัติ
+  · **เติมของเข้าคลังกลางให้เองก่อนเสมอ** — สำนักงานจัดส่งตัดจากคลังกลาง ของไม่พอแล้วกด "พร้อมจัดส่ง"
+    ไม่ผ่าน ซึ่งทำให้เทสต์ล้มโดยที่ระบบไม่ได้ผิด (เคยหลงประเด็นมาแล้ว)
+  · ปฏิเสธการรันกับ prod เป็นตัวกันพลาด · ยกเลิกบิลทดสอบให้ตอนจบ แต่**ทิ้งผู้ขาย/PO/ใบรับของไว้บน UAT**
+    (เอกสารที่ลงบัญชีแล้วลบไม่ได้ตามหลักบัญชี)
 - `UAT_URL='<uat exec url>' node .dev/uat-purchasing-e2e.js` — live UAT test ของงานซื้อ+บัญชีทั้งสาย
   (ผู้ขาย → สายอนุมัติ 2 ขั้น → PR → PO → รับของ 2 ครั้ง → ตั้งหนี้ → จ่าย → ลูกหนี้ → งบทดลอง/งบดุล)
   ทิ้งเอกสารทดสอบชื่อขึ้นต้น `E2E` ไว้ใน UAT (เอกสารที่ลงบัญชีแล้วลบไม่ได้ตามหลักบัญชี)
