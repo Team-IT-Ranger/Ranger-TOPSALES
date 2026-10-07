@@ -318,8 +318,27 @@ function receiveGoods(session, payload) {
       journalId = jr.journalId;
       centralUpdate('goods_receipts', grId, { journal_id: journalId });
     }
-    var res = _withPoResult(session, po.record_id, 'รับของเข้าคลัง ' + grNo + ' แล้ว' + (journalId ? ' (ลงบัญชีสินค้าคงเหลือ ' + inventoryValue.toLocaleString() + ' บาท)' : ''), scope);
+
+    /* ★ ตั้งหนี้ให้อัตโนมัติเมื่อ "ตัวแทน" รับของ (เจ้าของระบบสั่ง 7 ต.ค. 2026)
+       ตัวแทนซื้อขาดจากบริษัท — ของมาถึงพร้อมเอกสารขายของบริษัทอยู่แล้ว ยอดจึงรู้แน่ตั้งแต่วินาทีที่รับ
+       ไม่มีอะไรให้รอ · ปล่อยให้ตั้งหนี้ด้วยมือทีหลัง = GR-NI ค้างบวมโดยไม่มีใครตามเก็บ (เคยค้างถึงล้าน)
+       ★★ ของบริษัทไม่ทำให้อัตโนมัติ และไม่ใช่เพราะลืม — บริษัทซื้อจากผู้ขายภายนอก ต้องรอใบแจ้งหนี้จริง
+       ของผู้ขายก่อน (เลขที่ใบ/ยอด/VAT อาจไม่ตรงกับใบรับของ) นั่นคือเหตุผลที่บัญชี 2150 GR-NI มีอยู่
+       ★ ล้มเหลวต้องไม่ล้มการรับของ — ของเข้าคลังไปแล้ว ย้อนไม่ได้ · รายงานเป็นคำเตือนแล้วให้ตั้งหนี้เองทีหลัง
+         (ปุ่ม "ตั้งหนี้" ยังอยู่ และกันซ้ำด้วย gr_id อยู่แล้ว) */
+    var apNote = '', apBillNo = '';
+    if (journalId && _normBook(scope)) {
+      var ap = _createApBillFromGrCore(session, { grId: grId, billDate: receiveDate }, _normBook(scope));
+      if (ap && ap.success) apBillNo = ap.billNo;
+      else apNote = 'ยังไม่ได้ตั้งหนี้: ' + ((ap && ap.message) || 'ไม่ทราบสาเหตุ');
+    }
+
+    var res = _withPoResult(session, po.record_id, 'รับของเข้าคลัง ' + grNo + ' แล้ว' +
+      (journalId ? ' (ลงบัญชีสินค้าคงเหลือ ' + inventoryValue.toLocaleString() + ' บาท)' : '') +
+      (apBillNo ? ' · ตั้งหนี้ ' + apBillNo : ''), scope);
     res.grId = grId; res.grNo = grNo; res.journalId = journalId;
+    if (apBillNo) res.billNo = apBillNo;
+    if (apNote) res.warning = apNote;
     return res;
   });
 }

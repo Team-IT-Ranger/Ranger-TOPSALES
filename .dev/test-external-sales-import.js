@@ -102,7 +102,24 @@ const DB = { goods_receipts: [{ record_id: 3, gr_no: 'GR-1', status: 'pending_re
                               { record_id: 5, gr_no: 'GR-3', status: 'pending_review', po_id: 7, source_ref: '', note: '' }],
   purchase_orders: [{ record_id: 2, status: 'sent', source_ref: 'IV1', note: '' }, { record_id: 3, status: 'received', source_ref: 'IV2', note: '' },
                     { record_id: 7, status: 'sent', source_ref: '', note: '' }] };
+/* ★ 7 ต.ค. 2026 — ตรวจรับใบนำเข้าแล้วลงบัญชี + ตั้งหนี้ให้อัตโนมัติ (ดู 23_accounting.gs)
+   ไฟล์นี้เป็นเทสต์ของ "การนำเข้า/ตรวจรับ" ไม่ใช่ของบัญชี จึงดักไว้แทนการโหลดโมดูลบัญชีทั้งก้อน
+   แล้วตรวจเฉพาะสิ่งที่เป็นหน้าที่ของไฟล์นี้: เรียกไหม ด้วยสมุดของใคร วันที่อะไร ยอดเท่าไหร่
+   (ตรรกะการลงบัญชีมีเทสต์ของตัวเองใน .dev/test-purchasing-accounting.js) */
 Object.assign(ctx, {
+  GL_ACCT: { INVENTORY: '1300', GRNI: '2150' },
+  _normBook: t => String(t || ''),
+  jvCalls: [], apCalls: [], jvFails: false,
+  _postJournal: function (o) {
+    ctx.jvCalls.push({ date: o.date, book: o.tenantId, refId: o.refId,
+      debit: (o.lines || []).reduce((s2, l) => s2 + (l.debit || 0), 0) });
+    return ctx.jvFails ? { success: false, message: 'ผังบัญชียังไม่พร้อม' }
+      : { success: true, journalId: 900 + ctx.jvCalls.length, journalNo: 'JV-TEST-' + ctx.jvCalls.length };
+  },
+  _createApBillFromGrCore: function (session, payload, book) {
+    ctx.apCalls.push({ grId: payload.grId, billDate: payload.billDate, book: book });
+    return { success: true, billId: 1, billNo: 'AP-TEST-0001' };
+  },
   _requirePermission: () => null, _purchaseScope: () => 'T1', _withDocLock: fn => fn(), nowStr: () => '2026-10-02 10:00:00',
   _findScoped: (name, id) => DB[name].find(x => String(x.record_id) === String(id)) || null,
   _childrenOf: (name, fk, id) => (DB[name] || []).filter(r => String(r[fk]) === String(id)),
@@ -263,6 +280,41 @@ eq('เปลี่ยนหน่วยที่รับจริงเป็�
   [STOCK.find(x => x.pid === '1').baseQty, STOCK.find(x => x.pid === '1').cost, D2.po_items[0].received_qty, D2.purchase_orders[0].status,
    (D2.gr_items.find(g => g.gr_id !== 20 && g.product_id === 1) || {}).qty], [120, 10, 2, 'partial', 8]);
 
+
+console.log('\n── ★ ตรวจรับแล้วลงบัญชี + ตั้งหนี้ให้อัตโนมัติ (เจ้าของระบบสั่ง 7 ต.ค. 2026) ──');
+/* เส้นทางนี้คือเส้นทางจริงของ BDC — ของเข้าทางนี้ทุกวัน ไม่ใช่ทาง receiveGoods
+   เดิมเขียนไว้ว่า "ไม่ลงบัญชี" ตามกติกาเก่าที่ตัวแทนยังไม่มีสมุด พอตัวแทนมีสมุดแล้วแต่ลืมแก้ที่นี่
+   สมุดของเขาจะว่างเปล่าตลอดไป (เจอจริง: ต้องไล่ backfill 2 ใบรวมล้านกว่าบาทบน UAT) */
+{
+  fresh();
+  ctx.jvCalls = []; ctx.apCalls = [];
+  const c2 = ctx.confirmExternalGoodsReceipt(S1, { id: 20, receiveDate: '2026-09-28',
+    items: [{ grItemId: 200, qty: 10 }, { grItemId: 201, qty: 4 }] });
+  /* ★ เทียบกับมูลค่าที่เข้าสต็อกจริง ไม่ใช่ตัวเลขที่เขียนตายไว้ — นี่คือสิ่งที่ต้องจริงเสมอ:
+     บัญชีสินค้าคงเหลือต้องขยับเท่ากับของที่เข้าคลังจริง ไม่งั้นบัญชีกับคลังจะเริ่มเพี้ยนจากกัน */
+  const stockValue = STOCK.reduce((sum, x) => sum + x.baseQty * x.cost, 0);
+  eq('ตรวจรับแล้วลงบัญชีให้ ด้วยยอดเท่ามูลค่าที่เข้าสต็อกจริง',
+    [ctx.jvCalls.length, ctx.jvCalls[0] && ctx.jvCalls[0].debit, stockValue > 0], [1, stockValue, true]);
+  eq('  ★ ลงวันที่รับของจริง ไม่ใช่วันที่กดตรวจรับ (นาฬิกาในกล่องทดสอบคือ 2 ต.ค.)',
+    ctx.jvCalls[0].date, '2026-09-28');
+  eq('  ★ ลงในสมุดของตัวแทนเจ้าของใบ', ctx.jvCalls[0].book, 'T1');
+  eq('  ติดเลขใบสำคัญกลับไปที่ใบรับของ', !!D2.goods_receipts[0].journal_id, true);
+  eq('  ตั้งหนี้ให้ต่อทันที ด้วยวันที่และสมุดเดียวกัน',
+    [ctx.apCalls.length, ctx.apCalls[0] && ctx.apCalls[0].billDate, ctx.apCalls[0] && ctx.apCalls[0].book],
+    [1, '2026-09-28', 'T1']);
+  eq('  ตอบกลับหน้าจอบอกทั้งเลขใบสำคัญและเลขตั้งหนี้', [!!c2.journalId, c2.billNo], [true, 'AP-TEST-0001']);
+
+  /* ★★ ลงบัญชีไม่สำเร็จ ต้องไม่ล้มการตรวจรับ — ของเข้าสต็อกไปแล้ว ย้อนไม่ได้
+     และต้องไม่ตั้งหนี้ต่อ (ตั้งหนี้คือการล้าง GR-NI ที่ยังไม่ได้ตั้งขึ้นมา) */
+  fresh();
+  ctx.jvCalls = []; ctx.apCalls = []; ctx.jvFails = true;
+  const c3 = ctx.confirmExternalGoodsReceipt(S1, { id: 20, items: [{ grItemId: 200, qty: 10 }, { grItemId: 201, qty: 4 }] });
+  eq('ลงบัญชีล้ม → ตรวจรับยังสำเร็จ ของเข้าสต็อกตามปกติ และบอกเหตุผลเป็นคำเตือน',
+    [c3.success, D2.goods_receipts[0].status, STOCK.find(x => x.pid === '1').baseQty,
+     /ยังไม่ได้ลงบัญชี/.test(c3.warning || '')], [true, 'posted', 600, true]);
+  eq('  และต้องไม่ตั้งหนี้ต่อ (ยังไม่มี GR-NI ให้ล้าง)', ctx.apCalls.length, 0);
+  ctx.jvFails = false;
+}
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

@@ -294,8 +294,11 @@ function listPendingExternalGoodsReceipts(session, payload) {
 }
 
 /**
- * แอดมินศูนย์ตรวจรับ — ยืดหยุ่นได้ก่อนยืนยัน (2 ต.ค. 2026) แล้วค่อยเข้าสต็อกจริง (เส้นทางเดียวกับ receiveGoods แต่ไม่ลงบัญชี
- * เพราะใบรับของของตัวแทนไม่ลง journal ตามกติกาเดิม)
+ * แอดมินศูนย์ตรวจรับ — ยืดหยุ่นได้ก่อนยืนยัน (2 ต.ค. 2026) แล้วค่อยเข้าสต็อกจริง (เส้นทางเดียวกับ receiveGoods)
+ * ★ 7 ต.ค. 2026 — **ลงบัญชีและตั้งหนี้ให้ด้วยแล้ว** เหมือน receiveGoods ทุกประการ
+ *   เดิมเขียนไว้ว่า "ไม่ลงบัญชีเพราะใบรับของของตัวแทนไม่ลง journal ตามกติกาเดิม" ซึ่งเลิกใช้ไปแล้วตั้งแต่
+ *   ตัวแทนมีสมุดของตัวเอง (6 ต.ค.) · **เส้นทางนี้คือเส้นทางจริงของ BDC** ของเข้าทางนี้ทุกวัน ไม่ใช่ทาง
+ *   receiveGoods — ลืมแก้ที่นี่ = สมุดของเขาว่างเปล่าตลอดไปแล้วต้องไล่ backfill ทุกเดือน
  * payload: {
  *   id, receiveDate?: 'yyyy-MM-dd', note?: string, createRemainder?: bool (ค่าตั้งต้น true),
  *   items:   [{ grItemId, qty?, unitCode?, remove?: bool }]   — ไม่ส่งช่อง = ใช้ค่าเดิม/ค่าปัจจุบันของสินค้า
@@ -415,6 +418,7 @@ function confirmExternalGoodsReceipt(session, payload) {
     stockOps.forEach(function(op) {
       _applyStockIn(scope, gr.warehouse_id, op.productId, op.baseQty, op.unitCost, 'receipt', 'GR', gr.record_id, gr.gr_no, session.adminUserId);
     });
+    var invValue = _money(stockOps.reduce(function(sum, op) { return sum + (Number(op.baseQty) || 0) * (Number(op.unitCost) || 0); }, 0));
 
     var done = after.length > 0 && after.every(function(it) { return (Number(it.received_qty) || 0) >= (Number(it.qty) || 0) - 1e-9; });
     var some = after.some(function(it) { return (Number(it.received_qty) || 0) > 0; });
@@ -425,9 +429,32 @@ function confirmExternalGoodsReceipt(session, payload) {
     var noteText = payload.note !== undefined ? String(payload.note || '').trim() : String(gr.note || '');
     if (auditNotes.length) noteText += (noteText ? '\n' : '') + auditNotes.join('\n');
     grFields.note = noteText;
+    /* ★ ลงบัญชี + ตั้งหนี้ ให้เหมือนเส้นทาง receiveGoods เป๊ะ (7 ต.ค. 2026)
+       วันที่ใช้วันรับของจริงของใบนี้ ไม่ใช่วันที่กดตรวจรับ — ไม่งั้นยอดไปโผล่ผิดงวด
+       ล้มเหลวต้องไม่ล้มการตรวจรับ: ของเข้าสต็อกไปแล้ว ย้อนไม่ได้ · รายงานเป็นคำเตือนแทน */
+    var grDate = String(grFields.receive_date || gr.receive_date || '').slice(0, 10);
+    var journalId = '', billNo = '', warn = '';
+    if (invValue > 0 && /^\d{4}-\d{2}-\d{2}$/.test(grDate)) {
+      var jr = _postJournal({ date: grDate, source: 'INV', refType: 'GR', refId: gr.record_id, tenantId: scope,
+        memo: 'รับของเข้าคลัง ' + gr.gr_no + ' (นำเข้าจากรายการขายออกของบริษัท)', createdBy: session.adminUserId, lines: [
+          { accountCode: GL_ACCT.INVENTORY, description: 'สินค้าคงเหลือเพิ่มจาก ' + gr.gr_no, debit: invValue, credit: 0 },
+          { accountCode: GL_ACCT.GRNI, description: 'รอรับใบแจ้งหนี้จากผู้ขาย', debit: 0, credit: invValue, partyType: 'vendor', partyId: gr.vendor_id }
+        ] });
+      if (jr.success) { journalId = jr.journalId; grFields.journal_id = journalId; }
+      else warn = 'ยังไม่ได้ลงบัญชี: ' + (jr.message || 'ไม่ทราบสาเหตุ');
+    }
     centralUpdate('goods_receipts', gr.record_id, grFields);
+    // ตั้งหนี้ให้อัตโนมัติเฉพาะของตัวแทน (ซื้อขาดจากบริษัท ยอดรู้แน่แล้ว) — ของบริษัทรอใบแจ้งหนี้จริงของผู้ขาย
+    if (journalId && _normBook(scope)) {
+      var ap = _createApBillFromGrCore(session, { grId: gr.record_id, billDate: grDate }, _normBook(scope));
+      if (ap && ap.success) billNo = ap.billNo;
+      else warn = (warn ? warn + ' · ' : '') + 'ยังไม่ได้ตั้งหนี้: ' + ((ap && ap.message) || 'ไม่ทราบสาเหตุ');
+    }
     return { success: true, remainderGrNo: remGr ? remGr.no : '', remainderLines: remGr ? remGr.count : 0,
+      journalId: journalId, billNo: billNo, warning: warn || undefined,
       message: 'ตรวจรับใบ ' + gr.gr_no + ' แล้ว — เข้าสต็อกเรียบร้อย' +
+        (journalId ? ' · ลงบัญชีสินค้าคงเหลือ ' + invValue.toLocaleString() + ' บาท' : '') +
+        (billNo ? ' · ตั้งหนี้ ' + billNo : '') +
         (remGr ? ' · ส่วนที่เหลือ ' + remGr.count + ' รายการสร้างเป็นใบรอตรวจรับใหม่ ' + remGr.no : '') };
   });
 }

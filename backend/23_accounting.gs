@@ -328,8 +328,16 @@ function listApBills(session, payload) {
  */
 function createApBillFromGr(session, payload) {
   var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
-  return _withDocLock(function() {
-    var book = _bookScope(session, payload);
+  payload = payload || {};
+  return _withDocLock(function() { return _createApBillFromGrCore(session, payload, _bookScope(session, payload)); });
+}
+
+/* ตัวจริงของการตั้งหนี้จากใบรับของ — **ไม่ตรวจสิทธิ์และไม่จับ lock เอง** ผู้เรียกต้องทำมาก่อนแล้ว
+   (หลักเดียวกับ `_createArInvoiceCore` / `_reverseJournalCore` — ดู CLAUDE.md "บัญชีแยกเล่มต่อตัวแทน")
+   `receiveGoods` ใน `22_purchase_order.gs` เรียกตัวนี้ตรงๆ ตอนตัวแทนรับของ เพราะอยู่ใต้ lock เดียวกันอยู่แล้ว
+   และคนรับของคือฝ่ายคลัง ซึ่งไม่ควรต้องมีสิทธิ์บัญชีเพื่อจะรับของเข้าคลัง */
+function _createApBillFromGrCore(session, payload, book) {
+  return (function() {
     var gr = _findById('goods_receipts', payload.grId);
     /* ตั้งหนี้ได้ทั้งของบริษัทและของตัวแทน แต่ "ลงสมุดของเจ้าของใบรับของ" เท่านั้น (6 ต.ค. 2026)
        ใบของสมุดอื่นตอบเหมือนไม่มี — ฝั่งบริษัทต้องสวมสิทธิ์เข้าไปในตัวแทนก่อนถึงจะตั้งหนี้ให้เขาได้ */
@@ -370,7 +378,7 @@ function createApBillFromGr(session, payload) {
       note: String(payload.note || ''), created_by: session.adminUserId, created_at: nowStr() });
     return { success: true, billId: billId, billNo: billNo, total: total, journalNo: jr.journalNo,
       message: 'ตั้งหนี้ ' + billNo + ' ยอด ' + total.toLocaleString() + ' บาท (ครบกำหนด ' + dueDate + ')' };
-  });
+  })();
 }
 
 /**

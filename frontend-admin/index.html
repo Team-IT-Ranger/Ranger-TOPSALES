@@ -3453,7 +3453,11 @@ function renderSaleOrderDetail(r){
     (o.centerEditedAt ? ' · <span class="pill wait" title="ศูนย์แก้ไขรายการหลังรับงาน — พนักงานจะเห็นแจ้งเตือนในแอปมือถือ">แก้ไขโดยศูนย์ ' + esc(o.centerEditedAt) + (o.centerEditedBy ? ' (' + esc(o.centerEditedBy) + ')' : '') + '</span>' : '') +
     (o.note ? '<br><span class="unit">'+esc(o.note)+'</span>' : '');
   sedClose();
+  /* ลำดับปุ่มเรียงตามลำดับที่คนทำงานใช้จริง (แอดมินสั่ง 7 ต.ค. 2026):
+     แก้ไขรายการ → พิมพ์เอกสาร → ยกเลิกบิล · แก้ให้ถูกก่อนแล้วค่อยพิมพ์ ส่วนยกเลิกเป็นทางออกสุดท้าย
+     จึงอยู่ท้ายสุดและไกลจากปุ่มที่กดบ่อย */
   document.getElementById('sod-actions').innerHTML =
+    (o.canEditLines ? '<button class="btn btn-sm btn-primary" onclick="openSodEdit()">✎ แก้ไขรายการ</button> ' : '') +
     '<div class="sod-print-menu">' +
       '<button class="btn btn-sm" onclick="toggleSoPrintMenu(event)">พิมพ์เอกสาร ▾</button>' +
       '<div class="sod-print-list" id="sod-print-list">' +
@@ -3462,7 +3466,6 @@ function renderSaleOrderDetail(r){
             ? ' <span class="unit">(ไม่มีราคา)</span>' : '') +
           (code === 'parcel' ? ' <span class="unit">100×150 มม.</span>' : '') + '</button>').join('') +
       '</div></div> ' +
-    (o.canEditLines ? '<button class="btn btn-sm btn-primary" onclick="openSodEdit()">✎ แก้ไขรายการ</button> ' : '') +
     (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
   renderSaleOrderStatusCard(r);
   renderSaleOrderHistory(r);
@@ -3616,8 +3619,11 @@ const SO_DOC_KINDS = {
   parcel:      { title: 'ใบปะหน้าพัสดุ', label: true },
   picking:     { title: 'ใบจัดของ', signers: ['ผู้จัดของ','ผู้ตรวจสอบ','ผู้รับของขึ้นรถ'], showPrice: false, showBank: false }
 };
-// เรียงตามเมนูจริง — ใบจัดของเป็นของเราเพิ่มเอง (ใช้ตอนโหลดของขึ้นรถ) จึงต่อท้าย
-const SO_DOC_MENU = ['salesorder', 'receipt', 'receiptdlv', 'delivery', 'parcel', 'picking'];
+/* ★ เรียงตามลำดับที่เอกสารถูกใช้จริงตลอดสายงาน (แอดมินสั่ง 7 ต.ค. 2026):
+   ใบสั่งขาย (ตอนรับออร์เดอร์) → ใบจัดของ (หยิบของในคลัง) → ใบส่งสินค้า (ติดไปกับของ) →
+   ใบส่งสินค้า/ใบเสร็จรับเงิน (ส่งพร้อมเก็บเงิน) → ใบเสร็จรับเงิน (เก็บเงินอย่างเดียว) → ใบปะหน้าพัสดุ (ส่งขนส่ง)
+   เอกสารที่ไม่มีราคาอยู่ติดกันตรงกลาง จะได้ไม่หยิบใบที่มีราคาติดไปกับของโดยพลาด */
+const SO_DOC_MENU = ['salesorder', 'picking', 'delivery', 'receiptdlv', 'receipt', 'parcel'];
 function printSaleDoc(r, kind){
   const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.salesorder;
   const o = r.order, iss = r.issuer || {};
@@ -6694,7 +6700,11 @@ function submitReceive(){ return plBusy(async () => {
     receiveDate: document.getElementById('rc-date').value, note: document.getElementById('rc-note').value.trim(), items });
   if (!r.success) return plModalErr(r.message);
   plModalClose(); posCache = []; grsCache = [];
-  renderPoDetail(r.po); toast(r.message || 'รับของแล้ว');
+  renderPoDetail(r.po);
+  /* ★ รับของสำเร็จ "แต่" ลงบัญชี/ตั้งหนี้ต่อไม่ผ่าน — ของเข้าคลังไปแล้ว ย้อนไม่ได้ จึงไม่ล้มทั้งใบ
+     แต่ต้องเด้งให้เห็น ไม่งั้นจะรู้ตัวอีกทีตอนงบไม่ตรงปลายเดือน */
+  if (r.warning) { toast((r.message || 'รับของแล้ว') + ' · ' + r.warning, true); alert('⚠️ ' + r.warning); }
+  else toast(r.message || 'รับของแล้ว');
 }); }
 async function billFromGr(grId){
   const inv = prompt('เลขที่ใบแจ้งหนี้ของผู้ขาย (ไม่บังคับ)');
@@ -7035,7 +7045,9 @@ async function pgrConfirm(id){
   const r = await callApi('confirmExternalGoodsReceipt', { id, items, newItems, createRemainder: remainder,
     receiveDate: card.querySelector('.pgr-date').value, note: card.querySelector('.pgr-note').value });
   if (!r.success) { toast(r.message, true); return; }
-  toast(r.message); loadPendingGoodsReceipts();
+  if (r.warning) { toast(r.message + ' · ' + r.warning, true); alert('⚠️ ' + r.warning); }
+  else toast(r.message);
+  loadPendingGoodsReceipts();
 }
 async function pgrWithdraw(id, grNo){
   if (!confirm('ถอนใบรับของ '+grNo+' ?\n\nใบรับของ+ใบสั่งซื้อที่นำเข้าคู่กันจะถูกยกเลิก (ยังไม่เข้าสต็อก) แล้วใบกำกับภาษีนี้จะกลับไปอยู่ในรายการ "พร้อมนำเข้า" ให้ฝั่งบริษัทนำเข้าใหม่ได้')) return;

@@ -240,6 +240,11 @@ let j = ctx.getJournal(MGR, { id: r.journalId }).journal;
 eq('  ลงบัญชี Dr สินค้าคงเหลือ / Cr GR-NI 7,200', [j.lines.map(l => [l.accountCode, l.debit, l.credit]), j.totalDebit === j.totalCredit],
    [[['1300', 7200, 0], ['2150', 0, 7200]], true]);
 const GR1 = r.grId;
+/* ★ ของบริษัทต้อง "ไม่" ตั้งหนี้ให้อัตโนมัติ — ต่างจากของตัวแทนโดยตั้งใจ ไม่ใช่ลืม
+   บริษัทซื้อจากผู้ขายภายนอก ต้องรอใบแจ้งหนี้จริงของผู้ขายก่อน (เลขที่ใบ/ยอด/VAT อาจไม่ตรงกับใบรับของ)
+   นั่นคือเหตุผลที่บัญชี 2150 GR-NI มีอยู่ตั้งแต่แรก */
+eq('  ★ ไม่ตั้งหนี้ให้อัตโนมัติ (รอใบแจ้งหนี้จริงของผู้ขายก่อน)',
+   [r.billNo === undefined, objs(sheets.ap_bills).some(b => String(b.gr_id) === String(GR1))], [true, false]);
 r = ctx.receiveGoods(MGR, { poId: PO1, receiveDate: '2026-09-25', items: [{ poItemId: itemBox.id, qty: 20 }, { poItemId: itemTape.id, qty: 100 }] });
 ok('รับของส่วนที่เหลือ', r);
 eq('  รับครบ → สถานะ received', r.po.status, 'received');
@@ -495,15 +500,19 @@ eq('  บริษัทไม่เห็นใบรับของ/สต็�
    [ctx.listGoodsReceipts(FIN, {}).data.some(g => String(g.id) === String(r.grId)),
     ctx.listStockLedger(FIN, {}).data.some(l => String(l.productId) === '12')], [false, false]);
 const TGR = r.grId;
-fails('  บริษัทตั้งหนี้จากใบรับของของตัวแทนตรงๆ ไม่ได้ (ต้องสวมสิทธิ์เข้าไปก่อน)',
-  ctx.createApBillFromGr(FIN, { grId: TGR, billDate: '2026-09-25' }), /ไม่พบใบรับของ/);
-r = ctx.createApBillFromGr(BOSS, { grId: TGR, tenantId: TEN, billDate: '2026-09-25', vendorInvoiceNo: 'T-991' });
-ok('  สวมสิทธิ์เข้าไปแล้วตั้งหนี้ให้ตัวแทนได้ (ลงสมุดของเขา)', r);
-eq('  ใบตั้งหนี้อยู่ในสมุดของตัวแทน · เลขที่แยกเล่ม · งบบริษัทไม่ขยับ',
-   [objs(sheets.ap_bills).find(b => String(b.record_id) === String(r.billId)).tenant_id,
-    /^AP-TNKN-/.test(r.billNo), ctx.getTrialBalance(FIN, {}).totalDebit], [TEN, true, ownerTbBefore]);
+/* ★ 7 ต.ค. 2026 เปลี่ยนกติกา: ตัวแทนรับของ = ระบบตั้งหนี้ให้เลย ไม่ต้องกดเอง
+   (ซื้อขาดจากบริษัท ของมาถึงพร้อมเอกสารขายของบริษัท ยอดรู้แน่ตั้งแต่วินาทีที่รับ ไม่มีอะไรให้รอ)
+   สิ่งที่ยังต้องจริงเหมือนเดิม: ลงสมุดของเขา · เลขที่แยกเล่ม · งบบริษัทไม่ขยับ */
+eq('  ★ ตั้งหนี้ให้อัตโนมัติตั้งแต่ตอนรับของ — ไม่ต้องกดเอง', /^AP-TNKN-/.test(r.billNo || ''), true);
+const TAUTOBILL = objs(sheets.ap_bills).find(b => String(b.gr_id) === String(TGR));
+eq('  ใบตั้งหนี้อยู่ในสมุดของตัวแทน · งบบริษัทไม่ขยับ',
+   [TAUTOBILL.tenant_id, ctx.getTrialBalance(FIN, {}).totalDebit], [TEN, ownerTbBefore]);
 eq('  ล้าง GR-NI ของตัวแทนหมดพอดี (รับของ 1,000 → ตั้งหนี้ 1,000)',
    ctx.getTrialBalance(TADMIN, {}).data.find(x => x.code === '2150').balance, 0);
+fails('  กดตั้งหนี้ซ้ำจากใบเดิมไม่ได้ (ระบบตั้งให้ไปแล้ว)',
+  ctx.createApBillFromGr(BOSS, { grId: TGR, tenantId: TEN }), /ตั้งหนี้ไปแล้ว/);
+fails('  บริษัทแตะใบรับของของตัวแทนตรงๆ ไม่ได้ (ต้องสวมสิทธิ์เข้าไปก่อน)',
+  ctx.createApBillFromGr(FIN, { grId: TGR, billDate: '2026-09-25' }), /ไม่พบใบรับของ/);
 fails('  ตัวแทนยกเลิกใบสั่งซื้อของบริษัทไม่ได้', ctx.cancelPurchaseOrder(TADMIN, { id: PO1 }), /ไม่พบใบสั่งซื้อ/);
 
 console.log('\n── สมุดบัญชีแยกเล่มต่อตัวแทน (ข้อมูลต้องไม่รั่วข้ามสมุด) ──');
