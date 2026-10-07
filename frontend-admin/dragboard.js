@@ -19,23 +19,27 @@
 
   var CSS = [
     '.dgb{display:flex;gap:12px;overflow-x:auto;align-items:flex-start;padding-bottom:4px}',
-    '.dgb-col{flex:0 0 236px;background:var(--bg,#F6F8FC);border:1px solid var(--border,#E4E9F1);',
-    '  border-radius:10px;display:flex;flex-direction:column;min-height:160px}',
+    /* ★ ใช้ชื่อตัวแปรจริงของแอป (--ground/--surface/--border/--blue) ไม่ใช่ชื่อที่เดาเอง
+       ของเดิมเขียน var(--bg) / var(--primary) ซึ่งไม่มีในธีมนี้ รอดมาเพราะค่า fallback เท่านั้น
+       แปลว่าถ้าวันหนึ่งธีมเปลี่ยนสี กระดานจะไม่เปลี่ยนตามโดยไม่มีใครรู้ */
+    '.dgb-col{flex:0 0 236px;background:var(--ground,#F6F8FC);border:1px solid var(--border,#E4E9F1);',
+    '  border-radius:10px;display:flex;flex-direction:column;min-height:160px;overflow:hidden}',
     '.dgb-colh{padding:9px 12px;border-bottom:1px solid var(--border,#E4E9F1);display:flex;',
-    '  justify-content:space-between;align-items:center;gap:8px}',
-    '.dgb-colh b{font-size:.86rem;font-weight:600}',
-    '.dgb-colh span{font-size:.78rem;opacity:.6;font-variant-numeric:tabular-nums}',
+    '  justify-content:space-between;align-items:flex-start;gap:8px}',
+    '.dgb-colh b{font-size:.86rem;font-weight:600;display:block}',
+    '.dgb-sub{font-size:.76rem;opacity:.72;font-variant-numeric:tabular-nums;display:block;margin-top:1px}',
+    '.dgb-ct{font-size:.78rem;opacity:.6;font-variant-numeric:tabular-nums;flex:0 0 auto;padding-top:1px}',
     '.dgb-colb{padding:10px;display:flex;flex-direction:column;gap:8px;flex:1}',
     /* ★ touch-action:none จำเป็น ไม่งั้นนิ้วที่ลากการ์ดจะเลื่อนหน้าแทน แล้วลากไม่ได้เลยบนมือถือ */
-    '.dgb-card{background:#fff;border:1px solid var(--border,#E4E9F1);border-radius:8px;padding:9px 11px;',
+    '.dgb-card{background:var(--surface,#fff);border:1px solid var(--border,#E4E9F1);border-radius:8px;padding:9px 11px;',
     '  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}',
     '.dgb-card:active{cursor:grabbing}',
-    '.dgb-card:focus-visible{outline:2px solid var(--primary,#2B63D9);outline-offset:2px}',
+    '.dgb-card:focus-visible{outline:2px solid var(--blue,#2B63D9);outline-offset:2px}',
     '.dgb-card.dgb-ghost{opacity:.3}',
     '.dgb-card.dgb-busy{opacity:.55}',
     '.dgb-fly{position:fixed;z-index:9999;width:214px;pointer-events:none;',
     '  box-shadow:0 12px 30px -8px rgba(27,36,52,.45);transform:rotate(-1.5deg)}',
-    '.dgb-col.dgb-ok{outline:2px dashed var(--primary,#2B63D9);outline-offset:-4px}',
+    '.dgb-col.dgb-ok{outline:2px dashed var(--blue,#2B63D9);outline-offset:-4px}',
     '.dgb-col.dgb-no{opacity:.38}',
     '.dgb-empty{text-align:center;font-size:.82rem;opacity:.5;padding:12px 4px}',
     '@media (prefers-reduced-motion:reduce){.dgb-fly{transform:none}}'
@@ -71,8 +75,13 @@
     el.className = 'dgb';
     el.innerHTML = spec.columns.map(function (c) {
       var mine = spec.cards.filter(function (x) { return String(x.col) === String(c.key); });
+      /* c.tone = สีหัวคอลัมน์ (ผู้เรียกเป็นคนเลือก เครื่องมือไม่รู้ว่าสีไหนแปลว่าอะไร)
+         c.sub  = บรรทัดรองใต้ชื่อ เช่น ยอดรวมเงินของคอลัมน์นั้น */
+      var sub = typeof spec.columnSub === 'function' ? spec.columnSub(c, mine) : c.sub;
       return '<div class="dgb-col" data-col="' + E(c.key) + '">' +
-        '<div class="dgb-colh"><b>' + E(c.label) + '</b><span>' + mine.length + '</span></div>' +
+        '<div class="dgb-colh"' + (c.tone ? ' style="background:' + E(c.tone) + '"' : '') + '>' +
+          '<span><b>' + E(c.label) + '</b>' + (sub ? '<span class="dgb-sub">' + E(sub) + '</span>' : '') + '</span>' +
+          '<span class="dgb-ct">' + mine.length + '</span></div>' +
         '<div class="dgb-colb">' +
           (mine.length ? mine.map(cardHtml).join('') : '<div class="dgb-empty">' + E(spec.emptyText || 'ว่าง') + '</div>') +
         '</div></div>';

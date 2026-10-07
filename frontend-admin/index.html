@@ -23,6 +23,8 @@
     /* ยืดหด sidebar/กลุ่มเมนู — เดิมจงใจทำช้า "อ้อยอิ่ง" 3 วินาที ผู้ใช้สั่งเปลี่ยนเป็น 0.25 วิ (2026-09-23)
        ให้เข้ากับธีม light/minimal ที่ควรตอบสนองไว */
     --sb-w:264px; --sb-cw:76px; --sb-dur:.25s; --sb-ease:cubic-bezier(.4,0,.2,1);
+    /* สีหัวคอลัมน์กระดาน — พาสเทลจางๆ พอให้แยกออกด้วยหางตา ไม่แย่งความสนใจจากตัวการ์ด */
+    --col-wait:#EDF1F7; --col-accept:#E7EEFC; --col-ready:#FBF0DC; --col-ship:#EDE8FA; --col-done:#E3F2E9;
     --sg-open-dur:.25s; --sg-close-dur:.2s; --sg-ease:cubic-bezier(.4,0,.2,1);
     --fly-in-dur:.16s; --fly-out-dur:.12s;
   }
@@ -201,6 +203,23 @@
   .view.active > :not(.view-head):not(.view-body){ flex:none; }
   .view-body > :last-child{ margin-bottom:10px; }
   .view-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; gap:16px; }
+  /* ปุ่มสลับมุมมองแบบแถบ — โชว์ทั้งสองคำพร้อมกัน ผู้ใช้จะได้รู้ว่ามีสองแบบให้เลือก
+     (ปุ่มเดี่ยวที่สลับข้อความไปมาบอกไม่ได้ว่ามีอะไรให้เลือกบ้าง จนกว่าจะกดไปแล้ว) */
+  .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
+    border-radius:999px;padding:3px;gap:2px;vertical-align:middle}
+  .segtog .seg{font:inherit;font-size:.82rem;font-weight:600;color:var(--ink-soft);background:transparent;
+    border:0;border-radius:999px;padding:.3em .95em;cursor:pointer;display:inline-flex;align-items:center;gap:.45em;
+    transition:background .15s,color .15s}
+  .segtog .seg:hover{color:var(--ink)}
+  /* ตัวที่ใช้งานอยู่ "ยุบลง" — เงา inset ทำให้ดูกดค้างไว้ ต่างจากปุ่มปกติที่ดูลอยขึ้น */
+  .segtog .seg.on{background:var(--blue-soft);color:var(--blue);box-shadow:inset 0 1px 3px rgba(31,62,135,.22)}
+  .segtog .seg:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  /* จุดไฟเขียวหายใจช้าๆ — บอกว่าอันนี้กำลังแสดงอยู่ จงใจให้จางสุดแค่ .4 และช้า 2.6 วิ จะได้ไม่เคืองตา */
+  .segtog .seg.on::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 4px rgba(31,138,95,.55);animation:segpulse 2.6s ease-in-out infinite}
+  @keyframes segpulse{0%,100%{opacity:.4}50%{opacity:1}}
+  @media(prefers-reduced-motion:reduce){.segtog .seg.on::before{animation:none;opacity:.85}}
+  .view-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .view-head h1{ font-size:19px; margin:0 0 3px; }
   .view-head p{ margin:0; color:var(--ink-soft); font-size:12.5px; }
 
@@ -826,7 +845,17 @@
         <!-- ═══ งานขาย: รายการบิลขาย ═══ -->
         <section class="view" id="view-salesorders">
           <div class="view-head">
-            <div><h1>บิลขาย</h1><p id="so-head-desc">รายการบิลขาย — เปิดบิลขายเองได้จากที่นี่โดยไม่ต้องผ่านแอปมือถือ</p></div>
+            <div>
+              <div class="view-title">
+                <h1>บิลขาย</h1>
+                <!-- แถบสลับมุมมอง — อยู่ติดหัวข้อเพราะเป็น "หน้านี้ดูได้สองแบบ" ไม่ใช่ตัวกรองของตาราง -->
+                <div class="segtog" id="so-view-seg" role="group" aria-label="เลือกมุมมองบิลขาย">
+                  <button type="button" class="seg" data-v="board" onclick="setSalesOrderView('board')">กระดาน</button>
+                  <button type="button" class="seg" data-v="table" onclick="setSalesOrderView('table')">ตาราง</button>
+                </div>
+              </div>
+              <p id="so-head-desc">รายการบิลขาย — เปิดบิลขายเองได้จากที่นี่โดยไม่ต้องผ่านแอปมือถือ</p>
+            </div>
             <button class="btn btn-primary" onclick="openSaleOrderNew()">+ เปิดบิลขาย</button>
           </div>
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
@@ -844,7 +873,6 @@
               <option value="paid">ชำระแล้ว</option>
             </select>
             <input id="so-filter-search" data-table-search placeholder="ค้นหาชื่อร้าน / เลขที่บิล / พนักงานขาย" oninput="renderSalesOrders()" style="flex:1;min-width:200px">
-            <button class="btn btn-sm" id="so-view-toggle" onclick="toggleSalesOrderView()">กระดาน</button>
             <button class="btn btn-sm" onclick="printSalesOrderList()">พิมพ์รายงาน</button>
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
@@ -3426,11 +3454,11 @@ function soDateOnly(v){ return String(v || '').substring(0, 10); }
      สลับกลับไปดูตารางต้องเห็นผลทันทีโดยไม่ต้องโหลดใหม่ */
 let soViewMode = 'table';
 const SO_BOARD_COLS = [
-  { key:'confirmed',     label:'รอรับงาน',      also:['pending_delivery'] },
-  { key:'accepted',      label:'บันทึกรับงานแล้ว' },
-  { key:'ready_to_ship', label:'พร้อมจัดส่ง' },
-  { key:'delivering',    label:'กำลังจัดส่ง' },
-  { key:'completed',     label:'ส่งของแล้ว' }
+  { key:'confirmed',     label:'รอรับงาน',      also:['pending_delivery'], tone:'var(--col-wait)' },
+  { key:'accepted',      label:'บันทึกรับงานแล้ว', tone:'var(--col-accept)' },
+  { key:'ready_to_ship', label:'พร้อมจัดส่ง',    tone:'var(--col-ready)' },
+  { key:'delivering',    label:'กำลังจัดส่ง',    tone:'var(--col-ship)' },
+  { key:'completed',     label:'ส่งของแล้ว',     tone:'var(--col-done)' }
 ];
 /* สถานะจริงหลายค่า map ลงคอลัมน์เดียว — `pending_delivery` เป็นชื่อเดิมของ `confirmed`
    ยังมีบิลเก่าค้างอยู่ ถ้าไม่รวมเข้าคอลัมน์เดียวกันจะหายไปจากกระดานเงียบๆ */
@@ -3438,16 +3466,21 @@ function soBoardCol(status){
   for (const c of SO_BOARD_COLS) if (c.key === status || (c.also || []).includes(status)) return c.key;
   return null;                                  // ร่าง/ยกเลิก/ปฏิเสธ ไม่อยู่บนกระดาน
 }
-function toggleSalesOrderView(){
-  soViewMode = soViewMode === 'table' ? 'board' : 'table';
-  try { localStorage.setItem(snapKey() + 'so_view', soViewMode); } catch(e){}
+function setSalesOrderView(mode){
+  if (soViewMode === mode) return;
+  soViewMode = mode;
+  try { localStorage.setItem(snapKey() + 'so_view', mode); } catch(e){}
   renderSalesOrders();
 }
 function renderSalesOrders(){
   const board = document.getElementById('so-board');
   const wrap = document.querySelector('#view-salesorders .table-wrap');
-  const btn = document.getElementById('so-view-toggle');
-  if (btn) btn.textContent = soViewMode === 'board' ? 'ตาราง' : 'กระดาน';
+  const seg = document.getElementById('so-view-seg');
+  if (seg) seg.querySelectorAll('.seg').forEach(b => {
+    const on = b.dataset.v === soViewMode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
   if (wrap) wrap.hidden = soViewMode === 'board';
   if (board) board.hidden = soViewMode !== 'board';
   if (soViewMode === 'board') renderSalesOrderBoard();
@@ -3465,6 +3498,9 @@ async function renderSalesOrderBoard(){
   DragBoard.mount(el, {
     columns: SO_BOARD_COLS,
     emptyText: 'ไม่มีบิล',
+    /* ยอดรวมเงินของคอลัมน์ — ตัวเลขที่ศูนย์ฯ ต้องการจริงคือ "เงินค้างอยู่ตรงไหน"
+       ไม่ใช่แค่จำนวนใบ · 1 ใบ 48,600 กับ 8 ใบรวม 9,000 คนละเรื่องกันโดยสิ้นเชิง */
+    columnSub: (col, cards) => '฿' + baht(cards.reduce((sum, c) => sum + (parseFloat(c.order.total) || 0), 0)),
     cards: rows.map(o => ({
       id: o.id, col: soBoardCol(o.status), busy: !!o.__saving, order: o,
       html: '<div class="mono-data" style="font-size:.8rem">' + esc(o.code) + '</div>' +
@@ -3574,8 +3610,9 @@ function exportSalesOrderList(){
   }));
 }
 async function loadSalesOrders(){
-  // จำมุมมองที่เลือกไว้ต่อผู้ใช้ — คนที่ทำงานจากกระดานทั้งวันไม่ต้องกดสลับใหม่ทุกครั้งที่เปิดหน้า
-  try { soViewMode = localStorage.getItem(snapKey() + 'so_view') === 'board' ? 'board' : 'table'; } catch(e){}
+  /* จำมุมมองที่เลือกไว้ต่อผู้ใช้ · ★ ยังไม่เคยเลือก = กระดาน (เจ้าของระบบสั่ง 7 ต.ค. 2026)
+     กระดานตอบคำถามแรกของวันได้ทันที — งานค้างอยู่ตรงไหน — ส่วนตารางเหมาะกับการค้นหาใบที่รู้ชื่ออยู่แล้ว */
+  try { soViewMode = localStorage.getItem(snapKey() + 'so_view') === 'table' ? 'table' : 'board'; } catch(e){ soViewMode = 'board'; }
   const body = document.getElementById('salesorders-body');
   if (!salesOrdersCache.length) salesOrdersCache = listSnapLoad('salesorders') || [];
   if (salesOrdersCache.length) renderSalesOrders();
