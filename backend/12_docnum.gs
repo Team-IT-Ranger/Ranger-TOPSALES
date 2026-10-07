@@ -16,7 +16,11 @@
 
    ★ `defaults` ของแต่ละหมวดต้องให้ผล **เหมือนที่ระบบออกมาแต่ไหนแต่ไร** เป๊ะทุกตัวอักษร
      ไม่งั้นวันที่ deploy เลขเอกสารจะเปลี่ยนหน้าตาเองทั้งระบบโดยไม่มีใครสั่ง (มีเทสต์ไล่ทีละหมวด)
-   ★ `central: true` = ออกเลขจากตัวนับกลาง (`_nextCentralDocNo` ใน 20_purchasing_master.gs)
+   ★ `central: true` = ออกเลขผ่าน `_nextCentralDocNo` (`20_purchasing_master.gs`) ซึ่งเก็บ "แถวตัวนับ"
+     ไว้ในชีตกลาง — **ไม่ได้แปลว่าเลขเดินร่วมกันระหว่างบริษัท** ทุกบริษัทมีเล่มของตัวเองเสมอ:
+     คีย์ตัวนับเป็น `PO@BDC` แยกจาก `PO` ของบริษัท และรูปแบบเลขอ่านจาก `doc_number_series`
+     ของสมุดนั้นเอง (`_centralDocConfig` → `_docSeriesConfig(book, …)`)
+     ชื่อ `central` หมายถึง "ที่เก็บ" ไม่ใช่ "ใช้ร่วมกัน" — เคยทำให้เข้าใจผิดมาแล้ว 7 ต.ค. 2026
      และ **แทรกรหัสตัวแทนต่อท้าย prefix** เมื่อเป็นเอกสารของตัวแทน เช่น `PO-TNKN-202610-0001`
      ส่วน SO ใช้ตัวนับในไฟล์ของตัวแทนเอง จึงไม่ต้องแทรกรหัส
 
@@ -35,8 +39,10 @@ var DOC_SERIES_TYPES = [
     defaults: { prefix: 'PICK', date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' } },
   { code: 'RC',  label: 'ใบเสร็จรับเงิน', note: 'ออกเลขอัตโนมัติเมื่อรับชำระครั้งแรก (ขายสดจากรถออกตั้งแต่เปิดบิล)',
     defaults: { prefix: 'RC',  date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' } },
-  { code: 'TAX', label: 'ใบกำกับภาษี', note: 'ออกเลขอัตโนมัติตอนส่งมอบสินค้า ("พร้อมจัดส่ง" · ขายสดจากรถออกตั้งแต่เปิดบิล)',
-    defaults: { prefix: 'TAX', date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' } },
+  /* ★ รหัสเป็น `TAX-IV` ไม่ใช่ `TAX` (เจ้าของระบบสั่ง 7 ต.ค. 2026) — "TAX" เฉยๆ อ่านแล้วนึกว่าเป็น
+     เรื่องภาษีทั่วไป ไม่ใช่ชื่อเอกสาร · เลขที่ออกมาจึงเป็น TAX-IV-20261007-0001 ซึ่งอ่านแล้วรู้ทันทีว่าใบอะไร */
+  { code: 'TAX-IV', label: 'ใบกำกับภาษี', note: 'ออกเลขอัตโนมัติตอนส่งมอบสินค้า ("พร้อมจัดส่ง" · ขายสดจากรถออกตั้งแต่เปิดบิล)',
+    defaults: { prefix: 'TAX-IV', date_format: 'yyyyMMdd', running_digits: 4, reset_cycle: 'daily', separator: '-' } },
   { code: 'PR',  label: 'ใบขอซื้อ',          central: true },
   { code: 'PO',  label: 'ใบสั่งซื้อ',         central: true },
   { code: 'GR',  label: 'ใบรับของ',           central: true },
@@ -116,16 +122,57 @@ function getNextDocNumber(tenantId, docType) {
   return _formatDocNumber(cfg, periodKey, 1);
 }
 
-// preview เฉยๆ ไม่ขยับตัวนับ — ใช้โชว์ล่วงหน้าใน UI
-function previewNextDocNumber(tenantId, docType) {
-  var cfg = _docSeriesConfig(tenantId, docType);
-  var periodKey = _periodKey(cfg.reset_cycle);
-  var rows = tenantObjects(tenantId, 'doc_number_counters');
+/* ★★ เอกสารในระบบนี้มีตัวนับอยู่ "สองที่" และนี่คือตัวบอกว่าหมวดไหนอยู่ที่ไหน (7 ต.ค. 2026)
+ *   - หมวดงานขาย (SO/DO/PICK/RC/TAX-IV) → `doc_number_counters` ในไฟล์ของบริษัทนั้น
+ *   - หมวดงานซื้อ/บัญชี (`central: true`) → `central_doc_counters` ในชีตกลาง คีย์ `PO@BDC`
+ *     และเลขที่ออกมามีรหัสบริษัทคั่น (`PO-BDC-202610-0001`) — ดู `_nextCentralDocNo`
+ *
+ * ★ ทั้งสองแบบ "เดินเลขแยกของแต่ละบริษัทเหมือนกัน" ต่างกันแค่ที่เก็บแถวตัวนับ
+ *
+ * ★★★ เคยพลาดมาแล้ว 7 ต.ค. 2026: `previewNextDocNumber` และ `setDocCounter` ดูแต่ตัวนับในไฟล์บริษัท
+ *     หมวดงานซื้อ/บัญชีจึง **preview เลขผิด และตั้งเลขไม่มีผลเลย** โดยหน้าจอตอบว่าสำเร็จ
+ *     ซึ่งเป็นอาการที่แย่ที่สุด (บันทึกได้แต่ไม่มีผล) — ทุกที่ที่อ่าน/เขียนตัวนับต้องผ่านตัวนี้ตัวเดียว
+ */
+function _docCounterRef(tenantId, docType) {
+  var meta = _docTypeMeta(docType);
+  if (meta && meta.central) {
+    // สมุดของบริษัทเจ้าของสินค้า (ตัวแทนบ้าน) ใช้คีย์เปล่า ไม่มีรหัสคั่น — ตรงกับที่ _nextCentralDocNo ทำ
+    var scope = (typeof _normBook === 'function') ? _normBook(tenantId) : '';
+    return { central: true, scope: scope, key: String(docType) + (scope ? '@' + scope : ''),
+      cfg: _centralDocConfig(docType, scope) };
+  }
+  return { central: false, scope: '', key: String(docType), cfg: _docSeriesConfig(tenantId, docType) };
+}
+
+// ประกอบเลขให้ตรงกับที่ตัวออกเลขจริงของหมวดนั้นทำ (หมวดกลางมีรหัสบริษัทคั่นหลัง prefix)
+function _buildDocNumber(ref, runningNo) {
+  if (!ref.central) return _formatDocNumber(ref.cfg, '', runningNo);
+  var cfg = ref.cfg, parts = [cfg.prefix || ''];
+  if (ref.scope) parts.push(ref.scope);
+  if (cfg.date_format) parts.push(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), cfg.date_format));
+  var digits = parseInt(cfg.running_digits, 10) || 4;
+  var padded = String(runningNo);
+  while (padded.length < digits) padded = '0' + padded;
+  parts.push(padded);
+  return parts.join(cfg.separator || '-');
+}
+
+// อ่านเลขล่าสุดของงวดปัจจุบันจากตัวนับที่ถูกที่ — คืน { last, cfg, ref }
+function _docCounterState(tenantId, docType) {
+  var ref = _docCounterRef(tenantId, docType);
+  var period = _periodKey(ref.cfg.reset_cycle);
+  var rows = ref.central ? centralObjects('central_doc_counters') : tenantObjects(tenantId, 'doc_number_counters');
   var last = 0;
   for (var i = 0; i < rows.length; i++) {
-    if (String(rows[i].doc_type) === String(docType) && String(rows[i].period_key) === periodKey) { last = parseInt(rows[i].last_number) || 0; break; }
+    if (String(rows[i].doc_type) === ref.key && String(rows[i].period_key) === period) { last = parseInt(rows[i].last_number, 10) || 0; break; }
   }
-  return _formatDocNumber(cfg, periodKey, last + 1);
+  return { ref: ref, period: period, last: last };
+}
+
+// preview เฉยๆ ไม่ขยับตัวนับ — ใช้โชว์ล่วงหน้าใน UI
+function previewNextDocNumber(tenantId, docType) {
+  var st = _docCounterState(tenantId, docType);
+  return _buildDocNumber(st.ref, st.last + 1);
 }
 
 // preview เลขเอกสารถัดไปให้ Admin App โชว์ก่อนสร้างเอกสารจริง
@@ -162,26 +209,26 @@ function setDocCounter(session, payload) {
   var next = parseInt(payload.nextNumber, 10);
   if (!(next >= 1)) return { success: false, message: 'เลขถัดไปต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป' };
 
-  var cfg = _docSeriesConfig(tenantId, docType);
-  var periodKey = _periodKey(cfg.reset_cycle);
-  var sh = tenantSheet(tenantId, 'doc_number_counters');
-  var values = sh.getDataRange().getValues();
-  var head = values[0], cType = head.indexOf('doc_type'), cKey = head.indexOf('period_key'), cNum = head.indexOf('last_number');
-  var last = 0, rowNo = 0;
-  for (var i = 1; i < values.length; i++) {
-    if (String(values[i][cType]) === docType && String(values[i][cKey]) === periodKey) {
-      last = parseInt(values[i][cNum], 10) || 0; rowNo = i + 1; break;
-    }
-  }
+  /* ★ ต้องเขียนลงตัวนับ "ตัวที่หมวดนั้นใช้จริง" — หมวดงานซื้อ/บัญชีอยู่ในชีตกลาง ไม่ใช่ไฟล์บริษัท
+     เขียนผิดที่ = หน้าจอตอบว่าสำเร็จแต่เลขจริงไม่ขยับ ซึ่งแย่กว่าปฏิเสธไปเลย */
+  var st = _docCounterState(tenantId, docType);
+  var ref = st.ref, periodKey = st.period, last = st.last;
   if (next - 1 < last) {
     return { success: false, message: 'ตอนนี้ออกถึงเลข ' + last + ' แล้ว (งวด ' + periodKey + ') — ' +
       'ตั้งเลขถัดไปเป็น ' + next + ' จะทำให้ออกเลขซ้ำกับเอกสารที่ออกไปแล้ว ' +
       'ตั้งได้ตั้งแต่ ' + (last + 1) + ' ขึ้นไปเท่านั้น' };
   }
+  var sh = ref.central ? centralSheet('central_doc_counters') : tenantSheet(tenantId, 'doc_number_counters');
+  var values = sh.getDataRange().getValues();
+  var head = values[0], cType = head.indexOf('doc_type'), cKey = head.indexOf('period_key'), cNum = head.indexOf('last_number');
+  var rowNo = 0;
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][cType]) === ref.key && String(values[i][cKey]) === periodKey) { rowNo = i + 1; break; }
+  }
   if (rowNo) sh.getRange(rowNo, cNum + 1).setValue(next - 1);
-  else sh.appendRow([docType, periodKey, next - 1]);
+  else sh.appendRow([ref.key, periodKey, next - 1]);
 
-  var sample = _formatDocNumber(cfg, periodKey, next);
+  var sample = _buildDocNumber(ref, next);
   return { success: true, docType: docType, periodKey: periodKey, previousLast: last, nextNumber: next, sample: sample,
     message: 'ตั้งเลขถัดไปของ ' + docType + ' เป็น ' + next + ' แล้ว — ใบถัดไปจะเป็น ' + sample +
       (last ? ' (เดิมออกถึง ' + last + ')' : '') };

@@ -52,7 +52,7 @@ const ctx = {
     DOCNO_CALLS.push({ tenantId, hasOrder: !!order, kinds });
     const f = {};
     (kinds || []).forEach(k => {
-      const m = { receipt: ['receipt_no', 'RC'], tax: ['tax_invoice_no', 'TAX'],
+      const m = { receipt: ['receipt_no', 'RC'], tax: ['tax_invoice_no', 'TAX-IV'],
                   picking: ['picking_no', 'PICK'], delivery: ['delivery_order_no', 'DO'] }[k];
       if (m) { f[m[0]] = m[1] + '-TEST-0001'; f[m[0].replace(/_no$/, '_at')] = '2026-10-07 10:00:00'; }
     });

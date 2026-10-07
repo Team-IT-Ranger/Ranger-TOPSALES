@@ -46,16 +46,32 @@ const ctx = {
       appendRow: r => { const o = {}; hdr.forEach((h, i) => { o[h] = r[i]; }); counters.push(o); }
     };
   },
+  /* ★ ตัวนับของหมวดงานซื้อ/บัญชี (central: true) อยู่ในชีตกลาง คนละที่กับหมวดงานขาย
+     ของจริงอยู่ใน 20_purchasing_master.gs / 23_accounting.gs ซึ่งไฟล์นี้ไม่ได้โหลด จึงดักไว้
+     — ต้องมี ไม่งั้นเทสต์จะไม่เคยแตะเส้นทางที่ "ตั้งเลขแล้วไม่มีผล" ซึ่งเป็นบั๊กที่เพิ่งเจอ (7 ต.ค. 2026) */
+  centralCounters: [],
+  _normBook: t => (String(t || '') === 'TNKI' || String(t || '') === 'HOUSE' ? '' : String(t || '')),
+  _centralDocConfig: (docType, scope) => ctx._docSeriesConfig(scope || 'TNKI', docType),
+  centralObjects: n => ctx.centralCounters.map(o => Object.assign({}, o)),
+  centralSheet: n => {
+    const hdr = ['doc_type', 'period_key', 'last_number'];
+    return {
+      getDataRange: () => ({ getValues: () => [hdr].concat(ctx.centralCounters.map(c => hdr.map(h => c[h]))) }),
+      getRange: (row, col) => ({ setValue: v => { ctx.centralCounters[row - 2][hdr[col - 1]] = v; } }),
+      appendRow: r => { const o = {}; hdr.forEach((h, i) => { o[h] = r[i]; }); ctx.centralCounters.push(o); }
+    };
+  },
   _requirePermission: () => null,
   _salesTenantId: () => 'BDC',
 };
 // ★ ต้องเก็บ stub ไว้ "ก่อน" โหลด 02_helpers.gs ซึ่งประกาศ tenantSheet ตัวจริงทับ
-const _tenantSheetStub = ctx.tenantSheet;
+const _tenantSheetStub = ctx.tenantSheet, _centralSheetStub = ctx.centralSheet,
+      _centralObjectsStub = ctx.centralObjects;
 vm.createContext(ctx);
 ['02_helpers.gs', '12_docnum.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 // 02_helpers.gs ประกาศ tenant* ตัวจริงทับ mock — ต้องคืน mock หลังโหลด (แพทเทิร์นเดียวกับ test-owner-tenant.js)
 Object.assign(ctx, {
-  tenantSheet: _tenantSheetStub,
+  tenantSheet: _tenantSheetStub, centralSheet: _centralSheetStub, centralObjects: _centralObjectsStub,
   tenantObjects: (t, n) => (n === 'doc_number_series' ? series : counters).map(o => Object.assign({}, o)),
   tenantAppend: (t, n, o) => { (n === 'doc_number_series' ? series : counters).push(Object.assign({}, o)); },
   tenantUpdate: (t, n, id, patch) => {
@@ -110,13 +126,17 @@ console.log('\n-- ประเภทอื่นไม่ถูกแตะ --')
 series.push({ record_id: 9, doc_type: 'INV', prefix: 'INV', date_format: '', running_digits: 3, reset_cycle: 'none', separator: '-', is_active: 'TRUE' });
 r = ctx.saveDocSeries(SESSION, { docType: 'SO', prefix: 'SO9', dateFormat: '', runningDigits: 3, resetCycle: 'none', separator: '-' });
 eq('ปิดเฉพาะ SO ไม่ยุ่งกับ INV', series.find(s => s.doc_type === 'INV').is_active, 'TRUE');
-eq('  INV ยังออกเลขได้ตามรูปแบบตัวเอง', ctx.previewNextDocNumber('BDC', 'INV'), 'INV-001');
+/* ★ 7 ต.ค. 2026 — preview ของหมวดงานซื้อ/บัญชีมี "รหัสบริษัทคั่น" แล้ว ให้ตรงกับเลขที่ออกจริง
+   ของเดิมโชว์ INV-001 แต่เลขจริงที่ _nextCentralDocNo ออกให้คือ INV-BDC-001 — preview โกหกมาตลอด */
+eq('  INV ยังออกเลขได้ตามรูปแบบตัวเอง (มีรหัสบริษัทคั่นเหมือนเลขจริง)',
+   ctx.previewNextDocNumber('BDC', 'INV'), 'INV-BDC-001');
 
 console.log('\n-- กันพลาด --');
 eq('ไม่ระบุประเภท → ปฏิเสธ', ctx.saveDocSeries(SESSION, { prefix: 'X' }).success, false);
 eq('  ประเภทเว้นวรรคล้วน → ปฏิเสธ', ctx.saveDocSeries(SESSION, { docType: '   ' }).success, false);
 // PO ยังไม่ได้ตั้ง → ใช้ค่าเริ่มต้นประจำหมวด (รายเดือน ไม่ใช่รายวันแบบ SO)
-eq('ไม่มีรูปแบบเลย → ใช้ค่าเริ่มต้นประจำหมวด', ctx.previewNextDocNumber('BDC', 'PO'), 'PO-202610-0001');
+eq('ไม่มีรูปแบบเลย → ใช้ค่าเริ่มต้นประจำหมวด (และมีรหัสบริษัทคั่น)',
+   ctx.previewNextDocNumber('BDC', 'PO'), 'PO-BDC-202610-0001');
 eq('รายการเรียงใหม่สุดขึ้นก่อน', ctx.listDocSeries(SESSION, {}).data[0].record_id,
   series.reduce((m, o) => Math.max(m, o.record_id), 0));
 
@@ -127,7 +147,7 @@ console.log('\n-- ประเภทเอกสารที่ตั้งไ�
 series = [];
 // DO = ใบส่งสินค้า (6 ต.ค. 2026) — ใช้ตัวนับของตัวแทนเหมือน SO จึงอยู่ติดกัน ไม่ใช่กลุ่มตัวนับกลาง
 eq('ครบทุกหมวดที่ต้องมีเลขกำกับ', ctx.listDocSeries(SESSION, {}).types.map(t => t.code),
-  ['SO', 'DO', 'PICK', 'RC', 'TAX', 'PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
+  ['SO', 'DO', 'PICK', 'RC', 'TAX-IV', 'PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
 eq('  หมวดที่ใช้ตัวนับกลางถูกติดธงไว้', ctx.listDocSeries(SESSION, {}).types.filter(t => t.central).map(t => t.code),
   ['PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'JV']);
 r = ctx.saveDocSeries(SESSION, { docType: 'PO', prefix: 'PO' });
@@ -193,21 +213,51 @@ console.log('\n── ★ ตั้งเลขถัดไปตอนย้า
     good ? pass++ : fail++;
   };
 
-  eq('ใบแรกของเล่มใหม่เริ่มที่ 0001', ctx.getNextDocNumber('BDC', 'TAX'), 'TAX-20261001-0001');
+  eq('ใบแรกของเล่มใหม่เริ่มที่ 0001', ctx.getNextDocNumber('BDC', 'TAX-IV'), 'TAX-IV-20261001-0001');
 
   bad('ตั้งย้อนหลังต่ำกว่าที่ออกไปแล้ว → ปฏิเสธ (ไม่มีทางลัด)',
-    ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 1 }), /ออกเลขซ้ำ|ตั้งได้ตั้งแต่/);
-  bad('ตั้งเป็น 0 → ปฏิเสธ', ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 0 }), /ตั้งแต่ 1/);
+    ctx.setDocCounter(SESSION, { docType: 'TAX-IV', nextNumber: 1 }), /ออกเลขซ้ำ|ตั้งได้ตั้งแต่/);
+  bad('ตั้งเป็น 0 → ปฏิเสธ', ctx.setDocCounter(SESSION, { docType: 'TAX-IV', nextNumber: 0 }), /ตั้งแต่ 1/);
   bad('ประเภทที่ไม่รู้จัก → ปฏิเสธ', ctx.setDocCounter(SESSION, { docType: 'ZZZ', nextNumber: 5 }), /ไม่รู้จัก/);
 
-  const r = ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 1251 });
+  const r = ctx.setDocCounter(SESSION, { docType: 'TAX-IV', nextNumber: 1251 });
   eq('ตั้งเลขถัดไป = 1251 (เล่มเดิมเดินถึง 1250)',
-    [r.success, r.previousLast, r.sample], [true, 1, 'TAX-20261001-1251']);
-  eq('  ★ ใบถัดไปได้เลขนั้นจริง ไม่ใช่แค่ตอบว่าสำเร็จ', ctx.getNextDocNumber('BDC', 'TAX'), 'TAX-20261001-1251');
-  eq('  แล้วเดินต่อตามปกติ', ctx.getNextDocNumber('BDC', 'TAX'), 'TAX-20261001-1252');
+    [r.success, r.previousLast, r.sample], [true, 1, 'TAX-IV-20261001-1251']);
+  eq('  ★ ใบถัดไปได้เลขนั้นจริง ไม่ใช่แค่ตอบว่าสำเร็จ', ctx.getNextDocNumber('BDC', 'TAX-IV'), 'TAX-IV-20261001-1251');
+  eq('  แล้วเดินต่อตามปกติ', ctx.getNextDocNumber('BDC', 'TAX-IV'), 'TAX-IV-20261001-1252');
   eq('  ★ ไม่ไปกระทบเล่มของเอกสารประเภทอื่น', ctx.getNextDocNumber('BDC', 'RC'), 'RC-20261001-0001');
   eq('  ตั้งเท่าเลขถัดไปที่จะได้อยู่แล้ว (ไม่ถอยหลัง) → ยอม',
-    ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 1253 }).success, true);
+    ctx.setDocCounter(SESSION, { docType: 'TAX-IV', nextNumber: 1253 }).success, true);
+}
+
+console.log('\n── ★★ หมวดงานซื้อ/บัญชีใช้ตัวนับคนละที่ — preview และตั้งเลขต้องไปที่ถูกที่ (7 ต.ค. 2026) ──');
+/* บั๊กที่เพิ่งเจอ: previewNextDocNumber กับ setDocCounter ดูแต่ตัวนับในไฟล์บริษัท
+   หมวดงานซื้อ/บัญชี (central: true) จึง preview เลขผิด และ "ตั้งเลขแล้วไม่มีผลเลย"
+   โดยหน้าจอตอบว่าสำเร็จ — อาการที่แย่ที่สุด (บันทึกได้แต่ไม่มีผล)
+   ★ และเลขของหมวดกลางมีรหัสบริษัทคั่นหลัง prefix ซึ่ง _formatDocNumber เดิมไม่ได้ใส่ให้ */
+{
+  const bad2 = (label, r, re) => {
+    const good = r && r.success === false && (!re || re.test(r.message || ''));
+    console.log((good ? 'PASS ' : 'FAIL ') + label + (good ? '' : '\n   got ' + JSON.stringify(r)));
+    good ? pass++ : fail++;
+  };
+  ctx.centralCounters.length = 0;
+  ctx.centralCounters.push({ doc_type: 'AP@BDC', period_key: '202610', last_number: 7 });
+
+  eq('preview ของหมวดกลางอ่านจากตัวนับกลาง + มีรหัสบริษัทคั่น',
+    ctx.previewNextDocNumber('BDC', 'AP'), 'AP-BDC-202610-0008');
+  eq('  ★ สมุดของบริษัทเองใช้คีย์เปล่า ไม่มีรหัสคั่น (ยังไม่เคยออก → 0001)',
+    ctx.previewNextDocNumber('TNKI', 'AP'), 'AP-202610-0001');
+
+  bad2('ตั้งต่ำกว่าที่ออกไปแล้ว → ปฏิเสธ (อ่านเลขล่าสุดจากตัวนับกลางได้ถูก)',
+    ctx.setDocCounter(SESSION, { docType: 'AP', nextNumber: 5 }), /ออกถึงเลข 7/);
+
+  const r2 = ctx.setDocCounter(SESSION, { docType: 'AP', nextNumber: 501 });
+  eq('ตั้งเลขถัดไปของหมวดกลางได้ และตัวอย่างเลขถูกรูป',
+    [r2.success, r2.sample], [true, 'AP-BDC-202610-0501']);
+  eq('  ★★ เขียนลง "ตัวนับกลาง" จริง ไม่ใช่ไฟล์บริษัท (ข้อที่เคยพลาด)',
+    ctx.centralCounters.find(c => c.doc_type === 'AP@BDC').last_number, 500);
+  eq('  preview หลังตั้งตรงกับที่ตั้งไว้', ctx.previewNextDocNumber('BDC', 'AP'), 'AP-BDC-202610-0501');
 }
 
 console.log('\n' + (fail ? fail + ' FAILED' : 'ALL PASSED'));

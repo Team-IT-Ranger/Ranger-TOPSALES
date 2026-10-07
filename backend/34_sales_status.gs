@@ -437,7 +437,7 @@ var SALE_DOC_FIELDS = {
   picking:  { no: 'picking_no',        at: 'picking_at',        type: 'PICK', label: 'ใบจัดของ' },
   delivery: { no: 'delivery_order_no', at: 'delivery_order_at', type: 'DO',   label: 'ใบส่งสินค้า' },
   receipt:  { no: 'receipt_no',        at: 'receipt_at',        type: 'RC',   label: 'ใบเสร็จรับเงิน' },
-  tax:      { no: 'tax_invoice_no',    at: 'tax_invoice_at',    type: 'TAX',  label: 'ใบกำกับภาษี' }
+  tax:      { no: 'tax_invoice_no',    at: 'tax_invoice_at',    type: 'TAX-IV', label: 'ใบกำกับภาษี' }
 };
 
 /**

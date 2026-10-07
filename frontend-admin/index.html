@@ -928,8 +928,8 @@
             <span id="dn-count" class="form-hint"></span>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>ประเภท</th><th>Prefix</th><th>รูปแบบวันที่</th><th>หลัก</th><th>รีเซ็ต</th><th>สถานะ</th></tr></thead>
-            <tbody id="docnum-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>ชื่อประเภทเอกสาร</th><th>Prefix</th><th>รูปแบบวันที่</th><th>หลัก</th><th>รีเซ็ต</th><th>สถานะ</th></tr></thead>
+            <tbody id="docnum-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่ม/แก้ไขรูปแบบเลขที่เอกสาร</h3>
@@ -3223,8 +3223,13 @@ function renderDocnumTypeOptions(){
   const central = docnumTypes.filter(t => t.central);
   const note = document.getElementById('d-fixed-note');
   if (note) note.innerHTML = central.length
-    ? 'หมวดงานซื้อและบัญชี (' + central.map(t => esc(t.code)).join(' · ') + ') ใช้ตัวนับของส่วนกลาง ' +
-      'เอกสารของตัวแทนจะมีรหัสตัวแทนคั่นให้อัตโนมัติ เช่น <span class="mono-data">PO-BDC-202610-0001</span>'
+    /* ★ 7 ต.ค. 2026 — เดิมเขียนว่า "ใช้ตัวนับของส่วนกลาง" ซึ่งทำให้เจ้าของระบบเข้าใจว่าเลขเดินร่วมกัน
+       ทั้งที่ **ทุกบริษัทเดินเลขของตัวเองแยกกันอยู่แล้วทุกหมวด** — ทั้งรูปแบบเลขและตัวนับอ่าน/เขียน
+       แยกตามสมุด คำว่า "ส่วนกลาง" หมายถึงที่เก็บแถวตัวนับเท่านั้น ไม่ใช่การใช้เลขร่วมกัน
+       เปลี่ยนคำใหม่ให้ตรงกับของจริง เพราะคำเดิมทำให้เกือบสั่งย้ายระบบเลขทั้งก้อนโดยไม่จำเป็น */
+    ? 'หมวดงานซื้อและบัญชี (' + central.map(t => esc(t.code)).join(' · ') + ') ' +
+      '<b>เดินเลขแยกของแต่ละบริษัท</b> และมีรหัสบริษัทคั่นให้อัตโนมัติ ' +
+      'เช่น <span class="mono-data">PO-BDC-202610-0001</span> — ของบริษัทเจ้าของสินค้าไม่มีรหัสคั่น'
     : '';
   docnumTypePicked();
 }
@@ -3259,7 +3264,7 @@ function renderDocnumTable(){
     ? ('ทั้งหมด ' + docnumCache.length + ' รายการ')
     : (offCount ? ('ซ่อนรูปแบบเดิมที่ปิดแล้ว ' + offCount + ' รายการ') : '');
   if (!rows.length) {
-    body.innerHTML = '<tr class="empty-row"><td colspan="6">' +
+    body.innerHTML = '<tr class="empty-row"><td colspan="7">' +
       (docnumCache.length ? 'ไม่มีรูปแบบที่ใช้งานอยู่ — เลือก "ทั้งหมด" เพื่อดูรูปแบบเดิม'
                           : 'ยังไม่มีการตั้งค่า — ใช้ค่าเริ่มต้นอัตโนมัติ') + '</td></tr>';
     return;
@@ -3268,7 +3273,12 @@ function renderDocnumTable(){
     '<tr class="clickable-row'+(String(d.record_id) === String(docnumEditingId) ? ' row-editing' : '')+'"' +
       ' onclick="docnumPickRow('+d.record_id+')" title="คลิกเพื่อนำค่าของแถวนี้ไปใส่ในฟอร์มด้านล่าง"' +
       (isOn(d.is_active) ? '' : ' style="opacity:.6"') + '>' +
-    '<td>'+esc(d.doc_type)+'</td><td class="mono-data">'+esc(d.prefix)+'</td><td class="mono-data">'+esc(d.date_format||'-')+'</td>' +
+    /* ★ ชื่อประเภทเอกสารอ่านจาก docnumTypes (backend เป็นคนบอก) ไม่ใช่เขียนลิสต์ไว้ในหน้าเว็บ —
+       เขียนไว้เองจะเพี้ยนจากของจริงทันทีที่ backend เพิ่ม/เปลี่ยนชื่อเอกสาร
+       แถวเก่าที่รหัสไม่อยู่ในลิสต์แล้ว (ของที่เคยตั้งไว้ก่อนหน้า) โชว์ขีดแทน ไม่ปล่อยช่องว่างให้งง */
+    '<td class="mono-data">'+esc(d.doc_type)+'</td>' +
+    '<td>'+esc((docnumTypes.find(t => t.code === d.doc_type) || {}).label || '—')+'</td>' +
+    '<td class="mono-data">'+esc(d.prefix)+'</td><td class="mono-data">'+esc(d.date_format||'-')+'</td>' +
     '<td>'+esc(d.running_digits)+'</td><td>'+esc(d.reset_cycle)+'</td>' +
     '<td><span class="pill '+(isOn(d.is_active)?'ok':'off')+'">'+(isOn(d.is_active)?'ใช้งาน':'ปิดแล้ว')+'</span></td></tr>'
   ).join('');
