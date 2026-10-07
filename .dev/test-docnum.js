@@ -35,13 +35,27 @@ const ctx = {
     return !!row;
   },
   tenantNextId: () => series.reduce((m, o) => Math.max(m, parseInt(o.record_id, 10) || 0), 0) + 1,
+  /* ★ ชีตตัวนับต้องเป็น "ตาราง 2 มิติจริง" — `getNextDocNumber`/`setDocCounter` เขียนผ่าน
+     getRange/appendRow ไม่ใช่ tenantUpdate เพราะแถวตัวนับไม่มี record_id ตามสคีมา
+     ถ้า mock เป็น array ของ object เฉยๆ โค้ดส่วนที่ขยับตัวนับจะไม่เคยถูกรันเลยในเทสต์ */
+  tenantSheet: (t, n) => {
+    const hdr = ['doc_type', 'period_key', 'last_number'];
+    return {
+      getDataRange: () => ({ getValues: () => [hdr].concat(counters.map(c => hdr.map(h => c[h]))) }),
+      getRange: (row, col) => ({ setValue: v => { counters[row - 2][hdr[col - 1]] = v; } }),
+      appendRow: r => { const o = {}; hdr.forEach((h, i) => { o[h] = r[i]; }); counters.push(o); }
+    };
+  },
   _requirePermission: () => null,
   _salesTenantId: () => 'BDC',
 };
+// ★ ต้องเก็บ stub ไว้ "ก่อน" โหลด 02_helpers.gs ซึ่งประกาศ tenantSheet ตัวจริงทับ
+const _tenantSheetStub = ctx.tenantSheet;
 vm.createContext(ctx);
 ['02_helpers.gs', '12_docnum.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 // 02_helpers.gs ประกาศ tenant* ตัวจริงทับ mock — ต้องคืน mock หลังโหลด (แพทเทิร์นเดียวกับ test-owner-tenant.js)
 Object.assign(ctx, {
+  tenantSheet: _tenantSheetStub,
   tenantObjects: (t, n) => (n === 'doc_number_series' ? series : counters).map(o => Object.assign({}, o)),
   tenantAppend: (t, n, o) => { (n === 'doc_number_series' ? series : counters).push(Object.assign({}, o)); },
   tenantUpdate: (t, n, id, patch) => {
@@ -166,6 +180,35 @@ let cfg = ctx._docSeriesConfig('BDC', 'PO');
 eq('รูปแบบที่ตั้งถูกอ่านกลับมาใช้', [cfg.prefix, cfg.date_format, cfg.running_digits, cfg.reset_cycle, cfg.separator],
   ['ใบสั่งซื้อ', 'yyyy', 5, 'yearly', '/']);
 eq('  หมวดอื่นยังเป็นค่าเริ่มต้น', ctx._docSeriesConfig('BDC', 'GR').prefix, 'GR');
+
+console.log('\n── ★ ตั้งเลขถัดไปตอนย้ายเล่มจากระบบเดิม (เจ้าของระบบสั่ง 7 ต.ค. 2026) ──');
+/* ย้ายจากระบบเดิมมาแล้วต้องนับต่อจากเล่มเก่า ไม่ใช่เริ่ม 0001 ใหม่
+   ★ ข้อที่สำคัญที่สุดคือ "ลดตัวนับไม่ได้" — ลดแล้วระบบจะออกเลขที่มีเอกสารจริงถืออยู่แล้วซ้ำอีกใบ
+     ใบกำกับภาษีซ้ำเลขเป็นปัญหากับสรรพากร และแก้ย้อนหลังไม่ได้เลย
+     (ตั้งเกินไปโดยพลาดยังเดินหน้าต่อได้ ยอมเลขกระโดด ดีกว่าเลขซ้ำ) */
+{
+  const bad = (label, r, re) => {
+    const good = r && r.success === false && (!re || re.test(r.message || ''));
+    console.log((good ? 'PASS ' : 'FAIL ') + label + (good ? '' : '\n   got ' + JSON.stringify(r)));
+    good ? pass++ : fail++;
+  };
+
+  eq('ใบแรกของเล่มใหม่เริ่มที่ 0001', ctx.getNextDocNumber('BDC', 'TAX'), 'TAX-20261001-0001');
+
+  bad('ตั้งย้อนหลังต่ำกว่าที่ออกไปแล้ว → ปฏิเสธ (ไม่มีทางลัด)',
+    ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 1 }), /ออกเลขซ้ำ|ตั้งได้ตั้งแต่/);
+  bad('ตั้งเป็น 0 → ปฏิเสธ', ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 0 }), /ตั้งแต่ 1/);
+  bad('ประเภทที่ไม่รู้จัก → ปฏิเสธ', ctx.setDocCounter(SESSION, { docType: 'ZZZ', nextNumber: 5 }), /ไม่รู้จัก/);
+
+  const r = ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 1251 });
+  eq('ตั้งเลขถัดไป = 1251 (เล่มเดิมเดินถึง 1250)',
+    [r.success, r.previousLast, r.sample], [true, 1, 'TAX-20261001-1251']);
+  eq('  ★ ใบถัดไปได้เลขนั้นจริง ไม่ใช่แค่ตอบว่าสำเร็จ', ctx.getNextDocNumber('BDC', 'TAX'), 'TAX-20261001-1251');
+  eq('  แล้วเดินต่อตามปกติ', ctx.getNextDocNumber('BDC', 'TAX'), 'TAX-20261001-1252');
+  eq('  ★ ไม่ไปกระทบเล่มของเอกสารประเภทอื่น', ctx.getNextDocNumber('BDC', 'RC'), 'RC-20261001-0001');
+  eq('  ตั้งเท่าเลขถัดไปที่จะได้อยู่แล้ว (ไม่ถอยหลัง) → ยอม',
+    ctx.setDocCounter(SESSION, { docType: 'TAX', nextNumber: 1253 }).success, true);
+}
 
 console.log('\n' + (fail ? fail + ' FAILED' : 'ALL PASSED'));
 process.exit(fail ? 1 : 0);

@@ -155,6 +155,8 @@ var ADMIN_ACTION_MAP = {
 
   listDocSeries:          listDocSeries,
   // saveDocSeries แทน addDocSeries/updateDocSeries เดิม — บันทึก = ออกเวอร์ชันใหม่ ปิดของเดิม (12_docnum.gs)
+  // ตั้งเลขถัดไปตอนย้ายเล่มจากระบบเดิม (12_docnum.gs) — เดินหน้าได้อย่างเดียว
+  setDocCounter:          setDocCounter,
   saveDocSeries:          saveDocSeries,
   previewDocNumber:       previewDocNumberAdmin,
 

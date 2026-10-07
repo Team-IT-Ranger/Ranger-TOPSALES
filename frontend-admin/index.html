@@ -961,7 +961,10 @@
               </div>
             </div>
             <p class="form-hint" id="d-type-note"></p>
-            <div class="form-actions"><button class="btn btn-primary" onclick="saveDocSeriesUI()">บันทึก</button></div>
+            <div class="form-actions">
+              <button class="btn" onclick="openDocCounterForm()">ตั้งเลขถัดไป…</button>
+              <button class="btn btn-primary" onclick="saveDocSeriesUI()">บันทึก</button>
+            </div>
           </div>
         </section>
 
@@ -1757,7 +1760,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
   'createTenant','updateTenantStatus','deleteTestTenants','migrateOwnerTenantCode','saveCompanyProfile','updateTenantProfile','saveRole','deleteRole',
   'createAdminUser','updateAdminUser','approveAdminUser','rejectAdminUser','promoteToAdmin','linkAdminLineId','changeMyPassword',
-  'updateStaffAdmin','saveDocSeries','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
+  'updateStaffAdmin','saveDocSeries','setDocCounter','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
   'createArInvoice','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
@@ -3325,6 +3328,31 @@ async function saveDocSeriesUI(){
   toast(r.message || 'บันทึกสำเร็จ'); loadDocnum();
 }
 
+/* ★ ตั้ง "เลขถัดไป" ตอนย้ายเล่มจากระบบเดิม (เจ้าของระบบสั่ง 7 ต.ค. 2026)
+   เล่มเดิมเดินถึงเลขไหนแล้ว ต้องนับต่อจากนั้น ไม่ใช่เริ่ม 0001 ใหม่ — ไม่งั้นเลขซ้ำกับเอกสารที่ออกไปจริง
+   ★ แยกจากปุ่ม "บันทึก" โดยตั้งใจ: รูปแบบเลขแก้กี่ครั้งก็ได้ แต่ตัวนับเป็นของที่แก้ผิดแล้วย้อนไม่ได้
+     backend ก็กันไว้อีกชั้น (ลดตัวนับไม่ได้เด็ดขาด) ตรงนี้แค่ทำให้เห็นว่ากำลังทำอะไรอยู่ */
+function openDocCounterForm(){
+  const code = (document.getElementById('d-type') || {}).value;
+  if (!code) { toast('เลือกประเภทเอกสารก่อน', true); return; }
+  const label = (docnumTypes.find(t => t.code === code) || {}).label || '';
+  plModal('<h3>ตั้งเลขถัดไป — ' + esc(code + (label ? ' ' + label : '')) + '</h3>' +
+    '<p class="form-hint">ใช้ตอนย้ายเล่มจากระบบเดิม ให้ระบบนับต่อจากเล่มเก่า ไม่ใช่เริ่ม 0001 ใหม่<br>' +
+    '<b>ลดตัวนับไม่ได้</b> — ตั้งต่ำกว่าเลขที่ออกไปแล้วจะทำให้ออกเลขซ้ำกับเอกสารที่ลูกค้าถืออยู่ ซึ่งแก้ย้อนหลังไม่ได้<br>' +
+    'มีผลกับงวดปัจจุบันเท่านั้น (ตัวนับรีเซ็ตตามรอบที่ตั้งไว้)</p>' +
+    plField('เลขถัดไป *', '<input id="dc-next" type="number" min="1" step="1" placeholder="เช่น 1251">') +
+    '<div class="err" id="dc-err" style="display:none"></div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button>' +
+    '<button class="btn btn-primary" onclick="saveDocCounterUI(\'' + esc(code) + '\')">ตั้งเลข</button></div>');
+}
+async function saveDocCounterUI(docType){
+  const n = parseInt((document.getElementById('dc-next') || {}).value, 10);
+  if (!(n >= 1)) { plModalErr('เลขถัดไปต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป'); return; }
+  const r = await callApi('setDocCounter', { docType, nextNumber: n });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose(); toast(r.message); loadDocnum();
+}
+
 /* ══════════════ งานขาย (19_sales_admin.gs) — เปิด/ดู/ยกเลิกบิลขายเองจากแอดมิน ══════════════
    โหมด "ตัวแทน" (tenant_admin หรือ Ultra Admin ที่สวมสิทธิ์อยู่แล้ว) → เซิร์ฟเวอร์รู้ตัวแทนจาก session/ACTIVE_TENANT_ID เอง
    โหมด "บริษัทเจ้าของสินค้า" (owner, ไม่ได้สวมสิทธิ์ตัวแทนไหน) → ไม่ต้องเลือกอะไร เซิร์ฟเวอร์จะใช้ "ตัวแทนบ้าน" ของบริษัท
@@ -3610,8 +3638,12 @@ function ensureDocPrint(){
    ช่องลงชื่อสะท้อนหน้าที่ทางธุรกิจของเอกสารนั้น ไม่ใช่ของประดับ (ข้อ 2.4) */
 const SO_DOC_KINDS = {
   salesorder:  { title: 'ใบสั่งขาย', signers: ['ผู้สั่งซื้อ','ผู้ขาย','ผู้อนุมัติ'], showPrice: true, showBank: true },
-  receipt:     { title: 'ใบเสร็จรับเงิน', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false, noField: 'receiptNo' },
-  receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true, noField: 'receiptNo' },
+  /* ★ `withTaxNo` — ใบเสร็จของธุรกิจนี้เป็นใบกำกับภาษีในแผ่นเดียวกัน (เจ้าของระบบเลือกแบบนี้ 7 ต.ค. 2026)
+     จึงพิมพ์หัวเป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี" และโชว์ทั้งเลขใบเสร็จและเลขใบกำกับภาษีบนใบเดียว
+     ★★ สองเลขนี้ออกคนละจังหวะ (ใบกำกับภาษีตอนส่งมอบของ · ใบเสร็จตอนได้เงิน) จึงต้องโชว์แยกบรรทัด
+        ไม่ใช่ยุบเป็นเลขเดียว — ขายเชื่อจะมีใบกำกับภาษีก่อนใบเสร็จเป็นเดือน */
+  receipt:     { title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'], showPrice: true, showBank: false, noField: 'receiptNo', withTaxNo: true },
+  receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'], showPrice: true, showBank: true, noField: 'receiptNo', withTaxNo: true },
   /* ★ `noField` — เอกสารแต่ละชนิดมีเลขของตัวเอง ไม่ใช้เลขใบสั่งขายซ้ำกันหมด (แอดมินขอ 6-7 ต.ค. 2026)
      เลขออกอัตโนมัติจากฝั่ง backend (SALE_DOC_FIELDS ใน 34_sales_status.gs) ที่จุดงานจริงของเอกสารนั้น
      ★ ใบที่ยังไม่ถึงจุดออกเลข (เช่นพิมพ์ใบส่งของก่อนกด "พร้อมจัดส่ง") ยังไม่มีเลข → **ตกกลับไปใช้เลขใบสั่งขาย**
@@ -3666,6 +3698,8 @@ function printSaleDoc(r, kind){
       title: k.title, docNo: docNo, issuer: iss,
       subLabel: k.showPrice ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : '',
       metaRight: [['เลขที่', docNo]]
+        // ใบที่เป็นใบกำกับภาษีด้วย ต้องโชว์เลขใบกำกับภาษีของตัวเอง (ออกคนละจังหวะกับเลขใบเสร็จ)
+        .concat((k.withTaxNo && o.taxInvoiceNo) ? [['เลขที่ใบกำกับภาษี', o.taxInvoiceNo]] : [])
         // ใบส่งสินค้าที่มีเลขของตัวเอง ต้องอ้างกลับไปที่ใบสั่งขายได้ ไม่งั้นสองใบนี้โยงกันไม่ได้เลย
         .concat(docNo !== o.code ? [['อ้างอิงใบสั่งขาย', o.code]] : [])
         .concat([['วันที่', (o.createdAt || '').substring(0, 10)],

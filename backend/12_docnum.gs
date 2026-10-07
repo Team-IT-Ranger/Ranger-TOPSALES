@@ -136,6 +136,57 @@ function previewDocNumberAdmin(session, payload) {
   return { success: true, docNumber: previewNextDocNumber(tenantId, payload.docType) };
 }
 
+/**
+ * ★ ตั้ง "เลขถัดไป" ของเอกสารประเภทหนึ่ง (เจ้าของระบบสั่ง 7 ต.ค. 2026)
+ *
+ * ใช้ตอนย้ายเล่มจากระบบเดิมมาระบบนี้ — เล่มเดิมเดินถึงเลขไหนแล้ว ต้องนับต่อจากนั้น
+ * ไม่ใช่เริ่ม 0001 ใหม่ ไม่งั้นเลขซ้ำกับเอกสารที่ออกไปแล้วจริง (ใบกำกับภาษีซ้ำเลข = ปัญหากับสรรพากร)
+ *
+ * payload { docType, nextNumber }
+ *
+ * ★★ เดินหน้าได้อย่างเดียว — ตั้งต่ำกว่าเลขที่ออกไปแล้วถูกปฏิเสธเสมอ ไม่มีทางลัด
+ *   ลดตัวนับ = ระบบจะออกเลขที่มีเอกสารจริงถืออยู่แล้วซ้ำอีกใบ ซึ่งแก้ย้อนหลังไม่ได้เลย
+ *   (ถ้าตั้งเกินไปโดยพลาด ให้เดินหน้าต่อ ยอมเลขกระโดด ดีกว่าเลขซ้ำ)
+ * ★ มีผลกับ "งวดปัจจุบัน" เท่านั้น — ตัวนับผูกกับ period_key ตามรอบรีเซ็ต พอขึ้นงวดใหม่ก็เริ่มนับใหม่
+ *   ตามรูปแบบที่ตั้งไว้ ซึ่งเป็นพฤติกรรมที่ตั้งใจ (ตั้งค่านี้ไว้แก้ "ย้ายเล่มกลางคัน" ไม่ใช่ตั้งถาวร)
+ */
+function setDocCounter(session, payload) {
+  var err = _requirePermission(session, 'docnum', 'edit'); if (err) return err;
+  var tenantId = _salesTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'กรุณาเลือกตัวแทนจำหน่ายก่อน' };
+  payload = payload || {};
+  var docType = String(payload.docType || '').trim().toUpperCase();
+  if (!docType) return { success: false, message: 'กรุณาระบุประเภทเอกสาร' };
+  if (!_docTypeMeta(docType)) return { success: false, message: 'ไม่รู้จักเอกสารประเภท ' + docType };
+
+  var next = parseInt(payload.nextNumber, 10);
+  if (!(next >= 1)) return { success: false, message: 'เลขถัดไปต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป' };
+
+  var cfg = _docSeriesConfig(tenantId, docType);
+  var periodKey = _periodKey(cfg.reset_cycle);
+  var sh = tenantSheet(tenantId, 'doc_number_counters');
+  var values = sh.getDataRange().getValues();
+  var head = values[0], cType = head.indexOf('doc_type'), cKey = head.indexOf('period_key'), cNum = head.indexOf('last_number');
+  var last = 0, rowNo = 0;
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][cType]) === docType && String(values[i][cKey]) === periodKey) {
+      last = parseInt(values[i][cNum], 10) || 0; rowNo = i + 1; break;
+    }
+  }
+  if (next - 1 < last) {
+    return { success: false, message: 'ตอนนี้ออกถึงเลข ' + last + ' แล้ว (งวด ' + periodKey + ') — ' +
+      'ตั้งเลขถัดไปเป็น ' + next + ' จะทำให้ออกเลขซ้ำกับเอกสารที่ออกไปแล้ว ' +
+      'ตั้งได้ตั้งแต่ ' + (last + 1) + ' ขึ้นไปเท่านั้น' };
+  }
+  if (rowNo) sh.getRange(rowNo, cNum + 1).setValue(next - 1);
+  else sh.appendRow([docType, periodKey, next - 1]);
+
+  var sample = _formatDocNumber(cfg, periodKey, next);
+  return { success: true, docType: docType, periodKey: periodKey, previousLast: last, nextNumber: next, sample: sample,
+    message: 'ตั้งเลขถัดไปของ ' + docType + ' เป็น ' + next + ' แล้ว — ใบถัดไปจะเป็น ' + sample +
+      (last ? ' (เดิมออกถึง ' + last + ')' : '') };
+}
+
 /* ── Admin CRUD: จัดการรูปแบบเลขที่เอกสารของ "สมุดที่กำลังทำงานอยู่" ──
    ★ 1 ต.ค. 2026 เปลี่ยนจาก `_effectiveTenantId` เป็น `_salesTenantId` ทั้งไฟล์
    ของเดิมฝั่งบริษัทได้ null เสมอ แล้วตอบ "กรุณาเลือกตัวแทนจำหน่ายก่อน" — ทั้งที่
