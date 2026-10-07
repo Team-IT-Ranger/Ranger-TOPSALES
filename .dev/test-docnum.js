@@ -260,5 +260,30 @@ console.log('\n── ★★ หมวดงานซื้อ/บัญชี�
   eq('  preview หลังตั้งตรงกับที่ตั้งไว้', ctx.previewNextDocNumber('BDC', 'AP'), 'AP-BDC-202610-0501');
 }
 
+console.log('\n── ★ listDocSeries ส่ง "เลขที่เอกสารถัดไป" มาให้ตารางด้วย (เจ้าของระบบสั่ง 7 ต.ค. 2026) ──');
+/* คิดฝั่ง backend ในคำขอเดียว ไม่ให้หน้าเว็บยิง previewDocNumber ทีละแถว
+   (Apps Script มีค่าคงที่ ~1.9 วินาทีต่อคำขอ 13 แถวก็เกือบครึ่งนาที) */
+{
+  const d = ctx.listDocSeries(SESSION, {}).data;
+  const act = d.filter(r => String(r.is_active) === 'TRUE');
+  eq('ทุกแถวที่ใช้งานอยู่มีเลขถัดไปครบ ไม่มีช่องว่าง',
+    act.length > 0 && act.every(r => !!r.next_number), true);
+  /* ★ ต้องเป็นเลขที่ "ประกอบเสร็จแล้ว" ไม่ใช่เลขรันเปล่าๆ — คนอ่านต้องเห็นหน้าตาเลขจริง
+     และหมวดงานซื้อ/บัญชีต้องมีรหัสบริษัทคั่นเหมือนเลขที่ออกจริง */
+  /* ★ สร้างแถวเองแทนการ "ถ้าเจอค่อยเช็ค" — เงื่อนไข if ทำให้เทสต์ข้ามเงียบๆ แล้วขึ้นเขียวหลอกตา
+     (เพิ่งโดนมาเมื่อครู่: สองข้อนี้ไม่เคยรันเลยตอนเขียนครั้งแรก) */
+  ctx.saveDocSeries(SESSION, { docType: 'AP', prefix: 'AP', dateFormat: 'yyyyMM', runningDigits: 4,
+    resetCycle: 'monthly', separator: '-' });
+  const d2 = ctx.listDocSeries(SESSION, {}).data;
+  const ap = d2.find(r => r.doc_type === 'AP' && String(r.is_active) === 'TRUE');
+  eq('  หมวดกลางมีรหัสบริษัทคั่น ตรงกับเลขที่ออกจริง', !!ap && /^AP-BDC-/.test(ap.next_number), true);
+  const inact = d.filter(r => String(r.is_active) !== 'TRUE');
+  eq('  ★ แถวที่ปิดไปแล้วไม่โชว์เลข (เป็นประวัติของรูปแบบเก่า เลขไม่ได้ออกจากแถวนั้น)',
+    inact.every(r => !r.next_number), true);
+  // เทียบกับตัว preview ตรงๆ — ถ้าวันหนึ่งมีใครไปประกอบเลขในตารางด้วยสูตรที่สอง จะจับได้ตรงนี้
+  eq('  ตรงกับ previewNextDocNumber ของหมวดเดียวกัน (ไม่ได้ประกอบคนละสูตร)',
+    ap && ap.next_number, ctx.previewNextDocNumber('BDC', 'AP'));
+}
+
 console.log('\n' + (fail ? fail + ' FAILED' : 'ALL PASSED'));
 process.exit(fail ? 1 : 0);

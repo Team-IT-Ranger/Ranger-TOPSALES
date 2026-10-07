@@ -259,6 +259,16 @@ function listDocSeries(session, payload) {
     known[c] = 1;
     types.push({ code: c, label: c, legacy: true, note: 'ตั้งไว้เดิม — ยังไม่มีเอกสารไหนในระบบใช้รูปแบบนี้' });
   });
+  /* ★ ประกอบ "เลขที่เอกสารถัดไป" ให้ดูเป็นตัวอย่างจริง (เจ้าของระบบสั่ง 7 ต.ค. 2026)
+     คิดฝั่ง backend ในคำขอเดียว ไม่ให้หน้าเว็บยิง previewDocNumber ทีละแถว —
+     Apps Script มีค่าคงที่ ~1.9 วินาทีต่อคำขอ 13 แถวก็เกือบครึ่งนาที (ดู CLAUDE.md หัวข้อความเร็ว)
+     ★ เฉพาะแถวที่ "ใช้งานอยู่" — แถวที่ถูกปิดไปแล้วเป็นประวัติของรูปแบบเก่า เลขถัดไปไม่ได้ออกจากแถวนั้น
+       โชว์เลขให้ = เข้าใจผิดว่ายังใช้อยู่ */
+  rows.forEach(function(r) {
+    if (!isFlagOn(r.is_active)) { r.next_number = ''; return; }
+    try { r.next_number = previewNextDocNumber(tenantId, String(r.doc_type || '').trim()); }
+    catch (e) { r.next_number = ''; }
+  });
   return { success: true, data: rows, types: types };
 }
 

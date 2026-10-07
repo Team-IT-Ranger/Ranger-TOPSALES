@@ -928,8 +928,8 @@
             <span id="dn-count" class="form-hint"></span>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>ชื่อประเภทเอกสาร</th><th>Prefix</th><th>รูปแบบวันที่</th><th>หลัก</th><th>รีเซ็ต</th><th>สถานะ</th></tr></thead>
-            <tbody id="docnum-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>รหัส</th><th>ชื่อประเภทเอกสาร</th><th>Prefix</th><th>รูปแบบวันที่</th><th>หลัก</th><th>เลขที่เอกสารถัดไป</th><th>รีเซ็ต</th><th>สถานะ</th></tr></thead>
+            <tbody id="docnum-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่ม/แก้ไขรูปแบบเลขที่เอกสาร</h3>
@@ -3264,7 +3264,7 @@ function renderDocnumTable(){
     ? ('ทั้งหมด ' + docnumCache.length + ' รายการ')
     : (offCount ? ('ซ่อนรูปแบบเดิมที่ปิดแล้ว ' + offCount + ' รายการ') : '');
   if (!rows.length) {
-    body.innerHTML = '<tr class="empty-row"><td colspan="7">' +
+    body.innerHTML = '<tr class="empty-row"><td colspan="8">' +
       (docnumCache.length ? 'ไม่มีรูปแบบที่ใช้งานอยู่ — เลือก "ทั้งหมด" เพื่อดูรูปแบบเดิม'
                           : 'ยังไม่มีการตั้งค่า — ใช้ค่าเริ่มต้นอัตโนมัติ') + '</td></tr>';
     return;
@@ -3279,7 +3279,11 @@ function renderDocnumTable(){
     '<td class="mono-data">'+esc(d.doc_type)+'</td>' +
     '<td>'+esc((docnumTypes.find(t => t.code === d.doc_type) || {}).label || '—')+'</td>' +
     '<td class="mono-data">'+esc(d.prefix)+'</td><td class="mono-data">'+esc(d.date_format||'-')+'</td>' +
-    '<td>'+esc(d.running_digits)+'</td><td>'+esc(d.reset_cycle)+'</td>' +
+    '<td>'+esc(d.running_digits)+'</td>' +
+    /* ★ เลขที่เอกสารถัดไป — ประกอบจริงจาก backend (prefix + รหัสบริษัท + วันที่ + เลขรัน) ไม่ได้ต่อสตริงเองที่นี่
+       หมวดงานซื้อ/บัญชีมีรหัสบริษัทคั่นด้วย ต่อเองจะได้เลขที่ไม่ตรงกับที่ออกจริง */
+    '<td class="mono-data">'+(d.next_number ? esc(d.next_number) : '<span class="muted">—</span>')+'</td>' +
+    '<td>'+esc(d.reset_cycle)+'</td>' +
     '<td><span class="pill '+(isOn(d.is_active)?'ok':'off')+'">'+(isOn(d.is_active)?'ใช้งาน':'ปิดแล้ว')+'</span></td></tr>'
   ).join('');
 }
