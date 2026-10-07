@@ -37,6 +37,11 @@ function listSalesOrdersAdmin(session, payload) {
       // ซึ่งอ่านไม่ออก จึงแปลงเป็นชื่อด้วย _saleByLabel() ตัวเดียวกับที่รายงานการขายใช้ (41_sales_reports.gs)
       saleBy: o.sale_by, saleByName: _saleByLabel(o.sale_by),
       deliveryOrderNo: o.delivery_order_no || '',
+      /* ★ ส่งขั้นถัดไปมากับรายการด้วย เพื่อให้กระดานลากการ์ด (dragboard.js) รู้ว่าลากไปไหนได้บ้าง
+         **โดยไม่ต้องก๊อป SO_TRANSITIONS ไปไว้ในหน้าเว็บ** — ตารางสถานะมีที่เดียวคือ 34_sales_status.gs
+         ก๊อปไปแล้ววันหนึ่งสองฝั่งจะไม่ตรงกัน แล้วผู้ใช้จะลากได้แต่โดนปฏิเสธ หรือลากไม่ได้ทั้งที่ควรได้
+         (รูปแบบเดียวกับที่หน้ารายละเอียดใช้อยู่แล้ว) */
+      nextStatuses: (SO_TRANSITIONS[_soStatusOf(o)] || []).filter(function(x) { return x !== 'cancelled'; }),
       note: o.note || '', createdAt: safeDateStr(o.created_at)
     }; });
   return { success: true, data: data };

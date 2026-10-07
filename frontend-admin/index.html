@@ -830,23 +830,26 @@
             <button class="btn btn-primary" onclick="openSaleOrderNew()">+ เปิดบิลขาย</button>
           </div>
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-            <select id="so-filter-status" onchange="renderSalesOrdersTable()">
+            <select id="so-filter-status" onchange="renderSalesOrders()">
               <option value="">ทุกสถานะการส่ง</option>
               <option value="pending_delivery">รอสำนักงานจัดส่ง</option>
               <option value="delivering">กำลังจัดส่ง</option>
               <option value="completed">ส่งของแล้ว</option>
               <option value="cancelled">ยกเลิกแล้ว</option>
             </select>
-            <select id="so-filter-pay" onchange="renderSalesOrdersTable()">
+            <select id="so-filter-pay" onchange="renderSalesOrders()">
               <option value="">ทุกสถานะการเงิน</option>
               <option value="unpaid">ยังไม่ชำระ</option>
               <option value="partial">ชำระบางส่วน</option>
               <option value="paid">ชำระแล้ว</option>
             </select>
-            <input id="so-filter-search" data-table-search placeholder="ค้นหาชื่อร้าน / เลขที่บิล / พนักงานขาย" oninput="renderSalesOrdersTable()" style="flex:1;min-width:200px">
+            <input id="so-filter-search" data-table-search placeholder="ค้นหาชื่อร้าน / เลขที่บิล / พนักงานขาย" oninput="renderSalesOrders()" style="flex:1;min-width:200px">
+            <button class="btn btn-sm" id="so-view-toggle" onclick="toggleSalesOrderView()">กระดาน</button>
             <button class="btn btn-sm" onclick="printSalesOrderList()">พิมพ์รายงาน</button>
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
+          <!-- กระดานลากการ์ด — มุมมองที่สองของหน้าเดียวกัน ใช้ข้อมูล/ตัวกรอง/snapshot ชุดเดียวกับตาราง -->
+          <div id="so-board" class="dgb" hidden></div>
           <div class="table-wrap"><table>
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
             <tbody id="salesorders-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
@@ -3417,6 +3420,111 @@ function soFilteredRows(){
    และเรียงคอลัมน์ยังถูกอยู่ เพราะ 'yyyy-mm-dd' เรียงแบบข้อความได้ตรงกับเรียงตามเวลาพอดี */
 function soDateOnly(v){ return String(v || '').substring(0, 10); }
 
+/* ══════════ มุมมองกระดาน (ลากการ์ด) — มุมมองที่สองของหน้าบิลขาย ══════════
+   ★ เป็น "มุมมองที่สองของหน้าเดิม" ไม่ใช่หน้าใหม่ — ใช้ salesOrdersCache ตัวเดียวกับตาราง
+     ตัวกรองเดียวกัน (soFilteredRows) และ snapshot เดียวกัน · เปลี่ยนสถานะจากกระดานแล้ว
+     สลับกลับไปดูตารางต้องเห็นผลทันทีโดยไม่ต้องโหลดใหม่ */
+let soViewMode = 'table';
+const SO_BOARD_COLS = [
+  { key:'confirmed',     label:'รอรับงาน',      also:['pending_delivery'] },
+  { key:'accepted',      label:'บันทึกรับงานแล้ว' },
+  { key:'ready_to_ship', label:'พร้อมจัดส่ง' },
+  { key:'delivering',    label:'กำลังจัดส่ง' },
+  { key:'completed',     label:'ส่งของแล้ว' }
+];
+/* สถานะจริงหลายค่า map ลงคอลัมน์เดียว — `pending_delivery` เป็นชื่อเดิมของ `confirmed`
+   ยังมีบิลเก่าค้างอยู่ ถ้าไม่รวมเข้าคอลัมน์เดียวกันจะหายไปจากกระดานเงียบๆ */
+function soBoardCol(status){
+  for (const c of SO_BOARD_COLS) if (c.key === status || (c.also || []).includes(status)) return c.key;
+  return null;                                  // ร่าง/ยกเลิก/ปฏิเสธ ไม่อยู่บนกระดาน
+}
+function toggleSalesOrderView(){
+  soViewMode = soViewMode === 'table' ? 'board' : 'table';
+  try { localStorage.setItem(snapKey() + 'so_view', soViewMode); } catch(e){}
+  renderSalesOrders();
+}
+function renderSalesOrders(){
+  const board = document.getElementById('so-board');
+  const wrap = document.querySelector('#view-salesorders .table-wrap');
+  const btn = document.getElementById('so-view-toggle');
+  if (btn) btn.textContent = soViewMode === 'board' ? 'ตาราง' : 'กระดาน';
+  if (wrap) wrap.hidden = soViewMode === 'board';
+  if (board) board.hidden = soViewMode !== 'board';
+  if (soViewMode === 'board') renderSalesOrderBoard();
+  else renderSalesOrdersTable();
+}
+async function renderSalesOrderBoard(){
+  const el = document.getElementById('so-board');
+  if (!window.DragBoard) {
+    el.innerHTML = '<p class="form-hint">กำลังโหลดกระดาน…</p>';
+    try { await ensureDragBoard(); } catch(e){ el.innerHTML = '<p class="form-hint">โหลดกระดานไม่สำเร็จ</p>'; return; }
+    if (soViewMode !== 'board') return;         // ผู้ใช้สลับกลับไปแล้วระหว่างรอโหลด
+  }
+  const rows = soFilteredRows().filter(o => soBoardCol(o.status));
+  const hidden = soFilteredRows().length - rows.length;
+  DragBoard.mount(el, {
+    columns: SO_BOARD_COLS,
+    emptyText: 'ไม่มีบิล',
+    cards: rows.map(o => ({
+      id: o.id, col: soBoardCol(o.status), busy: !!o.__saving, order: o,
+      html: '<div class="mono-data" style="font-size:.8rem">' + esc(o.code) + '</div>' +
+        '<div style="font-size:.86rem;margin-top:1px">' + esc(o.customer) + '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:5px">' +
+          '<span class="mono-data" style="font-size:.8rem">฿' + baht(o.total) + '</span>' +
+          soPayPill(o.paymentStatus) + '</div>'
+    })),
+    /* ★ ขั้นที่ไปได้มาจาก backend (nextStatuses ← SO_TRANSITIONS) ไม่ได้ก๊อปตารางสถานะมาไว้ที่นี่
+       และ backend ตัดสินซ้ำทุกครั้งอยู่แล้ว ตรงนี้มีไว้บอกผู้ใช้ล่วงหน้าเท่านั้น */
+    canMove: (card, to) => (card.order.nextStatuses || []).includes(to),
+    /* ★ "พร้อมจัดส่ง" ตัดสต็อกจริง ออกใบจัดของ/ใบส่งสินค้า/ใบกำกับภาษี และตั้งลูกหนี้ให้อัตโนมัติ
+       การลากเป็นท่าที่ปล่อยนิ้วผิดช่องได้ง่ายที่สุด จึงต้องถามก่อนเสมอ */
+    confirmText: (card, to) => to !== 'ready_to_ship' ? null
+      : 'ย้าย ' + card.order.code + ' ไป "พร้อมจัดส่ง"?\n\nระบบจะตัดสต็อก ออกใบจัดของ/ใบส่งสินค้า/ใบกำกับภาษี และตั้งลูกหนี้ให้ทันที',
+    onOpen: card => openSaleOrderDetail(card.id),
+    onMove: soBoardMove
+  });
+  const note = document.getElementById('so-board-note');
+  if (note) note.textContent = hidden ? ('ไม่แสดงบนกระดาน ' + hidden + ' ใบ (ร่าง / ยกเลิก / ปฏิเสธ) — ดูได้ในมุมมองตาราง') : '';
+}
+/* ★★ ย้ายการ์ดก่อน ยิง API ทีหลัง — Apps Script มีค่าคงที่ ~1.9 วินาทีต่อคำขอ
+   รอผลก่อนขยับการ์ดจะช้าจนใช้ไม่ได้จริง · แลกมาด้วยทางถอยที่ต้องเชื่อถือได้ ซึ่งคือ 3 บรรทัดท้ายฟังก์ชันนี้ */
+async function soBoardMove(card, from, to){
+  const o = card.order;
+  const prev = o.status;
+  o.status = to;
+  o.__saving = true;
+  renderSalesOrderBoard();
+  const r = await callApi('updateSalesOrderStatus', { id: o.id, status: to });
+  o.__saving = false;
+  if (r.success) {
+    o.status = r.status || to;
+    if (r.paymentStatus) o.paymentStatus = r.paymentStatus;
+    if (r.deliveryOrderNo) o.deliveryOrderNo = r.deliveryOrderNo;
+    /* ★ ขั้นถัดไปเปลี่ยนตามสถานะใหม่ — ไม่อัปเดตแล้วการ์ดจะลากต่อไม่ได้จนกว่าจะโหลดหน้าใหม่
+       backend ไม่ได้ส่ง nextStatuses กลับมากับการเปลี่ยนสถานะ จึงล้างทิ้งแล้วโหลดรายการใหม่เงียบๆ */
+    o.nextStatuses = null;
+    listSnapSave('salesorders', salesOrdersCache);
+    if (r.warning) { toast((r.message || 'บันทึกแล้ว') + ' · ' + r.warning, true); alert('⚠️ ' + r.warning); }
+    else toast(r.message || 'บันทึกแล้ว');
+    renderSalesOrderBoard();
+    loadSalesOrders();                          // เอาขั้นถัดไปชุดใหม่มา (เบื้องหลัง ไม่บล็อกผู้ใช้)
+  } else {
+    o.status = prev;                            // ★ เด้งกลับที่เดิม
+    renderSalesOrderBoard();
+    toast(r.message, true);                     // ★ บอกเหตุผลจาก backend ไม่ใช่ "ล้มเหลว" ลอยๆ
+  }
+}
+function ensureDragBoard(){
+  if (window.DragBoard) return Promise.resolve(window.DragBoard);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'dragboard.js?v=20261007';
+    s.onload = () => resolve(window.DragBoard);
+    s.onerror = () => { toast('โหลดกระดานไม่สำเร็จ', true); reject(new Error('dragboard')); };
+    document.head.appendChild(s);
+  });
+}
+
 function renderSalesOrdersTable(){
   const body = document.getElementById('salesorders-body');
   const rows = soFilteredRows();
@@ -3466,15 +3574,17 @@ function exportSalesOrderList(){
   }));
 }
 async function loadSalesOrders(){
+  // จำมุมมองที่เลือกไว้ต่อผู้ใช้ — คนที่ทำงานจากกระดานทั้งวันไม่ต้องกดสลับใหม่ทุกครั้งที่เปิดหน้า
+  try { soViewMode = localStorage.getItem(snapKey() + 'so_view') === 'board' ? 'board' : 'table'; } catch(e){}
   const body = document.getElementById('salesorders-body');
   if (!salesOrdersCache.length) salesOrdersCache = listSnapLoad('salesorders') || [];
-  if (salesOrdersCache.length) renderSalesOrdersTable();
+  if (salesOrdersCache.length) renderSalesOrders();
   else tblLoading(body, 10);
   const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', {})]);
   if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
   salesOrdersCache = r.data;
   listSnapSave('salesorders', salesOrdersCache);
-  renderSalesOrdersTable();
+  renderSalesOrders();
 }
 
 /* ── รายละเอียดบิล ── */
