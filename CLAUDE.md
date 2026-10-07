@@ -1816,6 +1816,14 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
   · **แก้ `config.js` เมื่อไหร่ ให้บัมป์ `?v=` ของ `<script src="config.js?v=…">` ใน `index.html` ด้วย** ทั้งสองแอป —
   เบราว์เซอร์แคชไฟล์นี้ไว้ ผู้ใช้เดิมจะยังยิงไป backend ตัวเก่าจนกว่าแคชหมดอายุ (เจอมาแล้วตอนเปิด prod 2026-09-24)
   · วิธีเช็คของจริงที่เสิร์ฟอยู่: `curl -s '<pages.dev url>/config.js?cb=1' | grep …` อย่าดูจากเบราว์เซอร์อย่างเดียว
+  · **★★ เช็ค frontend prod ต้องใช้ `curl -sL` กับ Cloudflare เท่านั้น** (7 ต.ค. 2026 — เสียเวลาไป 7 นาที
+    เพราะเช็คผิดสองชั้นพร้อมกัน แล้วสรุปผิดว่า "build ไม่ขึ้น" ทั้งที่ขึ้นตั้งนานแล้ว)
+    1. Cloudflare ตอบ **308 redirect** ให้ `/index.html` → ต้องยิง `/` หรือใส่ `-L` ไม่งั้นได้ size=0
+    2. **GitHub Pages `/admin/` เหลือเป็นหน้า redirect 1,991 ไบต์** ("ย้ายที่อยู่แล้ว" ชี้ไป pages.dev)
+       ตั้งแต่ย้ายไป Cloudflare 29 ก.ย. 2026 — **ไม่ใช่ตัวแอปอีกต่อไป** grep หาโค้ดในนั้นได้ 0 เสมอ
+       และดูเหมือน "บิลด์เก่าค้าง" ทั้งที่ไม่ใช่
+    คำสั่งที่ถูก: `curl -sL '<pages.dev url>/?cb=1' -o /tmp/p.html -w '%{http_code} %{size_download}\n'`
+    แล้ว grep ในไฟล์ · ของจริงต้องได้ **200 และขนาดหลักแสนไบต์** (ไฟล์แอปราว 730 KB)
     (แคชเบราว์เซอร์ทำให้เข้าใจผิดว่ายังไม่ขึ้นทั้งที่ของจริงขึ้นแล้ว — เจอเองตอนไล่บั๊ก 2 ต.ค. 2026)
 - Backend: `.dev/push-backend.sh dev|uat|prod` pushes the `.gs` files via `clasp` (`prod` refuses with
   a message until `backend/.clasp.prod.json` exists), but that alone
