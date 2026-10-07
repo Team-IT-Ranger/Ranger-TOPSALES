@@ -3507,8 +3507,13 @@ async function renderSalesOrderBoard(){
     columnSub: (col, cards) => '฿' + baht(cards.reduce((sum, c) => sum + (parseFloat(c.order.total) || 0), 0)),
     cards: rows.map(o => ({
       id: o.id, col: soBoardCol(o.status), busy: !!o.__saving, order: o,
+      /* ★ ชื่อพนักงานขายอยู่ใต้ชื่อลูกค้า (แอดมินขอ 7 ต.ค. 2026) — เหตุผลเดียวกับที่ขอคอลัมน์นี้ในตาราง
+         เมื่อ 6 ต.ค.: เห็นบิลค้างแล้วต้องรู้ทันทีว่าโทรตามใคร โดยไม่ต้องเปิดใบ
+         ตัดบรรทัดเดียวด้วย ellipsis — ชื่อยาวต้องไม่ดันการ์ดจนเสียรูปทั้งคอลัมน์ */
       html: '<div class="mono-data" style="font-size:.8rem">' + esc(o.code) + '</div>' +
         '<div style="font-size:.86rem;margin-top:1px">' + esc(o.customer) + '</div>' +
+        '<div style="font-size:.78rem;color:var(--ink-soft);margin-top:1px;white-space:nowrap;' +
+          'overflow:hidden;text-overflow:ellipsis">' + esc(o.saleByName || o.saleBy || '-') + '</div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:5px">' +
           '<span class="mono-data" style="font-size:.8rem">฿' + baht(o.total) + '</span>' +
           soPayPill(o.paymentStatus) + '</div>'
