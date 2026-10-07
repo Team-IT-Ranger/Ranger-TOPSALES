@@ -2880,7 +2880,7 @@ function renderDashboard(r, fromSnapshot){
 
   if (r.scope === 'tenant'){
     document.getElementById('dash-kpis').innerHTML =
-      kpi('ยอดขายวันนี้', '฿' + baht(r.revenue), r.bills + ' บิล') +
+      kpiLink('ยอดขายวันนี้', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย') +
       kpiCustReq(r.pendingCustomerRequests) +
       kpi('พนักงานอนุมัติแล้ว', r.activeStaff, '') +
       kpi('รออนุมัติ', r.pendingStaff, 'พนักงานลงทะเบียนใหม่') +
@@ -2894,7 +2894,7 @@ function renderDashboard(r, fromSnapshot){
       activityRow('อนุมัติแล้ว', r.activeStaff) + activityRow('รออนุมัติ', r.pendingStaff);
   } else {
     document.getElementById('dash-kpis').innerHTML =
-      kpi('ยอดขายวันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue), r.bills + ' บิล') +
+      kpiLink('ยอดขายวันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย') +
       kpiCustReq(r.pendingCustomerRequests) +
       kpi('ตัวแทนที่ใช้งาน', r.tenantCount, '') +
       kpi('สินค้าทั้งหมด', r.productCount, '') +
@@ -2909,6 +2909,15 @@ function renderDashboard(r, fromSnapshot){
   }
 }
 function kpi(lbl, val, sub){ return '<div class="kpi"><div class="lbl">'+esc(lbl)+'</div><div class="val">'+esc(val)+'</div><div class="sub">'+esc(sub||'')+'</div></div>'; }
+/* การ์ดตัวเลขที่กดแล้วไปหน้าที่เกี่ยวข้อง — ตัวเลขบนแดชบอร์ดทุกตัวมาจากหน้าใดหน้าหนึ่งเสมอ
+   เห็นแล้วอยากดูต่อเป็นเรื่องปกติ · เป็น <button> ไม่ใช่ <div onclick> เพื่อให้ Tab ถึงและ Enter ทำงานเอง
+   (แพทเทิร์นเดียวกับ kpiCustReq ที่ทำไว้ตอนการ์ดคำขอเปิดร้าน 6 ต.ค. 2026) */
+function kpiLink(lbl, val, sub, view, hint){
+  return '<button type="button" class="kpi kpi-link" style="text-align:left;font:inherit" ' +
+    'onclick="gotoView(\'' + view + '\')" title="' + esc(hint || '') + '">' +
+    '<div class="lbl">' + esc(lbl) + '</div><div class="val">' + esc(val) + '</div>' +
+    '<div class="go">' + esc(sub || '') + '</div></button>';
+}
 /* การ์ดคำขอเปิดร้านใหม่ — กดแล้วไปหน้า 1.4.6 (เมนูอยู่ลึกสามชั้น คนไม่รู้ว่ามีจะไม่เคยเจอ)
    เป็น <button> ไม่ใช่ <div onclick> เพื่อให้ Tab ถึงและ Enter ทำงานได้เอง */
 function kpiCustReq(count){
