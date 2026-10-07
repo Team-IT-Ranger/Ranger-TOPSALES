@@ -736,3 +736,64 @@ function listUninvoicedSalesOrders(session, payload) {
   out.sort(function(a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
   return { success: true, data: out, tenantId: tenantId };
 }
+/**
+ * ★ เติมใบสำคัญย้อนหลังให้ใบรับของของ "ตัวแทน" ที่รับไว้ก่อนระบบจะลงบัญชีให้ (ก่อน 6 ต.ค. 2026)
+ *
+ * เจ้าของระบบ 7 ต.ค. 2026: **"ยอดยกมาของ BDC เริ่มนับวันแรกที่มีข้อมูล"**
+ * = ไม่มีใบยอดยกมาแยกต่างหาก · สมุดของตัวแทนเริ่มนับจากเอกสารใบแรกที่มีอยู่จริง
+ * จึงต้องเดินย้อนกลับไปลงบัญชีให้ครบ ไม่ใช่เริ่มนับจากวันที่เปิดใช้ระบบบัญชี
+ *
+ * ★★ แตะเฉพาะใบของตัวแทน (`tenant_id` ไม่ว่าง) — ใบของบริษัทลงบัญชีมาตั้งแต่ต้นแล้ว
+ *    ใบของบริษัทที่ `journal_id` ว่างแปลว่ามีเหตุอื่น (เช่นยอดเป็นศูนย์) ลงย้อนหลังให้
+ *    = ขยับงบของงวดที่ปิดไปแล้ว ซึ่งแย่กว่าปล่อยไว้
+ *
+ * payload { commit?, limit?, tenantId? } — **ไม่ส่ง `commit: true` = ดูอย่างเดียว ไม่เขียนอะไรเลย**
+ * รันซ้ำได้ (ข้ามใบที่มี journal_id แล้ว) · ทำทีละ `limit` ใบ (ค่าเริ่มต้น 100) แล้วบอก `remaining`
+ * เพราะ Apps Script มีเพดาน 6 นาที — ค้างกลางทางแล้วรันต่อได้ ไม่ต้องเริ่มใหม่
+ */
+function backfillGrJournals(session, payload) {
+  if (String(session.role_code) !== 'super_admin') return { success: false, message: 'เฉพาะ super_admin' };
+  payload = payload || {};
+  var commit = payload.commit === true || String(payload.commit) === 'true';
+  var limit = _int(payload.limit) || 100;
+  var onlyTenant = String(payload.tenantId || '');
+
+  return _withDocLock(function() {
+    var pending = centralObjects('goods_receipts').filter(function(gr) {
+      if (String(gr.status) !== 'posted') return false;          // ใบที่ยกเลิกแล้วไม่ต้องลง
+      if (String(gr.journal_id || '').trim()) return false;      // ลงไปแล้ว
+      if (!String(gr.tenant_id || '')) return false;             // ★ ของบริษัทไม่แตะ (ดูหมายเหตุหัวฟังก์ชัน)
+      if (onlyTenant && String(gr.tenant_id) !== onlyTenant) return false;
+      return true;
+    });
+    // เรียงตามวันที่รับของจริง — ลงบัญชีย้อนหลังต้องไล่จากใบเก่าสุดไปใหม่สุด ไม่ใช่ตามลำดับแถวในชีต
+    pending.sort(function(a, b) { return String(_dOnly(a.receive_date)).localeCompare(String(_dOnly(b.receive_date))) || (a.record_id - b.record_id); });
+
+    var done = [], skipped = [], byBook = {};
+    for (var i = 0; i < pending.length && done.length < limit; i++) {
+      var gr = pending[i];
+      var date = _dOnly(gr.receive_date);
+      if (!_validDate(date)) { skipped.push({ grNo: gr.gr_no, why: 'วันที่รับของไม่ถูกรูปแบบ (' + gr.receive_date + ')' }); continue; }
+      var value = _money(_childrenOf('gr_items', 'gr_id', gr.record_id)
+        .reduce(function(s, it) { return s + (Number(it.amount) || 0); }, 0));
+      if (!(value > 0)) { skipped.push({ grNo: gr.gr_no, why: 'ยอดเป็นศูนย์' }); continue; }
+      var book = _normBook(gr.tenant_id);
+      byBook[book] = _money((byBook[book] || 0) + value);
+      done.push({ grNo: gr.gr_no, date: date, book: book, amount: value });
+      if (!commit) continue;
+      var jr = _postJournal({ date: date, source: 'INV', refType: 'GR', refId: gr.record_id, tenantId: gr.tenant_id,
+        memo: 'รับของเข้าคลัง ' + gr.gr_no + ' (ลงย้อนหลัง)', createdBy: session.adminUserId, lines: [
+          { accountCode: GL_ACCT.INVENTORY, description: 'สินค้าคงเหลือเพิ่มจาก ' + gr.gr_no, debit: value, credit: 0 },
+          { accountCode: GL_ACCT.GRNI, description: 'รอรับใบแจ้งหนี้จากผู้ขาย', debit: 0, credit: value, partyType: 'vendor', partyId: gr.vendor_id }
+        ] });
+      if (!jr.success) return jr;   // ล้มกลางทาง = หยุดทันที ใบที่ลงไปแล้วยังอยู่ รันซ้ำแล้วเดินต่อได้
+      centralUpdate('goods_receipts', gr.record_id, { journal_id: jr.journalId });
+    }
+    var remaining = pending.length - done.length - skipped.length;
+    return { success: true, commit: commit, posted: done.length, skipped: skipped, remaining: remaining < 0 ? 0 : remaining,
+      byBook: byBook, data: done,
+      message: (commit ? 'ลงบัญชีย้อนหลัง ' : 'ดูอย่างเดียว — จะลงบัญชีย้อนหลัง ') + done.length + ' ใบ' +
+        (skipped.length ? ' · ข้าม ' + skipped.length + ' ใบ' : '') +
+        (remaining > 0 ? ' · เหลืออีก ' + remaining + ' ใบ (รันซ้ำเพื่อทำต่อ)' : '') };
+  });
+}

@@ -599,6 +599,60 @@ eq('  อายุลูกหนี้ของตัวแทนว่าง �
    [ctx.getArAging(TADMIN, { asOf: '2026-10-20' }).data.length,
     ctx.getArAging(FIN, { asOf: '2026-10-20' }).data.length], [0, 1]);
 
+console.log('\n── ลงบัญชีย้อนหลังให้ใบรับของเก่าของตัวแทน (เจ้าของระบบ 7 ต.ค. 2026) ──');
+/* "ยอดยกมาของ BDC เริ่มนับวันแรกที่มีข้อมูล" = ไม่มีใบยอดยกมาแยก สมุดเริ่มนับจากเอกสารใบแรกที่มีจริง
+   จึงต้องเดินย้อนไปลงให้ครบ · ★ และต้องไม่แตะใบของบริษัท ซึ่งลงบัญชีมาตั้งแต่ต้นแล้ว */
+{
+  // จำลองใบรับของยุคก่อนมีสมุดตัวแทน: posted แต่ journal_id ว่าง
+  const oldGrId = ctx.centralNextId('goods_receipts');
+  append(sheets.goods_receipts, { record_id: oldGrId, tenant_id: TEN, gr_no: 'GR-OLD-1', po_id: '', vendor_id: TVENDOR,
+    warehouse_id: 1, receive_date: '2026-08-15', status: 'posted', journal_id: '', created_at: '2026-08-15 09:00:00' });
+  append(sheets.gr_items, { record_id: ctx.centralNextId('gr_items'), gr_id: oldGrId, product_id: 12,
+    qty: 10, unit_code: 'ม้วน', unit_factor: 1, base_qty: 10, unit_cost: 40, amount: 400 });
+  // ใบของบริษัทที่ยอดเป็นศูนย์ (journal_id ว่างด้วยเหตุอื่น) — ห้ามแตะ
+  const ownerGrId = ctx.centralNextId('goods_receipts');
+  append(sheets.goods_receipts, { record_id: ownerGrId, tenant_id: '', gr_no: 'GR-OWNER-0', po_id: '', vendor_id: VENDOR,
+    warehouse_id: 1, receive_date: '2026-08-15', status: 'posted', journal_id: '', created_at: '2026-08-15 09:00:00' });
+
+  fails('ไม่ใช่ super_admin → ปฏิเสธ', ctx.backfillGrJournals(FIN, {}), /super_admin/);
+
+  const tbBefore = ctx.getTrialBalance(TADMIN, {}).data.find(x => x.code === '1300').balance;
+  let r = ctx.backfillGrJournals(SUPER, {});
+  eq('ดูอย่างเดียว (ไม่ส่ง commit) → บอกว่าจะลงกี่ใบ แต่ยังไม่เขียนอะไรเลย',
+    [r.success, r.commit, r.posted, objs(sheets.goods_receipts).find(g => g.record_id === oldGrId).journal_id,
+     ctx.getTrialBalance(TADMIN, {}).data.find(x => x.code === '1300').balance], [true, false, 1, '', tbBefore]);
+  eq('  ★ ใบของบริษัทไม่อยู่ในรายการที่จะลงให้', r.data.every(x => x.grNo !== 'GR-OWNER-0'), true);
+
+  r = ctx.backfillGrJournals(SUPER, { commit: true });
+  const oldGr = objs(sheets.goods_receipts).find(g => g.record_id === oldGrId);
+  eq('ลงจริง → ใบได้ journal_id และยอดเข้าสมุดของตัวแทน',
+    [r.posted, !!oldGr.journal_id,
+     objs(sheets.gl_journals).find(j => String(j.record_id) === String(oldGr.journal_id)).tenant_id,
+     ctx.getTrialBalance(TADMIN, {}).data.find(x => x.code === '1300').balance], [1, true, TEN, tbBefore + 400]);
+  eq('  ★ ลงตามวันที่รับของจริง ไม่ใช่วันที่รัน (ไม่งั้นยอดไปโผล่ผิดงวด)',
+    objs(sheets.gl_journals).find(j => String(j.record_id) === String(oldGr.journal_id)).journal_date, '2026-08-15');
+  eq('  ใบของบริษัทไม่ถูกแตะ', objs(sheets.goods_receipts).find(g => g.record_id === ownerGrId).journal_id, '');
+
+  const jvCount = sheets.gl_journals.rows.length;
+  r = ctx.backfillGrJournals(SUPER, { commit: true });
+  eq('รันซ้ำไม่ลงซ้ำ (ใบที่มี journal_id แล้วถูกข้าม)', [r.posted, sheets.gl_journals.rows.length], [0, jvCount]);
+}
+
+console.log('\n── ตัวแทนลงบัญชีของตัวเองได้ทุกอย่าง (เจ้าของระบบ 7 ต.ค. 2026) ──');
+/* เดิมตัวแทนไม่มีโมดูล accounting เลย ฝั่งบริษัทต้องทำแทนให้ · ตอนนี้ทำเองได้ทั้งหมด
+   แต่ยังเป็น "ของตัวเอง" เท่านั้น — การกรองด้วย _inBook เป็นตัวกั้น ไม่ใช่การไม่มีสิทธิ์ */
+{
+  const before = ctx.getTrialBalance(FIN, {}).totalDebit;
+  let r = ctx.postManualJournal(TADMIN, { date: '2026-10-05', memo: 'ตัวแทนปรับปรุงยอดเอง',
+    lines: [{ accountCode: '1110', debit: 200, credit: 0 }, { accountCode: '1120', debit: 0, credit: 200 }] });
+  ok('ตัวแทนลงใบสำคัญเองได้', r);
+  eq('  ลงในสมุดของตัวเอง และงบบริษัทไม่ขยับ',
+    [objs(sheets.gl_journals).find(j => String(j.record_id) === String(r.journalId)).tenant_id,
+     ctx.getTrialBalance(FIN, {}).totalDebit], [TEN, before]);
+  ok('  ตัวแทนกลับรายการใบของตัวเองได้', ctx.voidJournal(TADMIN, { id: r.journalId, date: '2026-10-05', reason: 'ลงผิด' }));
+  ok('  ตัวแทนเปิดงบการเงินของตัวเองได้', ctx.getBalanceSheet(TADMIN, { asOf: '2026-12-31' }));
+}
+
 eq('lock ถูกปล่อยทุกครั้ง', lockHeld, false);
 
 console.log('\n── รายงานการขาย (1.8.1 แยกพนักงาน / 1.8.2 แยกลูกค้า / 1.8.3 แยกสินค้า) ──');

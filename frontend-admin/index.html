@@ -2308,11 +2308,11 @@ const NAV_GROUPS = [
   ]},
   { n:'5', icon:'book', label:'งานบัญชีการเงิน', subs:[
     { n:'5.1', label:'บัญชีทั่วไป', items:[
-      {n:'5.1.1', label:'สมุดรายวัน / งบทดลอง', view:'glbooks', mod:'accounting', ready:true, scope:'owner', supervise:true} ]},
+      {n:'5.1.1', label:'สมุดรายวัน / งบทดลอง', view:'glbooks', mod:'accounting', ready:true, scope:'both'} ]},
     { n:'5.2', label:'เจ้าหนี้', items:[
-      {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'owner', supervise:true} ]},
+      {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'both'} ]},
     { n:'5.3', label:'ลูกหนี้', items:[
-      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'owner', supervise:true} ]}
+      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'both'} ]}
   ]},
   /* กลุ่ม 6/7 สำรองไว้ (เจ้าของระบบสั่ง 2026-09-29 — ย้ายตัวแทนจำหน่าย + ผู้ใช้งาน/สิทธิ์ เข้าไปรวมกับ
      "ตั้งค่าระบบ" หมดแล้ว เพื่อลดจำนวนโมดูลบนสุดที่ต้องไล่ดู) — อย่าเอาไปใช้โดยไม่ถาม
@@ -2479,19 +2479,8 @@ function scheduleViewOnlyGuards(){ clearTimeout(_roGuardTimer); _roGuardTimer = 
  *   'locked' เห็นแต่กดไม่ได้ (พร้อมเหตุผล) — ของที่บริษัทคุม หรือยังไม่ได้รับสิทธิ์ หรือยังไม่ได้ทำ
  *   'hidden' ไม่ใช่งานของฝั่งนี้เลย ไม่ต้องโชว์ให้รก
  */
-/* ★ "ฝั่งบริษัทเป็นคนทำบัญชี" — จริงทั้งตอนทำงานในนามบริษัทและตอนสวมสิทธิ์เข้าไปทำแทนตัวแทน
-   (6 ต.ค. 2026 เจ้าของระบบ: บริษัทเปิดดู/ช่วยปิดสมุดของตัวแทนได้) · บัญชีที่สังกัดตัวแทนจริงยังไม่ใช่
-   เพราะบทบาทฝั่งตัวแทนไม่มีโมดูล accounting เลย — กดไปก็โดน backend ปฏิเสธ */
-const keepsBooks = () => !(SESSION && SESSION.tenantId);
-
 function navState(it){
-  /* `supervise:true` = เมนูของฝั่งบริษัทที่ต้องตามเข้าไปใช้ "ในนามตัวแทน" ได้ด้วย
-     ใช้กับงานบัญชี (เจ้าของระบบ 6 ต.ค. 2026: บริษัทเปิดดูสมุดของตัวแทนได้) — ถ้าไม่มีข้อนี้
-     พอ Ultra Admin สวมสิทธิ์เข้าตัวแทน SCOPE จะกลายเป็น 'tenant' แล้วเมนูบัญชีหายไปทั้งกลุ่ม
-     = เปิดดูสมุดของตัวแทนไม่ได้เลยทั้งที่ backend ให้ดูแล้ว
-     ★ เทียบจาก SESSION.tenantId (บัญชี "สังกัด" ตัวแทนจริงไหม) ไม่ใช่ SCOPE — บัญชีของตัวแทนยังไม่เห็นเหมือนเดิม */
-  const supervising = it.supervise && keepsBooks();
-  const mine = !it.scope || it.scope === 'both' || it.scope === SCOPE || (it.scope === 'owner' && supervising);
+  const mine = !it.scope || it.scope === 'both' || it.scope === SCOPE;
   if (!mine) {
     return it.grey === SCOPE
       ? { s:'locked', why:'บริษัทเจ้าของสินค้าเป็นผู้ดูแลเมนูนี้' }
@@ -6603,9 +6592,9 @@ function renderPoDetail(po){
     '<td class="mono-data">'+it.receivedQty+'</td><td class="mono-data">'+it.remainQty+'</td></tr>').join(''), 8, 'ไม่มีรายการ');
   document.getElementById('pod-receipts').innerHTML = po.receipts.length ? po.receipts.map(g =>
     '<div class="activity-row"><span><b>'+esc(g.grNo)+'</b> '+esc(g.receiveDate)+' · '+g.itemCount+' รายการ</span>' +
-    '<span>'+(keepsBooks() ? '<button class="btn btn-sm" onclick="billFromGr('+g.id+')">ตั้งหนี้</button>' : '')+'</span></div>').join('')
+    '<span>'+(canEdit('accounting') ? '<button class="btn btn-sm" onclick="billFromGr('+g.id+')">ตั้งหนี้</button>' : '')+'</span></div>').join('')
     : '<p class="form-hint">ยังไม่มีการรับของ</p>';
-  document.getElementById('pod-bills').innerHTML = !keepsBooks() ? '<p class="form-hint">บริษัทเจ้าของสินค้าเป็นผู้ดูแลสมุดบัญชี</p>' : po.bills.length ? po.bills.map(x =>
+  document.getElementById('pod-bills').innerHTML = !canView('accounting') ? '<p class="form-hint">ไม่ได้รับสิทธิ์ดูข้อมูลบัญชี</p>' : po.bills.length ? po.bills.map(x =>
     '<div class="activity-row"><span>'+esc(x.billNo)+'</span><span class="amt">฿'+bahtPlain(x.total)+' '+pill2(DOC_ST, x.status)+'</span></div>').join('')
     : '<p class="form-hint">ยังไม่ได้ตั้งหนี้</p>';
 }
@@ -6734,7 +6723,7 @@ function renderGrs(){
     '<td class="clickable-row" onclick="openPoDetail('+g.poId+')">'+dash(g.poNo)+'</td><td>'+dash(g.vendorName)+'</td>' +
     '<td>'+g.itemCount+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
     '<td>'+(g.billNo ? '<span class="pill ok">'+esc(g.billNo)+'</span>'
-      : (keepsBooks() ? '<button class="btn btn-sm" onclick="billFromGrList('+g.id+')">ตั้งหนี้</button>' : '<span class="muted">—</span>'))+'</td></tr>').join(''),
+      : (canEdit('accounting') ? '<button class="btn btn-sm" onclick="billFromGrList('+g.id+')">ตั้งหนี้</button>' : '<span class="muted">—</span>'))+'</td></tr>').join(''),
     7, 'ยังไม่มีใบรับของ');
 }
 async function billFromGrList(grId){

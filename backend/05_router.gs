@@ -174,6 +174,8 @@ var ADMIN_ACTION_MAP = {
   getAdminBootstrap:      getAdminBootstrap,
   rebuildSalesDaily:      function(session) { return session.role_code === 'super_admin' ? rebuildSalesDaily() : { success: false, message: 'เฉพาะ super_admin' }; },
   migrateUnitCodes:       migrateUnitCodes,
+  // ลงบัญชีย้อนหลังให้ใบรับของของตัวแทนที่รับไว้ก่อนมีสมุดของเขา (23_accounting.gs) — ไม่ส่ง commit = ดูอย่างเดียว
+  backfillGrJournals:     backfillGrJournals,
   getDatabaseLayout:      getDatabaseLayout,
   organizeDatabaseFiles:  organizeDatabaseFiles,
   syncTenantSheets:       syncTenantSheets,

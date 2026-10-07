@@ -10,8 +10,13 @@
 // docnum เพิ่มให้ฝั่งบริษัท 28 ก.ย. 2026 — บริษัทออกบิลขายตรงเอง (ตัวแทนบ้าน HOUSE) จึงต้องตั้งรูปแบบเลขที่ได้
 var OWNER_MODULES = ['products', 'pricing', 'promotions', 'tenants', 'settings', 'users_roles', 'sales_report', 'customers', 'staff', 'sales',
   'vendors', 'purchasing', 'inventory', 'accounting', 'docnum'];
+// ★ 7 ต.ค. 2026 เพิ่ม 'accounting' — เจ้าของระบบ: "ตัวแทนลงใบสำคัญของบริษัทตัวแทนได้เองทุกอย่าง"
+// ปลอดภัยเพราะทุก action บัญชีกรองด้วย _inBook/_bookScope แล้ว (ดู CLAUDE.md "บัญชีแยกเล่มต่อตัวแทน")
+// เขาจึงเห็นและแก้ได้เฉพาะสมุดของตัวเอง · การเพิ่มชื่อโมดูลที่นี่ทำให้ลายนิ้วมือสคีมาเปลี่ยน
+// → ensureSchemaCurrent() เติมสิทธิ์ให้ tenant_admin เองตอนแอดมินล็อกอินครั้งถัดไป ไม่ต้องรัน setup ด้วยมือ
+// (บทบาทที่ตัวแทนสร้างเองยังต้องไปติ๊กสิทธิ์ให้ที่หน้าบทบาทเอง — seed แตะเฉพาะ tenant_admin)
 var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_receive', 'stock_transfer', 'van_issue', 'shipping', 'sales_report', 'users_roles',
-  'vendors', 'purchasing', 'inventory'];   // ตัวแทนจำหน่ายซื้อของเองได้ (ข้อมูลแยกกันด้วย tenant_id — ดู 20_purchasing_master.gs)
+  'vendors', 'purchasing', 'inventory', 'accounting'];   // ตัวแทนจำหน่ายซื้อของเองได้ (ข้อมูลแยกกันด้วย tenant_id — ดู 20_purchasing_master.gs)
 // ★ 2 ต.ค. 2026 — โมดูลที่ฝั่งตัวแทนได้ "ดูอย่างเดียว" (seed can_view=TRUE, can_edit=FALSE เสมอ) ต่างจาก
 // TENANT_MODULES ข้างบนที่ seed ทั้งดู+แก้คู่กัน — แยกลิสต์ต่างหากเพราะ 'products' ยังอยู่ใน OWNER_MODULES ด้วย
 // (บริษัทดู+แก้ได้เต็ม) การให้ตัวแทนแก้เองไม่ได้ตามกติกาเดิม (บริษัทเจ้าของสินค้าคุมราคา/สินค้าส่วนกลาง)
