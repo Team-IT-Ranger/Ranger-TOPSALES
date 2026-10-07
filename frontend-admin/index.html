@@ -3520,6 +3520,9 @@ async function renderSalesOrderBoard(){
          เมื่อ 6 ต.ค.: เห็นบิลค้างแล้วต้องรู้ทันทีว่าโทรตามใคร โดยไม่ต้องเปิดใบ
          ตัดบรรทัดเดียวด้วย ellipsis — ชื่อยาวต้องไม่ดันการ์ดจนเสียรูปทั้งคอลัมน์ */
       html: '<div class="mono-data" style="font-size:.8rem">' + esc(o.code) + '</div>' +
+        /* วันที่บิลเป็นบรรทัดที่สอง (แอดมินขอ 7 ต.ค. 2026) — บิลที่ค้างในคอลัมน์เดิมหลายวัน
+           ต้องดูออกจากการ์ดเลยว่าค้างมานานแค่ไหน · ตัดเวลาด้วย soDateOnly() ตัวเดียวกับตาราง */
+        '<div class="mono-data" style="font-size:.76rem;color:var(--ink-faint)">' + esc(soDateOnly(o.createdAt)) + '</div>' +
         '<div style="font-size:.86rem;margin-top:1px">' + esc(o.customer) + '</div>' +
         '<div style="font-size:.78rem;color:var(--ink-soft);margin-top:1px;white-space:nowrap;' +
           'overflow:hidden;text-overflow:ellipsis">' + esc(o.saleByName || o.saleBy || '-') + '</div>' +
@@ -3572,7 +3575,11 @@ function ensureDragBoard(){
   if (window.DragBoard) return Promise.resolve(window.DragBoard);
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'dragboard.js?v=20261007';
+    /* ★★ บัมป์ `?v=` ทุกครั้งที่แก้ dragboard.js — เบราว์เซอร์แคชไฟล์นี้ไว้ตามสตริงนี้
+       ไม่บัมป์แล้วผู้ใช้เดิมจะยังรันของเก่าจนกว่าแคชจะหมดอายุ โดยไม่มีอะไรฟ้องเลย
+       (เจอจริง 7 ต.ค. 2026: แก้ความกว้างคอลัมน์แล้วไม่เปลี่ยน ตอนแรกนึกว่า CSS ผิด)
+       กติกาเดียวกับ config.js ที่ CLAUDE.md เตือนไว้แล้ว */
+    s.src = 'dragboard.js?v=20261007b';
     s.onload = () => resolve(window.DragBoard);
     s.onerror = () => { toast('โหลดกระดานไม่สำเร็จ', true); reject(new Error('dragboard')); };
     document.head.appendChild(s);

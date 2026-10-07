@@ -31,7 +31,12 @@
     /* ★ ใช้ชื่อตัวแปรจริงของแอป (--ground/--surface/--border/--blue) ไม่ใช่ชื่อที่เดาเอง
        ของเดิมเขียน var(--bg) / var(--primary) ซึ่งไม่มีในธีมนี้ รอดมาเพราะค่า fallback เท่านั้น
        แปลว่าถ้าวันหนึ่งธีมเปลี่ยนสี กระดานจะไม่เปลี่ยนตามโดยไม่มีใครรู้ */
-    '.dgb-col{flex:0 0 236px;background:var(--ground,#F6F8FC);border:1px solid var(--border,#E4E9F1);',
+    /* ★ คอลัมน์ "ยืดเต็มที่ว่าง" ไม่ใช่กว้างตายตัว — กว้างตายตัว 236px × 5 คอลัมน์ = 1,228px
+       แต่พื้นที่จริงมีแค่ ~976px คอลัมน์สุดท้ายจึงตกขอบไป 252px ต้องเลื่อนหาทุกครั้ง
+       (ผู้ใช้แจ้ง 7 ต.ค. 2026 — คอลัมน์ "ส่งของแล้ว" หายไปนอกจอ)
+       min-width กันไม่ให้แคบจนการ์ดอ่านไม่ออกเมื่อมีคอลัมน์เยอะหรือจอแคบ แล้วค่อยเลื่อนแทน */
+    '.dgb-col{flex:1 1 0;min-width:168px;max-width:300px;background:var(--ground,#F6F8FC);',
+    '  border:1px solid var(--border,#E4E9F1);',
     '  border-radius:10px;display:flex;flex-direction:column;min-height:160px;overflow:hidden}',
     '.dgb-colh{padding:9px 12px;border-bottom:1px solid var(--border,#E4E9F1);display:flex;',
     '  justify-content:space-between;align-items:flex-start;gap:8px}',
