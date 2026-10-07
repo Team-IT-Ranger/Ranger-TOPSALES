@@ -3521,14 +3521,26 @@ async function renderSalesOrderBoard(){
          ตัดบรรทัดเดียวด้วย ellipsis — ชื่อยาวต้องไม่ดันการ์ดจนเสียรูปทั้งคอลัมน์ */
       html: '<div class="mono-data" style="font-size:.8rem">' + esc(o.code) + '</div>' +
         /* วันที่บิลเป็นบรรทัดที่สอง (แอดมินขอ 7 ต.ค. 2026) — บิลที่ค้างในคอลัมน์เดิมหลายวัน
-           ต้องดูออกจากการ์ดเลยว่าค้างมานานแค่ไหน · ตัดเวลาด้วย soDateOnly() ตัวเดียวกับตาราง */
-        '<div class="mono-data" style="font-size:.76rem;color:var(--ink-faint)">' + esc(soDateOnly(o.createdAt)) + '</div>' +
-        '<div style="font-size:.86rem;margin-top:1px">' + esc(o.customer) + '</div>' +
+           ต้องดูออกจากการ์ดเลยว่าค้างมานานแค่ไหน · ตัดเวลาด้วย soDateOnly() ตัวเดียวกับตาราง
+           ★★ ป้ายสถานะมี "บรรทัดของตัวเอง" ท้ายการ์ด — ลองเอาไปอยู่คู่กับยอดเงินแล้วยอดหลักล้าน
+             โดนตัดจนอ่านไม่ออก (฿1,284,...) · ลองเอาไปคู่กับวันที่แล้วป้ายแตกเป็นสองบรรทัด
+             คอลัมน์กว้างแค่ ~186px ไม่พอให้สองอย่างอยู่บรรทัดเดียวจริงๆ
+             ทุกบรรทัดเป็นบรรทัดเดียวล้วน การ์ดทุกใบจึงสูงเท่ากันโดยไม่ต้องกำหนดความสูงตายตัว */
+        '<div>' +
+          '<span class="mono-data" style="font-size:.76rem;color:var(--ink-faint);white-space:nowrap">' +
+            esc(soDateOnly(o.createdAt)) + '</span></div>' +
+        /* ★ ชื่อลูกค้าบรรทัดเดียวเสมอ — ชื่อยาวที่ตัดสองบรรทัดทำให้การ์ดสูงไม่เท่ากัน
+           แล้วคอลัมน์ดูกระโดกกระเดกจนเทียบด้วยสายตาไม่ได้ (แอดมินขอ 7 ต.ค. 2026)
+           ชื่อเต็มยังอ่านได้จาก title ตอนเอาเมาส์ไปวาง และกดเข้าไปในใบก็เห็นเต็ม */
+        '<div title="' + esc(o.customer) + '" style="font-size:.86rem;margin-top:1px;white-space:nowrap;' +
+          'overflow:hidden;text-overflow:ellipsis">' + esc(o.customer) + '</div>' +
         '<div style="font-size:.78rem;color:var(--ink-soft);margin-top:1px;white-space:nowrap;' +
           'overflow:hidden;text-overflow:ellipsis">' + esc(o.saleByName || o.saleBy || '-') + '</div>' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:5px">' +
-          '<span class="mono-data" style="font-size:.8rem">฿' + baht(o.total) + '</span>' +
-          soPayPill(o.paymentStatus) + '</div>'
+        /* ★ ยอดเงินได้ทั้งบรรทัด ไม่ต้องแย่งที่กับป้ายสถานะ — ยอดหลักล้านจึงอ่านได้ครบเสมอ
+           ทุกบรรทัดในการ์ดเป็นบรรทัดเดียวทั้งหมด การ์ดทุกใบจึงสูงเท่ากันโดยไม่ต้องกำหนดความสูงตายตัว */
+        '<div class="mono-data" style="font-size:.84rem;font-weight:600;margin-top:5px;' +
+          'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">฿' + baht(o.total) + '</div>' +
+        '<div style="margin-top:4px">' + soPayPill(o.paymentStatus) + '</div>'
     })),
     /* ★ ขั้นที่ไปได้มาจาก backend (nextStatuses ← SO_TRANSITIONS) ไม่ได้ก๊อปตารางสถานะมาไว้ที่นี่
        และ backend ตัดสินซ้ำทุกครั้งอยู่แล้ว ตรงนี้มีไว้บอกผู้ใช้ล่วงหน้าเท่านั้น */
@@ -3579,7 +3591,7 @@ function ensureDragBoard(){
        ไม่บัมป์แล้วผู้ใช้เดิมจะยังรันของเก่าจนกว่าแคชจะหมดอายุ โดยไม่มีอะไรฟ้องเลย
        (เจอจริง 7 ต.ค. 2026: แก้ความกว้างคอลัมน์แล้วไม่เปลี่ยน ตอนแรกนึกว่า CSS ผิด)
        กติกาเดียวกับ config.js ที่ CLAUDE.md เตือนไว้แล้ว */
-    s.src = 'dragboard.js?v=20261007b';
+    s.src = 'dragboard.js?v=20261007c';
     s.onload = () => resolve(window.DragBoard);
     s.onerror = () => { toast('โหลดกระดานไม่สำเร็จ', true); reject(new Error('dragboard')); };
     document.head.appendChild(s);
