@@ -151,7 +151,7 @@ r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'delivering' });
 eq('พร้อมจัดส่ง → กำลังจัดส่ง', [r.success, row(1).status], [true, 'delivering']);
 r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'completed' });
 eq('กำลังจัดส่ง → จัดส่งแล้ว และประทับเวลาส่ง', [r.success, row(1).status, row(1).delivered_at], [true, 'completed', '2026-09-26 12:00:00']);
-eq('  ข้อความที่ตอบกลับบอกสิ่งที่เปลี่ยนจริง', r.message, 'กำลังจัดส่ง → จัดส่งแล้ว');
+eq('  ข้อความที่ตอบกลับบอกสิ่งที่เปลี่ยนจริง', r.message, 'กำลังจัดส่ง → จัดส่งสำเร็จ');   // คำใหม่ 8 ต.ค. 2026
 r = ctx.updateSalesOrderStatus(S, { id: 1, status: 'delivering' });
 eq('ถอยกลับหนึ่งขั้นได้ (กดผิดเป็นเรื่องปกติ) และล้างเวลาส่งทิ้ง', [r.success, row(1).status, row(1).delivered_at], [true, 'delivering', '']);
 fails('ข้ามขั้นจากกำลังจัดส่งกลับไปหาอะไรที่ไม่มีในสาย ไม่ได้', ctx.updateSalesOrderStatus(S, { id: 1, status: 'ส่งแล้วมั้ง' }), /สถานะไม่ถูกต้อง/);
@@ -185,7 +185,7 @@ eq('  ประวัติบรรทัดเดียวเก็บทั�
   return [logs(1).length - before, l.to_status, l.to_payment, l.note]; })(),
   [1, 'completed', 'unpaid', 'ส่งของแล้วแต่ยังไม่ได้เก็บเงิน']);
 eq('ประวัติที่ส่งให้หน้าเว็บมีป้ายภาษาไทยมาแล้ว พร้อมตำแหน่งคนเปลี่ยน', (() => { const h = ctx.orderStatusLog('T1', 1).slice(-1)[0];
-  return [h.toLabel, h.toPaymentLabel, h.by, h.byRole]; })(), ['จัดส่งแล้ว', 'ยังไม่ชำระ', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
+  return [h.toLabel, h.toPaymentLabel, h.by, h.byRole]; })(), ['จัดส่งสำเร็จ', 'ยังไม่ชำระ', 'แอดมินบริษัท', 'แอดมิน (owner_admin)']);
 
 console.log('\n── ป้ายและเส้นทางที่ส่งให้หน้าเว็บ ──');
 console.log('\n== จุดตัดสต็อก: office_delivery ตัดตอน "กำลังจัดส่ง" ==');

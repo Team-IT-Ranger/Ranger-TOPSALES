@@ -28,9 +28,13 @@ var SO_DRAFT = 'draft', SO_CONFIRMED = 'confirmed', SO_ACCEPTED = 'accepted', SO
     SO_READY = 'ready_to_ship', SO_PENDING = 'pending_delivery',
     SO_DELIVERING = 'delivering', SO_COMPLETED = 'completed', SO_CANCELLED = 'cancelled';
 var SO_STATUS_LABELS = {
-  draft: 'ใหม่ (ร่าง)', confirmed: 'ยืนยันแล้ว → รอแอดมินกดรับงาน', pending_delivery: 'ยืนยันแล้ว → รอแอดมินกดรับงาน',
-  accepted: 'บันทึกรับงานแล้ว → รอการจัดส่ง', ready_to_ship: 'พร้อมจัดส่ง', delivering: 'กำลังจัดส่ง',
-  completed: 'จัดส่งแล้ว', rejected: 'ปฏิเสธการขาย', cancelled: 'ยกเลิกแล้ว'
+  /* ★ คำสั้นลงทั้งชุด (เจ้าของระบบกำหนดคำเอง 8 ต.ค. 2026) — ของเดิมเขียนเป็นประโยค
+     "ยืนยันแล้ว → รอแอดมินกดรับงาน" 28 ตัวอักษร ดันคอลัมน์สถานะจนตารางบิลขายล้นจอ
+     ★ แอปมือถืออ่านป้ายจากที่นี่ที่เดียว (ส่งไปเป็น statusLabel) ไม่ได้ตั้งชุดคำแปลที่สองไว้
+       แก้ตรงนี้แล้วทั้งสองแอปเปลี่ยนตาม แต่หน้าเว็บแอดมินมีชุดของตัวเองที่ต้องแก้ให้ตรงกันด้วย */
+  draft: 'ใหม่ (ร่าง)', confirmed: 'รอแอดมินรับงาน', pending_delivery: 'รอแอดมินรับงาน',
+  accepted: 'รับงานเตรียมการจัดส่ง', ready_to_ship: 'พร้อมจัดส่ง', delivering: 'กำลังจัดส่ง',
+  completed: 'จัดส่งสำเร็จ', rejected: 'ปฏิเสธการขาย', cancelled: 'ยกเลิกแล้ว'
 };
 /* ไปไหนต่อได้บ้างจากสถานะปัจจุบัน — ย้อนกลับได้หนึ่งขั้น (กดผิดเป็นเรื่องปกติ) แต่บิลที่ยกเลิกแล้วเปิดคืนไม่ได้
  * **ห้ามข้ามขั้น** (guide ข้อ 1.1): pending_delivery ไป completed ตรงๆ ไม่ได้ เพราะ delivering คือจุดที่ตัด

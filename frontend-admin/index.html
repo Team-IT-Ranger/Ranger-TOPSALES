@@ -891,9 +891,16 @@
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
             <select id="so-filter-status" onchange="renderSalesOrders()">
               <option value="">ทุกสถานะการส่ง</option>
-              <option value="pending_delivery">รอสำนักงานจัดส่ง</option>
+              <!-- ★ ครบทุกขั้นแล้ว (8 ต.ค. 2026) — เดิมมีแค่ 4 ตัว กรองหา "เตรียมการจัดส่ง"/"พร้อมจัดส่ง"
+                   ซึ่งเป็นขั้นที่คนดูบ่อยที่สุดไม่ได้เลย · ค่า confirmed ครอบบิลเก่าที่ยังเป็น
+                   pending_delivery ด้วย (ดู soStatusKey) -->
+              <option value="draft">ใหม่ (ร่าง)</option>
+              <option value="confirmed">รอแอดมินรับงาน</option>
+              <option value="accepted">เตรียมการจัดส่ง</option>
+              <option value="ready_to_ship">พร้อมจัดส่ง</option>
               <option value="delivering">กำลังจัดส่ง</option>
-              <option value="completed">ส่งของแล้ว</option>
+              <option value="completed">จัดส่งสำเร็จ</option>
+              <option value="rejected">ปฏิเสธการขาย</option>
               <option value="cancelled">ยกเลิกแล้ว</option>
             </select>
             <select id="so-filter-pay" onchange="renderSalesOrders()">
@@ -3462,14 +3469,15 @@ const payLabel = code => { const p = paymentTypesCache.find(x => x.code === code
 /* สถานะบิลขายสองแกน — ป้ายต้องตรงกับ backend (34_sales_status.gs) เป๊ะ */
 /* สายงาน 1 ต.ค. 2026 — ต้องตรงกับ SO_STATUS_LABELS ใน 34_sales_status.gs
    `pending_delivery` = ชื่อเดิมของ `confirmed` (บิลเก่ายังเป็นค่านี้ ห้ามตัดทิ้ง) */
-const SO_LABELS = { draft:'ใหม่ (ร่าง)', confirmed:'ยืนยันแล้ว → รอแอดมินกดรับงาน', pending_delivery:'ยืนยันแล้ว → รอแอดมินกดรับงาน',
-  accepted:'บันทึกรับงานแล้ว → รอการจัดส่ง', ready_to_ship:'พร้อมจัดส่ง', delivering:'กำลังจัดส่ง',
-  completed:'จัดส่งแล้ว', rejected:'ปฏิเสธการขาย', cancelled:'ยกเลิกแล้ว' };
+const SO_LABELS = { draft:'ใหม่ (ร่าง)', confirmed:'รอแอดมินรับงาน', pending_delivery:'รอแอดมินรับงาน',
+  accepted:'รับงานเตรียมการจัดส่ง', ready_to_ship:'พร้อมจัดส่ง', delivering:'กำลังจัดส่ง',
+  completed:'จัดส่งสำเร็จ', rejected:'ปฏิเสธการขาย', cancelled:'ยกเลิกแล้ว' };
 const SO_PILL   = { draft:'off', confirmed:'wait', pending_delivery:'wait', accepted:'wait', ready_to_ship:'wait',
   delivering:'wait', completed:'ok', rejected:'off', cancelled:'off' };
 // ปุ่มขั้นถัดไปไม่ได้ตั้งไว้ที่นี่ — backend ส่ง `nextStatuses` มาจาก SO_TRANSITIONS ให้แล้ว (แหล่งเดียว)
 const PAY_LABELS = { unpaid:'ยังไม่ชำระ', partial:'ชำระบางส่วน', paid:'ชำระแล้ว' };
 const PAY_PILL   = { unpaid:'off', partial:'wait', paid:'ok' };
+const soStatusKey = st => st === 'pending_delivery' ? 'confirmed' : st;   // ชื่อเดิม = confirmed
 const soStatusPill = st => '<span class="pill '+(SO_PILL[st]||'')+'">'+(SO_LABELS[st]||esc(st||'-'))+'</span>';
 const soPayPill = ps => '<span class="pill '+(PAY_PILL[ps]||'')+'">'+(PAY_LABELS[ps]||'-')+'</span>';
 function soFilteredRows(){
@@ -3477,7 +3485,9 @@ function soFilteredRows(){
   const payF = document.getElementById('so-filter-pay').value;
   const q = document.getElementById('so-filter-search').value.trim().toLowerCase();
   let rows = salesOrdersCache;
-  if (statusF) rows = rows.filter(o => o.status === statusF);
+  /* ★ บิลเก่าเก็บ pending_delivery ซึ่งมีความหมายเท่า confirmed — เทียบตรงๆ แล้วเลือก
+     "รอแอดมินรับงาน" จะไม่เห็นบิลเก่าสักใบ ทั้งที่มันอยู่ขั้นนั้นจริง (หลักเดียวกับ soBoardCol) */
+  if (statusF) rows = rows.filter(o => soStatusKey(o.status) === statusF);
   if (payF) rows = rows.filter(o => (o.paymentStatus || 'unpaid') === payF);
   if (q) rows = rows.filter(o => (o.customer||'').toLowerCase().indexOf(q) !== -1 || (o.code||'').toLowerCase().indexOf(q) !== -1
     || (o.customerCode||'').toLowerCase().indexOf(q) !== -1
@@ -3495,11 +3505,11 @@ function soDateOnly(v){ return String(v || '').substring(0, 10); }
      สลับกลับไปดูตารางต้องเห็นผลทันทีโดยไม่ต้องโหลดใหม่ */
 let soViewMode = 'table';
 const SO_BOARD_COLS = [
-  { key:'confirmed',     label:'รอรับงาน',      also:['pending_delivery'], tone:'var(--col-wait)' },
-  { key:'accepted',      label:'บันทึกรับงานแล้ว', tone:'var(--col-accept)' },
+  { key:'confirmed',     label:'รอแอดมินรับงาน', also:['pending_delivery'], tone:'var(--col-wait)' },
+  { key:'accepted',      label:'เตรียมการจัดส่ง', tone:'var(--col-accept)' },
   { key:'ready_to_ship', label:'พร้อมจัดส่ง',    tone:'var(--col-ready)' },
   { key:'delivering',    label:'กำลังจัดส่ง',    tone:'var(--col-ship)' },
-  { key:'completed',     label:'ส่งของแล้ว',     tone:'var(--col-done)' }
+  { key:'completed',     label:'จัดส่งสำเร็จ',    tone:'var(--col-done)' }
 ];
 /* สถานะจริงหลายค่า map ลงคอลัมน์เดียว — `pending_delivery` เป็นชื่อเดิมของ `confirmed`
    ยังมีบิลเก่าค้างอยู่ ถ้าไม่รวมเข้าคอลัมน์เดียวกันจะหายไปจากกระดานเงียบๆ */
