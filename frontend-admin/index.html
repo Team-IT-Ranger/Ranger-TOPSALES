@@ -2933,6 +2933,7 @@ function renderDashboard(r, fromSnapshot){
   if (r.scope === 'tenant'){
     document.getElementById('dash-kpis').innerHTML =
       kpiLink('ยอดขายวันนี้', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย') +
+      kpiPendingGr(r.pendingGoodsReceipts) +
       kpiCustReq(r.pendingCustomerRequests) +
       kpi('พนักงานอนุมัติแล้ว', r.activeStaff, '') +
       kpi('รออนุมัติ', r.pendingStaff, 'พนักงานลงทะเบียนใหม่') +
@@ -2947,6 +2948,7 @@ function renderDashboard(r, fromSnapshot){
   } else {
     document.getElementById('dash-kpis').innerHTML =
       kpiLink('ยอดขายวันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย') +
+      kpiPendingGr(r.pendingGoodsReceipts) +
       kpiCustReq(r.pendingCustomerRequests) +
       kpi('ตัวแทนที่ใช้งาน', r.tenantCount, '') +
       kpi('สินค้าทั้งหมด', r.productCount, '') +
@@ -2979,6 +2981,18 @@ function kpiCustReq(count){
     'title="ไปที่ 1.4.6 คำขอเปิดร้านใหม่">' +
     '<div class="lbl">คำขอเปิดร้านใหม่</div><div class="val">' + n + '</div>' +
     '<div class="' + (n ? 'go' : 'sub') + '">' + (n ? 'รออนุมัติ — กดเพื่อตรวจ' : 'ไม่มีคำขอค้าง') + '</div></button>';
+}
+/* ใบรับของรอตรวจรับ — ตัวเลขหลักคือ "จำนวนรายการสินค้า" ไม่ใช่จำนวนใบ (เจ้าของระบบสั่ง 8 ต.ค. 2026)
+   ใบเดียวอาจมี 40 รายการ สองใบอาจมี 3 รายการ — จำนวนใบไม่ได้บอกว่างานเยอะแค่ไหน
+   ★ ของที่ค้างอยู่ = สต็อกยังไม่เข้าระบบ ขายไม่ได้ทั้งที่ของมาถึงแล้ว จึงเน้นสีเตือนเหมือนคำขอเปิดร้าน */
+function kpiPendingGr(p){
+  const items = Number(p && p.items) || 0, docs = Number(p && p.receipts) || 0;
+  return '<button type="button" class="kpi kpi-link ' + (items ? 'kpi-alert' : 'kpi-quiet') + '" ' +
+    'style="text-align:left;font:inherit" onclick="gotoView(\'pendinggoodsreceipts\')" ' +
+    'title="ไปที่ 4.3.2 ใบรับของรอตรวจรับ">' +
+    '<div class="lbl">ใบรับของรอตรวจรับ</div><div class="val">' + items + '</div>' +
+    '<div class="' + (items ? 'go' : 'sub') + '">' +
+    (items ? docs + ' ใบ · รายการรอรับเข้าสต็อก — กดเพื่อตรวจรับ' : 'ไม่มีใบค้าง') + '</div></button>';
 }
 function activityRow(left, right){ return '<div class="activity-row"><span>'+left+'</span><span class="amt mono-data">'+right+'</span></div>'; }
 

@@ -117,6 +117,24 @@ function _dashPendingCustomerRequests(scope) {
   }).length;
 }
 
+/* ใบรับของที่รอแอดมินตรวจรับ (status='pending_review' — สต็อกยังไม่ขยับจนกว่าจะกดรับ ดู 43_external_sales_import.gs)
+   คืน { receipts: จำนวนใบ, items: จำนวนรายการสินค้าที่จะรับ }
+   ★ นับ "รายการสินค้า" เป็นตัวเลขหลักตามที่เจ้าของระบบสั่ง — จำนวนใบไม่ได้บอกว่างานเยอะแค่ไหน
+     ใบเดียวอาจมี 40 รายการ สองใบอาจมี 3 รายการ
+   ★★ ไม่มีใบรอตรวจรับ = ไม่อ่าน gr_items เลย — แดชบอร์ดถูกเรียกทุกครั้งที่เปิดแอป และตารางเอกสาร
+     แคชไม่ได้ (กติกาข้อ 3) จึงต้องไม่จ่ายค่าอ่านชีตที่สองในกรณีปกติที่ไม่มีอะไรค้าง */
+function _dashPendingGoodsReceipts(scope) {
+  var ids = {}, receipts = 0;
+  centralObjects('goods_receipts').forEach(function(g) {
+    if (String(g.status) !== 'pending_review') return;
+    if (String(g.tenant_id || '') !== String(scope || '')) return;
+    ids[String(g.record_id)] = 1; receipts++;
+  });
+  if (!receipts) return { receipts: 0, items: 0 };
+  var items = centralObjects('gr_items').filter(function(it) { return ids[String(it.gr_id)]; }).length;
+  return { receipts: receipts, items: items };
+}
+
 function getAdminDashboard(session, payload) {
   var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
@@ -149,6 +167,7 @@ function getAdminDashboard(session, payload) {
       pendingDeliveryCount: pendingSO.length,
       pendingDeliveryValue: pendingSO.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0),
       pendingCustomerRequests: _dashPendingCustomerRequests(effTenantId),
+      pendingGoodsReceipts: _dashPendingGoodsReceipts(effTenantId),
       recentOrders: recentOrders
     };
   }
@@ -171,6 +190,7 @@ function getAdminDashboard(session, payload) {
     productCount: centralObjects('products').filter(function(p) { return isNotOff(p.is_active); }).length,
     activePromoCount: centralObjects('discount_rules').filter(function(r) { return isFlagOn(r.is_active); }).length,
     pendingCustomerRequests: _dashPendingCustomerRequests(null),
+    pendingGoodsReceipts: _dashPendingGoodsReceipts(''),
     perTenant: perTenant
   };
 }
