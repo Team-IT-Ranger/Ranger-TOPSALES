@@ -65,6 +65,16 @@
     '  box-shadow:0 12px 30px -8px rgba(27,36,52,.45);transform:rotate(-1.5deg)}',
     '.dgb-col.dgb-ok{outline:2px dashed var(--blue,#2B63D9);outline-offset:-4px}',
     '.dgb-col.dgb-no{opacity:.38}',
+    /* ══ หัวคอลัมน์กดเป็นตัวกรองได้ (spec.onColumnClick) ══
+       ตัวที่กดอยู่ = สีเต็ม + เส้นขอบน้ำเงิน + เครื่องหมาย ✓ · ตัวอื่น = จางลงให้รู้ว่าไม่ได้ใช้งาน
+       ★ ต้องบอกสองทางพร้อมกัน (ตัวที่ใช้เด่นขึ้น + ตัวที่ไม่ใช้จางลง) — ทำแค่ทางเดียวคนจะไม่แน่ใจว่า
+         "เด่น" เพราะถูกเลือก หรือเพราะมันเป็นแบบนั้นอยู่แล้ว */
+    '.dgb-pick .dgb-colh{cursor:pointer;user-select:none;transition:opacity .15s,filter .15s}',
+    '.dgb-pick .dgb-colh:hover{filter:brightness(.97)}',
+    '.dgb-pick .dgb-colh:focus-visible{outline:2px solid var(--blue,#2B63D9);outline-offset:-2px}',
+    '.dgb-col.dgb-dim .dgb-colh{opacity:.42;filter:grayscale(.55)}',
+    '.dgb-col.dgb-active{outline:2px solid var(--blue,#2B63D9);outline-offset:-1px;border-color:transparent}',
+    '.dgb-col.dgb-active .dgb-colh b::before{content:"\u2713 ";color:var(--blue,#2B63D9);font-weight:700}',
     '.dgb-empty{text-align:center;font-size:.82rem;opacity:.5;padding:12px 4px}',
     '@media (prefers-reduced-motion:reduce){.dgb-fly{transform:none}}'
   ].join('\n');
@@ -100,13 +110,19 @@
        (เจอจริง 7 ต.ค. 2026: หน้าเว็บใส่ `dgb-heads` เพื่อซ่อนการ์ด แล้ว mount() ลบทิ้งทันที
        ผลคือกดดูตารางแล้วการ์ดไม่หาย) · เครื่องมือไม่มีสิทธิ์ล้างคลาสของ element ที่ยืมเขามาใช้ */
     el.classList.add('dgb');
+    el.classList.toggle('dgb-pick', typeof spec.onColumnClick === 'function');
     el.innerHTML = spec.columns.map(function (c) {
       var mine = spec.cards.filter(function (x) { return String(x.col) === String(c.key); });
       /* c.tone = สีหัวคอลัมน์ (ผู้เรียกเป็นคนเลือก เครื่องมือไม่รู้ว่าสีไหนแปลว่าอะไร)
          c.sub  = บรรทัดรองใต้ชื่อ เช่น ยอดรวมเงินของคอลัมน์นั้น */
       var sub = typeof spec.columnSub === 'function' ? spec.columnSub(c, mine) : c.sub;
-      return '<div class="dgb-col" data-col="' + E(c.key) + '">' +
-        '<div class="dgb-colh"' + (c.tone ? ' style="background:' + E(c.tone) + '"' : '') + '>' +
+      var pick = typeof spec.onColumnClick === 'function';
+      var on = pick && spec.activeColumn && String(spec.activeColumn) === String(c.key);
+      var dim = pick && spec.activeColumn && !on;
+      return '<div class="dgb-col' + (on ? ' dgb-active' : '') + (dim ? ' dgb-dim' : '') +
+          '" data-col="' + E(c.key) + '">' +
+        '<div class="dgb-colh"' + (c.tone ? ' style="background:' + E(c.tone) + '"' : '') +
+          (pick ? ' role="button" tabindex="0" title="' + E(on ? 'กดอีกครั้งเพื่อเลิกกรอง' : 'กรองเฉพาะ ' + c.label) + '"' : '') + '>' +
           '<span><b>' + E(c.label) + '</b>' + (sub ? '<span class="dgb-sub">' + E(sub) + '</span>' : '') + '</span>' +
           '<span class="dgb-ct">' + mine.length + '</span></div>' +
         '<div class="dgb-colb">' +
@@ -176,6 +192,24 @@
     function clearMarks() {
       [].forEach.call(el.querySelectorAll('.dgb-col'), function (c) { c.classList.remove('dgb-ok', 'dgb-no'); });
     }
+
+    /* กดหัวคอลัมน์ = กรอง · แยกจากการลากการ์ดชัดเจนเพราะคนละ element กัน
+       ★ ผู้เรียกเป็นคนตัดสินว่ากดแล้วเกิดอะไร เครื่องมือแค่บอกว่ากดคอลัมน์ไหน */
+    function headClick(e) {
+      var h = e.target.closest ? e.target.closest('.dgb-colh') : null;
+      if (!h || !el.contains(h)) return;
+      var s = spec();
+      if (!s || typeof s.onColumnClick !== 'function') return;
+      var col = h.parentElement.getAttribute('data-col');
+      if (col) s.onColumnClick(col);
+    }
+    el.addEventListener('click', headClick);
+    el.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (!e.target.classList || !e.target.classList.contains('dgb-colh')) return;
+      e.preventDefault();
+      headClick(e);
+    });
 
     el.addEventListener('pointerdown', function (e) {
       var node = e.target.closest ? e.target.closest('[data-dgb-id]') : null;

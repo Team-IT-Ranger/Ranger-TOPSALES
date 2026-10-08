@@ -3480,8 +3480,11 @@ const PAY_PILL   = { unpaid:'off', partial:'wait', paid:'ok' };
 const soStatusKey = st => st === 'pending_delivery' ? 'confirmed' : st;   // ชื่อเดิม = confirmed
 const soStatusPill = st => '<span class="pill '+(SO_PILL[st]||'')+'">'+(SO_LABELS[st]||esc(st||'-'))+'</span>';
 const soPayPill = ps => '<span class="pill '+(PAY_PILL[ps]||'')+'">'+(PAY_LABELS[ps]||'-')+'</span>';
-function soFilteredRows(){
-  const statusF = document.getElementById('so-filter-status').value;
+/* opts.ignoreStatus = ไม่กรองตามสถานะ — ใช้ตอนสร้างแถบหัวคอลัมน์ในโหมดตาราง
+   ★ ถ้าแถบนับจากแถวที่กรองแล้ว พอกดกรอง "พร้อมจัดส่ง" คอลัมน์อื่นจะกลายเป็น 0 ทั้งแถบ
+     แล้วแถบที่มีไว้ดูภาพรวมก็หมดประโยชน์ทันทีที่เริ่มใช้งานมัน */
+function soFilteredRows(opts){
+  const statusF = (opts && opts.ignoreStatus) ? '' : document.getElementById('so-filter-status').value;
   const payF = document.getElementById('so-filter-pay').value;
   const q = document.getElementById('so-filter-search').value.trim().toLowerCase();
   let rows = salesOrdersCache;
@@ -3517,6 +3520,15 @@ function soBoardCol(status){
   for (const c of SO_BOARD_COLS) if (c.key === status || (c.also || []).includes(status)) return c.key;
   return null;                                  // ร่าง/ยกเลิก/ปฏิเสธ ไม่อยู่บนกระดาน
 }
+/* กดหัวคอลัมน์ในโหมดตาราง = กรองเฉพาะสถานะนั้น · กดซ้ำตัวเดิม = เลิกกรอง
+   ★ เขียนค่าลงช่องตัวกรองจริง ไม่เก็บสถานะคู่ขนานไว้ที่อื่น — แถบหัวคอลัมน์กับ select ตัวกรอง
+     จึงไม่มีวันขัดกันเอง และ soFilteredRows() ยังเป็นแหล่งความจริงเดียวเหมือนเดิม */
+function soHeadFilter(col){
+  const sel = document.getElementById('so-filter-status');
+  if (!sel) return;
+  sel.value = (sel.value === col) ? '' : col;
+  renderSalesOrders();
+}
 function setSalesOrderView(mode){
   if (soViewMode === mode) return;
   soViewMode = mode;
@@ -3536,7 +3548,13 @@ function renderSalesOrders(){
   /* ★ โหมดตารางไม่ซ่อนกระดานทั้งก้อน — เหลือหัวคอลัมน์ไว้เป็นแถบสรุป (เจ้าของระบบสั่ง 7 ต.ค. 2026)
      ยอดเงินค้างต่อสถานะเป็นตัวเลขที่อยากเห็นตลอดเวลา ไม่ใช่เฉพาะตอนดูกระดาน
      ★★ จึงต้องวาดกระดานทั้งสองโหมด เพราะยอดรวมคิดจากการ์ดที่กรองแล้ว */
-  if (board) board.classList.toggle('dgb-heads', soViewMode !== 'board');
+  /* ★ โหมดตาราง: แถบหัวคอลัมน์เป็น "กรอบ" (ตัวกรอง) ไม่ใช่ข้อมูล จึงถอดป้าย data-view-scroll ออก
+     ให้ initViewFrames() ย้ายไปตรึงไว้เหนือกรอบที่เลื่อน — เลื่อนตารางลงไปแล้วแถบยังอยู่ให้กด
+     (เจ้าของระบบสั่ง 8 ต.ค. 2026) · โหมดกระดานใส่ป้ายคืน เพราะตอนนั้นมันคือข้อมูลที่ต้องเลื่อนเอง */
+  if (board) {
+    board.classList.toggle('dgb-heads', soViewMode !== 'board');
+    board.toggleAttribute('data-view-scroll', soViewMode === 'board');
+  }
   renderSalesOrderBoard();
   if (soViewMode !== 'board') renderSalesOrdersTable();
 }
@@ -3547,11 +3565,19 @@ async function renderSalesOrderBoard(){
     try { await ensureDragBoard(); } catch(e){ el.innerHTML = '<p class="form-hint">โหลดกระดานไม่สำเร็จ</p>'; return; }
     if (soViewMode !== 'board') return;         // ผู้ใช้สลับกลับไปแล้วระหว่างรอโหลด
   }
-  const rows = soFilteredRows().filter(o => soBoardCol(o.status));
-  const hidden = soFilteredRows().length - rows.length;
+  /* โหมดตาราง: แถบหัวคอลัมน์ต้องบอกภาพรวม "ทุกสถานะ" เสมอ ถึงจะกดสลับไปมาได้
+     โหมดกระดาน: การ์ดต้องเป็นชุดเดียวกับที่ตัวกรองเลือกไว้ตามปกติ */
+  const headsMode = soViewMode !== 'board';
+  const base = soFilteredRows({ ignoreStatus: headsMode });
+  const rows = base.filter(o => soBoardCol(o.status));
+  const hidden = base.length - rows.length;
+  const statusF = document.getElementById('so-filter-status').value;
   DragBoard.mount(el, {
     columns: SO_BOARD_COLS,
     emptyText: 'ไม่มีบิล',
+    // หัวคอลัมน์กดกรองได้เฉพาะโหมดตาราง — บนกระดาน คอลัมน์คือการจัดกลุ่มอยู่แล้ว กรองซ้ำไม่มีความหมาย
+    activeColumn: headsMode ? statusF : '',
+    onColumnClick: headsMode ? soHeadFilter : null,
     /* ยอดรวมเงินของคอลัมน์ — ตัวเลขที่ศูนย์ฯ ต้องการจริงคือ "เงินค้างอยู่ตรงไหน"
        ไม่ใช่แค่จำนวนใบ · 1 ใบ 48,600 กับ 8 ใบรวม 9,000 คนละเรื่องกันโดยสิ้นเชิง */
     columnSub: (col, cards) => '฿' + baht(cards.reduce((sum, c) => sum + (parseFloat(c.order.total) || 0), 0)),
@@ -3636,7 +3662,7 @@ function ensureDragBoard(){
        ไม่บัมป์แล้วผู้ใช้เดิมจะยังรันของเก่าจนกว่าแคชจะหมดอายุ โดยไม่มีอะไรฟ้องเลย
        (เจอจริง 7 ต.ค. 2026: แก้ความกว้างคอลัมน์แล้วไม่เปลี่ยน ตอนแรกนึกว่า CSS ผิด)
        กติกาเดียวกับ config.js ที่ CLAUDE.md เตือนไว้แล้ว */
-    s.src = 'dragboard.js?v=20261007e';
+    s.src = 'dragboard.js?v=20261008a';
     s.onload = () => resolve(window.DragBoard);
     s.onerror = () => { toast('โหลดกระดานไม่สำเร็จ', true); reject(new Error('dragboard')); };
     document.head.appendChild(s);
