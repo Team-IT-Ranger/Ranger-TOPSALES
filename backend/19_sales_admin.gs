@@ -125,7 +125,9 @@ function getSalesOrderAdmin(session, payload) {
       /* ★ เลขใบแจ้งหนี้ (INV) มาจากตารางลูกหนี้กลาง ไม่ได้อยู่ในไฟล์ของตัวแทน — คนละเอกสารกับใบกำกับภาษี
          ใบแจ้งหนี้ = "เรียกเก็บเงิน" (ขายเชื่อเท่านั้น) · ใบกำกับภาษี = "หลักฐานภาษีตอนส่งมอบของ"
          แอดมินสับสนสองตัวนี้มาแล้ว เอกสารจึงต้องพิมพ์เลขให้ครบทั้งคู่ ไม่ใช่เลือกมาโชว์ตัวเดียว */
-      arInvoiceNo: _arInvoiceNoOf(tenantId, order.record_id),
+      /* ★ ใบแจ้งหนี้ลูกหนี้ถูกตั้งตอนเข้าสถานะ "พร้อมจัดส่ง" — ใบที่ยังไม่ถึงขั้นนั้นไม่มีทางมีเลข
+         ข้ามการอ่านทั้งชีต ar_invoices ไปเลย ซึ่งเป็นกรณีของบิลใหม่ทุกใบ (ที่คนเปิดดูบ่อยที่สุด) */
+      arInvoiceNo: _soReachedReady(order.status) ? _arInvoiceNoOf(tenantId, order.record_id) : '',
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
       canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && hasPermission(session, 'sales', 'edit')
     },
@@ -142,6 +144,8 @@ function getSalesOrderAdmin(session, payload) {
 /* หาเลขใบแจ้งหนี้ลูกหนี้ของบิลขายใบนี้ (ถ้ามี) — ใบที่ถูกยกเลิกไม่นับ
    ★ อ่านจาก ar_invoices ของสมุดที่บิลสังกัดเท่านั้น (เทียบ tenant_id ด้วย) ไม่งั้นบิลคนละตัวแทน
      ที่บังเอิญ record_id ชนกันจะดึงเลขของอีกบริษัทมาพิมพ์ลงเอกสาร */
+/* ★ อ่านทั้งชีต ar_invoices ทุกครั้งที่เปิดดูบิล — ตารางเอกสารจึงแคชไม่ได้ (ความถูกต้องสำคัญกว่า)
+   ผู้เรียกต้องกันไว้เองว่าใบนี้ "มีโอกาสมีใบแจ้งหนี้แล้วหรือยัง" ก่อนเรียก ดู getSalesOrderAdmin */
 function _arInvoiceNoOf(tenantId, salesOrderId) {
   var hit = '';
   centralObjects('ar_invoices').forEach(function(iv) {
@@ -153,6 +157,11 @@ function _arInvoiceNoOf(tenantId, salesOrderId) {
   return hit;
 }
 
+/* ใบนี้เคยไปถึงขั้น "พร้อมจัดส่ง" แล้วหรือยัง — ใช้ตัดสินว่าต้องไปหาเลขใบแจ้งหนี้หรือไม่
+   ★ รวม cancelled ด้วย — ใบที่เคยตั้งหนี้แล้วค่อยยกเลิกมีเลขใบแจ้งหนี้จริง ต้องยังเห็นเลขนั้นอยู่ */
+function _soReachedReady(status) {
+  return ['ready_to_ship', 'delivering', 'completed', 'cancelled'].indexOf(String(status || '')) !== -1;
+}
 function _docIssuer(session, tenantId) {
   var tenant = null;
   centralObjects('tenants').forEach(function(t) { if (String(t.tenant_id) === String(tenantId)) tenant = t; });

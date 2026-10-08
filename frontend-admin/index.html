@@ -3742,10 +3742,38 @@ async function loadSalesOrders(){
 }
 
 /* ── รายละเอียดบิล ── */
+/* ★★ วาดหัวบิลจากแถวที่อยู่ในมืออยู่แล้วทันที ไม่ต้องรอเซิร์ฟเวอร์ (เจ้าของระบบแจ้ง 8 ต.ค. 2026
+     ว่าเปิดหน้านี้ครั้งแรกช้ามาก) — วัดแล้ว `getSalesOrderAdmin` ใช้ ~5.9 วินาทีทุกครั้ง
+     (พื้นเวลา Apps Script ~2 วิ + เปิดไฟล์ตัวแทนและอ่าน 4 แท็บอีก ~3.5 วิ)
+   ★ ที่รู้สึกว่า "ครั้งต่อไปไม่ช้า" เพราะ tblLoading() คงรายการของใบก่อนหน้าไว้บนจอ ไม่ใช่เพราะเร็วขึ้นจริง
+     ครั้งแรกไม่มีของเก่าให้คง จอจึงว่างเปล่า 6 วินาที
+   ข้อมูลที่หัวบิลใช้ (เลขที่ · ร้าน · รหัสร้าน · วันที่ · การจ่าย/ส่ง · พนักงานขาย · ยอด · สถานะ)
+   มีครบอยู่ในรายการบิลที่โหลดไว้แล้ว — เอามาวาดก่อน แล้วค่อยให้ของจริงทับเมื่อมาถึง
+   ★ ไม่แตะ SOD_DATA เด็ดขาด เพราะเมนูพิมพ์อ่านจากตัวนั้น พิมพ์จากข้อมูลครึ่งใบไม่ได้ */
+function sodPreview(id){
+  const o = (salesOrdersCache || []).find(x => String(x.id) === String(id));
+  if (!o) return false;
+  document.getElementById('sod-title').textContent = o.code || 'บิลขาย';
+  document.getElementById('sod-meta').innerHTML = esc(o.customer || '') +
+    (o.customerCode ? ' <span class="mono-data">' + esc(o.customerCode) + '</span>' : '') +
+    ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
+    ' · <b>พนักงานขาย ' + esc(o.saleByName || o.saleBy || '-') + '</b>' +
+    ' · ' + esc(o.createdAt || '') +
+    ' · ' + soStatusPill(o.status) + ' ' + soPayPill(o.paymentStatus) +
+    ' · <b class="mono-data">฿' + baht(o.total) + '</b>' +
+    ' <span class="unit">กำลังโหลดรายการ…</span>';
+  return true;
+}
 async function openSaleOrderDetail(id){
   currentSaleOrderId = id;
   _switchProductView('view-saleorderdetail', 'บิลขาย');
-  document.getElementById('sod-title').textContent = 'บิลขาย'; document.getElementById('sod-meta').textContent = ''; document.getElementById('sod-actions').innerHTML = '';
+  document.getElementById('sod-actions').innerHTML = '';
+  document.getElementById('sod-status-card').innerHTML = '';
+  document.getElementById('sod-history').innerHTML = '';
+  if (!sodPreview(id)) {        // เปิดจากลิงก์ตรงโดยยังไม่เคยโหลดรายการบิล — ไม่มีอะไรให้วาดก่อน
+    document.getElementById('sod-title').textContent = 'บิลขาย';
+    document.getElementById('sod-meta').textContent = '';
+  }
   tblLoading(document.getElementById('sod-body'), 9);
   const r = await callApi('getSalesOrderAdmin', { id });
   if (!r.success) { toast(r.message, true); return; }
