@@ -15,8 +15,14 @@ function listSalesOrdersAdmin(session, payload) {
   var tenantId = _salesTenantId(session, payload);
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
-  var custName = {};
-  centralObjects('customers').forEach(function(c) { custName[String(c.record_id)] = c.name; });
+  /* ★ รหัสลูกค้าต้องมากับรายการบิลด้วย (เจ้าของระบบสั่ง 8 ต.ค. 2026) — ชื่อร้านซ้ำกันได้
+     และคนทำงานจำร้านจากรหัสมากกว่าชื่อ (ใบราคา/ใบกำกับใช้รหัส) · อ่านจากชีตเดียวกันรอบเดียว
+     ไม่ได้เพิ่มคำขอหรือรอบอ่านใหม่ */
+  var custName = {}, custCode = {};
+  centralObjects('customers').forEach(function(c) {
+    custName[String(c.record_id)] = c.name;
+    custCode[String(c.record_id)] = c.customer_code || '';
+  });
 
   var rows = tenantObjects(tenantId, 'sales_orders');
   if (payload.status) rows = rows.filter(function(o) { return String(o.status) === String(payload.status); });
@@ -29,6 +35,7 @@ function listSalesOrdersAdmin(session, payload) {
     .map(function(o) { return {
       id: o.record_id, code: o.order_code, customerId: o.customer_id,
       customer: custName[String(o.customer_id)] || 'ลูกค้าทั่วไป',
+      customerCode: custCode[String(o.customer_id)] || '',
       subtotal: parseFloat(o.subtotal) || 0, discount: parseFloat(o.discount) || 0, total: parseFloat(o.total) || 0,
       paymentMethod: o.payment_method, fulfillmentType: o.fulfillment_type, status: o.status,
       paymentStatus: orderPaymentStatus(o), paidAmount: parseFloat(o.paid_amount) || 0,

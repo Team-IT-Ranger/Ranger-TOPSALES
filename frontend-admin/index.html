@@ -219,6 +219,13 @@
     box-shadow:0 0 4px rgba(31,138,95,.55);animation:segpulse 2.6s ease-in-out infinite}
   @keyframes segpulse{0%,100%{opacity:.4}50%{opacity:1}}
   @media(prefers-reduced-motion:reduce){.segtog .seg.on::before{animation:none;opacity:.85}}
+  /* ลากหัวคอลัมน์เพื่อสลับตำแหน่ง (initTableColOrder) — จับได้ทั้งเมาส์และนิ้ว
+     ★ touch-action:none เฉพาะตอนเริ่มลากจริง ไม่ใช่ตั้งไว้ตลอด ไม่งั้นเลื่อนตารางด้วยนิ้วไม่ได้เลย */
+  th.th-movable{ cursor:grab; }
+  th.th-dragging{ cursor:grabbing; opacity:.55; }
+  table.tbl-dragging{ user-select:none; -webkit-user-select:none; }
+  th.th-drop-before{ box-shadow:inset 3px 0 0 var(--blue); }
+  th.th-drop-after{ box-shadow:inset -3px 0 0 var(--blue); }
   .view-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .view-head h1{ font-size:19px; margin:0 0 3px; }
   .view-head p{ margin:0; color:var(--ink-soft); font-size:12.5px; }
@@ -872,7 +879,7 @@
               <option value="partial">ชำระบางส่วน</option>
               <option value="paid">ชำระแล้ว</option>
             </select>
-            <input id="so-filter-search" data-table-search placeholder="ค้นหาชื่อร้าน / เลขที่บิล / พนักงานขาย" oninput="renderSalesOrders()" style="flex:1;min-width:200px">
+            <input id="so-filter-search" data-table-search placeholder="ค้นหาชื่อร้าน / รหัสร้าน / เลขที่บิล / พนักงานขาย" oninput="renderSalesOrders()" style="flex:1;min-width:200px">
             <button class="btn btn-sm" onclick="printSalesOrderList()">พิมพ์รายงาน</button>
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
@@ -880,8 +887,8 @@
           <div id="so-board" class="dgb" data-view-scroll></div>
           <p class="form-hint" id="so-board-note" style="margin:6px 0 10px"></p>
           <div class="table-wrap"><table>
-            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
-            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
+            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -3450,6 +3457,7 @@ function soFilteredRows(){
   if (statusF) rows = rows.filter(o => o.status === statusF);
   if (payF) rows = rows.filter(o => (o.paymentStatus || 'unpaid') === payF);
   if (q) rows = rows.filter(o => (o.customer||'').toLowerCase().indexOf(q) !== -1 || (o.code||'').toLowerCase().indexOf(q) !== -1
+    || (o.customerCode||'').toLowerCase().indexOf(q) !== -1
     || (o.saleByName||'').toLowerCase().indexOf(q) !== -1);
   return rows;
 }
@@ -3534,6 +3542,10 @@ async function renderSalesOrderBoard(){
            ชื่อเต็มยังอ่านได้จาก title ตอนเอาเมาส์ไปวาง และกดเข้าไปในใบก็เห็นเต็ม */
         '<div title="' + esc(o.customer) + '" style="font-size:.86rem;margin-top:1px;white-space:nowrap;' +
           'overflow:hidden;text-overflow:ellipsis">' + esc(o.customer) + '</div>' +
+        /* รหัสร้านบรรทัดของตัวเองใต้ชื่อร้าน (เจ้าของระบบสั่ง 8 ต.ค. 2026) — ชื่อร้านซ้ำกันได้
+           และรหัสคือสิ่งที่ใช้คุยกับคลัง/ใบกำกับ · บรรทัดเดียวเหมือนบรรทัดอื่น การ์ดจึงยังสูงเท่ากัน */
+        '<div class="mono-data" style="font-size:.74rem;color:var(--ink-faint);margin-top:1px;' +
+          'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(o.customerCode || '-') + '</div>' +
         '<div style="font-size:.78rem;color:var(--ink-soft);margin-top:1px;white-space:nowrap;' +
           'overflow:hidden;text-overflow:ellipsis">' + esc(o.saleByName || o.saleBy || '-') + '</div>' +
         /* ★ ยอดเงินได้ทั้งบรรทัด ไม่ต้องแย่งที่กับป้ายสถานะ — ยอดหลักล้านจึงอ่านได้ครบเสมอ
@@ -3601,12 +3613,13 @@ function ensureDragBoard(){
 function renderSalesOrdersTable(){
   const body = document.getElementById('salesorders-body');
   const rows = soFilteredRows();
-  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="10">ไม่พบบิลขาย</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">ไม่พบบิลขาย</td></tr>'; return; }
   body.innerHTML = rows.map(o =>
     '<tr class="clickable-row" onclick="openSaleOrderDetail('+o.id+')">' +
     // วันที่อยู่หน้าสุดและตัดเวลาออก (เจ้าของระบบสั่ง 6 ต.ค. 2026) — เวลายังดูได้ในหน้ารายละเอียด
     '<td class="mono-data">'+esc(soDateOnly(o.createdAt))+'</td>' +
     '<td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
+    '<td class="mono-data">'+esc(o.customerCode || '-')+'</td>' +
     '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
     '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
     // ★ แอดมินขอมา 6 ต.ค. 2026 — ต้องรู้ว่าบิลมาจากพนักงานคนไหน · backend แปลง LINE user id เป็นชื่อให้แล้ว
@@ -3625,10 +3638,10 @@ function printSalesOrderList(){
   if (!rows.length) { toast('ไม่มีรายการให้พิมพ์', true); return; }
   ensureDocPrint().then(() => DocPrint.table({
     title: 'รายงานบิลขาย', subtitle: scopeLabelForPrint(), issuerName: (SESSION && SESSION.displayName) || '',
-    headers: ['วันที่','เลขที่บิล','ลูกค้า','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','พนักงานขาย'],
-    weights: [1.1,1.5,2.6,1.2,1,1.3,1.4,1.2,1.8],
-    align: ['c','','','r','c','c','c','c',''],
-    rows: rows.map(o => [soDateOnly(o.createdAt), o.code, o.customer, baht(o.total), payLabel(o.paymentMethod),
+    headers: ['วันที่','เลขที่บิล','ลูกค้า','รหัสลูกค้า','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','พนักงานขาย'],
+    weights: [1.1,1.5,2.4,1.1,1.2,1,1.3,1.4,1.2,1.8],
+    align: ['c','','','c','r','c','c','c','c',''],
+    rows: rows.map(o => [soDateOnly(o.createdAt), o.code, o.customer, o.customerCode || '-', baht(o.total), payLabel(o.paymentMethod),
       soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-',
       o.saleByName || o.saleBy || '-']),
     note: 'รวมยอดสุทธิ ' + baht(rows.reduce((t,o) => t + (o.status === 'cancelled' ? 0 : (o.total||0)), 0)) + ' บาท (ไม่รวมบิลที่ยกเลิก)',
@@ -3640,8 +3653,8 @@ function exportSalesOrderList(){
   if (!rows.length) { toast('ไม่มีรายการให้ส่งออก', true); return; }
   ensureDocPrint().then(() => DocPrint.xlsx({
     // ★ ไฟล์ส่งออกคงวันที่+เวลาไว้ตามเดิม (ต่างจากบนจอ) — เป็นข้อมูลเอาไปวิเคราะห์ต่อ ตัดเวลาทิ้งแล้วเอาคืนไม่ได้
-    filename: 'บิลขาย', headers: ['วันที่','เลขที่บิล','ลูกค้า','ยอดก่อนส่วนลด','ส่วนลด','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','พนักงานขาย'],
-    rows: rows.map(o => [o.createdAt, o.code, o.customer, baht(o.subtotal), baht(o.discount), baht(o.total), payLabel(o.paymentMethod),
+    filename: 'บิลขาย', headers: ['วันที่','เลขที่บิล','ลูกค้า','รหัสลูกค้า','ยอดก่อนส่วนลด','ส่วนลด','ยอดสุทธิ','ชำระเงิน','การจัดส่ง','สถานะ','การเงิน','พนักงานขาย'],
+    rows: rows.map(o => [o.createdAt, o.code, o.customer, o.customerCode || '', baht(o.subtotal), baht(o.discount), baht(o.total), payLabel(o.paymentMethod),
       soFulfillText(o.fulfillmentType), SO_LABELS[o.status]||o.status, PAY_LABELS[o.paymentStatus||'unpaid']||'-',
       o.saleByName || o.saleBy || '-'])
   }));
@@ -3653,9 +3666,9 @@ async function loadSalesOrders(){
   const body = document.getElementById('salesorders-body');
   if (!salesOrdersCache.length) salesOrdersCache = listSnapLoad('salesorders') || [];
   if (salesOrdersCache.length) renderSalesOrders();
-  else tblLoading(body, 10);
+  else tblLoading(body, 11);
   const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', {})]);
-  if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="11">'+esc(r.message)+'</td></tr>'; return; }
   salesOrdersCache = r.data;
   listSnapSave('salesorders', salesOrdersCache);
   renderSalesOrders();
@@ -3677,7 +3690,9 @@ function renderSaleOrderDetail(r){
   SOD_DATA = r;
   const o = r.order;
   document.getElementById('sod-title').textContent = o.code;
-  document.getElementById('sod-meta').innerHTML = esc(o.customer) + ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
+  document.getElementById('sod-meta').innerHTML = esc(o.customer) +
+    (o.customerCode ? ' <span class="mono-data">' + esc(o.customerCode) + '</span>' : '') +
+    ' · ' + esc(payLabel(o.paymentMethod)) + ' · ' + soFulfillLabel(o.fulfillmentType) +
     ' · <b>พนักงานขาย ' + esc(o.saleByName || o.saleBy || '-') + '</b>' +
     ' · ' + esc(o.createdAt) + (o.requestedDeliveryDate ? ' · <b>วันนัดส่ง ' + esc(o.requestedDeliveryDate) + '</b>' : '') +
     (o.centerEditedAt ? ' · <span class="pill wait" title="ศูนย์แก้ไขรายการหลังรับงาน — พนักงานจะเห็นแจ้งเตือนในแอปมือถือ">แก้ไขโดยศูนย์ ' + esc(o.centerEditedAt) + (o.centerEditedBy ? ' (' + esc(o.centerEditedBy) + ')' : '') + '</span>' : '') +
@@ -8072,8 +8087,139 @@ function tblLoading(body, cols){
   });
 
   const all = () => document.querySelectorAll('.table-wrap > table').forEach(apply);
+  // ย้ายคอลัมน์แล้วลืมการเรียงของตารางนั้น (ดู initTableColOrder) — ลำดับที่จำไว้เป็นตำแหน่ง ไม่ใช่ตัวคอลัมน์
+  document.addEventListener('tbl-cols-changed', e => {
+    const k = e.detail && e.detail.key;
+    if (k && STATE[k]) { delete STATE[k]; all(); }
+  });
   let timer;
   new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(all, 50); })
+    .observe(document.body, { childList: true, subtree: true });
+  all();
+})();
+
+/* ══════════════ ลากหัวคอลัมน์เพื่อสลับตำแหน่ง ══════════════
+   เจ้าของระบบขอ 8 ต.ค. 2026 (ตารางบิลขาย) — ทำเป็นตัวกลางเหมือน initTableSort/initTableSearch
+   ตารางใหม่จึงได้เองโดยไม่ต้องแก้ renderer · จำลำดับไว้ต่อผู้ใช้+ต่อตาราง แล้วใส่คืนทุกครั้งที่วาดใหม่
+   ★★ ไม่ทำอะไรเลยกับตารางที่ผู้ใช้ยังไม่เคยสลับคอลัมน์ — ไม่ติดป้าย ไม่วนลูปเซลล์
+     ตารางลูกค้า 2,000 แถวจะได้ไม่ต้องจ่ายค่าติดป้ายสองหมื่นเซลล์ทุกครั้งที่หน้าจอขยับ
+   ★ แยก "คลิกเพื่อเรียง" กับ "ลากเพื่อย้าย" ด้วยระยะ 5px เหมือน dragboard — ขยับไม่ถึงคือคลิก
+     และต้องกลืน click ที่ตามมาหลังลาก ไม่งั้นปล่อยนิ้วแล้วตารางเรียงใหม่ทุกครั้ง */
+(function initTableColOrder(){
+  // คีย์เดียวกับของอื่นในแอป: topshop_<env>_<ชื่อ>_<ผู้ใช้> — ลำดับคอลัมน์เป็นรสนิยมของแต่ละคน ไม่ใช่ของทั้งทีม
+  const LS = () => qlKey('colorder');
+  const load = () => { try { return JSON.parse(localStorage.getItem(LS()) || '{}'); } catch (e) { return {}; } };
+  const save = m => { try { localStorage.setItem(LS(), JSON.stringify(m)); } catch (e) {} };
+
+  const headRow = t => (t.tHead && [...t.tHead.rows].find(r => !r.classList.contains('tbl-search-row'))) || null;
+  const keyOf = t => (t.tBodies[0] && t.tBodies[0].id) || (t.closest('.view') && t.closest('.view').id) ||
+                     (t.closest('[id]') && t.closest('[id]').id) || '';
+  // แถวที่สลับเซลล์ได้ = เซลล์ครบทุกคอลัมน์และไม่มีเซลล์ผสาน (แถวว่าง/แถวค้นหา/ท้ายตารางจึงถูกข้ามเอง)
+  const plainRows = (t, n) => [...(t.tBodies[0] ? t.tBodies[0].rows : [])]
+    .filter(r => r.cells.length === n && ![...r.cells].some(c => c.colSpan > 1 || c.rowSpan > 1));
+
+  const movable = t => {
+    if (t.closest('.docsheet')) return false;
+    const head = headRow(t);
+    if (!head || head.cells.length < 2) return false;
+    if ([...head.cells].some(c => c.colSpan > 1 || c.rowSpan > 1)) return false;
+    /* ★★ ตารางที่มีเซลล์ผสานในเนื้อตาราง ย้ายคอลัมน์ไม่ได้ (หน้าชุดราคารวมหลาย SKU ด้วย rowspan)
+       หัวตารางย้ายได้แต่แถวที่ผสานย้ายตามไม่ได้ = ข้อมูลไปอยู่ผิดคอลัมน์โดยไม่มีอะไรฟ้อง
+       กติกาเดียวกับตัวเรียงและตัวค้นหา ซึ่งข้ามตารางกลุ่มนี้ด้วยเหตุผลเดียวกัน */
+    const body = t.tBodies[0];
+    if (!body) return false;
+    if ([...body.rows].some(r => [...r.cells].some(c => c.rowSpan > 1))) return false;
+    return true;
+  };
+
+  /* ติดป้ายหมายเลขคอลัมน์ "ดั้งเดิม" ให้เซลล์ที่ยังไม่มีป้าย — แถวที่ renderer เพิ่งเขียนใหม่
+     จะเรียงตามลำดับดั้งเดิมเสมอ ป้ายจึงตรงกับตำแหน่งปัจจุบันของมันพอดี */
+  const tag = row => { [...row.cells].forEach((c, i) => { if (!c.dataset.colId) c.dataset.colId = String(i); }); };
+  const orderOf = row => [...row.cells].map(c => Number(c.dataset.colId));
+  const reorder = (row, want) => {
+    const cur = orderOf(row);
+    if (cur.join() === want.join()) return;
+    const byId = {};
+    [...row.cells].forEach(c => { byId[c.dataset.colId] = c; });
+    want.forEach(id => { if (byId[id]) row.appendChild(byId[id]); });
+  };
+
+  const apply = t => {
+    const want = load()[keyOf(t)];
+    if (!want || !want.length || !movable(t)) return;
+    const head = headRow(t);
+    if (!head || head.cells.length !== want.length) return;   // คอลัมน์เปลี่ยนจำนวน = ลำดับเดิมใช้ไม่ได้แล้ว
+    tag(head); reorder(head, want);
+    plainRows(t, want.length).forEach(r => { tag(r); reorder(r, want); });
+  };
+
+  // ── ลาก ──
+  let drag = null, justDragged = false;
+  document.addEventListener('pointerdown', e => {
+    const th = e.target.closest && e.target.closest('.table-wrap thead th');
+    if (!th || th.closest('.tbl-search-row') || e.button !== 0) return;
+    const t = th.closest('table');
+    if (!t || !movable(t)) return;
+    drag = { t, th, x: e.clientX, started: false, moved: false };
+  });
+  document.addEventListener('pointermove', e => {
+    if (!drag) return;
+    if (!drag.started) {
+      if (Math.abs(e.clientX - drag.x) < 5) return;
+      drag.started = drag.moved = true;
+      drag.th.classList.add('th-dragging');
+      drag.t.classList.add('tbl-dragging');
+    }
+    const over = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = over && over.closest ? over.closest('thead th') : null;
+    [...headRow(drag.t).cells].forEach(c => c.classList.remove('th-drop-before', 'th-drop-after'));
+    if (cell && cell !== drag.th && cell.closest('table') === drag.t && !cell.closest('.tbl-search-row')) {
+      const r = cell.getBoundingClientRect();
+      cell.classList.add(e.clientX < r.left + r.width / 2 ? 'th-drop-before' : 'th-drop-after');
+      drag.target = cell;
+      drag.before = e.clientX < r.left + r.width / 2;
+    } else { drag.target = null; }
+  });
+  document.addEventListener('pointerup', e => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    d.th.classList.remove('th-dragging');
+    d.t.classList.remove('tbl-dragging');
+    const head = headRow(d.t);
+    if (head) [...head.cells].forEach(c => c.classList.remove('th-drop-before', 'th-drop-after'));
+    if (d.started) justDragged = true;              // กลืน click ที่กำลังจะตามมา (ดูตัวจับ click ข้างล่าง)
+    if (!d.started || !d.target || !head) return;
+    tag(head);
+    plainRows(d.t, head.cells.length).forEach(tag);
+    const ids = orderOf(head);
+    const from = ids.indexOf(Number(d.th.dataset.colId));
+    let to = ids.indexOf(Number(d.target.dataset.colId));
+    if (from < 0 || to < 0) return;
+    const moved = ids.splice(from, 1)[0];
+    if (from < to) to--;                      // ถอดตัวเองออกแล้ว ตำแหน่งปลายทางเลื่อนมาหนึ่งช่อง
+    ids.splice(d.before ? to : to + 1, 0, moved);
+    const m = load(); m[keyOf(d.t)] = ids; save(m);
+    apply(d.t);
+    /* ★ ตัวเรียงจำ "ตำแหน่งคอลัมน์" ไม่ใช่ตัวคอลัมน์ — ย้ายคอลัมน์แล้วลำดับที่จำไว้จะชี้ผิดตัว
+       แล้วรอบหน้าที่หน้าจอวาดใหม่ มันจะเรียงตามคอลัมน์ที่ผู้ใช้ไม่ได้สั่ง · ล้างทิ้งไปเลยตรงไปตรงมากว่า */
+    document.dispatchEvent(new CustomEvent('tbl-cols-changed', { detail: { key: keyOf(d.t) } }));
+  });
+  /* ★ ลากเสร็จแล้วเบราว์เซอร์ยิง click ตามมาเสมอ — ต้องกลืนทิ้งครั้งเดียว
+     ไม่งั้นปล่อยนิ้วทีไร initTableSort จะเรียงตารางใหม่ทุกครั้ง ทั้งที่ผู้ใช้แค่ย้ายคอลัมน์
+     จับที่ช่วง capture เพื่อให้ถึงก่อนตัวเรียงซึ่งฟังอยู่ที่ document เหมือนกัน */
+  document.addEventListener('click', e => {
+    if (!justDragged) return;
+    justDragged = false;
+    const th = e.target.closest && e.target.closest('.table-wrap thead th');
+    if (th) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  const all = () => document.querySelectorAll('.table-wrap > table').forEach(t => {
+    if (movable(t)) [...headRow(t).cells].forEach(c => c.classList.add('th-movable'));
+    apply(t);
+  });
+  let timer;
+  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(all, 60); })
     .observe(document.body, { childList: true, subtree: true });
   all();
 })();
