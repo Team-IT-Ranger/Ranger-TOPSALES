@@ -78,6 +78,12 @@
   .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:8px; }
   .field{ display:flex; flex-direction:column; gap:4px; }
   .field label{ font-size:12px; font-weight:600; color:var(--ink-soft); }
+  /* ป้ายกับช่องกรอกอยู่บรรทัดเดียวกัน (เจ้าของระบบสั่ง 8 ต.ค. 2026) — ประหยัดบรรทัดให้หน้าเปิดบิลสั้นลง
+     ★ ช่องกรอกต้อง min-width:0 ด้วย — flex item ที่เป็น <input> ไม่ยอมหดต่ำกว่าความกว้าง
+       ตั้งต้นของเบราว์เซอร์ (size=20) ไม่ใส่แล้วมันจะล้นออกนอกจอบนจอแคบ */
+  .field-row{ display:flex; align-items:center; gap:8px; }
+  .field-row label{ flex:none; }
+  .field-row .inp{ flex:1; min-width:0; padding:8px 10px; font-size:13.5px; }
   .inp{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:15px; }
   .seg{ display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:3px; gap:3px; }
   .seg button{ flex:1; border:none; background:none; border-radius:8px; padding:8px; font-weight:600; font-size:13.5px; color:var(--ink-soft); }
@@ -279,8 +285,9 @@
       </div>
     </div>
     <div class="stack" style="margin-bottom:12px">
-      <div class="field"><label>ลูกค้า</label>
-        <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()">
+      <div class="field">
+        <div class="field-row"><label for="s-cust-q">ลูกค้า</label>
+          <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()"></div>
         <select class="inp" id="s-cust" onchange="cartChanged()"></select></div>
       <!-- ★ 8 ต.ค. 2026 เจ้าของระบบสั่ง: ปุ่มสลับแบบเดียวกับหน้าบิลขายฝั่งแอดมิน ทั้งชุดจ่ายเงินและชุดส่งของ
            และวางให้อยู่ระนาบเดียวกัน — เป็นสองคำถามของบิลใบเดียวกัน คนขายตอบพร้อมกันเสมอ
@@ -300,8 +307,8 @@
       <span class="note seg-note" id="s-fulfil-note">ลงของจากรถให้ลูกค้าเดี๋ยวนี้ — ตัดสต็อกบนรถทันที</span>
       <!-- วันนัดส่งโดยประมาณ — โชว์เฉพาะใบนัดส่ง ไปพิมพ์ลงใบที่ลูกค้าถือไว้เป็นหลักฐาน (เจ้าของระบบสั่ง 1 ต.ค. 2026) -->
       <div id="s-deliv-wrap" style="display:none;margin-top:8px">
-        <span class="note seg-note">วันนัดส่งโดยประมาณ (บอกลูกค้า) — ระบบตั้งให้ +5 วัน ไม่นับวันอาทิตย์ · แก้ได้</span>
-        <input type="date" id="s-deliv" style="width:100%;padding:8px;margin-top:4px">
+        <div class="field-row"><label for="s-deliv">วันนัดส่งโดยประมาณ</label>
+          <input type="date" id="s-deliv" class="inp"></div>
       </div>
     </div>
     <!-- ★ 2026-09-30 เจ้าของระบบสั่ง: แยก "หน้าเลือกสินค้า" ออกจาก "หน้าตะกร้า" ให้ชัดเจนเหมือนฝั่งแอดมิน
