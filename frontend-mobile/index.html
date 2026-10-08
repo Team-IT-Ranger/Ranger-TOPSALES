@@ -80,7 +80,11 @@
        (เจ้าของระบบสั่ง 8 ต.ค. 2026) · ต่างจากของแอดมินแค่ขนาด: นิ้วต้องกดโดน จึงสูง 36px ไม่ใช่ 26px
      ใช้กับ "ตัวเลือกที่เปลี่ยนผลของบิล" เท่านั้น (จ่ายเงิน/ส่งของ) ไม่ใช่ทุกปุ่มสลับในแอป —
      จุดไฟเขียวจะได้ยังมีความหมาย ไม่กลายเป็นไฟกระพริบเต็มหน้าจอ */
-  .segrow{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  /* สองชุดแยกไปคนละขอบจอ (เจ้าของระบบสั่ง 8 ต.ค. 2026) — ชุดจ่ายเงินชิดซ้าย ชุดส่งของชิดขวา
+     อยู่ติดกันตรงกลางจะอ่านเหมือนปุ่มชุดเดียวกันสี่ปุ่ม ทั้งที่เป็นคนละคำถาม
+     · gap ยังอยู่ เป็นระยะห่างขั้นต่ำตอนจอแคบจนเกือบชนกัน
+     · ตกบรรทัด (จอ <360px) แล้วแต่ละบรรทัดมีชุดเดียว space-between จะวางชิดซ้ายให้เอง */
+  .segrow{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:center; }
   .segtog{ display:inline-flex; background:var(--surface-2); border:1px solid var(--border);
     border-radius:999px; padding:3px; gap:2px; max-width:100%; }
   .segtog button{ font:inherit; font-size:13px; font-weight:600; color:var(--ink-soft); background:transparent;
