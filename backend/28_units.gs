@@ -34,6 +34,42 @@ function unitLabelOf(code) {
   var c = normUnitCode(code);
   return UNIT_LABELS[c] || String(code || '');
 }
+/* ═══ ราคาต่อ "หน่วยฐาน" (ชิ้น) ของสินค้า — ต้องคิดจากหน่วยขายจริงเสมอ ห้ามใช้ products.base_price ดิบๆ ═══
+ * ★★ ของจริงบน UAT/prod (ตรวจ 8 ต.ค. 2026): 90 จาก 94 รายการมี product_units.price ของ "ลัง"
+ *    เท่ากับ base_price เป๊ะ ขณะที่ unit_factor เป็น 12/18/60 — แปลว่าเลขใน base_price คือ
+ *    **ราคาต่อลัง ไม่ใช่ราคาต่อชิ้น** (มาจากไฟล์นำเข้าที่ตั้งราคาเป็นลังมาแต่ต้น)
+ *    ใช้ตรงๆ = ขาย 1 ชิ้น เก็บเงินเท่า 1 ลัง · เจ้าของระบบเจอเองตอนลองขาย 1 ชิ้นได้ ฿1,247.98
+ *    ซึ่งเท่าราคาทั้งลัง (สินค้า 10185 · ลัง 60 ชิ้น)
+ * ★ โดนเฉพาะ "เส้นทางสำรอง" (ร้านที่ยังไม่มีชุดราคาที่ใช้งานอยู่ เช่น ลูกค้าทั่วไป/ไม่ระบุร้าน)
+ *   เส้นทางชุดราคาไม่โดน เพราะอ่านราคาจาก price_list_items ซึ่งผูกกับหน่วยของมันเอง
+ * คืน: ราคาหน่วยขาย ÷ ขนาดบรรจุ · ไม่มีข้อมูลพอ (ไม่มีหน่วยขาย / factor ≤ 1 / ราคา 0)
+ *   = คืน base_price ตามเดิม — ดีกว่าคืน 0 แล้วขายฟรี
+ * ★ ปัดเป็นสตางค์ เพราะราคาต่อหน่วยต้องออกใบเสร็จได้จริง · ผลข้างเคียงที่ยอมรับ: ซื้อ 60 ชิ้น
+ *   อาจต่างจากซื้อ 1 ลัง ไม่กี่สตางค์ (1166.34/60 = 19.439 → 19.44)
+ * units รับได้ทั้งแถวดิบจากชีต (unit_code/unit_factor) และแบบ camelCase ที่ bootstrap ประกอบไว้แล้ว
+ */
+function baseUnitPrice(product, units) {
+  var base = parseFloat(product && product.base_price) || 0;
+  if (!units || !units.length) return base;
+  var rows = units.map(function(u) {
+    return { code: normUnitCode(u.unit_code !== undefined ? u.unit_code : u.unitCode),
+             factor: parseFloat(u.unit_factor !== undefined ? u.unit_factor : u.unitFactor) || 0,
+             price: parseFloat(u.price) || 0,
+             active: (u.is_active === undefined && u.isActive === undefined) ? true
+                     : isNotOff(u.is_active !== undefined ? u.is_active : u.isActive) };
+  }).filter(function(u) { return u.active && u.factor > 1 && u.price > 0 && u.code !== UNIT_PC; });
+  if (!rows.length) return base;
+  // หน่วยขายตั้งต้นของสินค้าก่อน (products.sales_unit_code) → ลัง → หน่วยที่บรรจุมากสุด
+  var want = normUnitCode(product && product.sales_unit_code);
+  var pick = (want && find(rows, want)) || find(rows, UNIT_CT) ||
+             rows.sort(function(a, b) { return b.factor - a.factor; })[0];
+  function find(list, code) {
+    for (var i = 0; i < list.length; i++) if (list[i].code === code) return list[i];
+    return null;
+  }
+  return Math.round((pick.price / pick.factor) * 100) / 100;
+}
+
 function isCaseUnit(code) { return normUnitCode(code) === UNIT_CT; }
 function isPackUnit(code) { return normUnitCode(code) === UNIT_PK; }
 function isBaseUnit(code) { return normUnitCode(code, UNIT_PC) === UNIT_PC; }

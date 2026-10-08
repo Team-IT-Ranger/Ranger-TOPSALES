@@ -13,7 +13,7 @@ const ctx = {
   CacheService: { getScriptCache: () => ({ get: () => null, put: () => {}, remove: () => {} }) },
 };
 vm.createContext(ctx);
-for (const f of ['28_units.gs', '17_pricing.gs', '18_pricing_engine.gs', '11_promotions.gs', '07_sales.gs']) {
+for (const f of ['02_helpers.gs', '28_units.gs', '17_pricing.gs', '18_pricing_engine.gs', '11_promotions.gs', '07_sales.gs']) {
   vm.runInContext(B(f), ctx, { filename: f });
 }
 
@@ -143,6 +143,53 @@ console.log('\n── _priceSaleCart(): ราคาในทะเบียน�
     [r.calc.vat.exVat, r.calc.vat.vat, r.calc.vat.exemptAmount, r.calc.vat.taxableExVat], [1700, 84, 500, 1200]);
 
   PRODUCTS.pop(); CUSTOMERS.pop();
+}
+
+/* ══ ราคาต่อ "ชิ้น" ต้องคิดจากหน่วยขาย ไม่ใช่เอา base_price มาใช้ดิบๆ ══
+   บั๊กจริง 8 ต.ค. 2026: เจ้าของระบบขาย 1 ชิ้น แล้วได้ ฿1,247.98 ซึ่งเท่าราคาทั้งลัง
+   ข้อมูลจริงบน UAT/prod เก็บ "ราคาต่อลัง" ไว้ในช่อง base_price (90 จาก 94 รายการมีราคาลัง
+   เท่ากับ base_price เป๊ะ ขณะที่ขนาดบรรจุเป็น 12/18/60) — ดู baseUnitPrice() ใน 28_units.gs
+   เส้นทางชุดราคาไม่โดน โดนเฉพาะเส้นทางสำรอง (ลูกค้าทั่วไป/ร้านที่ยังไม่มีชุดราคา) */
+{
+  console.log('\n── ราคาต่อชิ้นมาจากหน่วยขาย ไม่ใช่ base_price ที่จริงๆ เป็นราคาต่อลัง ──');
+  // สินค้า 3 = ของจริงที่ทำให้เจอบั๊ก (10185): base_price เท่ากับราคาลัง ขนาดบรรจุ 60
+  const P3 = { record_id: 3, name: 'เรนเจอร์เอ๊กตรีม 8ชม 8+2 แซนดัลวูด', group_id: 0,
+    base_price: 1166.34, tax_status: 'vat', sales_unit_code: 'CT' };
+  const U3 = { product_id: 3, unit_code: 'CT', unit_factor: 60, price: 1166.34, is_active: 'TRUE' };
+  PRODUCTS.push(P3); PRODUCT_UNITS.push(U3);
+
+  eq('baseUnitPrice(): 1,166.34 ต่อลัง 60 ชิ้น → 19.44 ต่อชิ้น (ไม่ใช่ 1,166.34)',
+    ctx.baseUnitPrice(P3, [U3]), 19.44);
+
+  let r = ctx._priceSaleCart(1, [{ productId: 3, unitCode: '', qty: 1 }], 'cash', false);
+  eq('★ ขาย 1 ชิ้น ต้องไม่เท่าราคา 1 ลัง (19.44 +VAT = 20.80 — เดิมได้ 1,247.98)',
+    [r.success, r.items[0].lineTotal], [true, 20.8]);
+  const whole = ctx._priceSaleCart(1, [{ productId: 3, unitCode: 'CT', qty: 1 }], 'cash', false);
+  eq('  ขาย 1 ลัง ยังเท่าเดิมทุกบาท (1,166.34 +VAT = 1,247.98)',
+    [whole.success, whole.items[0].lineTotal], [true, 1247.98]);
+  eq('  ซื้อเป็นชิ้นต้องถูกกว่าซื้อเป็นลังเสมอ ไม่ใช่เท่ากัน',
+    r.items[0].lineTotal < whole.items[0].lineTotal, true);
+
+  // ขนาดบรรจุยังไม่ยืนยัน (factor 1) = ไม่มีข้อมูลพอให้หาร → ต้องไม่เพี้ยนไปทางอื่น
+  const P4 = { record_id: 4, name: 'สินค้ายังไม่ยืนยันขนาดบรรจุ', group_id: 0, base_price: 300, tax_status: 'vat' };
+  const U4 = { product_id: 4, unit_code: 'CT', unit_factor: 1, price: 300, is_active: 'TRUE' };
+  eq('factor = 1 (ยังไม่ยืนยันขนาดบรรจุ) → คืน base_price ตามเดิม ไม่ใช่ 0',
+    ctx.baseUnitPrice(P4, [U4]), 300);
+  eq('ไม่มีหน่วยขายเลย → คืน base_price ตามเดิม',
+    ctx.baseUnitPrice(P4, []), 300);
+
+  // หน่วยขายตั้งต้นของสินค้าเป็นตัวตัดสินว่าหารด้วยอะไร เมื่อมีหลายหน่วย
+  const P5 = { record_id: 5, name: 'สินค้าหลายหน่วย', group_id: 0, base_price: 999,
+    tax_status: 'vat', sales_unit_code: 'PK' };
+  const manyUnits = [{ product_id: 5, unit_code: 'CT', unit_factor: 60, price: 1200, is_active: 'TRUE' },
+                     { product_id: 5, unit_code: 'PK', unit_factor: 5, price: 101, is_active: 'TRUE' }];
+  eq('เลือกหารด้วยหน่วยขายตั้งต้นของสินค้า (PK 101/5 = 20.20 ไม่ใช่ CT 1200/60 = 20)',
+    ctx.baseUnitPrice(P5, manyUnits), 20.2);
+  eq('หน่วยที่ปิดใช้งานไม่ถูกเอามาคิด',
+    ctx.baseUnitPrice(P5, [{ product_id: 5, unit_code: 'PK', unit_factor: 5, price: 101, is_active: 'FALSE' },
+                                    { product_id: 5, unit_code: 'CT', unit_factor: 60, price: 1200, is_active: 'TRUE' }]), 20);
+
+  PRODUCTS.pop(); PRODUCT_UNITS.pop();
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

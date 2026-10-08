@@ -35,8 +35,11 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
 
   var productMap = {};
   centralObjects('products').forEach(function(p) { productMap[String(p.record_id)] = p; });
-  var unitMap = {};
-  centralObjects('product_units').forEach(function(u) { unitMap[String(u.product_id) + '_' + normUnitCode(u.unit_code)] = u; });
+  var unitMap = {}, unitsByProduct = {};
+  centralObjects('product_units').forEach(function(u) {
+    unitMap[String(u.product_id) + '_' + normUnitCode(u.unit_code)] = u;
+    (unitsByProduct[String(u.product_id)] = unitsByProduct[String(u.product_id)] || []).push(u);
+  });
 
   /* สถานะภาษีของลูกค้า + อัตรา VAT — ต้องรู้ "ก่อน" ตั้งราคา ไม่ใช่แค่ตอนถอดภาษีท้ายฟังก์ชันเหมือนเดิม
      เพราะราคาที่เก็บในทะเบียนสินค้าเป็นราคา "ก่อน VAT" แล้ว ต้องบวกภาษีกลับเข้าไปตอนตั้งราคา (ดูในลูป)
@@ -65,6 +68,9 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
       unitPrice = parseFloat(u.price) || 0;
     } else {
       unitCode = UNIT_PC;                 // หน่วยฐานของทั้งระบบ = ชิ้น
+      /* ★★ ราคาต่อชิ้นต้องคิดจากหน่วยขาย ไม่ใช่เอา base_price มาใช้ดิบๆ — ของจริงเก็บ "ราคาต่อลัง"
+         ไว้ในช่องนั้น ขาย 1 ชิ้นจึงเก็บเงินเท่า 1 ลัง (เจ้าของระบบเจอเอง 8 ต.ค. 2026) ดู baseUnitPrice() */
+      unitPrice = baseUnitPrice(p, unitsByProduct[String(raw.productId)]);
     }
 
     /* ★★ ราคาในทะเบียนสินค้าเป็น "ก่อน VAT" ตั้งแต่ 3 ต.ค. 2026 — ต้องบวก VAT กลับเข้าไปตรงนี้

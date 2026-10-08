@@ -25,7 +25,10 @@ function getBootstrap(user) {
     .filter(function(p) { return isNotOff(p.is_active); })
     .sort(_productCodeCmp)   // เรียงตามรหัสสินค้า (ลำดับตั้งต้นของรายการเลือกสินค้าในแอปมือถือ)
     .map(function(p) { return {
-      id: String(p.record_id), code: String(p.product_code || ''), name: p.name, price: parseFloat(p.base_price) || 0,
+      /* ★ ราคาหน่วยฐานต้องคิดแบบเดียวกับตอนคิดเงินจริง (baseUnitPrice ใน 28_units.gs) ไม่งั้นการ์ดโชว์
+         ราคาหนึ่ง เซิร์ฟเวอร์เก็บเงินอีกราคาหนึ่ง — คนขายจะไม่เชื่อหน้าจออีกเลย */
+      id: String(p.record_id), code: String(p.product_code || ''), name: p.name,
+      price: baseUnitPrice(p, unitsByProduct[String(p.record_id)]),
       unit: p.unit || 'ชิ้น', groupId: parseInt(p.group_id) || 0,
       vanStock: myStock[String(p.record_id)] || 0,
       // หน่วยขายเพิ่มเติม (แพ็ค/ลัง ฯลฯ) — หน่วยฐาน (unit/price ด้านบน) มี factor=1 เสมอ ไม่ต้องใส่ในลิสต์นี้
