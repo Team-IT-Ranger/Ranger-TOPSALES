@@ -101,6 +101,10 @@
   @media(prefers-reduced-motion:reduce){ .segtog button.on::before{ animation:none; opacity:.85 } }
   /* บรรทัดบอกผลของตัวเลือก — ผลที่ตามมาสำคัญกว่าชื่อปุ่ม (ของจะถูกตัดตอนไหน) */
   .seg-note{ display:block; font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  /* บรรทัดบอกผลของปุ่มส่งของอยู่กึ่งกลาง — มันอธิบายปุ่มสองชุดที่แยกไปคนละขอบ
+     ไม่ได้เป็นคำอธิบายของชุดซ้าย ชิดซ้ายแล้วอ่านเหมือนหมายเหตุของปุ่มซ้ายชุดเดียว (เจ้าของระบบสั่ง 8 ต.ค. 2026)
+     · คำอธิบายช่องวันนัดส่งยังชิดซ้ายเหมือนเดิม เพราะมันเป็นป้ายของช่องกรอกที่อยู่ใต้มัน */
+  #s-fulfil-note{ text-align:center; }
   .check{ display:flex; align-items:center; gap:8px; font-size:13.5px; }
 
   .prod{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
