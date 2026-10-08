@@ -87,6 +87,7 @@ var ADMIN_ACTION_MAP = {
   previewSaleAdmin:       previewSaleAdmin,
   recordSaleAdmin:        recordSaleAdmin,
   cancelSalesOrderAdmin:  cancelSalesOrderAdmin,
+  ensureSaleDocNo:        ensureSaleDocNo,          // ออกเลขเอกสารย้อนหลังตอนกดพิมพ์ (34_sales_status.gs)
   updateSalesOrderStatus: updateSalesOrderStatus,   // เปลี่ยนสถานะส่งของ/การเงิน (34_sales_status.gs)
 
   listProductsAdmin:      listProductsAdmin,

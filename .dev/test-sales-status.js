@@ -512,5 +512,46 @@ console.log('\n── ★ ใบเสร็จรับเงินมีเล
     [row(60).receipt_no, row(60).payment_status, ctx.docNoCalls - midRc], [firstRc, 'paid', 0]);
 }
 
+/* ══ ถึงขั้นแล้วแต่ยังไม่มีเลข → กดพิมพ์แล้วออกเลขให้ (ensureSaleDocNo, เจ้าของระบบสั่ง 8 ต.ค. 2026) ══
+   ใช้กับบิลที่เดินผ่านขั้นนั้นไปก่อนกติกาใหม่มีผล — ไม่งั้นต้องถอยสถานะกลับไปเดินใหม่เพื่อให้ได้เลข */
+console.log('\n── กดพิมพ์แล้วออกเลขย้อนหลังให้เอกสารที่ถึงขั้นแล้วแต่ยังไม่มี ──');
+{
+  // ใบที่ "รับงานแล้ว" แต่ไม่มีเลขใบจัดของ/ใบส่งสินค้า (บิลเก่าก่อนย้ายจุดออกเลข)
+  t.sales_orders.push({ record_id: 70, order_code: 'SO-70', customer_id: 1, total: 500,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'accepted',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-10-01 09:00:00' });
+  t.order_items.push({ record_id: 700, order_id: 70, product_id: '101', unit_code: 'CT', qty: 1, base_qty: 1 });
+
+  const n70 = ctx.docNoCalls;
+  let e = ctx.ensureSaleDocNo(S, { id: 70, kinds: ['picking', 'delivery'] });
+  eq('รับงานแล้วแต่ไม่มีเลข → กดพิมพ์แล้วออกให้ทั้งสองใบ',
+    [e.success, /^PICK-/.test(row(70).picking_no || ''), /^DO-/.test(row(70).delivery_order_no || ''), ctx.docNoCalls - n70],
+    [true, true, true, 2]);
+  eq('  ตอบเลขกลับไปให้หน้าจอใช้ต่อได้เลย ไม่ต้องโหลดใบใหม่',
+    [e.docNos.pickingNo, e.docNos.deliveryOrderNo], [row(70).picking_no, row(70).delivery_order_no]);
+
+  const keep = row(70).picking_no, n70b = ctx.docNoCalls;
+  e = ctx.ensureSaleDocNo(S, { id: 70, kinds: ['picking', 'delivery'] });
+  eq('★★ กดพิมพ์ซ้ำ ต้องได้เลขเดิมและไม่กินตัวนับเพิ่ม',
+    [e.success, row(70).picking_no, ctx.docNoCalls - n70b, e.issued.length], [true, keep, 0, 0]);
+
+  eq('ยังไม่ถึงขั้น = ไม่ออกให้ (ใบกำกับภาษีต้องถึง "พร้อมจัดส่ง" ก่อน)',
+    [ctx.ensureSaleDocNo(S, { id: 70, kinds: ['tax'] }).success, !row(70).tax_invoice_no], [true, true]);
+  eq('ยังไม่ได้เงิน = ไม่ออกใบเสร็จให้',
+    [ctx.ensureSaleDocNo(S, { id: 70, kinds: ['receipt'] }).success, !row(70).receipt_no], [true, true]);
+
+  // ใบที่ "ยืนยันแล้ว" ยังไม่รับงาน — ขอใบจัดของก็ยังไม่ให้
+  t.sales_orders.push({ record_id: 71, order_code: 'SO-71', customer_id: 1, total: 500,
+    payment_method: 'cash', fulfillment_type: 'office_delivery', status: 'confirmed',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-10-01 09:00:00' });
+  const n71 = ctx.docNoCalls;
+  eq('ยืนยันแล้วแต่ยังไม่รับงาน → ยังไม่ออกใบจัดของให้ และไม่กินตัวนับ',
+    [ctx.ensureSaleDocNo(S, { id: 71, kinds: ['picking'] }).success, !row(71).picking_no, ctx.docNoCalls - n71],
+    [true, true, 0]);
+
+  eq('บิลที่ไม่มีอยู่จริง → ตอบไม่สำเร็จ', ctx.ensureSaleDocNo(S, { id: 9999, kinds: ['picking'] }).success, false);
+  eq('ไม่ระบุชนิดเอกสาร → ตอบไม่สำเร็จ', ctx.ensureSaleDocNo(S, { id: 70 }).success, false);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

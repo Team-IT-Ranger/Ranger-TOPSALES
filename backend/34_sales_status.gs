@@ -471,6 +471,70 @@ function issueSaleDocNos(tenantId, order, kinds) {
   return { fields: fields, issued: issued };
 }
 
+/* ขั้นต่ำที่เอกสารแต่ละชนิด "ควรมีเลขแล้ว" — ชุดเดียวกับที่หน้าเว็บใช้กั้นปุ่มพิมพ์ (SO_DOC_MIN)
+   แต่ฝั่งนี้คือตัวตัดสินจริง ห้ามเชื่อค่าที่หน้าเว็บส่งมา */
+var SALE_DOC_READY_AT = {
+  picking:  [SO_ACCEPTED, SO_READY, SO_DELIVERING, SO_COMPLETED],
+  delivery: [SO_ACCEPTED, SO_READY, SO_DELIVERING, SO_COMPLETED],
+  tax:      [SO_READY, SO_DELIVERING, SO_COMPLETED]
+  // receipt ไม่ได้ดูสถานะการส่ง แต่ดูว่าได้รับเงินแล้วหรือยัง (ดูในฟังก์ชัน)
+};
+
+/**
+ * ออกเลขเอกสารให้บิลที่ "ถึงขั้นแล้วแต่ยังไม่มีเลข" — เรียกตอนผู้ใช้กดพิมพ์เอกสารนั้น
+ * (เจ้าของระบบสั่ง 8 ต.ค. 2026: ถึงขั้นแล้วแต่ยังไม่มีเอกสาร ให้การกดพิมพ์สร้างเลขให้เลย)
+ *
+ * ★★ ทำไมต้องอยู่ฝั่ง backend ทั้งหมด: เลขเอกสารกินตัวนับทุกครั้งที่ออก และ "พิมพ์ซ้ำสิบครั้ง
+ *   ต้องได้เลขเดิมสิบครั้ง" · ถ้าให้หน้าเว็บเป็นคนตัดสินว่าจะออกเลขไหม สองเครื่องที่เปิดใบเดียวกัน
+ *   แล้วกดพิมพ์พร้อมกันจะได้คนละเลข และเลขกระโดดโดยไม่มีเอกสารรองรับ
+ *   → ตัดสินจากสถานะจริงในชีต + ออกภายใต้ _withDocLock + ข้ามชนิดที่มีเลขแล้วเสมอ (issueSaleDocNos)
+ * ★ ไม่เขียน order_status_log เพราะสถานะไม่ได้เปลี่ยน — แต่บันทึกว่าออกเลขอะไรไว้ใน changes ที่ตอบกลับ
+ */
+function ensureSaleDocNo(session, payload) {
+  var err = _requirePermission(session, 'sales', 'edit'); if (err) return err;
+  payload = payload || {};
+  var tenantId = _salesTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+  var kinds = payload.kinds || (payload.kind ? [payload.kind] : []);
+  if (!kinds.length) return { success: false, message: 'ไม่ได้ระบุชนิดเอกสาร' };
+  ensureTenantSheetsCurrent(tenantId);
+
+  return _withDocLock(function() {
+    var order = null;
+    tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+    if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
+
+    var status = _soStatusOf(order), paid = orderPaymentStatus(order);
+    var want = [];
+    kinds.forEach(function(k) {
+      var m = SALE_DOC_FIELDS[k];
+      if (!m) return;
+      if (String(order[m.no] || '').trim()) return;          // มีเลขแล้ว ไม่ต้องทำอะไร
+      var okNow = (k === 'receipt') ? (paid !== PAY_UNPAID)
+        : ((SALE_DOC_READY_AT[k] || []).indexOf(status) !== -1);
+      if (okNow) want.push(k);
+    });
+
+    var out = { success: true, issued: [], fields: {} };
+    if (!want.length) {               // ไม่มีอะไรต้องออก — ตอบเลขที่มีอยู่กลับไปเฉยๆ ไม่ถือว่าผิดพลาด
+      out.docNos = _saleDocNos(order);
+      return out;
+    }
+    var iss = issueSaleDocNos(tenantId, order, want);
+    tenantUpdate(tenantId, 'sales_orders', order.record_id, iss.fields);
+    for (var k2 in iss.fields) order[k2] = iss.fields[k2];
+    out.issued = iss.issued;
+    out.docNos = _saleDocNos(order);
+    return out;
+  });
+}
+
+/** เลขเอกสารทุกชนิดของบิลนี้ ในรูปที่หน้าเว็บใช้ (ชื่อฟิลด์ตรงกับ getSalesOrderAdmin) */
+function _saleDocNos(order) {
+  return { deliveryOrderNo: order.delivery_order_no || '', pickingNo: order.picking_no || '',
+           receiptNo: order.receipt_no || '', taxInvoiceNo: order.tax_invoice_no || '' };
+}
+
 /* ═══════════ ฝั่งแอปมือถือ: ยืนยันใบสั่งขาย / ยกเลิกใบของตัวเอง (1 ต.ค. 2026) ═══════════
  * กติกาเจ้าของระบบ:
  *   ร่าง        → แก้ได้ · ยกเลิกเองได้ · กด "ยืนยัน" เพื่อส่งให้ศูนย์
