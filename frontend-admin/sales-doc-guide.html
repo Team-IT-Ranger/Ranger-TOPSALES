@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>คำอธิบายเอกสารการขาย — Ranger TOPSALES</title>
+<!--
+  คู่มือหน้าเดียวสำหรับแอดมิน: เอกสารการขายออกตอนไหน เลขมาจากไหน
+  ★ ตั้งใจให้เป็นภาพ ไม่ใช่บทความ — ข้อความสั้นที่สุดที่ยังเข้าใจได้ คนอ่านยืนอยู่หน้าเครื่องพิมพ์
+  ★ ไฟล์นี้ต้องอยู่ได้ด้วยตัวเอง ไม่มี dependency ภายนอก (เปิดจากแท็บใหม่/พิมพ์/ส่งต่อได้)
+  ★★ แก้กติกาการออกเลขเมื่อไหร่ ต้องมาแก้หน้านี้ด้วยเสมอ — คู่มือที่ไม่ตรงกับระบบแย่กว่าไม่มีคู่มือ
+     (ของจริงอยู่ที่ SALE_DOC_FIELDS + SALE_DOC_READY_AT ใน backend/34_sales_status.gs
+      และ SO_DOC_MIN ใน frontend-admin/index.html)
+-->
+<style>
+  :root{
+    --ink:#1B2C33; --ink-soft:#5B6B84; --ink-faint:#8A97AB; --line:#E4E9F1; --bg:#F6F8FC; --card:#fff;
+    --blue:#2B63D9; --blue-soft:#DEE9FD; --green:#1F8A5F; --green-soft:#DFF3E9;
+    --amber:#B4741A; --amber-soft:#FCEEDA; --violet:#5B4BC4; --violet-soft:#EDEAFB; --grey-soft:#EEF1F6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);padding:16px 16px 24px;
+       font-family:"Sarabun","Noto Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:21px;margin:0 0 2px}
+  .lead{color:var(--ink-soft);font-size:13px;margin:0 0 12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px 15px;
+        box-shadow:0 6px 22px rgba(27,44,51,.05);margin-bottom:11px}
+  .card h2{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 10px;font-weight:700}
+
+  /* ── สายงาน 6 ขั้น ── */
+  .flow{display:flex;gap:10px;align-items:stretch}
+  .step{flex:1 1 0;min-width:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .step .hd{padding:9px 10px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:7px;line-height:1.25}
+  .step .n{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.75);color:var(--ink);
+           font-size:11.5px;display:flex;align-items:center;justify-content:center;flex:none;font-weight:800}
+  .step .bd{padding:9px;display:flex;flex-direction:column;gap:6px;flex:1;background:var(--card)}
+  .doc{border:1px solid var(--line);border-radius:9px;padding:6px 9px;background:#fff}
+  .doc b{display:block;font-size:13px}
+  .doc code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--blue);font-weight:700}
+  .none{color:var(--ink-faint);font-size:12px;text-align:center;padding:10px 0}
+  .s1 .hd{background:var(--grey-soft)}
+  .s2 .hd{background:var(--blue-soft)}
+  .s3 .hd{background:var(--amber-soft)}
+  .s4 .hd{background:var(--green-soft)}
+  .s5 .hd{background:var(--violet-soft)}
+  .s6 .hd{background:var(--green-soft)}
+
+  /* ── กฎสามข้อ ── */
+  .rules{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .rule{border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:10px;padding:10px 13px;background:#fff}
+  .rule b{display:block;font-size:14px;margin-bottom:3px}
+  .rule span{color:var(--ink-soft);font-size:12.5px;line-height:1.5}
+  .rule.g{border-left-color:var(--green)} .rule.a{border-left-color:var(--amber)}
+
+  /* ── ตารางเอกสาร ── */
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);
+     padding:0 10px 8px;font-weight:700}
+  td{padding:6px 10px;border-top:1px solid var(--line);vertical-align:top}
+  td.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:var(--blue);white-space:nowrap}
+  td.when{color:var(--ink-soft);white-space:nowrap}
+  .muted{color:var(--ink-soft)}
+
+  .tips{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .tip{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.55}
+  .tip .ic{width:22px;height:22px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;
+           font-weight:800;font-size:12px;background:var(--blue-soft);color:var(--blue)}
+  .tip.warn .ic{background:var(--amber-soft);color:var(--amber)}
+  .foot{color:var(--ink-faint);font-size:11.5px;text-align:center;margin-top:10px}
+
+  @media (max-width:980px){ .flow{flex-wrap:wrap} .step{flex:1 1 30%} .rules{grid-template-columns:1fr} .tips{grid-template-columns:1fr} }
+  @media print{ body{background:#fff;padding:0} .card{box-shadow:none;break-inside:avoid} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>เอกสารการขาย — ออกตอนไหน เลขมาจากไหน</h1>
+  <p class="lead">เอกสารแต่ละใบมีเลขของตัวเอง และออกให้อัตโนมัติเมื่อบิลเดินถึงขั้นของมัน · ทุกใบอ้างอิงเลขใบสั่งขายเสมอ</p>
+
+  <div class="card">
+    <h2>บิลหนึ่งใบเดินผ่าน 6 ขั้น — แต่ละขั้นได้เอกสารอะไร</h2>
+    <div class="flow">
+
+      <div class="step s1">
+        <div class="hd"><span class="n">1</span> ใหม่ (ร่าง)</div>
+        <div class="bd"><div class="none">ยังไม่มีเอกสาร<br>ยังแก้ไขได้</div></div>
+      </div>
+
+      <div class="step s2">
+        <div class="hd"><span class="n">2</span> รอแอดมินรับงาน</div>
+        <div class="bd">
+          <div class="doc"><b>ใบสั่งขาย</b><code>SO-…</code></div>
+        </div>
+      </div>
+
+      <div class="step s3">
+        <div class="hd"><span class="n">3</span> รับงานเตรียมการจัดส่ง</div>
+        <div class="bd">
+          <div class="doc"><b>ใบจัดของ</b><code>PICK-…</code></div>
+          <div class="doc"><b>ใบส่งสินค้า</b><code>DO-…</code></div>
+          <div class="doc"><b>ใบปะหน้าพัสดุ</b><code class="muted">ไม่มีเลข</code></div>
+        </div>
+      </div>
+
+      <div class="step s4">
+        <div class="hd"><span class="n">4</span> พร้อมจัดส่ง</div>
+        <div class="bd">
+          <div class="doc"><b>ใบกำกับภาษี</b><code>TAX-IV-…</code></div>
+          <div class="doc"><b>ใบแจ้งหนี้</b><code>INV-…</code></div>
+          <div class="none" style="padding:2px 0">ของถูกตัดออกจากคลังที่ขั้นนี้</div>
+        </div>
+      </div>
+
+      <div class="step s5">
+        <div class="hd"><span class="n">5</span> กำลังจัดส่ง</div>
+        <div class="bd"><div class="none">ไม่มีเอกสารใหม่<br>พิมพ์ซ้ำของเดิมได้</div></div>
+      </div>
+
+      <div class="step s6">
+        <div class="hd"><span class="n">6</span> จัดส่งสำเร็จ</div>
+        <div class="bd"><div class="none">ไม่มีเอกสารใหม่<br>พิมพ์ซ้ำของเดิมได้</div></div>
+      </div>
+
+    </div>
+
+    <div style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-weight:700;font-size:13px">แยกจากสายส่งของ:</span>
+      <div class="doc" style="min-width:230px"><b>ใบเสร็จรับเงิน <span class="muted" style="font-weight:400;font-size:12px">— ออกเมื่อบันทึกรับเงินครั้งแรก</span></b><code>RC-…</code></div>
+      <span class="muted" style="font-size:12.5px">ขายเชื่อจะได้ใบกำกับภาษีก่อนใบเสร็จเป็นเดือน — คนละจังหวะกัน</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>กฎที่ต้องรู้ 3 ข้อ</h2>
+    <div class="rules">
+      <div class="rule"><b>เลขออกครั้งเดียวต่อใบ</b>
+        <span>ถอยสถานะกลับแล้วเดินหน้าใหม่ ได้เลขเดิม ไม่ออกเลขใหม่ซ้ำ</span></div>
+      <div class="rule g"><b>พิมพ์ซ้ำได้ไม่จำกัด</b>
+        <span>พิมพ์สิบครั้งได้เลขเดิมสิบครั้ง · ใบที่ยกเลิกแล้วพิมพ์ได้ แต่มีลายน้ำ “ยกเลิก”</span></div>
+      <div class="rule a"><b>ถึงขั้นแล้วแต่ยังไม่มีเลข</b>
+        <span>กดพิมพ์ได้เลย ระบบจะออกเลขให้ตอนนั้น (ใช้กับบิลเก่าที่เดินผ่านขั้นมาก่อน)</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>เอกสารแต่ละใบคืออะไร</h2>
+    <table>
+      <thead><tr><th style="width:150px">เอกสาร</th><th style="width:120px">เลขขึ้นต้น</th><th style="width:190px">ออกเมื่อ</th><th>ใช้ทำอะไร</th></tr></thead>
+      <tbody>
+        <tr><td><b>ใบสั่งขาย</b></td><td class="code">SO</td><td class="when">ยืนยันบิล</td>
+            <td>ยืนยันรายการและราคากับลูกค้า · เป็นเลขอ้างอิงของทุกใบที่ตามมา</td></tr>
+        <tr><td><b>ใบจัดของ</b></td><td class="code">PICK</td><td class="when">รับงานเตรียมการจัดส่ง</td>
+            <td><b>ไม่มีราคา</b> — ใบที่คนคลังถือไปหยิบของ</td></tr>
+        <tr><td><b>ใบส่งสินค้า</b></td><td class="code">DO</td><td class="when">รับงานเตรียมการจัดส่ง</td>
+            <td><b>ไม่มีราคา</b> — ไปกับของ ให้ลูกค้าเซ็นรับ</td></tr>
+        <tr><td><b>ใบกำกับภาษี</b></td><td class="code">TAX-IV</td><td class="when">พร้อมจัดส่ง</td>
+            <td>หลักฐานภาษีตอนส่งมอบของ · ออกทุกบิลที่มี VAT ไม่ว่าสดหรือเชื่อ</td></tr>
+        <tr><td><b>ใบแจ้งหนี้</b></td><td class="code">INV</td><td class="when">พร้อมจัดส่ง</td>
+            <td>เรียกเก็บเงิน — ของขายเชื่อ · คนละใบกับใบกำกับภาษี</td></tr>
+        <tr><td><b>ใบเสร็จรับเงิน</b></td><td class="code">RC</td><td class="when">บันทึกรับเงินครั้งแรก</td>
+            <td>หลักฐานว่าได้รับเงินแล้ว · รับเพิ่มงวดถัดไปใช้เลขเดิม</td></tr>
+        <tr><td><b>ใบปะหน้าพัสดุ</b></td><td class="code muted">ไม่มีเลข</td><td class="when">รับงานเตรียมการจัดส่ง</td>
+            <td><b>ห้ามมีราคา</b> — ติดบนกล่อง · มีบาร์โค้ดเลขบิลให้สแกน · ถามจำนวนกล่องตอนพิมพ์</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>อ่านเมนูพิมพ์ให้ออก</h2>
+    <div class="tips">
+      <div class="tip"><span class="ic">✓</span><span><b>ปุ่มปกติ</b> = พิมพ์ได้เลย · บรรทัดเล็กใต้ชื่อบอกชื่ออังกฤษและว่าใบนั้นมีราคาหรือไม่</span></div>
+      <div class="tip warn"><span class="ic">!</span><span><b>ปุ่มสีจาง</b> = ยังไม่ถึงขั้นของมัน บรรทัดสีส้มบอกว่าต้องทำอะไรก่อน เช่น “ต้องพร้อมจัดส่งก่อน”</span></div>
+      <div class="tip"><span class="ic">∑</span><span><b>ใบรวม</b> เช่น “ใบเสร็จ / ใบกำกับภาษี / ใบส่งสินค้า” คือเอกสารหลายหน้าที่บนแผ่นเดียว พิมพ์ใบเดียวจบ — บนใบจะมีเลขครบทุกชนิด</span></div>
+      <div class="tip"><span class="ic">฿</span><span><b>ใบที่ไม่มีราคา</b> (ใบจัดของ · ใบส่งสินค้า · ใบปะหน้าพัสดุ) ตั้งใจไม่พิมพ์ราคา เพราะไปกับของและมีคนเห็นระหว่างทาง</span></div>
+    </div>
+  </div>
+
+  <p class="foot">Ranger TOPSALES · เอกสารการขาย — หน้านี้อธิบายกติกาที่ระบบใช้จริง ถ้าของจริงไม่ตรงกับหน้านี้ ให้แจ้งทีมพัฒนา</p>
+</div>
+</body>
+</html>

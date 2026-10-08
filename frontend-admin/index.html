@@ -3939,7 +3939,14 @@ function renderSaleOrderStatusCard(r){
      ไม่ว่าแถบขั้นตอนฝั่งซ้ายจะตกบรรทัดกี่แถว */
   const col = 'display:flex;flex-direction:column;min-height:100%';
   const btnRow = 'margin-top:auto;padding-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
-  box.innerHTML = '<div class="form-card"><div class="form-grid g2" style="align-items:stretch">' +
+  /* ★ ปุ่มคู่มืออยู่แถวบนสุดของการ์ดสถานะ ชิดขอบขวา (เจ้าของระบบสั่ง 8 ต.ค. 2026)
+     วางเต็มความกว้างการ์ด ไม่ใช่ในคอลัมน์ซ้าย — ไม่งั้น "ชิดขวา" จะไปอยู่กลางการ์ดพอดี
+     เปิดแท็บใหม่ด้วย target=_blank ไม่ใช่ window.open() ในโค้ด — ลิงก์ที่ผู้ใช้กดเองไม่โดนบล็อกป๊อปอัพ */
+  const guideRow = '<div style="display:flex;align-items:center;margin-bottom:10px">' +
+    '<a class="btn btn-ghost btn-sm" style="margin-left:auto;text-decoration:none" ' +
+    'href="sales-doc-guide.html" target="_blank" rel="noopener" ' +
+    'title="เอกสารแต่ละใบออกตอนไหน เลขมาจากไหน — เปิดแท็บใหม่">📄 คำอธิบายเอกสารการขาย</a></div>';
+  box.innerHTML = '<div class="form-card">' + guideRow + '<div class="form-grid g2" style="align-items:stretch">' +
     '<div style="'+col+'"><div class="unit">สถานะการส่งของ</div><div style="margin:6px 0 10px">'+stepBar+'</div>' +
       (o.deliveredAt ? '<div class="unit">ส่งของเมื่อ '+esc(o.deliveredAt)+'</div>' : '') +
       '<div style="'+btnRow+'">'+nextBtns+'</div></div>' +
