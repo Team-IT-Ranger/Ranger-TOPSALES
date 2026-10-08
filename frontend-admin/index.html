@@ -3533,6 +3533,14 @@ function setSalesOrderView(mode){
   if (soViewMode === mode) return;
   soViewMode = mode;
   try { localStorage.setItem(snapKey() + 'so_view', mode); } catch(e){}
+  /* ★ ล้างตัวกรองสถานะทุกครั้งที่สลับมุมมอง (เจ้าของระบบสั่ง 8 ต.ค. 2026)
+     บนกระดาน "สถานะ" คือคอลัมน์อยู่แล้ว — กรองค้างไว้แล้วสลับมาจะเห็นคอลัมน์เดียวมีการ์ด
+     อีกสี่คอลัมน์ว่างเปล่า เหมือนบิลหายไปทั้งกระดาน · สลับกลับไปตารางก็ลืมว่ายังกรองอยู่
+     แล้วตัวเลขท้ายตารางไม่ตรงกับที่คิดในหัว
+     ★ ล้างเฉพาะ "สถานะ" — ตัวกรองการเงินกับคำค้นทำงานเหมือนกันทั้งสองมุมมอง
+       ล้างไปด้วยจะกลายเป็นพิมพ์ชื่อร้านค้างไว้แล้วหายทุกครั้งที่กดสลับ */
+  const sel = document.getElementById('so-filter-status');
+  if (sel) sel.value = '';
   renderSalesOrders();
 }
 function renderSalesOrders(){
