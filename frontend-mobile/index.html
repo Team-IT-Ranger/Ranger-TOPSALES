@@ -289,12 +289,12 @@
              vs ไปตัดจากคลังตอนสำนักงานกดจัดส่ง) — ปุ่มสองทางพูดออกมาทั้งสองทาง และมีบรรทัดบอกผลใต้ปุ่ม -->
       <div class="segrow">
         <div class="segtog" id="s-pay" role="group" aria-label="วิธีชำระเงิน">
-          <button type="button" class="on" data-v="cash" onclick="setPay('cash')">เงินสด</button>
           <button type="button" data-v="credit_term" onclick="setPay('credit_term')">เครดิต</button>
+          <button type="button" class="on" data-v="cash" onclick="setPay('cash')">เงินสด</button>
         </div>
         <div class="segtog" id="s-fulfil" role="group" aria-label="วิธีส่งของ">
           <button type="button" data-v="office" onclick="setFulfil('office');cartChanged()">รอจัดส่ง</button>
-          <button type="button" class="on" data-v="immediate" onclick="setFulfil('immediate');cartChanged()">ลงสินค้าเลย</button>
+          <button type="button" class="on" data-v="immediate" onclick="setFulfil('immediate');cartChanged()">ลงสินค้า</button>
         </div>
       </div>
       <span class="note seg-note" id="s-fulfil-note">ลงของจากรถให้ลูกค้าเดี๋ยวนี้ — ตัดสต็อกบนรถทันที</span>
