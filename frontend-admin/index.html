@@ -226,6 +226,10 @@
   table.tbl-dragging{ user-select:none; -webkit-user-select:none; }
   th.th-drop-before{ box-shadow:inset 3px 0 0 var(--blue); }
   th.th-drop-after{ box-shadow:inset -3px 0 0 var(--blue); }
+  /* ปุ่มคืนลำดับคอลัมน์ — โผล่เฉพาะตารางที่ผู้ใช้สลับคอลัมน์ไว้ ไม่งั้นเป็นปุ่มที่ไม่มีวันได้ใช้บนทุกตาราง */
+  .tbl-colreset{ font:inherit; font-size:11px; font-weight:400; color:var(--ink-soft); background:none;
+    border:1px solid var(--border); border-radius:999px; padding:2px 9px; cursor:pointer; white-space:nowrap; }
+  .tbl-colreset:hover{ color:var(--blue); border-color:var(--blue); }
   .view-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .view-head h1{ font-size:19px; margin:0 0 3px; }
   .view-head p{ margin:0; color:var(--ink-soft); font-size:12.5px; }
@@ -8187,7 +8191,12 @@ function tblLoading(body, cols){
     d.t.classList.remove('tbl-dragging');
     const head = headRow(d.t);
     if (head) [...head.cells].forEach(c => c.classList.remove('th-drop-before', 'th-drop-after'));
-    if (d.started) justDragged = true;              // กลืน click ที่กำลังจะตามมา (ดูตัวจับ click ข้างล่าง)
+    /* กลืน click ที่กำลังจะตามมา (ดูตัวจับ click ข้างล่าง)
+       ★★ ต้องปลดธงด้วยตัวจับเวลา ไม่ใช่รอให้ click มาปลดให้ — เบราว์เซอร์ยิง click **เฉพาะตอนที่
+         ปล่อยนิ้วบน element เดิมกับที่กดลงไป** ลากข้ามคอลัมน์จึงไม่มี click ตามมาเลย ธงค้างเป็น true
+         แล้วไปกลืนคลิกถัดไปของผู้ใช้แทน (เจอจริง 8 ต.ค. 2026: ลากคอลัมน์แล้วปุ่ม "คืนลำดับคอลัมน์"
+         กดไม่ติด เพราะมันอยู่ในแถวหัวตารางเหมือนกัน) · timeout 0 มาหลัง click ที่เกิดจริงเสมอ */
+    if (d.started) { justDragged = true; setTimeout(() => { justDragged = false; }, 0); }
     if (!d.started || !d.target || !head) return;
     tag(head);
     plainRows(d.t, head.cells.length).forEach(tag);
@@ -8203,6 +8212,7 @@ function tblLoading(body, cols){
     /* ★ ตัวเรียงจำ "ตำแหน่งคอลัมน์" ไม่ใช่ตัวคอลัมน์ — ย้ายคอลัมน์แล้วลำดับที่จำไว้จะชี้ผิดตัว
        แล้วรอบหน้าที่หน้าจอวาดใหม่ มันจะเรียงตามคอลัมน์ที่ผู้ใช้ไม่ได้สั่ง · ล้างทิ้งไปเลยตรงไปตรงมากว่า */
     document.dispatchEvent(new CustomEvent('tbl-cols-changed', { detail: { key: keyOf(d.t) } }));
+    syncBtn(d.t);
   });
   /* ★ ลากเสร็จแล้วเบราว์เซอร์ยิง click ตามมาเสมอ — ต้องกลืนทิ้งครั้งเดียว
      ไม่งั้นปล่อยนิ้วทีไร initTableSort จะเรียงตารางใหม่ทุกครั้ง ทั้งที่ผู้ใช้แค่ย้ายคอลัมน์
@@ -8214,9 +8224,41 @@ function tblLoading(body, cols){
     if (th) { e.stopPropagation(); e.preventDefault(); }
   }, true);
 
+  /* คืนลำดับเดิม — ลบที่จำไว้ แล้วเรียงเซลล์กลับตามหมายเลขดั้งเดิมที่ติดป้ายไว้
+     ★ ต้องเรียงของที่อยู่บนจอกลับเองด้วย ลบที่จำไว้เฉยๆ ไม่พอ เพราะ apply() จะไม่ทำอะไรแล้ว
+       ผู้ใช้จะเห็นลำดับเดิมค้างอยู่จนกว่าจะรีเฟรช แล้วนึกว่าปุ่มเสีย */
+  const reset = t => {
+    const head = headRow(t);
+    if (!head) return;
+    const m = load(); delete m[keyOf(t)]; save(m);
+    const ident = [...head.cells].map((c, i) => i);
+    tag(head); reorder(head, ident);
+    plainRows(t, ident.length).forEach(r => { tag(r); reorder(r, ident); });
+    document.dispatchEvent(new CustomEvent('tbl-cols-changed', { detail: { key: keyOf(t) } }));
+    syncBtn(t);
+  };
+  /* ปุ่มอยู่ในแถวค้นหา (ซึ่งตรึงอยู่กับหัวตาราง) — ที่เดียวที่มีพื้นที่ว่างจริงและเลื่อนไม่หาย
+     ตารางที่ไม่มีแถวค้นหาก็ไม่มีปุ่ม — ลากกลับเองได้ และไม่ต้องไปยัดปุ่มลงหัวคอลัมน์ให้รก */
+  const syncBtn = t => {
+    const box = t.querySelector('.tbl-search-row .tbl-search-box');
+    if (!box) return;
+    const want = load()[keyOf(t)];
+    const btn = box.querySelector('.tbl-colreset');
+    if (!want || !want.length) { if (btn) btn.remove(); return; }
+    if (btn) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tbl-colreset';
+    b.textContent = '\u21BA คืนลำดับคอลัมน์';
+    b.title = 'เรียงคอลัมน์กลับเป็นลำดับตั้งต้นของหน้านี้';
+    b.addEventListener('click', e => { e.stopPropagation(); reset(t); });
+    box.appendChild(b);
+  };
+
   const all = () => document.querySelectorAll('.table-wrap > table').forEach(t => {
     if (movable(t)) [...headRow(t).cells].forEach(c => c.classList.add('th-movable'));
     apply(t);
+    syncBtn(t);
   });
   let timer;
   new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(all, 60); })
