@@ -79,6 +79,16 @@
     '.docsheet.dp-label .dp-lb-from{border-bottom:1px solid #111;padding-bottom:.5em;font-size:.95em}',
     '.docsheet.dp-label .dp-lb-code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1.5em;font-weight:700;',
     '  text-align:center;border:2px solid #111;border-radius:.3em;padding:.25em;margin:.5em 0}',
+    /* ★★ บาร์โค้ดต้องย่อให้พอดีความกว้างป้ายเสมอ — ตัวสร้างกำหนด width เป็นพิกเซลตามความยาวข้อความ
+       เลขบิลยาว 16 ตัวกินราว 440px แต่ป้ายกว้าง 100mm หัก padding เหลือ ~340px จึงล้นออกนอกสติกเกอร์
+       (เจ้าของระบบแจ้ง 8 ต.ค. 2026) · มี viewBox อยู่แล้ว ใส่ width:100% จึงย่อตามสัดส่วนได้ทันที
+       ★ ย่อแล้วแท่งยังคมเพราะ shape-rendering:crispEdges และ quiet zone ถูกนับรวมใน viewBox แล้ว */
+    '.docsheet.dp-label .dp-bc{width:100%;height:auto;margin:0}',
+    /* บล็อกบาร์โค้ดอยู่ "ล่างสุดของป้าย" (เจ้าของระบบสั่ง) — ของเดิมอยู่กลางป้ายใต้ชื่อผู้ส่ง
+       ซึ่งเป็นตำแหน่งที่เทปพันกล่องมักทับ และคนสแกนต้องพลิกหากลางกล่อง */
+    '.docsheet.dp-label .dp-lb-bc{margin-top:.5em;border-top:1px dashed #111;padding-top:.4em;text-align:center}',
+    '.docsheet.dp-label .dp-lb-bc .dp-lb-bcno{font-family:ui-monospace,Menlo,Consolas,monospace;',
+    '  font-size:1.05em;font-weight:700;letter-spacing:.06em;margin-top:.15em}',
     '.docsheet.dp-label .dp-lb-to{border:2px solid #111;border-radius:.3em;padding:.6em;flex:1}',
     '.docsheet.dp-label .dp-lb-to .dp-lb-lbl{font-size:.85em;color:#444}',
     '.docsheet.dp-label .dp-lb-to .dp-lb-name{font-size:1.6em;font-weight:700;line-height:1.25;margin:.15em 0}',
@@ -405,11 +415,7 @@
         '<div class="dp-lb-from"><b>ผู้ส่ง</b> ' + E(from.name || '') +
           (from.phone ? ' · โทร. ' + E(from.phone) : '') +
           (from.address ? '<div>' + E(from.address) + '</div>' : '') + '</div>' +
-        '<div class="dp-lb-code">' + E(spec.docNo || '') + (count > 1 ? '  (' + b + '/' + count + ')' : '') +
-          /* ★ บาร์โค้ดเลขใบสั่งขาย — ใบนี้ติดบนกล่องตลอดทาง คนที่รับของปลายทางสแกนเข้าระบบได้เลย
-             ไม่ต้องพิมพ์เลขตามที่อ่านจากกระดาษ (พิมพ์ผิดทีเดียวตามของไม่เจอทั้งกล่อง)
-             ★ ไม่ใส่หมายเลขกล่องลงบาร์โค้ด — ทุกกล่องของบิลเดียวกันสแกนได้เลขเดียวกัน ซึ่งคือสิ่งที่ต้องการ */
-          (barcodeSvg(spec.docNo, { height: 42, unit: 2 }) || '') + '</div>' +
+        '<div class="dp-lb-code">' + E(spec.docNo || '') + (count > 1 ? '  (' + b + '/' + count + ')' : '') + '</div>' +
         '<div class="dp-lb-to">' +
           '<div class="dp-lb-lbl">ผู้รับ</div>' +
           '<div class="dp-lb-name">' + E(to.name || '') + '</div>' +
@@ -419,6 +425,12 @@
         '<div class="dp-lb-foot"><span>' + E(spec.dateStr || '') + '</span>' +
           '<span>' + E(spec.summary || '') + '</span></div>' +
         (spec.note ? '<div style="font-size:.9em;margin-top:.3em">' + E(spec.note) + '</div>' : '') +
+        /* ★ บาร์โค้ดเลขใบสั่งขาย — ใบนี้ติดบนกล่องตลอดทาง คนที่รับของปลายทางสแกนเข้าระบบได้เลย
+           ไม่ต้องพิมพ์เลขตามที่อ่านจากกระดาษ (พิมพ์ผิดทีเดียวตามของไม่เจอทั้งกล่อง)
+           ★ ไม่ใส่หมายเลขกล่องลงบาร์โค้ด — ทุกกล่องของบิลเดียวกันสแกนได้เลขเดียวกัน ซึ่งคือสิ่งที่ต้องการ
+           ★ พิมพ์เลขเป็นตัวอักษรใต้บาร์โค้ดด้วยเสมอ เผื่อสแกนไม่ติด (เทปทับ/หมึกจาง) คนยังอ่านออก */
+        '<div class="dp-lb-bc">' + (barcodeSvg(spec.docNo, { height: 40, unit: 2 }) || '') +
+          '<div class="dp-lb-bcno">' + E(spec.docNo || '') + '</div></div>' +
         '</div>');
     }
     show('ใบปะหน้าพัสดุ ' + (spec.docNo || ''), sheets, { paper: 'label100x150' });

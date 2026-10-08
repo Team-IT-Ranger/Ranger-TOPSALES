@@ -3886,13 +3886,25 @@ function printParcelLabel(r){
   const o = r.order, iss = r.issuer || {};
   const boxes = parseInt(prompt('พิมพ์ใบปะหน้ากี่กล่อง? (จะได้เลข 1/2, 2/2 … บนแต่ละใบ)', '1'), 10);
   if (!boxes || boxes < 1) return;
-  const cases = r.items.reduce((n, it) => n + (String(it.unitCode || '').toUpperCase() === 'CT' ? (it.qty || 0) : 0), 0);
+  /* ★ สรุปจำนวนต้องขึ้นเสมอ ไม่ใช่เฉพาะตอนมีหน่วย "ลัง" (เจ้าของระบบแจ้ง 8 ต.ค. 2026 ว่าจำนวนไม่แสดง)
+     ของเดิมนับเฉพาะ CT — บิลที่ขายเป็นแพ็ค/ชิ้นล้วนจึงได้ "N รายการ" เปล่าๆ ไม่มีจำนวนเลย
+     ตอนนี้รวมจำนวนแยกตามหน่วยทุกหน่วยที่มีจริงในบิล แล้วเรียงลัง → แพ็ค → ชิ้น ตามขนาดหน่วย */
+  const UNIT_ORDER = { CT: 0, PK: 1, PC: 2 };
+  const byUnit = {};
+  r.items.forEach(it => {
+    const u = String(it.unitCode || 'PC').toUpperCase();
+    byUnit[u] = (byUnit[u] || 0) + (parseFloat(it.qty) || 0);
+  });
+  const qtyText = Object.keys(byUnit)
+    .sort((a, b) => (UNIT_ORDER[a] == null ? 9 : UNIT_ORDER[a]) - (UNIT_ORDER[b] == null ? 9 : UNIT_ORDER[b]))
+    .map(u => byUnit[u] + ' ' + (({ CT: 'ลัง', PK: 'แพ็ค', PC: 'ชิ้น' })[u] || u))
+    .join(' · ');
   ensureDocPrint().then(() => DocPrint.label({
     docNo: o.code, boxes: boxes, dateStr: (o.createdAt || '').substring(0, 10),
     from: { name: iss.name || '', phone: iss.phone || '', address: iss.address || '' },
     to: { name: o.customer + (o.customerCode ? ' [' + o.customerCode + ']' : ''),
       address: o.customerShipTo || o.customerAddress || '', phone: o.customerPhone || '' },
-    summary: r.items.length + ' รายการ' + (cases ? ' · ' + cases + ' ลัง' : ''),
+    summary: r.items.length + ' รายการ' + (qtyText ? ' · ' + qtyText : ''),
     note: o.note || ''
   }));
 }
@@ -3981,7 +3993,7 @@ function ensureDocPrint(){
   if (window.DocPrint) return Promise.resolve(window.DocPrint);
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'doc-print.js?v=20260926';
+    s.src = 'doc-print.js?v=20261008';
     s.onload = () => resolve(window.DocPrint);
     s.onerror = () => { toast('โหลดตัวพิมพ์เอกสารไม่สำเร็จ', true); reject(new Error('doc-print')); };
     document.head.appendChild(s);
