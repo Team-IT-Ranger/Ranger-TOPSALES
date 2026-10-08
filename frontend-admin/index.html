@@ -454,8 +454,23 @@
   .sod-print-list{ display:none; position:absolute; right:0; top:calc(100% + 6px); z-index:40; min-width:230px;
     background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow-md); padding:6px; }
   .sod-print-list.open{ display:block; }
-  .sod-print-list .btn{ display:flex; width:100%; justify-content:flex-start; text-align:left; height:auto; padding:8px 10px; }
-  .sod-print-list .btn:hover{ background:var(--surface-2); }
+  /* ★★ ต้องเขียน `body.density-compact` นำหน้าด้วย — โหมดกระชับเป็น**ค่าเริ่มต้นของแอป** และกฎ
+     `body.density-compact .btn-sm{height:26px}` มีน้ำหนักเท่ากัน (0,2,0) แต่อยู่ "ทีหลัง" ในไฟล์ จึงชนะ
+     ผลคือปุ่มถูกบีบเหลือ 26px ทั้งที่ข้อความยาวสองสามบรรทัด → ข้อความล้นไปทับรายการถัดไปทั้งเมนู
+     (เจ้าของระบบส่งภาพมา 8 ต.ค. 2026 "ตีกันมั่ว") · เขียนเจาะจงกว่าเท่านั้นถึงจะเอาชนะได้จริง */
+  .sod-print-list .btn, body.density-compact .sod-print-list .btn{
+    display:flex; flex-direction:column; align-items:flex-start; gap:1px;
+    width:100%; justify-content:center; text-align:left;
+    height:auto; min-height:34px; padding:7px 10px; line-height:1.35; white-space:normal; }
+  .sod-print-list .btn:hover:not(:disabled){ background:var(--surface-2); }
+  .sod-print-list .btn .t{ font-weight:600; }
+  /* บรรทัดรอง: ชื่ออังกฤษ + หมายเหตุ (ไม่มีราคา / ขนาดกระดาษ / เหตุผลที่ยังพิมพ์ไม่ได้)
+     แยกบรรทัดแทนที่จะต่อท้ายชื่อ — ต่อท้ายแล้วชื่อเอกสารกับหมายเหตุปนกันจนอ่านไม่ออกว่าอันไหนคือชื่อใบ */
+  .sod-print-list .btn .s{ font-size:11px; font-weight:400; color:var(--ink-faint); }
+  .sod-print-list .btn:disabled .s{ color:var(--orange); }
+  .sod-print-list .grp{ font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--ink-faint); padding:8px 10px 3px; }
+  .sod-print-list .grp:first-child{ padding-top:3px; }
   /* tag เล็กในตาราง — ใช้กับคุณสมบัติสินค้า/สถานะภาษี (คนละตัวกับ .pill ที่ใช้กับสถานะเอกสาร) */
   .tag{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:11.5px; font-weight:600; line-height:1.6;
     background:var(--surface-2); color:var(--ink-soft); border:1px solid var(--border); white-space:nowrap; }
@@ -3811,21 +3826,29 @@ function renderSaleOrderDetail(r){
     '<div class="sod-print-menu">' +
       '<button class="btn btn-sm" onclick="toggleSoPrintMenu(event)">พิมพ์เอกสาร ▾</button>' +
       '<div class="sod-print-list" id="sod-print-list">' +
-        soDocMenu(o).map(code => {
+        soDocMenu(o).map((code, i, arr) => {
           const k = SO_DOC_KINDS[code];
           /* ★ ใบที่เป็นหลักฐาน "ได้รับเงินแล้ว" พิมพ์ก่อนได้เงินไม่ได้ — ปิดปุ่มพร้อมบอกเหตุผล
              ไม่ซ่อน เพราะแอดมินต้องเห็นว่ามีใบนี้อยู่และรู้ว่าต้องทำอะไรก่อนถึงจะพิมพ์ได้
              (เลขใบเสร็จออกตอนรับเงินครั้งแรก — ยังไม่มีเลข = ยังไม่ได้บันทึกรับเงิน) */
+          const info = SO_DOC_MENU_INFO[code] || {};
           const why = soDocBlockReason(o, code);
-          const tail = (k.showPrice === false || k.label ? ' <span class="unit">(ไม่มีราคา)</span>' : '') +
-            (code === 'parcel' ? ' <span class="unit">100×150 มม.</span>' : '') +
-            (why ? ' <span class="unit">— ' + esc(why) + '</span>' : '');
-          return why
+          /* บรรทัดรองรวมทุกอย่างที่ไม่ใช่ชื่อใบไว้ด้วยกัน: ชื่ออังกฤษ · ไม่มีราคา · เหตุผลที่ยังพิมพ์ไม่ได้
+             เหตุผลมาก่อนเสมอ เพราะเป็นสิ่งเดียวที่ต้องอ่านตอนปุ่มถูกปิด */
+          const sub = [why ? '— ' + why : '', info.en || '',
+                       (k.showPrice === false || k.label) ? 'ไม่มีราคา' : ''].filter(Boolean).join(' · ');
+          const head = '<span class="t">' + esc(info.short || k.title) + '</span>' +
+                       (sub ? '<span class="s">' + esc(sub) + '</span>' : '');
+          /* หัวข้อกลุ่มขึ้นเมื่อกลุ่มเปลี่ยนจากตัวก่อนหน้า — เทียบกับเพื่อนบ้านตรงๆ ไม่ต้องมีตัวแปรจำสถานะ
+             (เมนูทุกชุดเรียงให้กลุ่มติดกันอยู่แล้ว ดู SO_DOC_MENUS) */
+          const prevGrp = i ? (SO_DOC_MENU_INFO[arr[i - 1]] || {}).grp : '';
+          const grp = info.grp && info.grp !== prevGrp ? '<div class="grp">' + esc(info.grp) + '</div>' : '';
+          return grp + (why
             ? '<button class="btn btn-ghost btn-sm" disabled title="' + esc(why) +
               ' — เอกสารชนิดนี้ออกเลขที่ของตัวเองตามขั้นงาน พิมพ์ก่อนถึงขั้นนั้นจะไม่มีเลขอ้างอิง">' +
-              esc(k.title) + tail + '</button>'
+              head + '</button>'
             : '<button class="btn btn-ghost btn-sm" onclick="closeSoPrintMenu();printSaleDoc(SOD_DATA,\''+code+'\')">' +
-              esc(k.title) + tail + '</button>';
+              head + '</button>');
         }).join('') +
       '</div></div> ' +
     (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
@@ -3970,6 +3993,21 @@ function ensureDocPrint(){
      ราคาที่ตกลงกันไม่ควรหลุดไปกับของ · งานรถเร่ของผ่านมือคนนอกเยอะกว่าขายหน้าร้านมาก เรื่องนี้จึงสำคัญ
    ★ "ใบเสร็จรับเงิน / ใบส่งสินค้า" คือใบเดียวทำสองหน้าที่ — ใช้ตอนเก็บเงินพร้อมส่งของ (มีราคา)
    ช่องลงชื่อสะท้อนหน้าที่ทางธุรกิจของเอกสารนั้น ไม่ใช่ของประดับ (ข้อ 2.4) */
+/* ★ ชื่อที่ใช้ "ในเมนู" แยกจาก `title` ที่พิมพ์ลงหัวเอกสารจริง — หัวเอกสารต้องเป็นชื่อเต็มทางการ
+   แต่เมนูต้องกวาดตาเจอเร็ว · `en` ยังเก็บไว้เพราะแอดมินเคยสับสนใบแจ้งหนี้กับใบกำกับภาษีมาแล้ว
+   แค่ย้ายไปอยู่บรรทัดรองแทนที่จะต่อท้ายชื่อ · `grp` = หัวข้อกลุ่มในเมนู (เรียงตามลำดับงานจริง) */
+const SO_DOC_MENU_INFO = {
+  salesorder:    { short: 'ใบสั่งขาย',                         en: 'Sales Order',                          grp: 'ขาย' },
+  picking:       { short: 'ใบจัดของ',                          en: 'Picking List',                         grp: 'คลังและการจัดส่ง' },
+  delivery:      { short: 'ใบส่งสินค้า',                        en: 'Delivery Note',                        grp: 'คลังและการจัดส่ง' },
+  parcel:        { short: 'ใบปะหน้าพัสดุ',                      en: 'Shipping Label · 100×150 มม.',          grp: 'คลังและการจัดส่ง' },
+  deliveryinv:   { short: 'ใบส่งสินค้า / ใบแจ้งหนี้',            en: 'Delivery Note / Invoice',              grp: 'เงินและภาษี' },
+  invoice:       { short: 'ใบแจ้งหนี้',                         en: 'Invoice',                              grp: 'เงินและภาษี' },
+  taxinvoice:    { short: 'ใบกำกับภาษี',                        en: 'Tax Invoice',                          grp: 'เงินและภาษี' },
+  receipt:       { short: 'ใบเสร็จรับเงิน',                     en: 'Receipt',                              grp: 'เงินและภาษี' },
+  receiptdlv:    { short: 'ใบเสร็จรับเงิน / ใบส่งสินค้า',        en: 'Receipt / Delivery Note',              grp: 'เงินและภาษี' },
+  receipttaxdlv: { short: 'ใบเสร็จ / ใบกำกับภาษี / ใบส่งสินค้า', en: 'Receipt / Tax Invoice / Delivery Note', grp: 'เงินและภาษี' }
+};
 const SO_DOC_KINDS = {
   salesorder:  { title: 'ใบสั่งขาย', signers: ['ผู้สั่งซื้อ','ผู้ขาย','ผู้อนุมัติ'], showPrice: true, showBank: true },
   /* ★ `withTaxNo` — ใบเสร็จของธุรกิจนี้เป็นใบกำกับภาษีในแผ่นเดียวกัน (เจ้าของระบบเลือกแบบนี้ 7 ต.ค. 2026)
@@ -4042,9 +4080,9 @@ function soDocBlockReason(o, code){
 }
 const SO_DOC_MENUS = {
   // ขายเชื่อ ส่งจากสำนักงาน — ใบแจ้งหนี้ไปกับของ แล้วค่อยออกใบเสร็จตอนเก็บเงินได้
-  credit_office: ['salesorder', 'picking', 'delivery', 'deliveryinv', 'invoice', 'taxinvoice', 'receipt', 'parcel'],
+  credit_office: ['salesorder', 'picking', 'delivery', 'parcel', 'deliveryinv', 'invoice', 'taxinvoice', 'receipt'],
   // ขายสด ส่งจากสำนักงาน — เก็บเงินพร้อมส่งของ จึงรวมใบเสร็จ+ใบกำกับภาษี+ใบส่งสินค้าเป็นแผ่นเดียว
-  cash_office:   ['salesorder', 'picking', 'delivery', 'receipttaxdlv', 'taxinvoice', 'receipt', 'parcel'],
+  cash_office:   ['salesorder', 'picking', 'delivery', 'parcel', 'receipttaxdlv', 'taxinvoice', 'receipt'],
   /* ขายจากรถ — ไม่มีใบจัดของ/ใบปะหน้าพัสดุ เพราะไม่ได้หยิบของจากคลังและไม่ได้ส่งผ่านขนส่ง
      พนักงานยกของลงจากรถให้ลูกค้าตรงนั้น */
   credit_van:    ['salesorder', 'deliveryinv', 'invoice', 'taxinvoice', 'receipt'],
