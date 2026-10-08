@@ -76,6 +76,27 @@
   .seg{ display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:3px; gap:3px; }
   .seg button{ flex:1; border:none; background:none; border-radius:8px; padding:8px; font-weight:600; font-size:13.5px; color:var(--ink-soft); }
   .seg button.on{ background:var(--surface); color:var(--blue); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  /* ★ ปุ่มสลับแบบแถบกลม — ยกมาจาก .segtog ของหน้าบิลขายฝั่งแอดมิน (กระดาน/ตาราง) ให้สองแอปพูดภาษาเดียวกัน
+       (เจ้าของระบบสั่ง 8 ต.ค. 2026) · ต่างจากของแอดมินแค่ขนาด: นิ้วต้องกดโดน จึงสูง 36px ไม่ใช่ 26px
+     ใช้กับ "ตัวเลือกที่เปลี่ยนผลของบิล" เท่านั้น (จ่ายเงิน/ส่งของ) ไม่ใช่ทุกปุ่มสลับในแอป —
+     จุดไฟเขียวจะได้ยังมีความหมาย ไม่กลายเป็นไฟกระพริบเต็มหน้าจอ */
+  .segrow{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .segtog{ display:inline-flex; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:999px; padding:3px; gap:2px; max-width:100%; }
+  .segtog button{ font:inherit; font-size:13px; font-weight:600; color:var(--ink-soft); background:transparent;
+    border:0; border-radius:999px; padding:8px 13px; min-height:36px; white-space:nowrap;
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    transition:background .15s, color .15s; }
+  /* ตัวที่เลือกอยู่ "ยุบลง" — เงา inset ทำให้ดูกดค้างไว้ ต่างจากปุ่มปกติที่ดูลอยขึ้น */
+  .segtog button.on{ background:var(--blue-soft); color:var(--blue); box-shadow:inset 0 1px 3px rgba(31,62,135,.22); }
+  .segtog button:active{ transform:translateY(1px); }
+  /* จุดไฟเขียวหายใจช้าๆ บอกว่ากำลังยืนอยู่ทางไหน — จางสุด .4 ช้า 2.6 วิ จะได้สังเกตได้แต่ไม่เคืองตา */
+  .segtog button.on::before{ content:''; flex:none; width:6px; height:6px; border-radius:50%; background:var(--green);
+    box-shadow:0 0 4px rgba(31,138,95,.55); animation:segpulse 2.6s ease-in-out infinite; }
+  @keyframes segpulse{ 0%,100%{ opacity:.4 } 50%{ opacity:1 } }
+  @media(prefers-reduced-motion:reduce){ .segtog button.on::before{ animation:none; opacity:.85 } }
+  /* บรรทัดบอกผลของตัวเลือก — ผลที่ตามมาสำคัญกว่าชื่อปุ่ม (ของจะถูกตัดตอนไหน) */
+  .seg-note{ display:block; font-size:12px; color:var(--ink-soft); margin-top:2px; }
   .check{ display:flex; align-items:center; gap:8px; font-size:13.5px; }
 
   .prod{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
@@ -247,14 +268,25 @@
       <div class="field"><label>ลูกค้า</label>
         <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()">
         <select class="inp" id="s-cust" onchange="cartChanged()"></select></div>
-      <div class="seg" id="s-pay">
-        <button class="on" data-v="cash" onclick="setPay('cash')">เงินสด</button>
-        <button data-v="credit_term" onclick="setPay('credit_term')">เครดิต</button>
+      <!-- ★ 8 ต.ค. 2026 เจ้าของระบบสั่ง: ปุ่มสลับแบบเดียวกับหน้าบิลขายฝั่งแอดมิน ทั้งชุดจ่ายเงินและชุดส่งของ
+           และวางให้อยู่ระนาบเดียวกัน — เป็นสองคำถามของบิลใบเดียวกัน คนขายตอบพร้อมกันเสมอ
+           ★ ของเดิมชุดส่งของเป็น "ช่องติ๊ก ส่งจากสำนักงาน" ซึ่งบอกออกมาทางเดียว อีกทางคนต้องแปลเอง
+             ว่าไม่ติ๊กแล้วเกิดอะไรขึ้น · เรื่องนี้แปลผิดไม่ได้ จุดตัดสต็อกคนละที่กัน (ตัดจากรถทันที
+             vs ไปตัดจากคลังตอนสำนักงานกดจัดส่ง) — ปุ่มสองทางพูดออกมาทั้งสองทาง และมีบรรทัดบอกผลใต้ปุ่ม -->
+      <div class="segrow">
+        <div class="segtog" id="s-pay" role="group" aria-label="วิธีชำระเงิน">
+          <button type="button" class="on" data-v="cash" onclick="setPay('cash')">เงินสด</button>
+          <button type="button" data-v="credit_term" onclick="setPay('credit_term')">เครดิต</button>
+        </div>
+        <div class="segtog" id="s-fulfil" role="group" aria-label="วิธีส่งของ">
+          <button type="button" data-v="office" onclick="setFulfil('office');cartChanged()">รอจัดส่ง</button>
+          <button type="button" class="on" data-v="immediate" onclick="setFulfil('immediate');cartChanged()">ลงสินค้าเลย</button>
+        </div>
       </div>
-      <label class="check"><input type="checkbox" id="s-office" onchange="syncDelivField();cartChanged()"> ส่งจากสำนักงาน (ไม่ตัดสต็อกบนรถ)</label>
+      <span class="seg-note" id="s-fulfil-note">ลงของจากรถให้ลูกค้าเดี๋ยวนี้ — ตัดสต็อกบนรถทันที</span>
       <!-- วันนัดส่งโดยประมาณ — โชว์เฉพาะใบนัดส่ง ไปพิมพ์ลงใบที่ลูกค้าถือไว้เป็นหลักฐาน (เจ้าของระบบสั่ง 1 ต.ค. 2026) -->
       <div id="s-deliv-wrap" style="display:none;margin-top:8px">
-        <span class="note">วันนัดส่งโดยประมาณ (บอกลูกค้า)</span>
+        <span class="seg-note">วันนัดส่งโดยประมาณ (บอกลูกค้า) — ระบบตั้งให้ +5 วัน ไม่นับวันอาทิตย์ · แก้ได้</span>
         <input type="date" id="s-deliv" style="width:100%;padding:8px;margin-top:4px">
       </div>
     </div>
@@ -535,7 +567,7 @@ function enterApp(){
   // เปิดแอป (พนักงานขับรถ/van_sales ยังดีฟอลต์เงินสด + ตัดสต็อกรถทันทีเหมือนเดิม — ค่าเริ่มต้นในตัว HTML)
   // ตั้งครั้งเดียวตอนเข้าแอปต่อเซสชัน ไม่บังคับซ้ำทุกครั้งที่กลับมาแท็บขาย เพราะจะไปแย่งค่าที่ผู้ใช้เปลี่ยนเองไว้
   // ราคาเงินสด/เครดิตเลือกตามค่า PAY นี้อยู่แล้วในตัว (isCreditPayment ที่ quoteSale/recordSale) ไม่ต้องแก้อะไรเพิ่ม
-  if (ME.role === 'credit_sales') { setPay('credit_term'); $('s-office').checked = true; }
+  if (ME.role === 'credit_sales') { setPay('credit_term'); setFulfil('office'); }
   syncDelivField();
   const cached = lsGet('boot_' + ME.lineUserId, null);
   if (cached) DATA = cached.data;
@@ -758,9 +790,9 @@ function editThisDraft(code){
   gotoTab('sell');
   const sel = $('s-cust'); if (sel && d.order.customerId) sel.value = d.order.customerId;
   if (d.order.paymentMethod) setPay(d.order.paymentMethod);
-  $('s-office').checked = d.order.fulfillmentType === 'office_delivery';
-  syncDelivField();
+  setFulfil(d.order.fulfillmentType === 'office_delivery' ? 'office' : 'immediate');
   const dv = $('s-deliv'); if (dv) dv.value = d.order.requestedDeliveryDate || '';
+  syncDelivField();          // ใบเก่าที่ยังไม่เคยมีวันนัด → เติมค่าประมาณให้ ช่องจะได้ไม่ว่าง
   renderEditBanner(); renderProducts(); cartChanged();
   toast('กำลังแก้ไข ' + code + ' — กดบันทึกเพื่อทับใบเดิม');
 }
@@ -803,7 +835,10 @@ function dropQueued(i){
 
 /* ══════════════ ขาย ══════════════ */
 let CART = [];          // [{ productId, unitCode ('' = หน่วยฐาน), qty }]
-let PAY = 'cash', QUOTE = null, quoteSeq = 0, quoteTimer = null;
+/* OFFICE = บิลนี้ให้สำนักงานจัดส่ง (ไม่ตัดสต็อกบนรถ) · คู่กับ PAY ด้านบน
+   ★ เดิมอ่านจาก $('s-office').checked กระจาย 8 จุด พอเปลี่ยนช่องติ๊กเป็นปุ่มสลับก็ต้องตามแก้ทุกจุด
+     เก็บเป็นตัวแปรเดียวแบบ PAY แล้วหน้าจอเป็นแค่ภาพสะท้อนของมัน — เปลี่ยนหน้าตาอีกกี่ครั้งก็ไม่ต้องตามแก้ */
+let PAY = 'cash', OFFICE = false, QUOTE = null, quoteSeq = 0, quoteTimer = null;
 const prodById = id => DATA.products.find(p => String(p.id) === String(id));
 const custName = id => { const c = DATA.customers.find(x => String(x.id) === String(id)); return c ? c.name : (String(id) === '0' ? 'ลูกค้าทั่วไป' : '#' + id); };
 // หน่วยขายของสินค้า: หน่วยฐาน (factor 1) + หน่วยเพิ่ม (หีบ/แพ็ค ฯลฯ จาก product_units)
@@ -823,11 +858,39 @@ function renderCustSelect(){
    เดิมติ๊กให้เฉพาะบทบาทเครดิตเซลส์ตอนเปิดแอป — หน่วยรถที่เปลี่ยนมาเลือกเครดิตกลางคันจึงยังเป็นบิลขายจากรถ
    คือตัดสต็อกบนรถทันทีทั้งที่ของยังไม่ได้ออกไป · ยังเอาติ๊กออกเองได้ถ้าตั้งใจส่งของจากรถจริงๆ */
 // ช่องวันนัดส่งโผล่เฉพาะตอนติ๊ก 'ส่งจากสำนักงาน' — ขายจากรถส่งของไปแล้ว ไม่มีวันนัด
-function syncDelivField(){ const w=$('s-deliv-wrap'); if(w) w.style.display=$('s-office').checked?'':'none'; }
+/* วันนัดส่งโดยประมาณ = +5 วันจากวันเปิดบิล โดย "ไม่นับวันอาทิตย์" (เจ้าของระบบสั่ง 8 ต.ค. 2026)
+   ★ ต้องนับทีละวันแล้วข้ามวันอาทิตย์ ไม่ใช่บวก 5 รวดแล้วค่อยเลื่อนถ้าตกวันอาทิตย์ — ช่วง 5 วัน
+     คร่อมวันอาทิตย์เสมอ บวกรวดจะได้วันที่เร็วไปหนึ่งวันเกือบทุกครั้ง (เปิดบิลพุธ: ควรได้อังคาร ไม่ใช่จันทร์)
+   ★ ตั้งเวลาเป็นเที่ยงวันก่อนบวก กันวันหายตอนข้ามช่วงเปลี่ยนเวลา (ไทยไม่มี แต่เครื่องตั้งโซนเวลาอื่นได้)
+   ★ ประกอบสตริงเอง ไม่ใช้ toISOString() ซึ่งแปลงเป็น UTC ก่อน — เย็นวันที่ 8 จะกลายเป็นวันที่ 7 ทันที */
+function deliveryEta(from){
+  const d = from ? new Date(from) : new Date();
+  d.setHours(12, 0, 0, 0);
+  for (let left = 5; left > 0; ) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0) left--; }
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+/* ช่องวันนัดส่งโผล่เฉพาะโหมด "รอจัดส่ง" — ขายลงจากรถคือส่งของไปแล้ว ไม่มีวันนัด
+   เติมค่าประมาณให้เมื่อช่องยังว่างเท่านั้น ไม่ทับวันที่ที่คนขายตั้งเอง (หรือวันที่ของใบที่กำลังแก้) */
+function syncDelivField(){
+  const w = $('s-deliv-wrap'); if (w) w.style.display = OFFICE ? '' : 'none';
+  const dv = $('s-deliv');
+  if (OFFICE && dv && !dv.value) dv.value = deliveryEta();
+}
+/* เลือกวิธีส่งของ — ไม่เรียก cartChanged() เอง เพราะ setPay() เรียกตัวนี้แล้วเรียก cartChanged() ต่อท้ายอยู่แล้ว
+   (ใส่ไว้ในนี้ด้วยจะคิดราคาซ้ำสองรอบทุกครั้งที่สลับเป็นเครดิต) · ปุ่มที่ผู้ใช้กดเองเรียก cartChanged() ต่อเอง */
+function setFulfil(v){
+  OFFICE = (v === 'office');
+  document.querySelectorAll('#s-fulfil button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  const n = $('s-fulfil-note');
+  if (n) n.textContent = OFFICE ? 'สำนักงานจัดส่งให้ภายหลัง — ไม่ตัดสต็อกบนรถ'
+                                : 'ลงของจากรถให้ลูกค้าเดี๋ยวนี้ — ตัดสต็อกบนรถทันที';
+  syncDelivField();
+}
 function setPay(v){
   PAY = v;
   document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-  if (v === 'credit_term' || v === 'credit') { const o = $('s-office'); if (o && !o.checked) o.checked = true; }
+  if (v === 'credit_term' || v === 'credit') setFulfil('office');
   syncDelivField();
   cartChanged();
 }
@@ -855,7 +918,7 @@ function bump(pid, d){ const code = UNIT_PICK[pid] || ''; setQty(pid, cartQty(pi
 function setQty(pid, v){
   const code = UNIT_PICK[pid] || '', p = prodById(pid); if (!p) return;
   let qty = Math.max(0, parseInt(v) || 0);
-  if (!$('s-office').checked) {       // ขายจากรถ: ห้ามเกินของบนรถ (นับเป็นหน่วยฐานรวมทุกหน่วย)
+  if (!OFFICE) {                      // ขายจากรถ: ห้ามเกินของบนรถ (นับเป็นหน่วยฐานรวมทุกหน่วย)
     const f = unitOf(p, code).unitFactor, other = baseUsed(pid) - cartQty(pid, code) * f;
     const max = Math.floor((p.vanStock - other) / f);
     if (qty > max) { qty = Math.max(0, max); toast('บนรถมีไม่พอ — ได้สูงสุด ' + qty + ' ' + unitOf(p, code).unitLabel, 'err'); }
@@ -1013,8 +1076,8 @@ async function submitSale(){
     const freeGoods = (QUOTE && QUOTE.success && QUOTE.freeGoods && QUOTE.freeGoods.length)
       ? QUOTE.freeGoods.map(f => ({ ruleId: f.ruleId, productId: f.productId, applied: !FREE_OFF.has(f.ruleId) }))
       : undefined;
-    const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: $('s-office').checked ? 'office_delivery' : 'immediate',
-      requestedDeliveryDate: $('s-office').checked ? ($('s-deliv').value || '') : '',
+    const sale = { customerId: Number($('s-cust').value) || 0, paymentType: PAY, fulfillmentType: OFFICE ? 'office_delivery' : 'immediate',
+      requestedDeliveryDate: OFFICE ? ($('s-deliv').value || '') : '',
       editOrderCode: EDIT_ORDER_CODE || '',
       items: CART.map(c => ({ productId: c.productId, unitCode: c.unitCode, qty: c.qty })), freeGoods,
       latitude: gps.lat, longitude: gps.lng, googleMap: gps.map, savedAt: new Date().toISOString(),
@@ -1049,7 +1112,7 @@ async function submitSale(){
 }
 function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
-  if (!$('s-office').checked) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
+  if (!OFFICE) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
   lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
   EDIT_ORDER_CODE = null; renderEditBanner();   // ออกจากโหมดแก้ไขเมื่อบันทึกเสร็จ
   const dv = $('s-deliv'); if (dv) dv.value = '';   // ไม่ให้บิลถัดไปติดวันนัดส่งของบิลก่อนมา
