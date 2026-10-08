@@ -404,6 +404,26 @@ console.log('\n── ★ ใบส่งสินค้ามีเลขขอ
 
   eq('ก่อนถึงพร้อมจัดส่ง ยังไม่มีเลขใบส่งของ', !row(50).delivery_order_no, true);
 
+  /* ★ 8 ต.ค. 2026 เจ้าของระบบย้ายจุดออกเลข: ใบจัดของ+ใบส่งสินค้าออกตอน "รับงานเตรียมการจัดส่ง"
+     (คนคลังต้องถือใบไปหยิบของ ต้องมีตั้งแต่เริ่มจัด) ส่วนใบกำกับภาษียังออกตอนส่งมอบตามภาระภาษี */
+  t.sales_orders.push({ record_id: 52, order_code: 'SO-52', customer_id: 1, total: 100,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'confirmed',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-10-08 09:00:00' });
+  t.order_items.push({ record_id: 520, order_id: 52, product_id: '101', unit_code: 'CT', qty: 1, base_qty: 1 });
+  const n52 = ctx.docNoCalls;
+  let a52 = ctx.updateSalesOrderStatus(S, { id: 52, status: 'accepted' });
+  eq('รับงาน → ออกเลขใบจัดของ + ใบส่งสินค้า',
+    [a52.success, /^PICK-/.test(row(52).picking_no || ''), /^DO-/.test(row(52).delivery_order_no || '')],
+    [true, true, true]);
+  eq('  ★ ยังไม่ออกใบกำกับภาษี (ภาระภาษีเกิดตอนส่งมอบ ไม่ใช่ตอนรับงาน)', !row(52).tax_invoice_no, true);
+  eq('  กินตัวนับแค่สองชนิด ไม่เกินนั้น', ctx.docNoCalls - n52, 2);
+  const keep52 = row(52).delivery_order_no;
+  const n52b = ctx.docNoCalls;
+  ctx.updateSalesOrderStatus(S, { id: 52, status: 'ready_to_ship' });
+  eq('พร้อมจัดส่ง → ออกเฉพาะใบกำกับภาษีเพิ่ม เลขใบส่งของเดิมไม่เปลี่ยน',
+    [/^TAX-/.test(row(52).tax_invoice_no || ''), row(52).delivery_order_no, ctx.docNoCalls - n52b],
+    [true, keep52, 1]);
+
   const before = ctx.docNoCalls;
   let d = ctx.updateSalesOrderStatus(S, { id: 50, status: 'ready_to_ship' });
   eq('เข้าสถานะพร้อมจัดส่ง → ได้เลขใบส่งของ', [d.success, /^DO-/.test(row(50).delivery_order_no || '')], [true, true]);

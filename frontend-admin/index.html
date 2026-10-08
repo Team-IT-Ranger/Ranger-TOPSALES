@@ -3816,12 +3816,13 @@ function renderSaleOrderDetail(r){
           /* ★ ใบที่เป็นหลักฐาน "ได้รับเงินแล้ว" พิมพ์ก่อนได้เงินไม่ได้ — ปิดปุ่มพร้อมบอกเหตุผล
              ไม่ซ่อน เพราะแอดมินต้องเห็นว่ามีใบนี้อยู่และรู้ว่าต้องทำอะไรก่อนถึงจะพิมพ์ได้
              (เลขใบเสร็จออกตอนรับเงินครั้งแรก — ยังไม่มีเลข = ยังไม่ได้บันทึกรับเงิน) */
-          const locked = k.needsPaid && !o.receiptNo;
+          const why = soDocBlockReason(o, code);
           const tail = (k.showPrice === false || k.label ? ' <span class="unit">(ไม่มีราคา)</span>' : '') +
             (code === 'parcel' ? ' <span class="unit">100×150 มม.</span>' : '') +
-            (locked ? ' <span class="unit">— รอบันทึกรับเงินก่อน</span>' : '');
-          return locked
-            ? '<button class="btn btn-ghost btn-sm" disabled title="ใบนี้เป็นหลักฐานว่าได้รับเงินแล้ว ต้องบันทึกรับชำระที่การ์ดสถานะก่อนจึงจะพิมพ์ได้">' +
+            (why ? ' <span class="unit">— ' + esc(why) + '</span>' : '');
+          return why
+            ? '<button class="btn btn-ghost btn-sm" disabled title="' + esc(why) +
+              ' — เอกสารชนิดนี้ออกเลขที่ของตัวเองตามขั้นงาน พิมพ์ก่อนถึงขั้นนั้นจะไม่มีเลขอ้างอิง">' +
               esc(k.title) + tail + '</button>'
             : '<button class="btn btn-ghost btn-sm" onclick="closeSoPrintMenu();printSaleDoc(SOD_DATA,\''+code+'\')">' +
               esc(k.title) + tail + '</button>';
@@ -3975,8 +3976,15 @@ const SO_DOC_KINDS = {
      จึงพิมพ์หัวเป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี" และโชว์ทั้งเลขใบเสร็จและเลขใบกำกับภาษีบนใบเดียว
      ★★ สองเลขนี้ออกคนละจังหวะ (ใบกำกับภาษีตอนส่งมอบของ · ใบเสร็จตอนได้เงิน) จึงต้องโชว์แยกบรรทัด
         ไม่ใช่ยุบเป็นเลขเดียว — ขายเชื่อจะมีใบกำกับภาษีก่อนใบเสร็จเป็นเดือน */
-  receipt:     { title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี (Receipt / Tax Invoice)', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'],
-                 showPrice: true, showBank: false, noField: 'receiptNo', withTaxNo: true, needsPaid: true },
+  /* ★ ใบเสร็จกับใบกำกับภาษีแยกเป็นคนละใบแล้ว (เจ้าของระบบสั่ง 8 ต.ค. 2026) — ใบเสร็จเดี่ยวจึง
+     **ไม่โชว์เลขใบกำกับภาษี** เหลือเลขใบเสร็จ + อ้างอิงใบสั่งขาย · ใบรวมที่ยังมีอยู่ (receipttaxdlv)
+     ยังโชว์ทั้งสองเลขตามเดิม เพราะมันคือเอกสารที่ทำหน้าที่ทั้งสองอย่างจริงๆ บนแผ่นเดียว */
+  receipt:     { title: 'ใบเสร็จรับเงิน (Receipt)', signers: ['ผู้รับเงิน','ผู้จ่ายเงิน'],
+                 showPrice: true, showBank: false, noField: 'receiptNo', needsPaid: true },
+  /* ใบแจ้งหนี้แบบใบเดี่ยว — เดิมมีแต่แบบรวมกับใบส่งสินค้า · เลขมาจากใบแจ้งหนี้ลูกหนี้ (INV ตัวนับกลาง)
+     ที่ระบบตั้งให้อัตโนมัติตอนเข้าสถานะ "พร้อมจัดส่ง" */
+  invoice:     { title: 'ใบแจ้งหนี้ (Invoice)', signers: ['ผู้วางบิล','ผู้รับวางบิล'],
+                 showPrice: true, showBank: true, noField: 'arInvoiceNo' },
   receiptdlv:  { title: 'ใบเสร็จรับเงิน / ใบส่งสินค้า (Receipt / Delivery Note)', signers: ['ผู้ส่งของ','ผู้รับสินค้า / ผู้จ่ายเงิน'],
                  showPrice: true, showBank: true, noField: 'receiptNo', needsPaid: true },
   /* ★ สามแบบนี้เพิ่ม 7 ต.ค. 2026 — ของจริงรวมหน้าที่หลายอย่างไว้ในแผ่นเดียวตามรูปแบบการขาย
@@ -4005,15 +4013,42 @@ const SO_DOC_KINDS = {
 
    เรียงตามลำดับที่เอกสารถูกใช้จริงตลอดสายงาน และเอกสารที่ไม่มีราคาอยู่ติดกัน
    จะได้ไม่หยิบใบที่มีราคาติดไปกับของโดยพลาด */
+/* ══ เอกสารชนิดไหนพิมพ์ได้ตั้งแต่สถานะไหน (เจ้าของระบบกำหนด 8 ต.ค. 2026) ══
+   ★★ กติกาเดียวครอบทุกกรณี: พิมพ์ได้เมื่อ **บิลถึงขั้นที่กำหนดแล้ว** หรือ **เอกสารนั้นมีเลขแล้ว**
+     ข้อหลังทำให้ใบที่ยกเลิก/ปฏิเสธ/ถอยขั้น ยังพิมพ์ซ้ำของที่เคยออกไปแล้วได้เสมอ (เจ้าของระบบยืนยัน:
+     ไม่ออกเลขใหม่ แค่พิมพ์ซ้ำ) และขายสดจากรถซึ่งกระโดดไป completed ทันทีก็ผ่านทุกข้อโดยไม่ต้องยกเว้น
+   ★ ไม่ซ่อนปุ่มที่ยังไม่ถึงเวลา — ทำเป็นปุ่มเทาพร้อมบอกว่าต้องทำอะไรก่อน (หลักเดียวกับใบเสร็จ)
+     ซ่อนแล้วแอดมินจะไม่รู้ว่ามีใบนี้อยู่ในระบบ */
+const SO_FLOW = ['draft', 'confirmed', 'accepted', 'ready_to_ship', 'delivering', 'completed'];
+const SO_DOC_MIN = {
+  salesorder: 'confirmed',
+  picking: 'accepted', delivery: 'accepted', parcel: 'accepted', receiptdlv: 'accepted',
+  deliveryinv: 'ready_to_ship', invoice: 'ready_to_ship', taxinvoice: 'ready_to_ship',
+  receipt: 'confirmed', receipttaxdlv: 'accepted'          // สองใบนี้ล็อกด้วย needsPaid อีกชั้นอยู่แล้ว
+};
+/* คืน '' ถ้าพิมพ์ได้ · คืนข้อความเหตุผลถ้ายังไม่ถึงเวลา */
+function soDocBlockReason(o, code){
+  const k = SO_DOC_KINDS[code] || {};
+  if (k.noField && String(o[k.noField] || '').trim()) return '';   // มีเลขแล้ว = เคยออกไปแล้ว พิมพ์ซ้ำได้เสมอ
+  if (k.needsPaid && !o.receiptNo) return 'ต้องบันทึกรับชำระก่อน';
+  const need = SO_DOC_MIN[code];
+  if (!need) return '';
+  const at = SO_FLOW.indexOf(soStatusKey(o.status)), want = SO_FLOW.indexOf(need);
+  /* ★ ยกเลิก/ปฏิเสธ ไม่ได้อยู่ในสายงาน จึงเทียบขั้นไม่ได้ — ใบที่เคยออกเลขแล้วถูกปล่อยผ่านไปตั้งแต่
+     บรรทัดแรกของฟังก์ชัน ที่ตกมาถึงตรงนี้คือใบที่ "ไม่เคยออกเลขนี้เลย" จึงไม่มีอะไรให้พิมพ์ซ้ำ
+     (ใบสั่งขายเป็นข้อยกเว้น — ใช้เลขบิลซึ่งมีอยู่แล้ว และบิลที่ยกเลิกต้องพิมพ์ได้พร้อมลายน้ำ "ยกเลิก") */
+  if (at === -1) return code === 'salesorder' ? '' : 'ใบนี้ไม่เคยออกเอกสารนี้';
+  return at >= want ? '' : 'ต้อง' + (SO_LABELS[need] || need) + 'ก่อน';
+}
 const SO_DOC_MENUS = {
   // ขายเชื่อ ส่งจากสำนักงาน — ใบแจ้งหนี้ไปกับของ แล้วค่อยออกใบเสร็จตอนเก็บเงินได้
-  credit_office: ['salesorder', 'picking', 'delivery', 'deliveryinv', 'receipt', 'parcel'],
+  credit_office: ['salesorder', 'picking', 'delivery', 'deliveryinv', 'invoice', 'taxinvoice', 'receipt', 'parcel'],
   // ขายสด ส่งจากสำนักงาน — เก็บเงินพร้อมส่งของ จึงรวมใบเสร็จ+ใบกำกับภาษี+ใบส่งสินค้าเป็นแผ่นเดียว
-  cash_office:   ['salesorder', 'picking', 'delivery', 'receipttaxdlv', 'parcel'],
+  cash_office:   ['salesorder', 'picking', 'delivery', 'receipttaxdlv', 'taxinvoice', 'receipt', 'parcel'],
   /* ขายจากรถ — ไม่มีใบจัดของ/ใบปะหน้าพัสดุ เพราะไม่ได้หยิบของจากคลังและไม่ได้ส่งผ่านขนส่ง
      พนักงานยกของลงจากรถให้ลูกค้าตรงนั้น */
-  credit_van:    ['salesorder', 'deliveryinv', 'receipt'],
-  cash_van:      ['salesorder', 'receiptdlv', 'taxinvoice']
+  credit_van:    ['salesorder', 'deliveryinv', 'invoice', 'taxinvoice', 'receipt'],
+  cash_van:      ['salesorder', 'receiptdlv', 'taxinvoice', 'receipt']
 };
 function soDocMenuKey(o){
   const credit = String((o && o.paymentMethod) || '').toLowerCase().indexOf('credit') === 0;
