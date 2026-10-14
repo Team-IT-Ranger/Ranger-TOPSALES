@@ -268,6 +268,10 @@ function getSaleDetail(user, payload) {
       // ศูนย์แก้ไขรายการในใบนี้หลังรับงาน (editSalesOrderAdmin) — มือถือแจ้งพนักงานให้ตรวจกับลูกค้า
       centerEditedAt: safeDateStr(order.center_edited_at), centerEditedBy: order.center_edited_by || '',
       deliveryOrderNo: order.delivery_order_no || '',
+      /* ★ ใบที่ของไม่พอ ศูนย์แยกส่งเป็นรอบ (48_delivery_rounds.gs) — พนักงานขายต้องรู้ด้วย
+         ไม่งั้นเขาเห็นสถานะ "ถอยกลับ" จากกำลังจัดส่ง → รับงานเตรียมการจัดส่ง แล้วโทรถามศูนย์ว่าเกิดอะไรขึ้น
+         (อ่านจากคอลัมน์บนแถวบิลที่อ่านมาแล้ว ไม่มีการอ่านชีตเพิ่มสักครั้ง) */
+      shipRoundNo: parseInt(order.ship_round_no) || 0,
       customerAddress: cust ? (cust.address || '') : '',   // พิมพ์ลงใบที่ให้ลูกค้าถือไว้
       statusLabel: SO_STATUS_LABELS[_soStatusOf(order)] || '',
       canConfirm: _soStatusOf(order) === SO_DRAFT,

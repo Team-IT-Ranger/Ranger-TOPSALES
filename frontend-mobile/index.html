@@ -712,6 +712,9 @@ function renderSaleDetail(r){
     '<div class="card stack">' +
       '<div class="row"><b>' + esc(showCode(o.code)) + '</b><span class="note">' + esc(o.createdAt) + '</span></div>' +
       (o.statusLabel ? '<div class="row"><span>สถานะ</span><b>' + esc(o.statusLabel) + '</b></div>' : '') +
+      /* ★ ใบที่ศูนย์แยกส่งหลายรอบ (ของไม่พอส่งทีเดียว) — ถ้าไม่บอก พนักงานจะเห็นสถานะเหมือนถอยกลับ
+         ยอดบิลไม่เปลี่ยนเลย จึงบอกไว้ด้วยกันลูกค้าถามแล้วตอบไม่ได้ */
+      (o.shipRoundNo > 1 ? '<div class="row"><span>การจัดส่ง</span><b style="color:#C2410C">ส่งแล้วบางส่วน · กำลังเตรียมรอบที่ ' + o.shipRoundNo + '</b></div>' : '') +
       /* สองบรรทัดนี้มีไว้ให้ลูกค้าถือเป็นหลักฐาน: ของจะมาวันไหน และส่งไปที่ไหน */
       (o.requestedDeliveryDate ? '<div class="row"><span>นัดส่งโดยประมาณ</span><b>' + esc(o.requestedDeliveryDate) + '</b></div>' : '') +
       (o.customerAddress ? '<div class="row"><span>ที่อยู่จัดส่ง</span><span style="text-align:right">' + esc(o.customerAddress) + '</span></div>' : '') +
