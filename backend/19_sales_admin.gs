@@ -44,6 +44,8 @@ function listSalesOrdersAdmin(session, payload) {
       // ซึ่งอ่านไม่ออก จึงแปลงเป็นชื่อด้วย _saleByLabel() ตัวเดียวกับที่รายงานการขายใช้ (41_sales_reports.gs)
       saleBy: o.sale_by, saleByName: _saleByLabel(o.sale_by),
       deliveryOrderNo: o.delivery_order_no || '',
+      // ★ รอบจัดส่ง/ของค้างส่ง (14 ต.ค. 2026) — อ่านจากคอลัมน์บอกใบ้บนแถวบิล ไม่ได้เปิดตารางรอบ (48_delivery_rounds.gs)
+      shipRoundNo: parseInt(o.ship_round_no) || 0, backorderLines: parseInt(o.backorder_lines) || 0,
       /* ★ ส่งขั้นถัดไปมากับรายการด้วย เพื่อให้กระดานลากการ์ด (dragboard.js) รู้ว่าลากไปไหนได้บ้าง
          **โดยไม่ต้องก๊อป SO_TRANSITIONS ไปไว้ในหน้าเว็บ** — ตารางสถานะมีที่เดียวคือ 34_sales_status.gs
          ก๊อปไปแล้ววันหนึ่งสองฝั่งจะไม่ตรงกัน แล้วผู้ใช้จะลากได้แต่โดนปฏิเสธ หรือลากไม่ได้ทั้งที่ควรได้
@@ -75,6 +77,7 @@ function getSalesOrderAdmin(session, payload) {
   var items = tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
     .map(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
       var lineTotal = parseFloat(it.line_total) || 0; return {
+      itemId: it.record_id,
       productId: it.product_id, productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)',
       unitCode: it.unit_code, unitFactor: it.unit_factor, qty: parseFloat(it.qty) || 0, baseQty: parseFloat(it.base_qty) || 0,
       price: parseFloat(it.price) || 0, lineTotal: lineTotal, isFree: String(it.is_free) === '1',
@@ -91,6 +94,23 @@ function getSalesOrderAdmin(session, payload) {
   items.forEach(function(it) { preDiscountExVat += it.taxStatus === TAX_VAT ? it.lineTotal / (1 + orderVat.rate) : it.lineTotal; });
   preDiscountExVat = _round2(preDiscountExVat);
   var billDiscountExVat = _round2(preDiscountExVat - orderVat.exVat);
+
+  /* ★ รอบจัดส่ง · ของค้างส่ง (14 ต.ค. 2026 — 48_delivery_rounds.gs)
+     ★★ บิลที่ไม่เคยแยกรอบ (เกือบทุกใบ) `saleOrderHasRounds` เป็น false → ไม่อ่านตารางรอบเลย
+       การเปิดดูบิลจึงไม่ช้าลงแม้แต่มิลลิวินาที · ของคงเหลือในคลังเป็นอีก action ที่หน้าเว็บยิงขนานกัน
+       (getSaleDeliveryPlan) เพราะ warehouse_stock/stock_reservations แคชไม่ได้ */
+  var shippedAnyRound = false;
+  if (saleOrderHasRounds(order)) {
+    var dplan = saleDeliveryPlan(tenantId, order);
+    var dmap = {};
+    dplan.lines.forEach(function(l) { dmap[String(l.itemId)] = l; });
+    items.forEach(function(it) {
+      var dl = dmap[String(it.itemId)];
+      if (!dl) return;
+      it.shippedQty = dl.shipped; it.roundQty = dl.round; it.outstandingQty = dl.outstanding;
+    });
+    shippedAnyRound = dplan.lines.some(function(l) { return l.shipped > 0.0001; });
+  }
 
   var cust = customers[String(order.customer_id)];
   var status = String(order.status || '');
@@ -129,7 +149,12 @@ function getSalesOrderAdmin(session, payload) {
          ข้ามการอ่านทั้งชีต ar_invoices ไปเลย ซึ่งเป็นกรณีของบิลใหม่ทุกใบ (ที่คนเปิดดูบ่อยที่สุด) */
       arInvoiceNo: _soReachedReady(order.status) ? _arInvoiceNoOf(tenantId, order.record_id) : '',
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
-      canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && hasPermission(session, 'sales', 'edit')
+      /* รอบจัดส่ง: ว่าง/0 = ใบนี้ส่งรอบเดียวทั้งใบตามปกติ (หน้าเว็บไม่ต้องแสดงอะไรเพิ่ม) */
+      shipRoundNo: parseInt(order.ship_round_no) || 0, backorderLines: parseInt(order.backorder_lines) || 0,
+      shippedAnyRound: shippedAnyRound,
+      canSplitDelivery: status === SO_ACCEPTED && String(order.fulfillment_type) !== 'immediate' && hasPermission(session, 'sales', 'edit'),
+      // ★ ส่งของไปแล้วบางส่วน = แก้รายการไม่ได้ (บรรทัดบิลถูกสร้างใหม่ทั้งชุด id จะไม่ตรงกับรอบที่ส่งไปแล้ว)
+      canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && !shippedAnyRound && hasPermission(session, 'sales', 'edit')
     },
     issuer: _docIssuer(session, tenantId),
     statusLog: orderStatusLog(tenantId, order.record_id),

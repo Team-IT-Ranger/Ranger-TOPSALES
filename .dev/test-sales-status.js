@@ -70,7 +70,8 @@ const ctx = {
     const hdr = ['record_id','order_code','customer_id','total','payment_method','fulfillment_type','status',
       'payment_status','paid_amount','delivered_at','paid_at','updated_at','updated_by','sale_by','created_at',
       'requested_delivery_date','center_edited_at','center_edited_by','delivery_order_no','delivery_order_at',
-      'picking_no','picking_at','receipt_no','receipt_at','tax_invoice_no','tax_invoice_at'];
+      'picking_no','picking_at','receipt_no','receipt_at','tax_invoice_no','tax_invoice_at',
+      'ship_round_no','backorder_lines'];
     const values = [hdr].concat(rows.map(r => hdr.map(h => (r[h] === undefined ? '' : r[h]))));
     return { getDataRange: () => ({ getValues: () => values }),
       getRange: (row, col) => ({ setValue: v => { rows[row - 2][hdr[col - 1]] = v; } }) };
@@ -91,7 +92,11 @@ const ctx = {
   // จำลอง 26_roles.gs::_adminRoleLabel (ไม่โหลดทั้งไฟล์ — ไฟล์นี้ต้องมีแค่ _withDocLock กับ 34_sales_status.gs เอง)
   _adminRoleLabel: session => 'แอดมิน (' + (session && session.role_code || '') + ')',
   centralObjects: name => (name === 'products'
-    ? [{ record_id: 101, name: 'น้ำยาล้างจาน' }, { record_id: 102, name: 'ผงซักฟอก' }] : []),
+    ? [{ record_id: 101, name: 'น้ำยาล้างจาน' }, { record_id: 102, name: 'ผงซักฟอก' },
+       { record_id: 301, name: 'สเปรย์กันยุง', product_code: 'P301', unit: 'ชิ้น' },
+       { record_id: 302, name: 'กาวดักแมลง', product_code: 'P302', unit: 'ชิ้น' }]
+    : name === 'warehouses' ? [{ record_id: 'W1', name: 'คลังกลาง' }] : []),
+  hasPermission: () => true,
   // stock_reservations เป็นตารางกลาง (เหมือน warehouse_stock) เก็บใน WH ก้อนเดียวกัน — mock centralAppend/centralNextId/
   // centralSheet ให้เขียนลง WH ตรงๆ (แบบเดียวกับ tenantAppend/tenantNextId/tenantSheet ด้านบนที่เขียนลง t)
   centralNextId: name => { WH[name] = WH[name] || []; return WH[name].reduce((m, o) => Math.max(m, parseInt(o.record_id) || 0), 0) + 1; },
@@ -105,7 +110,7 @@ const ctx = {
   }
 };
 vm.createContext(ctx);
-['20_purchasing_master.gs', '34_sales_status.gs'].forEach(f => {
+['20_purchasing_master.gs', '34_sales_status.gs', '48_delivery_rounds.gs'].forEach(f => {
   const src = B(f);
   // 20_purchasing_master มี _withDocLock ที่เราต้องใช้ — โหลดเฉพาะฟังก์ชันนั้นพอ
   if (f === '20_purchasing_master.gs') {
@@ -551,6 +556,121 @@ console.log('\n── กดพิมพ์แล้วออกเลขย้�
 
   eq('บิลที่ไม่มีอยู่จริง → ตอบไม่สำเร็จ', ctx.ensureSaleDocNo(S, { id: 9999, kinds: ['picking'] }).success, false);
   eq('ไม่ระบุชนิดเอกสาร → ตอบไม่สำเร็จ', ctx.ensureSaleDocNo(S, { id: 70 }).success, false);
+}
+
+/* ══════════ รอบจัดส่ง · ของค้างส่ง (48_delivery_rounds.gs · 14 ต.ค. 2026) ══════════
+   โจทย์จริงจากแอดมินศูนย์: ของไม่พอส่งทั้งใบ ต้องส่งเท่าที่มี แล้วส่งที่เหลือภายหลัง
+   โดย **ยอดบิลต้องไม่ขยับ** (ตัดรายการออก = ยอดไม่ถึงขั้นส่วนลดท้ายบิล ลูกค้าเสียส่วนลด) */
+console.log('\n══ รอบจัดส่ง · ของค้างส่ง ══');
+{
+  WH.warehouse_stock.push({ tenant_id: 'T1', warehouse_id: 'W1', product_id: '301', qty: 60, avg_cost: 10 });
+  WH.warehouse_stock.push({ tenant_id: 'T1', warehouse_id: 'W1', product_id: '302', qty: 60, avg_cost: 20 });
+  // บิล 10 ลัง (×12 = 120 ชิ้น) + 5 ลัง (×6 = 30 ชิ้น) · ของในคลังพอแค่ครึ่งแรก
+  t.sales_orders.push({ record_id: 80, order_code: 'SO-80', customer_id: 1, total: 15000,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'pending_delivery',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-10-14 09:00:00' });
+  t.order_items.push({ record_id: 8001, order_id: 80, product_id: '301', unit_code: 'CT', unit_factor: 12, qty: 10, base_qty: 120, is_free: 0 });
+  t.order_items.push({ record_id: 8002, order_id: 80, product_id: '302', unit_code: 'CT', unit_factor: 6, qty: 5, base_qty: 30, is_free: 0 });
+
+  r = ctx.updateSalesOrderStatus(S, { id: 80, status: 'accepted' });
+  eq('รับงาน: ออกใบจัดของ/ใบส่งสินค้า + กันของไว้ทั้งใบ',
+    [r.success, /^PICK-/.test(row(80).picking_no), resOf(80).sort()], [true, true, [['301', 120], ['302', 30]]]);
+  const pick1 = row(80).picking_no, do1 = row(80).delivery_order_no;
+
+  console.log('  -- ข้อ 2: ยอดคงเหลือในคลังต้องเห็นได้จากในบิล --');
+  let dp = ctx.getSaleDeliveryPlan(S, { id: 80 });
+  eq('getSaleDeliveryPlan บอก: สั่ง · ของในคลัง · ที่คนอื่นจองไว้ · ส่งได้กี่ลัง · ขาดอีกกี่ชิ้น',
+    dp.lines.map(l => [l.productId, l.ordered, l.onHand, l.reservedOther, l.canShip, l.shortBase]),
+    [['301', 10, 60, 0, 5, 60], ['302', 5, 60, 0, 10, 0]]);
+  eq('  ★ "ขายได้จริง" ไม่หักยอดที่ระบบกันไว้ให้ใบนี้เอง (ไม่งั้นอ่านว่าขายไม่ได้ทั้งที่ของกันไว้ให้ใบนี้)',
+    [dp.lines[0].reservedMine, dp.lines[0].available, dp.lines[0].canShip], [120, 60, 5]);
+  eq('  ยังไม่เคยแยกรอบ → ไม่มีตารางรอบ แต่แยกได้ (อยู่ขั้นรับงาน)', [dp.hasRounds, dp.rounds.length, dp.canSplit], [false, 0, true]);
+
+  console.log('  -- ข้อ 1: แยกของค้างส่ง --');
+  fails('ส่งเกินที่สั่งไว้ไม่ได้', ctx.saveDeliveryRound(S, { id: 80, lines: [{ itemId: 8001, qty: 11 }] }), /ส่งเกินที่สั่ง/);
+  fails('จำนวนติดลบไม่ได้', ctx.saveDeliveryRound(S, { id: 80, lines: [{ itemId: 8001, qty: -1 }] }), /ไม่ติดลบ/);
+  fails('ไม่มีของจะส่งเลย = ไม่ใช่การแยกรอบ', ctx.saveDeliveryRound(S, { id: 80, lines: [{ itemId: 8001, qty: 0 }] }), /อย่างน้อย 1 รายการ/);
+  eq('ส่งครบทั้งใบ = ไม่มีของค้าง → ไม่สร้างแถวรอบเลย (บิลเดินทางเดิม)',
+    [ctx.saveDeliveryRound(S, { id: 80, lines: [{ itemId: 8001, qty: 10 }, { itemId: 8002, qty: 5 }] }).noSplitNeeded,
+     (t.delivery_rounds || []).length], [true, 0]);
+
+  let sp = ctx.saveDeliveryRound(S, { id: 80, lines: [{ itemId: 8001, qty: 5 }, { itemId: 8002, qty: 5 }] });
+  eq('แยกรอบ 1 = ส่ง 301×5 + 302×5 · ค้าง 301×5',
+    [sp.success, sp.roundNo, sp.shortLines, row(80).ship_round_no, row(80).backorder_lines], [true, 1, 1, 1, 1]);
+  eq('  ★ รอบ 1 ใช้เลขใบจัดของ/ใบส่งสินค้าที่ออกไว้แล้วตอนรับงาน (อาจพิมพ์ไปแล้ว ห้ามเปลี่ยน)',
+    [sp.pickingNo, sp.deliveryOrderNo], [pick1, do1]);
+  eq('  ★★ ยอดบิลไม่ขยับแม้แต่บาทเดียว (หัวใจของงานนี้)', [row(80).total, row(80).subtotal], [15000, undefined]);
+  eq('  ประวัติบันทึกว่าแยกรอบอะไรไว้', /แยกรอบจัดส่งที่ 1.*ค้างส่ง/.test(logs(80).pop().note), true);
+
+  sp = ctx.saveDeliveryRound(S, { id: 80, lines: [{ itemId: 8001, qty: 5 }, { itemId: 8002, qty: 5 }] });
+  eq('กดแยกอีกครั้ง = แก้รอบเดิม ไม่เปิดรอบใหม่ และไม่ออกเลขเอกสารใหม่',
+    [sp.roundNo, (t.delivery_rounds || []).length, sp.pickingNo], [1, 1, pick1]);
+
+  console.log('  -- พร้อมจัดส่ง: ตัดสต็อก "เฉพาะของรอบนี้" --');
+  const nDoc = ctx.docNoCalls;
+  r = ctx.updateSalesOrderStatus(S, { id: 80, status: 'ready_to_ship' });
+  eq('ตัดเฉพาะของรอบ 1 (301: 5×12=60 · 302: 5×6=30) ไม่ใช่ทั้งใบ',
+    [r.success, whQty(301), whQty(302)], [true, 0, 30]);
+  eq('  ★ ของที่ยังค้างส่งยังถูกกันไว้ให้บิลนี้ (301 อีก 5 ลัง = 60 ชิ้น) ส่วนที่ตัดไปแล้วไม่กันซ้ำ',
+    resOf(80), [['301', 60]]);
+  eq('  ออกใบกำกับภาษี (ภาระภาษีเกิดตอนส่งมอบ) + ตั้งลูกหนี้ ครั้งเดียวของทั้งบิล',
+    [/^TAX-IV-/.test(row(80).tax_invoice_no), ctx.arCalls.filter(a => String(a.salesOrderId) === '80').length], [true, 1]);
+  eq('  ใบจัดของ/ใบส่งสินค้าไม่ออกเลขใหม่ (ออกไปแล้วตอนรับงาน) — กินตัวนับแค่ใบกำกับภาษี 1 ใบ', ctx.docNoCalls - nDoc, 1);
+
+  console.log('  -- กด "จัดส่งสำเร็จ" ขณะที่ยังมีของค้าง = ปิดรอบ 1 เปิดรอบ 2 (ไม่ปิดบิล) --');
+  ctx.updateSalesOrderStatus(S, { id: 80, status: 'delivering' });
+  const nDoc2 = ctx.docNoCalls;
+  r = ctx.updateSalesOrderStatus(S, { id: 80, status: 'completed' });
+  eq('บิลกลับไปขั้น "รับงานเตรียมการจัดส่ง" แทนที่จะปิดใบ · ไม่มีสถานะใหม่ในระบบ',
+    [r.success, row(80).status, r.status], [true, 'accepted', 'accepted']);
+  eq('  ★ ของที่ส่งไปแล้วไม่งอกคืนเข้าคลัง (ถึงมือลูกค้าแล้ว)', [whQty(301), whQty(302)], [0, 30]);
+  eq('  รอบ 1 ปิดเป็น "ส่งสำเร็จ" · รอบ 2 เปิดขึ้นใหม่พร้อมเลข PICK/DO ของตัวเอง',
+    [t.delivery_rounds.map(x => [x.round_no, x.status]), ctx.docNoCalls - nDoc2,
+     t.delivery_rounds[1].picking_no !== pick1, t.delivery_rounds[1].delivery_order_no !== do1],
+    [[[1, 'shipped'], [2, 'open']], 2, true, true]);
+  eq('  แถวบิลชี้ไปที่เลขของรอบปัจจุบัน (รอบ 2) — เลขของรอบ 1 ยังอยู่ที่แถวรอบ ไม่หายไปไหน',
+    [row(80).picking_no, row(80).delivery_order_no, row(80).ship_round_no],
+    [t.delivery_rounds[1].picking_no, t.delivery_rounds[1].delivery_order_no, 2]);
+  eq('  ยังไม่ลงวันที่ส่งของ (บิลยังไม่จบ)', !row(80).delivered_at, true);
+  eq('  ประวัติเห็นชัดว่าเกิดอะไร', /ปิดรอบที่ 1.*เปิดรอบที่ 2/.test(r.message), true);
+
+  dp = ctx.getSaleDeliveryPlan(S, { id: 80 });
+  eq('แผนจัดส่งหลังปิดรอบ: 301 ส่งแล้ว 5 · รอบนี้อีก 5 · 302 ส่งครบแล้ว',
+    dp.lines.map(l => [l.productId, l.ordered, l.shipped, l.round, l.outstanding]),
+    [['301', 10, 5, 5, 0], ['302', 5, 5, 0, 0]]);
+  eq('  ของค้างส่งถูกจัดเข้ารอบ 2 หมดแล้ว → ไม่มีของที่ "ไม่มีกำหนดส่ง" เหลือ',
+    [row(80).backorder_lines, dp.shortLines, dp.unshippedLines, dp.currentRoundNo], [0, 0, 1, 2]);
+  eq('  ★ ใบกำกับภาษี/ใบแจ้งหนี้ไม่ออกใหม่ตามรอบ (ใบเดียวของทั้งบิล)', ctx.arCalls.filter(a => String(a.salesOrderId) === '80').length, 1);
+
+  console.log('  -- รอบ 2: ของเข้าคลังแล้ว ส่งจนครบ → บิลปิด --');
+  fails('★ ส่งของไปแล้วบางส่วน แก้รายการบิลไม่ได้ (บรรทัดถูกสร้างใหม่ id จะไม่ตรงกับของที่ส่งไปแล้ว)',
+    ctx.editSalesOrderAdmin(S, { id: 80, items: [{ productId: '301', unitCode: 'CT', qty: 1 }] }), /ส่งของไปแล้วบางส่วน/);
+  WH.warehouse_stock.find(x => String(x.product_id) === '301').qty = 60;   // ของเข้าคลังแล้ว
+  ctx.updateSalesOrderStatus(S, { id: 80, status: 'ready_to_ship' });
+  eq('ตัดของรอบ 2 (60 ชิ้น) · ไม่เหลือยอดกันของแล้ว', [whQty(301), resOf(80).length], [0, 0]);
+  r = ctx.updateSalesOrderStatus(S, { id: 80, status: 'delivering' });
+  r = ctx.updateSalesOrderStatus(S, { id: 80, status: 'completed' });
+  eq('ส่งครบแล้ว → บิลปิดจริง · ลงวันที่ส่ง · ปิดรอบสุดท้าย',
+    [row(80).status, !!row(80).delivered_at, t.delivery_rounds.map(x => x.status)],
+    ['completed', true, ['shipped', 'shipped']]);
+
+  console.log('  -- ขอบรั้ว --');
+  fails('บิลขายจากรถ แยกรอบไม่ได้', ctx.saveDeliveryRound(S, { id: 2, lines: [{ itemId: 1, qty: 1 }] }), /ขายจากรถ/);
+  fails('ใบที่ปิดแล้ว แยกรอบไม่ได้ (ต้องย้อนขั้นกลับมาก่อน)', ctx.saveDeliveryRound(S, { id: 80, lines: [{ itemId: 8001, qty: 1 }] }), /ย้อนขั้น/);
+  eq('บิลขายจากรถ: ไม่มีคลังกลางให้ดู → applicable:false ไม่ต้องวาดการ์ดอะไร',
+    ctx.getSaleDeliveryPlan(S, { id: 2 }).applicable, false);
+
+  console.log('  -- ★ ยอดจองต้องไม่ถูกกันซ้ำสองชุด (บั๊กของเดิม) --');
+  t.sales_orders.push({ record_id: 81, order_code: 'SO-81', customer_id: 1, total: 100,
+    payment_method: 'cash', fulfillment_type: 'office_delivery', status: 'pending_delivery',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-10-14 10:00:00' });
+  t.order_items.push({ record_id: 8003, order_id: 81, product_id: '302', unit_code: 'CT', unit_factor: 6, qty: 2, base_qty: 12, is_free: 0 });
+  ctx.reserveStockForSale('T1', 'W1', { '302': 12 }, 61);      // recordSaleAdmin จองไว้ตั้งแต่เปิดบิล
+  ctx.updateSalesOrderStatus(S, { id: 81, status: 'accepted' });
+  eq('เปิดบิลแล้วจองไว้อยู่แล้ว → กดรับงานต้องไม่จองซ้ำอีกชุด (ของเดิมกันไว้ 2 เท่า "ขายได้จริง" ติดลบทั้งที่ของครบ)',
+    resOf(81), [['302', 12]]);
+  ctx.updateSalesOrderStatus(S, { id: 81, status: 'confirmed' });
+  eq('ถอยกลับไปยืนยันแล้ว ยังกันของไว้เท่าเดิม (ยังเป็นคำมั่นกับลูกค้า)', resOf(81), [['302', 12]]);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

@@ -22,6 +22,13 @@ var TENANT_SHEET_TABS = {
     'picking_no', 'picking_at', 'receipt_no', 'receipt_at', 'tax_invoice_no', 'tax_invoice_at',
     // ธง "ศูนย์แก้ไขรายการในใบนี้แล้ว" (3 ต.ค. 2026 — editSalesOrderAdmin, 34_sales_status.gs) ให้มือถือบอกพนักงาน
     'center_edited_at', 'center_edited_by',
+    /* ★ รอบจัดส่ง (14 ต.ค. 2026 — ดู 48_delivery_rounds.gs) สองคอลัมน์นี้เป็น "ตัวบอกใบ้" ให้ตาราง/กระดาน
+       ไม่ใช่ข้อมูลต้นฉบับ: ของจริงอยู่ใน delivery_rounds/delivery_round_items และคำนวณใหม่ได้เสมอ
+       ★★ มีไว้เพื่อให้ "รายการบิล" กับ "การเปิดดูบิล" ไม่ต้องอ่านตารางรอบเลยสำหรับบิลที่ไม่เคยแยกรอบ
+         (เกือบทุกใบในระบบ) — ว่าง = ใบนี้ส่งรอบเดียวทั้งใบตามปกติ
+       ship_round_no  = รอบที่กำลังเตรียมส่งอยู่ (1, 2, 3…)
+       backorder_lines = จำนวนบรรทัดที่ยัง "ไม่ได้อยู่ในรอบไหนเลย" = ของค้างส่งที่ยังไม่มีกำหนด */
+    'ship_round_no', 'backorder_lines',
     // ภาพนิ่งภาษี ณ วันที่ออกบิล — ห้ามคำนวณใหม่ตอนเปิดดู ไม่งั้นวันที่อัตราภาษีเปลี่ยน ใบเก่าทั้งหมดขยับตาม
     // และงบที่ปิดไปแล้วจะเคลื่อน · apply_vat: ใบนี้คิด VAT ไหม · vat_type: inclusive/exclusive ณ ตอนออก
     'apply_vat','vat_type','vat_rate','subtotal_ex_vat','vat_amount','exempt_amount'],
@@ -47,6 +54,15 @@ var TENANT_SHEET_TABS = {
   // changed_by/changed_by_role เก็บ "ชื่อและตำแหน่ง ณ เวลานั้น" ตรงๆ ในแถว (guide ข้อ 1.6) ไม่ใช่แค่รหัสอ้างอิง
   // เพราะคนเปลี่ยนชื่อได้ ย้ายแผนกได้ ลาออกได้ — หลักฐานประวัติต้องคงสภาพเดิมแม้ข้อมูลปัจจุบันของคนนั้นเปลี่ยนไปแล้ว
   order_status_log:    ['record_id','order_id','from_status','to_status','from_payment','to_payment','note','changed_by','changed_by_role','changed_at'],
+  /* ═══ รอบจัดส่ง (14 ต.ค. 2026) — ของไม่พอส่งทั้งใบในรอบเดียว ต้องแยกส่งภายหลังโดย "บิลคงสภาพเดิมทุกบาท"
+     ตัดรายการออกจากบิล = ยอดตกลงมาไม่ถึงขั้นส่วนลดท้ายบิล ลูกค้าเสียส่วนลดที่ตกลงกันไว้ (เหตุผลที่ต้องมีตารางนี้)
+     ★ เอกสารที่แยกตามรอบมีสองใบเท่านั้น: ใบจัดของ (PICK) · ใบส่งสินค้า (DO) — เก็บเลขไว้ที่แถวรอบ
+       ใบเสร็จ/ใบกำกับภาษี/ใบแจ้งหนี้ ยังเป็นใบเดียวของทั้งบิล (ภาระภาษีและหนี้เกิดครั้งเดียวตามบิล)
+     ★★ qty เป็น "หน่วยขาย" เหมือน order_items · base_qty คือหน่วยฐานที่จะตัดสต็อกจริง
+       item_id ชี้ไปที่ order_items.record_id — ใบที่แยกรอบไว้แล้ว **แก้รายการบิลไม่ได้**
+       (editSalesOrderAdmin ล้างรอบที่ยังไม่ส่งให้ก่อน เพราะบรรทัดบิลถูกสร้างใหม่ทั้งชุด id จะไม่ตรงกันอีก) ═══ */
+  delivery_rounds:     ['record_id','order_id','round_no','status','picking_no','picking_at','delivery_order_no','delivery_order_at','shipped_at','note','created_at','created_by','updated_at','updated_by'],
+  delivery_round_items:['record_id','round_id','order_id','item_id','product_id','unit_code','unit_factor','qty','base_qty'],
   doc_number_series:   ['record_id','doc_type','prefix','date_format','running_digits','reset_cycle','separator','is_active'],
   doc_number_counters: ['doc_type','period_key','last_number']
 };

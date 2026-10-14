@@ -89,6 +89,8 @@ var ADMIN_ACTION_MAP = {
   cancelSalesOrderAdmin:  cancelSalesOrderAdmin,
   ensureSaleDocNo:        ensureSaleDocNo,          // ออกเลขเอกสารย้อนหลังตอนกดพิมพ์ (34_sales_status.gs)
   updateSalesOrderStatus: updateSalesOrderStatus,   // เปลี่ยนสถานะส่งของ/การเงิน (34_sales_status.gs)
+  getSaleDeliveryPlan:    getSaleDeliveryPlan,      // แผนจัดส่ง + ของคงเหลือในคลัง (48_delivery_rounds.gs)
+  saveDeliveryRound:      saveDeliveryRound,        // แยกของค้างส่งออกเป็นรอบถัดไป (48_delivery_rounds.gs)
 
   listProductsAdmin:      listProductsAdmin,
   addProduct:             addProduct,

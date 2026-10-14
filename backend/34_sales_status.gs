@@ -75,13 +75,9 @@ var SO_MOBILE_CANCELLABLE = [SO_DRAFT, SO_CONFIRMED, SO_PENDING];
    รอตัดตอนรถออกวิ่ง = ระบบบอกว่ามีของทั้งที่ของนอนอยู่ในกล่อง แล้วจะมีคนมาขายซ้ำ (เหตุผลเดียวกับที่เคยย้ายมาที่ delivering)
    ไม่ต้องแก้ที่อื่นเลย — จุดตัดและจุดคืนของอ่านจาก saleStockTaken() ตัวเดียวกันทั้งคู่ */
 var SO_STOCK_TAKEN_STATUSES = [SO_READY, SO_DELIVERING, SO_COMPLETED];
-/* ช่วงที่ "กันของไว้ให้แล้วแต่ยังไม่ตัดจริง" — เจ้าของระบบสั่งให้จองตอนศูนย์รับงาน
-   ก่อนหน้านั้น (ร่าง/ยืนยัน) ยังไม่กันของ เพราะศูนย์ยังไม่ได้รับปากว่าจะขายให้ */
-var SO_RESERVED_STATUSES = [SO_ACCEPTED];
-function saleStockReserved(order) {
-  if (!order || String(order.fulfillment_type) === 'immediate') return false;
-  return SO_RESERVED_STATUSES.indexOf(_soStatusOf(order)) !== -1;
-}
+/* ยอดจอง (กันของไว้แต่ยังไม่ตัดจริง) ย้ายไปอยู่ที่ `DR_RESERVE_STATUSES` + `saleReserveBaseByProduct()`
+   ใน 48_delivery_rounds.gs — เพราะ "ควรกันไว้เท่าไร" ไม่ใช่คำถามแบบใช่/ไม่ใช่ตามสถานะอีกแล้ว
+   แต่เป็นจำนวน: ของที่สั่ง − ของที่ส่งไปแล้วในรอบก่อนๆ − ของที่รอบนี้ถูกตัดไปแล้ว */
 function saleStockTaken(order) {
   if (!order) return false;
   if (String(order.fulfillment_type) === 'immediate') return true;          // ตัดไปแล้วตั้งแต่บันทึกบิล
@@ -93,18 +89,6 @@ function _saleStockScope(tenantId) {
   return String(tenantId) === HOUSE_TENANT_ID ? '' : String(tenantId || '');
 }
 
-/** รวมจำนวนหน่วยฐานต่อสินค้าของบิลใบนี้ (รวมของแถม เพราะของแถมก็ออกจากคลังจริง) */
-function _saleBaseQtyByProduct(tenantId, orderId) {
-  var need = {};
-  tenantObjects(tenantId, 'order_items')
-    .filter(function(it) { return String(it.order_id) === String(orderId); })
-    .forEach(function(it) {
-      var pid = String(it.product_id);
-      need[pid] = (need[pid] || 0) + (parseFloat(it.base_qty) || 0);
-    });
-  return need;
-}
-
 /**
  * ขยับสต็อกคลังกลางของบิล office_delivery - dir = -1 ตัดออก - dir = +1 คืนเข้า
  * ของไม่พอ = ไม่ขยับอะไรเลยสักตัว (เช็คให้ครบก่อนค่อยเขียน ไม่ตัดครึ่งๆ กลางๆ แล้วค้างไว้แบบนั้น)
@@ -113,7 +97,10 @@ function _saleBaseQtyByProduct(tenantId, orderId) {
 function applySaleWarehouseStock(tenantId, order, dir, reason, userId) {
   var scope = _saleStockScope(tenantId);
   var warehouseId = _ensureScopeWarehouse(scope);
-  var need = _saleBaseQtyByProduct(tenantId, order.record_id);
+  /* ★ 14 ต.ค. 2026 — ตัด/คืน "ตามรอบจัดส่งปัจจุบัน" ไม่ใช่ทั้งใบ (48_delivery_rounds.gs)
+     บิลที่ไม่เคยแยกรอบ ตัวนี้คืนทั้งใบให้เหมือนเดิมเป๊ะ จึงไม่กระทบบิลใบไหนที่มีอยู่
+     ★★ ขาคืนต้องอ่านจากตัวเดียวกับขาตัดเสมอ — รอบที่เลยขั้นรับงานไปแล้วจึงห้ามแก้จำนวน (saveDeliveryRound กันไว้) */
+  var need = saleShipBaseByProduct(tenantId, order);
   var pids = Object.keys(need);
   if (!pids.length) return { success: true, moved: 0 };
 
@@ -314,37 +301,51 @@ function updateSalesOrderStatus(session, payload) {
         if (SO_TRANSITIONS[fromStatus].indexOf(toStatus) === -1) {
           return { success: false, message: 'เปลี่ยนจาก "' + SO_STATUS_LABELS[fromStatus] + '" เป็น "' + SO_STATUS_LABELS[toStatus] + '" ไม่ได้' };
         }
-        // ★ ขยับสต็อกเฉพาะตอนค่า "ของถูกตัดไปแล้ว" เปลี่ยน — ขั้นถัดไปจากจุดตัดจึงไม่ตัดซ้ำ
-        var wasTaken = saleStockTaken(order);
-        var willTake = saleStockTaken({ fulfillment_type: order.fulfillment_type, status: toStatus });
-        if (wasTaken !== willTake) {
-          var mv = applySaleWarehouseStock(tenantId, order, willTake ? -1 : 1,
-            'บิล ' + order.order_code + ' -> ' + SO_STATUS_LABELS[toStatus], session.adminUserId);
-          if (!mv.success) return mv;
-          changes.push(willTake ? 'ตัดสต็อกออกจากคลังแล้ว' : 'คืนของเข้าคลังแล้ว');
-          // ยอดจอง (guide ข้อ 1.3) เดินสวนทางกับสต็อกเสมอ: ตัดของจริงแล้ว = ปลดจอง (ไม่งั้นถูกนับซ้ำสองทาง)
-          // ถอยกลับมาไม่ถึงจุดตัด = ยังเป็นคำมั่นกับลูกค้าอยู่ ต้องจองกันของไว้ใหม่เหมือนตอนเปิดบิล (มีของพอเสมอ เพิ่งคืนเข้าคลังไปหมาดๆ)
-          if (willTake) releaseStockReservation(tenantId, order.record_id);
+        /* ★ ของในรอบนี้ยังไม่ได้ระบุเลย = เดินหน้าไปไม่ได้ (จะได้ใบจัดของเปล่าและไม่มีของออกจากคลัง)
+           เกิดได้เฉพาะใบที่แยกรอบไว้แล้ว — เช็คจากคอลัมน์บนแถวบิลก่อน ใบปกติจึงไม่จ่ายค่าอ่านตารางรอบ */
+        if (toStatus === SO_READY && saleOrderHasRounds(order)) {
+          var pReady = saleDeliveryPlan(tenantId, order);
+          if (!pReady.roundQty) return { success: false, message: 'รอบจัดส่งนี้ยังไม่ได้ระบุของที่จะส่ง — กด "แยกของค้างส่ง" เพื่อเลือกของที่จะส่งรอบนี้ก่อน' };
         }
-        /* ยอดจองเดินแยกจากการตัดจริง (1 ต.ค. 2026): จองตอน "ศูนย์รับงาน" ปลดตอนตัดของจริงหรือตอนถอยกลับ
-           เช็คหลังบล็อกตัดสต็อกเสมอ เพราะถ้าเพิ่งตัดของจริงไป reservation ถูกปลดไปแล้ว จะได้ไม่จองซ้ำ */
-        var wasRes = saleStockReserved(order);
-        var willRes = saleStockReserved({ fulfillment_type: order.fulfillment_type, status: toStatus });
-        if (wasRes !== willRes) {
-          if (willRes) {
-            var need2 = _saleBaseQtyByProduct(tenantId, order.record_id);
-            if (Object.keys(need2).length) {
-              reserveStockForSale(tenantId, _ensureScopeWarehouse(_saleStockScope(tenantId)), need2, order.record_id);
-              changes.push('กันของในคลังไว้ให้แล้ว');
-            }
-          } else {
-            releaseStockReservation(tenantId, order.record_id);
-            changes.push('ปลดของที่กันไว้');
+        /* ★★ "จัดส่งสำเร็จ" แต่ยังมีของค้างส่ง = **ปิดรอบนี้แล้วเปิดรอบถัดไป ไม่ใช่ปิดบิล** (14 ต.ค. 2026)
+           แอดมินกดปุ่มเดิมปุ่มเดียว ระบบตัดสินจากของที่ยังไม่ได้ส่งเอง — จึงไม่ต้องมีสถานะบิลใหม่
+           และของรอบที่ปิดแล้ว **ห้ามคืนเข้าคลัง** (ถึงมือลูกค้าไปแล้ว) ต้องข้ามบล็อกขยับสต็อกข้างล่างทั้งก้อน
+           เพราะปลายทางถูกเปลี่ยนเป็น accepted ซึ่งเป็นสถานะ "ยังไม่ตัดของ" ถ้าปล่อยให้เข้าบล็อกนั้นของจะงอกคืน */
+        var roll = (toStatus === SO_COMPLETED) ? saleDeliveryPlan(tenantId, order) : null;
+        if (roll && !(roll.currentRound && roll.shortLines)) roll = null;
+        if (roll) toStatus = SO_ACCEPTED;
+
+        if (!roll) {
+          // ★ ขยับสต็อกเฉพาะตอนค่า "ของถูกตัดไปแล้ว" เปลี่ยน — ขั้นถัดไปจากจุดตัดจึงไม่ตัดซ้ำ
+          var wasTaken = saleStockTaken(order);
+          var willTake = saleStockTaken({ fulfillment_type: order.fulfillment_type, status: toStatus });
+          if (wasTaken !== willTake) {
+            var mv = applySaleWarehouseStock(tenantId, order, willTake ? -1 : 1,
+              'บิล ' + order.order_code + ' -> ' + SO_STATUS_LABELS[toStatus], session.adminUserId);
+            if (!mv.success) return mv;
+            changes.push(willTake ? 'ตัดสต็อกออกจากคลังแล้ว' : 'คืนของเข้าคลังแล้ว');
           }
         }
         fields.status = toStatus;
-        if (toStatus === SO_COMPLETED) fields.delivered_at = nowStr();
+        if (roll) {
+          var rv = rolloverDeliveryRound(tenantId, order, session, roll);
+          for (var fk in rv.fields) fields[fk] = rv.fields[fk];
+          rv.changes.forEach(function(c) { changes.push(c); });
+        }
+        if (!roll && toStatus === SO_COMPLETED) {
+          fields.delivered_at = nowStr();
+          // ใบที่แยกรอบไว้และส่งครบแล้ว — ปิดรอบสุดท้ายเป็น "ส่งสำเร็จ" ด้วย ไม่ปล่อยค้างเป็น open ตลอดไป
+          if (saleOrderHasRounds(order)) {
+            var lastNo = closeLastDeliveryRound(tenantId, order, saleDeliveryPlan(tenantId, order), session);
+            if (lastNo) changes.push('ปิดรอบที่ ' + lastNo + ' (ส่งสำเร็จ)');
+          }
+        }
         if (toStatus === SO_PENDING || toStatus === SO_DELIVERING) fields.delivered_at = '';
+        /* ยอดจอง: ทำให้ตรงกับ "ที่ควรเป็น ณ สถานะปลายทาง" (syncSaleReservations ใน 48_delivery_rounds.gs)
+           = ของที่สั่ง − ที่ส่งไปแล้ว − ที่เพิ่งถูกตัด · เรียกซ้ำไม่เกิดผลซ้ำ (ตรงอยู่แล้ว = ไม่เขียนอะไรเลย)
+           ★ ต้องเรียก **หลัง** ปิด/เปิดรอบเสมอ ไม่งั้นมันยังเห็นว่ารอบที่เพิ่งส่งไปเป็นของที่ต้องกันไว้อยู่ */
+        var rsync = syncSaleReservations(tenantId, order, toStatus);
+        if (rsync.changed) changes.push(rsync.reserved ? 'กันของในคลังไว้ให้แล้ว' : 'ปลดของที่กันไว้');
 
         /* ★ ออกเลขใบส่งสินค้าตอนเข้าสถานะ "พร้อมจัดส่ง" (แอดมินขอ 6 ต.ค. 2026)
            ใบส่งของเป็นคนละเอกสารกับใบสั่งขาย เดิมพิมพ์โดยใช้เลขใบสั่งขายซ้ำ ทำให้อ้างอิงกันไม่ได้
@@ -420,6 +421,9 @@ function updateSalesOrderStatus(session, payload) {
       var ar = _createArInvoiceCore(session, { tenantId: tenantId, salesOrderId: order.record_id },
         typeof _normBook === 'function' ? _normBook(tenantId) : '');
       if (ar && ar.success) changes.push('ตั้งลูกหนี้ ' + ar.invoiceNo);
+      /* ★ ตั้งไว้แล้ว = ปกติ ไม่ใช่คำเตือน — บิลที่แยกรอบจัดส่งจะเดินผ่าน "พร้อมจัดส่ง" อีกครั้งทุกรอบ
+         แต่ลูกหนี้/ใบแจ้งหนี้มีใบเดียวต่อบิลเสมอ (14 ต.ค. 2026 · ดู 48_delivery_rounds.gs) */
+      else if (ar && ar.duplicate) changes.push('ใบแจ้งหนี้ ' + ar.invoiceNo + ' (ตั้งไว้แล้ว)');
       else arNote = 'ยังไม่ได้ตั้งลูกหนี้: ' + ((ar && ar.message) || 'ไม่ทราบสาเหตุ');
     }
 
@@ -637,6 +641,18 @@ function _editSalesOrderCore(session, payload, tenantId) {
   if ((parseFloat(order.paid_amount) || 0) > 0) {
     return { success: false, message: 'ใบนี้มีการรับชำระเงินแล้ว แก้ไขรายการไม่ได้ — ยกเลิกการรับชำระก่อนแล้วค่อยแก้' };
   }
+  /* ★★ ใบที่ส่งของไปแล้วบางส่วน แก้รายการไม่ได้เด็ดขาด (14 ต.ค. 2026)
+     ฟังก์ชันนี้ **ลบบรรทัดบิลทั้งชุดแล้วสร้างใหม่** record_id จึงเปลี่ยนหมด แถวใน delivery_round_items
+     ที่ชี้มาจะกลายเป็นเศษที่ไม่ชี้ไปไหน แล้ว "ส่งแล้วเท่าไร" จะหายไปเงียบๆ ทั้งที่ของออกจากคลังไปแล้วจริง
+     ★ รอบที่ยังไม่ได้ส่ง (เพิ่งกดแยกไว้ ยังไม่ถึงพร้อมจัดส่ง) ล้างทิ้งให้แล้วแยกใหม่ได้ — ไม่มีของออกไปไหน
+       เลข PICK/DO ยังอยู่บนแถวบิล รอบที่ 1 ที่สร้างใหม่จึงได้เลขเดิม (ใบที่พิมพ์ไปแล้วยังอ้างได้) */
+  var dpEdit = saleOrderHasRounds(order) ? saleDeliveryPlan(tenantId, order) : null;
+  if (dpEdit) {
+    var shippedAny = dpEdit.lines.some(function(l) { return l.shipped > 0.0001; });
+    if (shippedAny) return { success: false, message: 'ใบนี้ส่งของไปแล้วบางส่วน (แยกรอบจัดส่งไว้) แก้ไขรายการไม่ได้ — ถ้าของที่ค้างส่งไม่ถูกต้อง ให้ยกเลิกบิลแล้วเปิดใบใหม่สำหรับส่วนที่เหลือ' };
+    deleteRowsWhere(tenantSheet(tenantId, 'delivery_round_items'), 'order_id', order.record_id);
+    deleteRowsWhere(tenantSheet(tenantId, 'delivery_rounds'), 'order_id', order.record_id);
+  }
   var items = (payload.items || []).map(function(it) {
     return { productId: String(it.productId || ''), unitCode: it.unitCode, qty: parseInt(it.qty) || 0 };
   }).filter(function(it) { return it.productId; });
@@ -677,6 +693,7 @@ function _editSalesOrderCore(session, payload, tenantId) {
     updated_at: at, updated_by: String(session.adminUserId || ''), center_edited_at: at, center_edited_by: String(by || '')
   };
   if (wantDate !== undefined && wantDate !== null) row.requested_delivery_date = String(wantDate);
+  if (dpEdit) { row.ship_round_no = ''; row.backorder_lines = 0; }   // รอบที่แยกไว้ถูกล้างไปแล้ว ต้องล้างตัวบอกใบ้ด้วย
   tenantUpdate(tenantId, 'sales_orders', order.record_id, row);
 
   // ล้างบรรทัด/ส่วนลดเดิมแล้วเขียนชุดใหม่

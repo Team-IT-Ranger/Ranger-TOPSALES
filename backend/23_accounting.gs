@@ -572,7 +572,10 @@ function _createArInvoiceCore(session, payload, book) {
       if (String(order.status) === 'cancelled') return { success: false, message: 'บิลขายนี้ถูกยกเลิกแล้ว' };
       var dupe = centralObjects('ar_invoices').filter(function(iv) {
         return String(iv.tenant_id) === String(tenantId) && String(iv.sales_order_id) === String(order.record_id) && iv.status !== 'void'; })[0];
-      if (dupe) return { success: false, message: 'บิลขายนี้ออกใบแจ้งหนี้ไปแล้ว (' + dupe.invoice_no + ')' };
+      // duplicate:true ให้ผู้เรียกแยกได้ว่า "มีอยู่แล้ว" กับ "ออกไม่สำเร็จ" คนละเรื่องกัน
+      // (บิลที่แยกรอบจัดส่งเดินผ่าน "พร้อมจัดส่ง" ทุกรอบ แต่ใบแจ้งหนี้มีใบเดียวต่อบิล — 48_delivery_rounds.gs)
+      if (dupe) return { success: false, duplicate: true, invoiceNo: dupe.invoice_no, invoiceId: dupe.record_id,
+        message: 'บิลขายนี้ออกใบแจ้งหนี้ไปแล้ว (' + dupe.invoice_no + ')' };
       customerId = order.customer_id;
       // ใช้ยอดแยกภาษีที่บิลบันทึกไว้ตอนขาย (_orderVat ใน 18_pricing_engine.gs) — ไม่ถอดเองซ้ำ
       // ถอดซ้ำคือช่องทางให้ตัวเลขบนกระดาษกับในบัญชีต่างกันทีละสตางค์ แล้วงบไม่ลงตัว

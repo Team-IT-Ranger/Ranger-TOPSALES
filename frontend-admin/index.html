@@ -947,6 +947,8 @@
             <div id="sod-actions"></div>
           </div>
           <div id="sod-status-card"></div>
+          <!-- ของในคลัง + รอบจัดส่ง/ของค้างส่ง (getSaleDeliveryPlan — ยิงขนานกับใบรายละเอียด) -->
+          <div id="sod-delivery"></div>
           <!-- แก้ไขรายการหลังบันทึกรับงาน (editSalesOrderAdmin) — เปิดจากปุ่ม "แก้ไขรายการ" เฉพาะใบขั้นบันทึกรับงานแล้ว -->
           <div class="form-card" id="sod-edit-card" style="display:none">
             <h3>แก้ไขรายการในใบนี้</h3>
@@ -1838,7 +1840,7 @@ const baht = n => (parseFloat(n) || 0).toLocaleString('th-TH', {minimumFractionD
      3) action ที่สร้างของใหม่แนบ requestId ไปด้วย — เซิร์ฟเวอร์ทำครั้งเดียวต่อ id ถึงคำขอจะไปถึงสองรอบ
         (กรณีเน็ตหลุดหลังบันทึกสำเร็จแล้วผู้ใช้กดใหม่ — ชั้น 1-2 กันไม่ได้ ดู 35_idempotency.gs)
    เพิ่ม action ใหม่ที่เขียนข้อมูล = ใส่ใน MUTATING_ACTIONS ด้วยเสมอ ลืมแล้วไม่พัง แต่เสียการกันซ้ำเงียบๆ */
-const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','updateSalesOrderStatus','ensureSaleDocNo',
+const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','updateSalesOrderStatus','ensureSaleDocNo','saveDeliveryRound',
   'addCustomerAdmin','updateCustomerAdmin','addCustomerGroup','addProduct','updateProduct','uploadProductImage',
   'createPriceList','clonePriceList','savePriceListLine','deletePriceListLine','savePriceListBillPromos',
   'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
@@ -3648,7 +3650,8 @@ async function renderSalesOrderBoard(){
            ทุกบรรทัดในการ์ดเป็นบรรทัดเดียวทั้งหมด การ์ดทุกใบจึงสูงเท่ากันโดยไม่ต้องกำหนดความสูงตายตัว */
         '<div class="mono-data" style="font-size:.84rem;font-weight:600;margin-top:5px;' +
           'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">฿' + baht(o.total) + '</div>' +
-        '<div style="margin-top:4px">' + soPayPill(o.paymentStatus) + '</div>'
+        '<div style="margin-top:4px">' + soPayPill(o.paymentStatus) + '</div>' +
+        (soRoundBadge(o) ? '<div style="margin-top:3px">' + soRoundBadge(o) + '</div>' : '')
     })),
     /* ★ ขั้นที่ไปได้มาจาก backend (nextStatuses ← SO_TRANSITIONS) ไม่ได้ก๊อปตารางสถานะมาไว้ที่นี่
        และ backend ตัดสินซ้ำทุกครั้งอยู่แล้ว ตรงนี้มีไว้บอกผู้ใช้ล่วงหน้าเท่านั้น */
@@ -3717,7 +3720,7 @@ function renderSalesOrdersTable(){
     '<td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
     '<td class="mono-data">'+esc(o.customerCode || '-')+'</td>' +
     '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
-    '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
+    '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+soRoundBadge(o)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
     // ★ แอดมินขอมา 6 ต.ค. 2026 — ต้องรู้ว่าบิลมาจากพนักงานคนไหน · backend แปลง LINE user id เป็นชื่อให้แล้ว
     '<td class="wrap">'+esc(o.saleByName || o.saleBy || '-')+'</td>' +
     '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'salesorder\')">พิมพ์</button></td></tr>'
@@ -3800,6 +3803,8 @@ async function openSaleOrderDetail(id){
   _switchProductView('view-saleorderdetail', 'บิลขาย');
   document.getElementById('sod-actions').innerHTML = '';
   document.getElementById('sod-status-card').innerHTML = '';
+  document.getElementById('sod-delivery').innerHTML = '';
+  SOD_PLAN = null;
   document.getElementById('sod-history').innerHTML = '';
   if (!sodPreview(id)) {        // เปิดจากลิงก์ตรงโดยยังไม่เคยโหลดรายการบิล — ไม่มีอะไรให้วาดก่อน
     document.getElementById('sod-title').textContent = 'บิลขาย';
@@ -3813,16 +3818,25 @@ async function openSaleOrderDetail(id){
   if (String(sodShowingId) !== String(id)) sodBody.innerHTML = '';
   sodShowingId = id;
   tblLoading(sodBody, 9);
-  const r = await callApi('getSalesOrderAdmin', { id });
+  /* ★ ยิงขนานกัน — วัดแล้วคำขอขนานราคาเท่าคำขอเดียว (CLAUDE.md ข้อ 7) การ์ดของในคลัง
+     จึงไม่ทำให้การเปิดใบช้าลงเลย · และต้องแยกคำขอเพราะ warehouse_stock/stock_reservations
+     เป็นตารางที่แคชไม่ได้ ยัดเข้าใบรายละเอียดคือบวกการอ่านชีตเข้าไปในเส้นทางที่ช้าอยู่แล้ว
+     ★ ตัวที่สองล้มเหลวไม่กระทบใบ (การ์ดไม่ขึ้นเท่านั้น) */
+  const [r, dp] = await Promise.all([callApi('getSalesOrderAdmin', { id }), callApi('getSaleDeliveryPlan', { id })]);
   if (!r.success) { toast(r.message, true); return; }
   if (currentSaleOrderId !== id) return; // ผู้ใช้กดออกไปหน้าอื่นระหว่างรอโหลด
   renderSaleOrderDetail(r);
+  renderSaleDelivery(dp);
 }
 let SOD_DATA = null;   // ข้อมูลใบที่เปิดอยู่ ใช้พิมพ์เอกสารโดยไม่ต้องยิงคำขอซ้ำ
 let sodShowingId = null;   // ใบที่รายการบนจอเป็นของจริงๆ — ใช้ตัดสินว่าต้องล้างรายการเก่าทิ้งไหม
 function renderSaleOrderDetail(r){
   SOD_DATA = r;
   const o = r.order;
+  /* ★ อัปเดตแถวในรายการที่ถืออยู่ให้รู้เรื่องรอบจัดส่งด้วย — กลับไปหน้ารายการ/กระดานแล้วเห็นป้าย
+     "แยกส่ง รอบ N" ทันทีโดยไม่ต้องโหลดรายการใหม่ (หลักเดียวกับกติกาข้อ 4 ของ CLAUDE.md) */
+  const lrow = salesOrdersCache.find(x => String(x.id) === String(o.id));
+  if (lrow) { lrow.shipRoundNo = o.shipRoundNo || 0; lrow.backorderLines = o.backorderLines || 0; }
   document.getElementById('sod-title').textContent = o.code;
   document.getElementById('sod-meta').innerHTML = esc(o.customer) +
     (o.customerCode ? ' <span class="mono-data">' + esc(o.customerCode) + '</span>' : '') +
@@ -3924,6 +3938,149 @@ function printParcelLabel(r){
 }
 
 /* ── กล่องสถานะ: สองแกนแยกกันชัดเจน พร้อมปุ่มเดินไปขั้นถัดไป ── */
+/* ══════════ ของในคลัง + รอบจัดส่ง (ของค้างส่ง) — แอดมินศูนย์ขอ 14 ต.ค. 2026 ══════════
+   สองเรื่องอยู่การ์ดเดียวกันเพราะคนทำงานอ่านคู่กันเสมอ: "ของพอส่งไหม" แล้วจึง "งั้นรอบนี้ส่งอะไร"
+   ★ ยอดบิล/ส่วนลด/ภาษี ไม่เกี่ยวกับการ์ดนี้เลย — การแยกรอบไม่แตะยอดเงินแม้แต่บาทเดียว
+     (ตัดรายการออกจากบิลคือสิ่งที่ห้ามทำ เพราะยอดจะตกลงมาไม่ถึงขั้นส่วนลดท้ายบิล) */
+let SOD_PLAN = null;
+const DR_PILL = { open:'wait', shipped:'ok', cancelled:'off' };
+/* ป้ายบนการ์ดกระดาน/แถวตาราง — ขึ้นเฉพาะใบที่แยกรอบไว้ ใบปกติไม่มีอะไรเพิ่มมารบกวนสายตา */
+function soRoundBadge(o){
+  const n = parseInt(o && o.shipRoundNo) || 0;
+  if (!n) return '';
+  const back = parseInt(o.backorderLines) || 0;
+  return '<span class="pill wait" title="ใบนี้แยกส่งหลายรอบ — ยอดบิลและส่วนลดท้ายบิลคงเดิมทั้งใบ">แยกส่ง รอบ ' +
+    n + (back ? ' · ค้าง ' + back + ' รายการ' : '') + '</span>';
+}
+const sodNum = n => String(Math.round((Number(n) || 0) * 100) / 100);
+
+function renderSaleDelivery(dp){
+  const box = document.getElementById('sod-delivery');
+  if (!box) return;
+  SOD_PLAN = (dp && dp.success && dp.applicable) ? dp : null;
+  if (!SOD_PLAN) { box.innerHTML = ''; return; }
+  /* ใบที่ปิดแล้ว/ยกเลิก และไม่เคยแยกรอบ = ไม่มีอะไรให้ตัดสินใจ ไม่ต้องมีการ์ด
+     (แต่ใบที่เคยแยกรอบต้องเห็นประวัติรอบตลอดไป ไว้พิมพ์ใบส่งสินค้าซ้ำ) */
+  const live = ['confirmed','pending_delivery','accepted','ready_to_ship','delivering'].indexOf(dp.status) !== -1;
+  if (!live && !dp.hasRounds) { box.innerHTML = ''; return; }
+
+  const short = dp.lines.filter(l => l.shortBase > 0 && (l.ordered - l.shipped) > 0);
+  const rows = dp.lines.map(l => {
+    const remain = l.ordered - l.shipped;
+    const tight = remain > 0 && l.canShip < remain;
+    return '<tr'+(tight ? ' style="background:var(--red-pale,#FFF1F0)"' : '')+'>' +
+      '<td class="mono-data">'+esc(l.productCode || '-')+'</td>' +
+      '<td class="wrap">'+esc(l.productName)+(l.isFree ? ' <span class="unit">(ของแถม)</span>' : '')+'</td>' +
+      '<td class="mono-data">'+sodNum(l.ordered)+' '+esc(l.unitCode||'')+'</td>' +
+      '<td class="mono-data">'+(l.shipped ? sodNum(l.shipped) : '-')+'</td>' +
+      '<td class="mono-data"><b>'+(l.round ? sodNum(l.round) : '-')+'</b></td>' +
+      '<td class="mono-data">'+(l.outstanding ? '<b style="color:var(--red,#C0392B)">'+sodNum(l.outstanding)+'</b>' : '-')+'</td>' +
+      '<td class="mono-data">'+sodNum(l.onHand)+' '+esc(l.baseUnit||'')+'</td>' +
+      '<td class="mono-data">'+(l.reservedOther ? sodNum(l.reservedOther) : '-')+'</td>' +
+      '<td class="mono-data">'+sodNum(l.available)+'</td>' +
+      '<td class="mono-data"'+(tight ? ' style="color:var(--red,#C0392B);font-weight:600"' : '')+'>'+
+        sodNum(l.canShip)+' '+esc(l.unitCode||'')+'</td></tr>';
+  }).join('');
+
+  const roundRows = (dp.rounds || []).map(r =>
+    '<tr><td class="mono-data">รอบ '+r.roundNo+'</td>' +
+    '<td><span class="pill '+(DR_PILL[r.status]||'')+'">'+esc(r.statusLabel)+'</span></td>' +
+    '<td class="mono-data">'+esc(r.pickingNo || '-')+'</td>' +
+    '<td class="mono-data">'+esc(r.deliveryOrderNo || '-')+'</td>' +
+    '<td class="mono-data">'+esc(r.shippedAt || '-')+'</td>' +
+    '<td class="wrap">'+(r.items || []).map(it => esc(it.productCode || it.productName) + '×' + sodNum(it.qty) + ' ' + esc(it.unitCode||'')).join(' · ')+'</td>' +
+    '<td><button class="btn btn-sm" onclick="printRoundDoc(\'picking\','+r.id+')">ใบจัดของ</button> ' +
+        '<button class="btn btn-sm" onclick="printRoundDoc(\'delivery\','+r.id+')">ใบส่งสินค้า</button></td></tr>').join('');
+
+  box.innerHTML = '<div class="form-card">' +
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<h3 style="margin:0">ของในคลังและรอบจัดส่ง</h3>' +
+      '<span class="unit">คลัง '+esc(dp.warehouse||'')+' · จำนวนคงเหลือเป็นหน่วยฐาน</span>' +
+      (dp.canSplit ? '<button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="openSodSplit()">แยกของค้างส่ง…</button>'
+        : '<span class="unit" style="margin-left:auto">แยกของค้างส่งได้ตอนใบอยู่ขั้น "'+esc(SO_LABELS.accepted)+'"</span>') +
+    '</div>' +
+    (short.length
+      ? '<p class="form-hint" style="color:var(--red,#C0392B)"><b>ของไม่พอส่ง '+short.length+' รายการ</b> — กด "แยกของค้างส่ง" เพื่อส่งเท่าที่มีก่อน ' +
+        'แล้วระบบจะเปิดรอบถัดไปให้ของที่เหลือเอง · <b>ยอดบิลและส่วนลดท้ายบิลไม่เปลี่ยน</b></p>'
+      : '<p class="form-hint">ของในคลังพอส่งครบทั้งใบ — ไม่ต้องแยกรอบ</p>') +
+    '<div class="table-wrap"><table><thead><tr>' +
+      '<th>รหัส</th><th>สินค้า</th><th>สั่ง</th><th>ส่งแล้ว</th><th>ส่งรอบนี้</th><th>ค้างส่ง</th>' +
+      '<th>คงเหลือในคลัง</th><th>จองให้ใบอื่น</th><th>ขายได้จริง</th><th>ส่งได้</th>' +
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>' +
+    (roundRows
+      ? '<h3 style="margin:14px 0 0">รอบจัดส่งของใบนี้</h3>' +
+        '<p class="form-hint">ใบจัดของและใบส่งสินค้าแยกตามรอบ (เลขของตัวเอง) · ใบเสร็จ ใบกำกับภาษี ใบแจ้งหนี้ เป็นใบเดียวของทั้งบิล</p>' +
+        '<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>สถานะ</th><th>ใบจัดของ</th><th>ใบส่งสินค้า</th><th>ส่งเมื่อ</th><th>รายการ</th><th>พิมพ์</th></tr></thead>' +
+        '<tbody>'+roundRows+'</tbody></table></div>'
+      : '') +
+    '</div>';
+}
+
+/* ── โมดัลแยกของค้างส่ง — เติม "เท่าที่ส่งได้จริง" มาให้ก่อน แอดมินแก้ได้ทุกบรรทัด ── */
+function openSodSplit(){
+  if (!SOD_PLAN) { toast('ยังไม่ได้ข้อมูลคลัง ลองเปิดใบใหม่อีกครั้ง', true); return; }
+  /* ★ บรรทัดที่ส่งครบไปแล้วไม่ต้องโผล่ในโมดัลนี้ — อ่านว่า "เหลือส่ง 0 · ส่งได้จริง 10" แล้วสับสน
+     (ดูของที่ส่งไปแล้วได้ที่ตารางในการ์ด ซึ่งแสดงทุกบรรทัดตามเดิม) */
+  const pend = SOD_PLAN.lines.filter(l => (l.ordered - l.shipped) > 0);
+  if (!pend.length) { toast('ใบนี้ส่งครบทุกรายการแล้ว', true); return; }
+  const rows = pend.map(l => {
+    const remain = l.ordered - l.shipped;
+    const fill = Math.max(0, Math.min(remain, l.canShip));     // ของที่มีจริงพอส่งได้เท่าไร
+    return '<tr><td class="mono-data">'+esc(l.productCode||'-')+'</td><td class="wrap">'+esc(l.productName)+'</td>' +
+      '<td class="mono-data">'+sodNum(remain)+' '+esc(l.unitCode||'')+'</td>' +
+      '<td class="mono-data">'+sodNum(l.canShip)+'</td>' +
+      '<td><input type="number" class="sodsp-qty" data-item="'+l.itemId+'" data-remain="'+remain+'" ' +
+        'min="0" max="'+remain+'" step="1" value="'+fill+'" style="width:92px"></td></tr>';
+  }).join('');
+  plModal('<h3>แยกของค้างส่ง — รอบที่ ' + ((SOD_PLAN.currentRoundNo || 0) + (SOD_PLAN.currentRoundNo ? 0 : 1)) + '</h3>' +
+    '<p class="form-hint">กรอกจำนวนที่ <b>ส่งรอบนี้</b> ส่วนที่เหลือจะกลายเป็นของค้างส่ง · ระบบเติมเท่าที่คลังมีจริงมาให้แล้ว<br>' +
+    '★ ยอดบิล ส่วนลดท้ายบิล ภาษี และใบกำกับภาษี/ใบแจ้งหนี้ <b>ไม่เปลี่ยน</b> — เปลี่ยนแค่ว่าของออกจากคลังรอบไหน</p>' +
+    '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>เหลือส่ง</th><th>ส่งได้จริง</th><th>ส่งรอบนี้</th></tr></thead>' +
+    '<tbody>'+rows+'</tbody></table></div>' +
+    '<div style="margin-top:8px"><button class="btn btn-sm" onclick="sodSplitFill(\'avail\')">เติมเท่าที่ส่งได้</button> ' +
+    '<button class="btn btn-sm" onclick="sodSplitFill(\'all\')">เติมเต็มจำนวน</button> ' +
+    '<button class="btn btn-sm" onclick="sodSplitFill(\'zero\')">ล้างเป็น 0</button></div>' +
+    plModalActions('plBusy(sodSplitSave)', '✓ บันทึกรอบจัดส่ง'));
+}
+function sodSplitFill(mode){
+  document.querySelectorAll('.sodsp-qty').forEach(inp => {
+    const l = SOD_PLAN.lines.filter(x => String(x.itemId) === String(inp.dataset.item))[0] || {};
+    const remain = parseFloat(inp.dataset.remain) || 0;
+    inp.value = mode === 'all' ? remain : mode === 'zero' ? 0 : Math.max(0, Math.min(remain, l.canShip || 0));
+  });
+}
+async function sodSplitSave(){
+  const lines = [...document.querySelectorAll('.sodsp-qty')].map(inp => ({ itemId: inp.dataset.item, qty: parseFloat(inp.value) || 0 }));
+  if (!lines.some(l => l.qty > 0)) { plModalErr('ต้องมีของที่จะส่งในรอบนี้อย่างน้อย 1 รายการ'); return; }
+  const r = await callApi('saveDeliveryRound', { id: currentSaleOrderId, lines });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose();
+  toast(r.message || 'บันทึกรอบจัดส่งแล้ว');
+  openSaleOrderDetail(currentSaleOrderId);
+}
+
+/* ── ใบจัดของ/ใบส่งสินค้า "ของรอบนั้น" (พิมพ์ซ้ำได้ตลอด ได้ตัวเลขเดิมเสมอ) ──
+   ★ ยอดค้างส่งบนใบคิดจาก "รอบนี้และรอบก่อนๆ" ไม่ใช่สถานะวันนี้ — ใบที่ลูกค้าเซ็นรับไปแล้ว
+     พิมพ์ซ้ำอีกปีหน้าต้องได้ตัวเลขเดียวกับใบที่เขาถืออยู่ */
+function sodRoundLines(roundId){
+  const rounds = (SOD_PLAN && SOD_PLAN.rounds) || [];
+  let idx = -1;
+  rounds.forEach((r, i) => { if (String(r.id) === String(roundId)) idx = i; });
+  if (idx === -1) return null;
+  const upto = {}, now = {};
+  rounds.slice(0, idx + 1).forEach(r => (r.items || []).forEach(it => {
+    upto[String(it.itemId)] = (upto[String(it.itemId)] || 0) + (it.qty || 0); }));
+  (rounds[idx].items || []).forEach(it => { now[String(it.itemId)] = it.qty || 0; });
+  return { round: rounds[idx], lines: SOD_PLAN.lines.map(l => ({
+    productCode: l.productCode, productName: l.productName, unitCode: l.unitCode, isFree: l.isFree,
+    ordered: l.ordered, qty: now[String(l.itemId)] || 0,
+    remain: Math.max(0, l.ordered - (upto[String(l.itemId)] || 0)) })) };
+}
+function printRoundDoc(kind, roundId){
+  if (!SOD_DATA) { toast('ยังไม่ได้ข้อมูลบิล', true); return; }
+  printSaleDoc(SOD_DATA, kind, roundId);
+}
+
 function renderSaleOrderStatusCard(r){
   const o = r.order, box = document.getElementById('sod-status-card');
   if (o.status === 'cancelled') {
@@ -4138,10 +4295,16 @@ const SO_DOC_ISSUE_KINDS = {
    ใช้กับบิลที่เดินผ่านขั้นนั้นไปก่อนกติกาใหม่จะมีผล — ไม่งั้นต้องถอยสถานะกลับไปเดินใหม่เพื่อให้ได้เลข
    ★ หน้าเว็บไม่ได้เป็นคนออกเลข แค่ "ขอ" — backend ตัดสินจากสถานะจริงในชีต ออกภายใต้ล็อก
      และข้ามชนิดที่มีเลขแล้วเสมอ · พิมพ์ซ้ำสิบครั้งจึงยังได้เลขเดิมสิบครั้ง (ดู ensureSaleDocNo) */
-async function printSaleDoc(r, kind){
+async function printSaleDoc(r, kind, roundId){
   const k = SO_DOC_KINDS[kind] || SO_DOC_KINDS.salesorder;
   const o = r.order, iss = r.issuer || {};
-  const needKinds = (SO_DOC_ISSUE_KINDS[kind] || []).filter(kk => {
+  /* ★ ใบจัดของ/ใบส่งสินค้าของบิลที่แยกรอบจัดส่ง = เอกสาร "ของรอบนั้น" ไม่ใช่ของทั้งใบ
+     (14 ต.ค. 2026 · ดู 48_delivery_rounds.gs) · เลขที่เอกสารอยู่ที่แถวรอบ ออกไว้ตอนเปิดรอบแล้ว
+     จึงไม่ต้องขอ ensureSaleDocNo และไม่มีทางกินตัวนับเพิ่มตอนกดพิมพ์ */
+  const rv = (kind === 'picking' || kind === 'delivery') && SOD_PLAN && SOD_PLAN.hasRounds
+    && String(o.id) === String(currentSaleOrderId)
+    ? sodRoundLines(roundId || (SOD_PLAN.rounds.filter(x => x.status === 'open')[0] || {}).id) : null;
+  const needKinds = rv ? [] : (SO_DOC_ISSUE_KINDS[kind] || []).filter(kk => {
     const f = { picking: 'pickingNo', delivery: 'deliveryOrderNo', receipt: 'receiptNo', tax: 'taxInvoiceNo' }[kk];
     return f && !String(o[f] || '').trim();
   });
@@ -4155,10 +4318,23 @@ async function printSaleDoc(r, kind){
     }
   }
   // ยังไม่ถึงขั้นที่ออกเลข = ยังไม่มีเลขของตัวเอง → ใช้เลขใบสั่งขายไปก่อน ดีกว่าช่องเลขที่ว่าง
-  const docNo = (k.noField && o[k.noField]) ? o[k.noField] : o.code;
+  const docNo = rv ? ((kind === 'picking' ? rv.round.pickingNo : rv.round.deliveryOrderNo) || o.code)
+    : ((k.noField && o[k.noField]) ? o[k.noField] : o.code);
   if (k.label) return printParcelLabel(r);
   ensureDocPrint().then(() => {
-    const cols = [
+    /* เอกสารของรอบ: ใบจัดของพิมพ์เฉพาะของที่ต้องหยิบรอบนี้ · ใบส่งสินค้าพิมพ์ทุกบรรทัด
+       พร้อมคอลัมน์ สั่ง / ส่งรอบนี้ / ค้างส่ง เพื่อให้ลูกค้าเซ็นรับแล้วเห็นว่ายังค้างอะไรอยู่
+       (ใบจัดของมีคอลัมน์ค้างส่งด้วย ไว้ให้คนคลังรู้ว่าของที่ยังไม่มีคือตัวไหน) */
+    const lines = rv ? (kind === 'picking' ? rv.lines.filter(l => l.qty > 0) : rv.lines) : r.items;
+    const cols = rv ? [
+      { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
+      { label: 'รหัส', code: true, width: '14%', value: l => l.productCode || '-' },
+      { label: 'รายการ', value: l => l.productName + (l.isFree ? '  (ของแถม)' : '') },
+      { label: 'หน่วย', align: 'c', width: '10%', value: l => l.unitCode || '-' },
+      { label: 'สั่งทั้งใบ', align: 'r', width: '11%', value: l => String(l.ordered) },
+      { label: 'ส่งรอบนี้', align: 'r', width: '11%', value: l => String(l.qty) },
+      { label: 'ค้างส่ง', align: 'r', width: '11%', value: l => l.remain ? String(l.remain) : '-' }
+    ] : [
       { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
       { label: 'รหัส', code: true, width: '14%', value: l => l.productCode || '-' },
       { label: 'รายการ', value: l => l.productName + (l.isFree ? '  (ของแถม)' : '') },
@@ -4188,8 +4364,9 @@ async function printSaleDoc(r, kind){
         ['คงค้าง', DocPrint.money(Math.max(0, (o.total||0) - (o.paidAmount||0)))]] : [])
     ] : [];
     DocPrint.doc({
-      title: k.title, docNo: docNo, issuer: iss,
-      subLabel: k.showPrice ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : '',
+      title: k.title + (rv ? ' — รอบที่ ' + rv.round.roundNo : ''), docNo: docNo, issuer: iss,
+      subLabel: rv ? ('รอบจัดส่งที่ ' + rv.round.roundNo + (rv.lines.some(l => l.remain) ? ' · มีของค้างส่ง' : ' · รอบสุดท้าย'))
+        : (k.showPrice ? (o.paymentMethod === 'credit' ? 'ขายเชื่อ' : 'ขายสด') : ''),
       metaRight: [['เลขที่', docNo]]
         // ใบที่เป็นใบกำกับภาษีด้วย ต้องโชว์เลขใบกำกับภาษีของตัวเอง (ออกคนละจังหวะกับเลขใบเสร็จ)
         .concat((k.withTaxNo && o.taxInvoiceNo) ? [['เลขที่ใบกำกับภาษี (Tax Invoice)', o.taxInvoiceNo]] : [])
@@ -4205,12 +4382,15 @@ async function printSaleDoc(r, kind){
         { label: kind === 'picking' ? 'จัดส่งที่' : 'สถานที่ส่งของ',
           name: o.customerShipTo ? '' : 'ตามที่อยู่ลูกค้า', address: o.customerShipTo || o.customerAddress }
       ],
-      columns: cols, lines: r.items, totals: totals,
-      note: o.note || '', signers: k.signers, showBank: k.showBank,
+      columns: cols, lines: lines, totals: totals,
+      note: (rv && rv.lines.some(l => l.remain)
+        ? 'ใบนี้เป็นการส่งรอบที่ ' + rv.round.roundNo + ' ของบิล ' + o.code + ' — รายการที่ยังค้างส่งจะจัดส่งในรอบถัดไป (ยอดบิลและส่วนลดคงเดิมทั้งใบ)'
+          + (o.note ? ' · ' + o.note : '')
+        : (o.note || '')), signers: k.signers, showBank: k.showBank,
       carry: k.showPrice,   // ยอดยกไป/ยกมา มีเฉพาะเอกสารที่พิมพ์ราคา
       watermark: o.status === 'cancelled' ? 'ยกเลิก' : '',
-      xlsx: { filename: o.code, headers: cols.map(c => c.label),
-        rows: r.items.map((l, i) => cols.map(c => String(c.value(l, i)))) }
+      xlsx: { filename: o.code + (rv ? '-รอบ' + rv.round.roundNo : ''), headers: cols.map(c => c.label),
+        rows: lines.map((l, i) => cols.map(c => String(c.value(l, i)))) }
     });
   });
 }
