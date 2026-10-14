@@ -23,13 +23,25 @@ function _salesReportOrders(tenantId, dateFrom, dateTo) {
    ตอนใช้ในรายงาน (เรียกต่อ "พนักงาน") แต่พอเอามาใช้ในรายการบิลขายซึ่งเรียกต่อ "บิล" จะกลายเป็น
    O(จำนวนบิล × จำนวนพนักงาน) — บิล 300 ใบ × พนักงาน 100 คน = 30,000 รอบต่อการเปิดหน้าหนึ่งครั้ง
    (centralObjects แคชตัวข้อมูลให้แล้ว แต่ไม่ได้แคชการไล่หา) */
+/* ★★ 15 ต.ค. 2026 — แคช **แผนที่ชื่อ** ไว้ 5 นาที (ไม่ใช่ตัวตาราง liff_users/admin_users)
+   กติกา "ห้ามแคช liff_users/admin_users" มีไว้เพราะ **สถานะและสิทธิ์** ต้องสดเสมอ — ถ้าแคชแล้วคนที่เพิ่ง
+   ถูกระงับจะยังใช้งานได้ต่อ · แต่สิ่งที่เก็บตรงนี้คือ "id → ชื่อที่แสดง" ล้วนๆ ไม่มีการตัดสินใจอะไรอิงมัน
+   อย่างแย่ที่สุดคือคนเพิ่งเปลี่ยนชื่อแล้วรายการบิลยังขึ้นชื่อเดิมไม่เกิน 5 นาที
+   ★ ที่ต้องแคชเพราะสองตารางนี้ **ไม่อยู่ใน SHEET_CACHE_TABLES** จึงอ่านชีตจริงทุกคำขอ (วัดได้ ~0.8 วิ
+     ของเวลาเปิดหน้ารายการบิลขาย) ทั้งที่รายการบิลต้องการแค่ชื่อคนขาย */
 var _saleByIdxMemo = null;
+var SALEBY_CACHE_KEY = 'salebyidx_v1', SALEBY_CACHE_TTL = 300;
 function _saleByIndex() {
   if (_saleByIdxMemo) return _saleByIdxMemo;
+  try {
+    var hit = CacheService.getScriptCache().get(SALEBY_CACHE_KEY);
+    if (hit) { _saleByIdxMemo = JSON.parse(hit); return _saleByIdxMemo; }
+  } catch (e) {}
   var idx = { liff: {}, admin: {} };
   centralObjects('liff_users').forEach(function(u) { idx.liff[String(u.line_user_id)] = u.display_name || ''; });
   centralObjects('admin_users').forEach(function(u) { idx.admin[String(u.username)] = u.display_name || ''; });
   _saleByIdxMemo = idx;
+  try { CacheService.getScriptCache().put(SALEBY_CACHE_KEY, JSON.stringify(idx), SALEBY_CACHE_TTL); } catch (e) {}
   return idx;
 }
 

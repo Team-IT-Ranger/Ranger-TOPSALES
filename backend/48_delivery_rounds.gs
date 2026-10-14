@@ -427,7 +427,11 @@ function getSaleDeliveryPlan(session, payload) {
       shippedAt: safeDateStr(r.shipped_at), createdAt: safeDateStr(r.created_at), note: r.note || '', items: its };
   });
 
+  /* ★ ประวัติสถานะมาด้วยกับคำขอนี้ (15 ต.ค. 2026) — ไฟล์ตัวแทนถูกเปิดอยู่แล้วตรงนี้
+     ย้ายมาจาก getSalesOrderAdmin เพื่อให้เส้นทางวิกฤต (หัวบิล + รายการสินค้า) สั้นลงหนึ่งแท็บ
+     สองคำขอนี้ยิงขนานกัน เวลารวมจึงเท่ากับตัวที่ช้ากว่า ไม่ใช่ผลบวก */
   return { success: true, applicable: true, warehouse: wName || warehouseId,
+    statusLog: orderStatusLog(tenantId, order.record_id),
     status: _soStatusOf(order), canSplit: _soStatusOf(order) === SO_ACCEPTED && hasPermission(session, 'sales', 'edit'),
     hasRounds: plan.hasRounds, currentRoundNo: plan.currentRound ? (parseInt(plan.currentRound.round_no) || 1) : 0,
     shortLines: plan.shortLines, unshippedLines: plan.unshippedLines, lines: lines, rounds: rounds };

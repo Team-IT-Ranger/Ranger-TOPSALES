@@ -74,7 +74,8 @@ function getSalesOrderAdmin(session, payload) {
   centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c; });
 
   var orderVat = _orderVat(order);
-  var items = tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
+  var rawItems = tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); });
+  var items = rawItems
     .map(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
       var lineTotal = parseFloat(it.line_total) || 0; return {
       itemId: it.record_id,
@@ -88,7 +89,10 @@ function getSalesOrderAdmin(session, payload) {
       // ★ (2) ราคาตั้งก่อนภาษี — บิลเก่าก่อนมีคอลัมน์นี้ list_price_ex_vat ว่าง → listBreakdown เป็น null (ซ่อนคอลัมน์เอง)
       listBreakdown: _lineListBreakdown(it.list_price_ex_vat, it.qty, lineTotal, taxStatus === TAX_VAT, orderVat.rate)
     }; });
-  var discounts = tenantObjects(tenantId, 'order_discounts').filter(function(d) { return String(d.order_id) === String(order.record_id); });
+  /* ★ 15 ต.ค. 2026 — ตัดการอ่าน `order_discounts` ออก (วัดแล้วการอ่านแท็บหนึ่งในไฟล์ตัวแทน ≈ 0.45 วิ)
+     ไล่ดูทั้งหน้าเว็บแล้วไม่มีที่ไหนอ่าน `discounts` เลยสักจุด — ส่วนลดที่คนดูจริงคือยอดรวมในหัวบิล
+     กับส่วนลดรายบรรทัดใน items ซึ่งมาจากภาพนิ่งที่บันทึกตอนขาย · อยากได้รายละเอียดกฎส่วนลดเมื่อไหร่
+     ค่อยทำเป็นคำขอแยกตอนกดดู ไม่ใช่จ่ายค่าอ่านทุกครั้งที่เปิดบิล */
   // ★ (2) ราคารวมหลังหักส่วนลดสินค้า (ก่อนโปร/ส่วนลดท้ายบิล) ไม่รวมภาษี — ส่วนลดท้ายบิลเป็นเศษที่เหลือ กันปัดเศษไม่ตรงกัน
   var preDiscountExVat = 0;
   items.forEach(function(it) { preDiscountExVat += it.taxStatus === TAX_VAT ? it.lineTotal / (1 + orderVat.rate) : it.lineTotal; });
@@ -101,7 +105,8 @@ function getSalesOrderAdmin(session, payload) {
        (getSaleDeliveryPlan) เพราะ warehouse_stock/stock_reservations แคชไม่ได้ */
   var shippedAnyRound = false;
   if (saleOrderHasRounds(order)) {
-    var dplan = saleDeliveryPlan(tenantId, order);
+    // ★ ส่งบรรทัดที่อ่านมาแล้วเข้าไป — ไม่งั้นแท็บ order_items ถูกอ่านซ้ำรอบสองในคำขอเดียวกัน (~0.45 วิ)
+    var dplan = saleDeliveryPlan(tenantId, order, rawItems);
     var dmap = {};
     dplan.lines.forEach(function(l) { dmap[String(l.itemId)] = l; });
     items.forEach(function(it) {
@@ -161,8 +166,11 @@ function getSalesOrderAdmin(session, payload) {
       canEditLines: status === SO_ACCEPTED && !(parseFloat(order.paid_amount) > 0) && !shippedAnyRound && hasPermission(session, 'sales', 'edit')
     },
     issuer: _docIssuer(session, tenantId),
-    statusLog: orderStatusLog(tenantId, order.record_id),
-    items: items, discounts: discounts
+    /* ★ ประวัติสถานะย้ายไปอยู่กับ `getSaleDeliveryPlan` ซึ่งหน้าเว็บยิงขนานกันอยู่แล้ว (15 ต.ค. 2026)
+       การ์ดประวัติอยู่ล่างสุดของหน้า ไม่ใช่ของที่ต้องเห็นทันที และการอ่านแท็บนั้นอยู่ในเส้นทางวิกฤตเดิม
+       ★ ยังตอบกลับเป็น [] ไว้ ไม่ใช่ตัดคีย์ทิ้ง — หน้าเว็บรุ่นเก่าที่ยังค้างในเบราว์เซอร์ผู้ใช้จะได้ไม่พัง */
+    statusLog: [],
+    items: items
   };
 }
 
