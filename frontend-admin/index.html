@@ -3910,8 +3910,11 @@ function renderSaleOrderDetail(r){
 
 /* ใบปะหน้าพัสดุ 100×150 มม. — ★ ห้ามมีราคา ใบนี้ติดอยู่บนกล่องตลอดทาง คนเห็นระหว่างทางเยอะที่สุด
    จำนวนกล่องถามตอนสั่งพิมพ์ เพราะระบบไม่รู้ว่าแพ็คกี่กล่อง (พิมพ์ซ้ำได้ตลอด ไม่ต้องเก็บค่า) */
-function printParcelLabel(r){
+function printParcelLabel(r, rv){
   const o = r.order, iss = r.issuer || {};
+  /* ★ บิลที่แยกรอบจัดส่ง: กล่องชุดนี้มีเฉพาะของรอบนี้ — ถ้านับทั้งใบ คนรับจะเช็คของแล้วคิดว่าของหาย
+     (ป้ายติดบนกล่องคือสิ่งที่คนปลายทางใช้ตรวจรับจริง) */
+  const plines = rv ? rv.lines.filter(l => l.qty > 0) : r.items;
   const boxes = parseInt(prompt('พิมพ์ใบปะหน้ากี่กล่อง? (จะได้เลข 1/2, 2/2 … บนแต่ละใบ)', '1'), 10);
   if (!boxes || boxes < 1) return;
   /* ★ สรุปจำนวนต้องขึ้นเสมอ ไม่ใช่เฉพาะตอนมีหน่วย "ลัง" (เจ้าของระบบแจ้ง 8 ต.ค. 2026 ว่าจำนวนไม่แสดง)
@@ -3919,7 +3922,7 @@ function printParcelLabel(r){
      ตอนนี้รวมจำนวนแยกตามหน่วยทุกหน่วยที่มีจริงในบิล แล้วเรียงลัง → แพ็ค → ชิ้น ตามขนาดหน่วย */
   const UNIT_ORDER = { CT: 0, PK: 1, PC: 2 };
   const byUnit = {};
-  r.items.forEach(it => {
+  plines.forEach(it => {
     const u = String(it.unitCode || 'PC').toUpperCase();
     byUnit[u] = (byUnit[u] || 0) + (parseFloat(it.qty) || 0);
   });
@@ -3932,8 +3935,8 @@ function printParcelLabel(r){
     from: { name: iss.name || '', phone: iss.phone || '', address: iss.address || '' },
     to: { name: o.customer + (o.customerCode ? ' [' + o.customerCode + ']' : ''),
       address: o.customerShipTo || o.customerAddress || '', phone: o.customerPhone || '' },
-    summary: r.items.length + ' รายการ' + (qtyText ? ' · ' + qtyText : ''),
-    note: o.note || ''
+    summary: plines.length + ' รายการ' + (qtyText ? ' · ' + qtyText : '') + (rv ? ' · รอบที่ ' + rv.round.roundNo : ''),
+    note: (rv && rv.lines.some(l => l.remain) ? 'บิลนี้แยกส่งหลายรอบ — กล่องชุดนี้คือรอบที่ ' + rv.round.roundNo + (o.note ? ' · ' + o.note : '') : (o.note || ''))
   }));
 }
 
@@ -4301,7 +4304,7 @@ async function printSaleDoc(r, kind, roundId){
   /* ★ ใบจัดของ/ใบส่งสินค้าของบิลที่แยกรอบจัดส่ง = เอกสาร "ของรอบนั้น" ไม่ใช่ของทั้งใบ
      (14 ต.ค. 2026 · ดู 48_delivery_rounds.gs) · เลขที่เอกสารอยู่ที่แถวรอบ ออกไว้ตอนเปิดรอบแล้ว
      จึงไม่ต้องขอ ensureSaleDocNo และไม่มีทางกินตัวนับเพิ่มตอนกดพิมพ์ */
-  const rv = (kind === 'picking' || kind === 'delivery') && SOD_PLAN && SOD_PLAN.hasRounds
+  const rv = (kind === 'picking' || kind === 'delivery' || kind === 'parcel') && SOD_PLAN && SOD_PLAN.hasRounds
     && String(o.id) === String(currentSaleOrderId)
     ? sodRoundLines(roundId || (SOD_PLAN.rounds.filter(x => x.status === 'open')[0] || {}).id) : null;
   const needKinds = rv ? [] : (SO_DOC_ISSUE_KINDS[kind] || []).filter(kk => {
@@ -4320,7 +4323,7 @@ async function printSaleDoc(r, kind, roundId){
   // ยังไม่ถึงขั้นที่ออกเลข = ยังไม่มีเลขของตัวเอง → ใช้เลขใบสั่งขายไปก่อน ดีกว่าช่องเลขที่ว่าง
   const docNo = rv ? ((kind === 'picking' ? rv.round.pickingNo : rv.round.deliveryOrderNo) || o.code)
     : ((k.noField && o[k.noField]) ? o[k.noField] : o.code);
-  if (k.label) return printParcelLabel(r);
+  if (k.label) return printParcelLabel(r, rv);     // ★ ใบติดกล่องต้องนับของ "เที่ยวนี้" ไม่ใช่ทั้งใบ
   ensureDocPrint().then(() => {
     /* เอกสารของรอบ: ใบจัดของพิมพ์เฉพาะของที่ต้องหยิบรอบนี้ · ใบส่งสินค้าพิมพ์ทุกบรรทัด
        พร้อมคอลัมน์ สั่ง / ส่งรอบนี้ / ค้างส่ง เพื่อให้ลูกค้าเซ็นรับแล้วเห็นว่ายังค้างอะไรอยู่
@@ -4412,7 +4415,9 @@ async function cancelSaleOrderUI(){
   const r = await callApi('cancelSalesOrderAdmin', { id: currentSaleOrderId });
   if (!r.success) { toast(r.message, true); return; }
   const row = salesOrdersCache.find(x => x.id === currentSaleOrderId); if (row) row.status = 'cancelled';
-  toast('ยกเลิกบิลแล้ว');
+  // ยกเลิกใบที่ส่งของไปแล้วบางส่วน = มีงานตามเก็บของ/ออกใบลดหนี้รออยู่ ต้องเด้งให้เห็น ไม่ใช่ toast ผ่านตา
+  if (r.warning) { toast('ยกเลิกบิลแล้ว · ' + r.warning, true); alert('⚠️ ' + r.warning); }
+  else toast('ยกเลิกบิลแล้ว');
   openSaleOrderDetail(currentSaleOrderId);
 }
 

@@ -147,7 +147,11 @@ function getSalesOrderAdmin(session, payload) {
          แอดมินสับสนสองตัวนี้มาแล้ว เอกสารจึงต้องพิมพ์เลขให้ครบทั้งคู่ ไม่ใช่เลือกมาโชว์ตัวเดียว */
       /* ★ ใบแจ้งหนี้ลูกหนี้ถูกตั้งตอนเข้าสถานะ "พร้อมจัดส่ง" — ใบที่ยังไม่ถึงขั้นนั้นไม่มีทางมีเลข
          ข้ามการอ่านทั้งชีต ar_invoices ไปเลย ซึ่งเป็นกรณีของบิลใหม่ทุกใบ (ที่คนเปิดดูบ่อยที่สุด) */
-      arInvoiceNo: _soReachedReady(order.status) ? _arInvoiceNoOf(tenantId, order.record_id) : '',
+      /* ★ 14 ต.ค. 2026 — บิลที่แยกรอบจัดส่งจะ "ถอยกลับ" มาขั้นรับงานหลังส่งรอบหนึ่งเสร็จ (48_delivery_rounds.gs)
+         ทั้งที่ตั้งลูกหนี้/ออกใบกำกับภาษีไปแล้ว · ดูสถานะอย่างเดียวจึงไม่พอ เลขใบแจ้งหนี้จะหายจากหน้าจอ
+         และปุ่มพิมพ์ใบแจ้งหนี้จะถูกกั้นทั้งที่ใบมีอยู่จริง → ใบที่มีเลขใบกำกับภาษีแล้ว แปลว่าเคยถึงขั้นนั้นแน่นอน */
+      arInvoiceNo: (_soReachedReady(order.status) || String(order.tax_invoice_no || '').trim())
+        ? _arInvoiceNoOf(tenantId, order.record_id) : '',
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
       /* รอบจัดส่ง: ว่าง/0 = ใบนี้ส่งรอบเดียวทั้งใบตามปกติ (หน้าเว็บไม่ต้องแสดงอะไรเพิ่ม) */
       shipRoundNo: parseInt(order.ship_round_no) || 0, backorderLines: parseInt(order.backorder_lines) || 0,
@@ -410,6 +414,19 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
     releaseStockReservation(tenantId, order.record_id);
   }
 
+  /* ★ บิลที่ส่งของไปแล้วบางส่วน (แยกรอบจัดส่ง — 48_delivery_rounds.gs) ยกเลิกได้ แต่ต้องบอกให้ชัด
+     ของที่ส่งไปแล้วไม่ถูกคืนเข้าคลัง (มันอยู่กับลูกค้าแล้วจริงๆ) แต่ยอดขายถูกหักคืนทั้งใบ
+     → ต้องมีคนตามเก็บของคืนหรือออกใบลดหนี้ ไม่ใช่เรื่องที่ระบบตัดสินใจแทนได้ */
+  var shippedWarn = '';
+  if (saleOrderHasRounds(order)) {
+    var cp = saleDeliveryPlan(tenantId, order);
+    var shippedLines = cp.lines.filter(function(l) { return l.shipped > 0.0001; });
+    if (shippedLines.length) {
+      shippedWarn = 'ใบนี้ส่งของไปแล้ว ' + shippedLines.length + ' รายการ — ของที่ส่งไปแล้วไม่ถูกคืนเข้าคลัง ' +
+        'แต่ยอดขายถูกหักคืนทั้งใบ กรุณาตามเก็บของคืนหรือออกใบลดหนี้ให้ลูกค้า';
+    }
+  }
+
   var sh = tenantSheet(tenantId, 'sales_orders');
   var data = sh.getDataRange().getValues();
   var hdr = data[0], idCol = hdr.indexOf('record_id'), statusCol = hdr.indexOf('status');
@@ -418,6 +435,7 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
   }
   bumpSalesDaily(tenantId, _dOnly(order.created_at), -1, -(parseFloat(order.total) || 0));   // หักออกจากยอดสรุปรายวัน
   logOrderStatus(tenantId, order.record_id, String(order.status || ''), 'cancelled', orderPaymentStatus(order), orderPaymentStatus(order),
-    String(payload.note || 'ยกเลิกบิล'), session.displayName || session.username, _adminRoleLabel(session));
-  return { success: true };
+    String(payload.note || 'ยกเลิกบิล') + (shippedWarn ? ' · ' + shippedWarn : ''),
+    session.displayName || session.username, _adminRoleLabel(session));
+  return { success: true, warning: shippedWarn || undefined };
 }
