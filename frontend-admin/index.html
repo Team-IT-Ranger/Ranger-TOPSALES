@@ -13,6 +13,8 @@
        ของเดิมเป็นเทาอมเขียว (#F2F7F5/#D7E4E1) ซึ่งทำให้ทั้งหน้าดูขุ่น */
     --ground:#F6F8FC; --surface:#FFFFFF; --surface-2:#F1F5FA;
     --ink:#0F1B2D; --ink-soft:#5B6B84; --ink-faint:#94A2B8; --border:#E4E9F1;
+    /* เส้นแบ่งคอลัมน์ — จางกว่าเส้นแบ่งแถวหนึ่งระดับ เพราะแถวคือหน่วยที่คนอ่าน คอลัมน์เป็นแค่ตัวช่วยไล่สายตา */
+    --border-faint:#EFF2F8;
     --blue:#2B63D9; --blue-soft:#DEE9FD; --blue-pale:#F1F6FE;
     --green:#1F8A5F; --green-soft:#DFF3E9;
     --red:#C4443C; --red-soft:#FDE7E5;
@@ -319,6 +321,16 @@
   /* แถวที่กำลังถูกแก้อยู่ในฟอร์มด้านล่าง — ต้องเห็นชัดกว่า hover ไม่งั้นพอเมาส์เลื่อนไปที่อื่นแล้วไม่รู้ว่าแก้ตัวไหนอยู่ */
   tr.row-editing td{ background:var(--blue-pale); box-shadow:inset 3px 0 0 var(--blue); }
   td{ padding:9px 12px; border-top:1px solid var(--border); white-space:nowrap; }
+  /* ── เส้นแบ่งคอลัมน์บางๆ จางๆ (เจ้าของระบบสั่ง 15 ต.ค. 2026) ──
+     ตารางกว้างหลายคอลัมน์ (บิลขาย 11 ช่อง · สินค้า 18 ช่อง · ของในคลังและรอบจัดส่ง 10 ช่อง)
+     ไล่สายตาข้ามแถวแล้วหลุดไปคนละคอลัมน์ โดยเฉพาะช่องตัวเลขที่หน้าตาเหมือนกันหมด
+     ★ ใช้ `+` (เฉพาะเซลล์ที่มีเพื่อนบ้านทางซ้าย) จึงไม่มีเส้นเกินที่ขอบนอก และไม่มีเส้นซ้อนกันสองชั้น
+     ★ อยู่ใต้ .table-wrap เท่านั้น — เอกสารสำหรับพิมพ์ (.docsheet) ถูกวาดในหน้าเดียวกันและมีเส้นของตัวเอง
+       กฎ global จะหลุดไปโดนจนตารางบนกระดาษลายพร้อย
+     ★ ข้ามแถวค้นหา/ท้ายตาราง/แถวว่าง — พวกนั้นเป็นเซลล์เดียวกินทุกคอลัมน์ ไม่มีคอลัมน์ให้แบ่งอยู่แล้ว */
+  .table-wrap table td + td,
+  .table-wrap thead tr:not(.tbl-search-row) th + th{ border-left:1px solid var(--border-faint); }
+  .table-wrap tfoot td + td, .table-wrap .empty-row td + td{ border-left:none; }
   td.wrap{ white-space:normal; }
   .empty-row td{ color:var(--ink-soft); text-align:center; padding:18px; }
   .pill{ display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
