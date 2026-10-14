@@ -299,8 +299,12 @@ function saveDeliveryRound(session, payload) {
     // ยอดจองไม่เปลี่ยนเพราะการแยกรอบ (ขั้นรับงานยังไม่ตัดของ) — เรียกไว้ให้แน่ใจว่าตรงเสมอ ถูกก็ไม่เขียนอะไร
     syncSaleReservations(tenantId, order, status);
 
+    /* ประวัติต้องอ่านรู้เรื่องโดยไม่ต้องเปิดทะเบียนสินค้าเทียบ — ใช้รหัสสินค้าที่คนใช้คุยกันจริง
+       (ทะเบียนสินค้าอยู่ในชุดที่แคชไว้แล้ว ไม่ได้เพิ่มรอบอ่านชีต) */
+    var pcode = {};
+    centralObjects('products').forEach(function(p) { pcode[String(p.record_id)] = p.product_code || p.record_id; });
     var shortTxt = after.lines.filter(function(l) { return l.outstanding > 0.0001; })
-      .map(function(l) { return l.productId + '×' + l.outstanding + ' ' + (l.unitCode || ''); }).join(', ');
+      .map(function(l) { return pcode[l.productId] + '×' + l.outstanding + ' ' + (l.unitCode || ''); }).join(', ');
     logOrderStatus(tenantId, order.record_id, status, status, orderPaymentStatus(order), orderPaymentStatus(order),
       'แยกรอบจัดส่งที่ ' + roundNo + ': ส่งรอบนี้ ' + total + ' หน่วย' + (shortTxt ? ' · ค้างส่ง ' + shortTxt : ' · ไม่มีของค้างส่ง'),
       by, _adminRoleLabel(session));

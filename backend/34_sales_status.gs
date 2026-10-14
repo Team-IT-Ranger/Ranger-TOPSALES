@@ -289,7 +289,7 @@ function updateSalesOrderStatus(session, payload) {
 
     var fromStatus = _soStatusOf(order), fromPay = orderPaymentStatus(order);
     var toStatus = fromStatus, toPay = fromPay;
-    var fields = {}, changes = [], justBecameReady = false;
+    var fields = {}, changes = [], justBecameReady = false, rollNote = '';
 
     // ── แกนการส่งของ ──
     if (payload.status !== undefined && payload.status !== null && String(payload.status) !== '') {
@@ -331,6 +331,10 @@ function updateSalesOrderStatus(session, payload) {
           var rv = rolloverDeliveryRound(tenantId, order, session, roll);
           for (var fk in rv.fields) fields[fk] = rv.fields[fk];
           rv.changes.forEach(function(c) { changes.push(c); });
+          /* ★ ประวัติต้องตอบได้เองว่า "ทำไมบิลถึงถอยจากกำลังจัดส่งกลับมาขั้นรับงาน"
+             บรรทัดที่เขียนว่า delivering → accepted เฉยๆ โดยไม่มีเหตุผล คือสิ่งที่คนมาอ่านย้อนหลังแล้วงง
+             (และเป็นคนละคนกับคนที่กดด้วย) */
+          rollNote = rv.changes.join(' · ');
         }
         if (!roll && toStatus === SO_COMPLETED) {
           fields.delivered_at = nowStr();
@@ -407,7 +411,8 @@ function updateSalesOrderStatus(session, payload) {
     fields.updated_by = String(session.adminUserId || session.username || '');
     if (!_updateOrderRow(tenantId, order.record_id, fields)) return { success: false, message: 'บันทึกไม่สำเร็จ (ไม่พบแถวในชีต)' };
 
-    logOrderStatus(tenantId, order.record_id, fromStatus, toStatus, fromPay, toPay, payload.note,
+    logOrderStatus(tenantId, order.record_id, fromStatus, toStatus, fromPay, toPay,
+      [String(payload.note || ''), rollNote].filter(function(x) { return x; }).join(' · '),
       session.displayName || session.username, _adminRoleLabel(session));
 
     /* ★ ตั้งลูกหนี้ + ออกใบแจ้งหนี้/ใบกำกับภาษีอัตโนมัติตอนเข้าสถานะ "พร้อมจัดส่ง" (เจ้าของระบบสั่ง)
