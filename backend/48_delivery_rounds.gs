@@ -10,9 +10,12 @@
  *   บิล = ข้อตกลงกับลูกค้า (ยอด · ส่วนลด · ภาษี) · รอบจัดส่ง = ของออกจากคลังเมื่อไหร่กี่ชิ้น
  *   ยอดขายรายวัน ยอดลูกหนี้ ใบกำกับภาษี ใบแจ้งหนี้ ใบเสร็จ อ่านจากบิลเสมอ ไม่ได้อ่านจากรอบ
  *
- * ★ เอกสารที่ "แยกตามรอบ": ใบจัดของ (PICK) · ใบส่งสินค้า (DO) — คนคลังหยิบของตามรอบ ลูกค้าเซ็นรับตามรอบ
- *   เอกสารที่ "ใบเดียวของทั้งบิล": ใบเสร็จ · ใบกำกับภาษี · ใบแจ้งหนี้ (เจ้าของระบบกำหนด 14 ต.ค. 2026)
- *   ภาระภาษีและหนี้เกิดครั้งเดียวตามบิล ไม่ได้เกิดใหม่ทุกครั้งที่รถออก
+ * ★ เอกสารที่ "แยกตามรอบ": ใบจัดของ (PICK) · ใบส่งสินค้า (DO) · **ใบกำกับภาษี (TAX-IV) · ใบแจ้งหนี้ (INV)**
+ *   ตามของที่ส่งได้จริงในรอบนั้น · เอกสารที่ "ใบเดียวของทั้งบิล" เหลือ **ใบเสร็จรับเงิน** อย่างเดียว
+ *   (ผูกกับการรับชำระ ไม่ใช่การส่งของ)
+ *   ★★ กลับมติเมื่อ 15 ต.ค. 2026 — 14 ต.ค. เคยกำหนดว่าใบกำกับ/ใบแจ้งหนี้เป็นใบเดียวของทั้งบิล
+ *   แต่ภาระภาษีเกิดตอน "ส่งมอบ" การออกใบกำกับเต็มจำนวนทั้งที่ส่งไปครึ่งเดียวคือใบที่ระบุของเกินจริง
+ *   ของที่เหลือได้ใบใหม่เมื่อรอบถัดไปเข้าสถานะพร้อมจัดส่ง (ดู issueRoundInvoices)
  *
  * ★★ บิลที่ไม่เคยแยกรอบ = ไม่มีแถวในสองตารางนี้เลย และ "รอบ = ทั้งใบ" (saleDeliveryPlan คืนค่าแบบนั้นให้เอง)
  *   บิลเก่าทุกใบในระบบจึงเดินทางเดิมเป๊ะ ไม่ต้อง migrate อะไร และโค้ดมีทางเดินเดียวไม่ต้องแยก if
@@ -110,7 +113,12 @@ function saleDeliveryPlan(tenantId, order, items) {
     roundQty += rq;
     lines.push({ itemId: it.record_id, productId: pid, unitCode: it.unit_code || '',
       factor: factor, ordered: ordered, baseOrdered: baseOrdered, shipped: sh, round: rq, outstanding: out,
-      isFree: String(it.is_free) === '1' });
+      isFree: String(it.is_free) === '1',
+      /* ภาพนิ่งราคาที่บันทึกไว้ตอนขาย — ใช้คิด "ยอดของรอบนี้" ตอนออกใบกำกับภาษี/ใบแจ้งหนี้
+         lineDiscount รวมส่วนลดท้ายบิลที่เฉลี่ยลงบรรทัดแล้ว (_allocateLineDiscount ใน 18_pricing_engine.gs)
+         จึงหารตามสัดส่วนของที่ส่งได้เลย ไม่ต้องเฉลี่ยส่วนลดท้ายบิลใหม่ */
+      lineTotal: parseFloat(it.line_total) || 0, lineDiscount: parseFloat(it.line_discount) || 0,
+      taxStatus: String(it.tax_status || '') });
   });
 
   return {
@@ -240,6 +248,14 @@ function saveDeliveryRound(session, payload) {
       return { success: false, message: 'แยกของค้างส่งได้เฉพาะขั้น "' + SO_STATUS_LABELS[SO_ACCEPTED] + '" (ใบนี้อยู่ขั้น "' + (SO_STATUS_LABELS[status] || status) + '") — ย้อนขั้นกลับมาก่อนถ้าจะแก้' };
     }
 
+    /* ★★ ใบที่ออกใบกำกับภาษี "เต็มจำนวนทั้งบิล" ไปแล้ว (บิลเก่าก่อน 15 ต.ค. 2026 หรือบิลที่เคยเดินถึง
+       พร้อมจัดส่งโดยไม่แยกรอบ) แยกรอบย้อนหลังไม่ได้ — ใบกำกับที่ออกไปจะกลายเป็นใบที่ระบุของเกินจริง
+       ต้องยกเลิกใบนั้นก่อน ซึ่งเป็นงานฝั่งบัญชี ไม่ใช่สิ่งที่หน้าจอนี้ตัดสินใจแทนได้ */
+    if (!saleOrderHasRounds(order) && String(order.tax_invoice_no || '').trim()) {
+      return { success: false, message: 'ใบนี้ออกใบกำกับภาษีเต็มจำนวนไปแล้ว (' + order.tax_invoice_no + ') ' +
+        'แยกรอบจัดส่งไม่ได้ — ต้องให้ฝ่ายบัญชียกเลิกใบกำกับภาษีใบนั้นก่อน' };
+    }
+
     var plan = saleDeliveryPlan(tenantId, order);
     var byItem = {};
     plan.lines.forEach(function(l) { byItem[String(l.itemId)] = l; });
@@ -356,6 +372,104 @@ function closeLastDeliveryRound(tenantId, order, plan, session) {
 }
 
 /**
+ * ออกเอกสารเงินของ "รอบนี้" — ใบกำกับภาษี + ใบแจ้งหนี้ลูกหนี้ ตามของที่ส่งจริงในรอบ
+ * เรียกตอนรอบเข้าสถานะ "พร้อมจัดส่ง" = จุดส่งมอบ = จุดที่ภาระภาษีเกิดจริง
+ *
+ * ★ ออกครั้งเดียวต่อรอบ — เดินถอยแล้วเดินหน้าใหม่ต้องได้เลขเดิม (หลักเดียวกับเอกสารอื่นทั้งระบบ)
+ * ★ ยอดเงินถูกแช่ไว้ที่แถวรอบตอนออกใบ ไม่คิดใหม่ตอนเปิดดู/พิมพ์ซ้ำ
+ * ★★ ตั้งลูกหนี้ไม่สำเร็จ **ห้ามล้มการเปลี่ยนสถานะ** — ของแพ็คขึ้นรถไปแล้ว ย้อนไม่ได้ · รายงานเป็นคำเตือน
+ */
+function issueRoundInvoices(session, tenantId, order, plan, round) {
+  var out = { changes: [], warning: '', fields: {} };
+  if (!round) return out;
+  var amt = deliveryRoundAmounts(tenantId, order, plan, round);
+  var fields = {};
+
+  if (!String(round.tax_invoice_no || '').trim()) {
+    fields.tax_invoice_no = getNextDocNumber(tenantId, 'TAX-IV');
+    fields.tax_invoice_at = nowStr();
+    out.changes.push('ออกใบกำกับภาษี ' + fields.tax_invoice_no + ' (รอบที่ ' + round.round_no + ' ยอด ' + amt.total + ')');
+  }
+  if (String(round.total || '') === '') {
+    fields.subtotal = amt.subtotal; fields.discount = amt.discount; fields.total = amt.total;
+    fields.subtotal_ex_vat = amt.exVat; fields.vat_amount = amt.vat; fields.exempt_amount = amt.exempt;
+    fields.invoiced_at = nowStr();
+  }
+  /* ใบแจ้งหนี้ลูกหนี้: ขายเชื่อเท่านั้น (ขายสดเก็บเงินแล้ว ไม่มีหนี้ให้แจ้ง — กติกาเดิมทั้งระบบ) */
+  if (isCreditPayment(order.payment_method) && !String(round.ar_invoice_no || '').trim()) {
+    var ar = _createArInvoiceCore(session, {
+      tenantId: tenantId, salesOrderId: order.record_id, deliveryRoundId: round.record_id,
+      subtotalExVat: amt.exVat, vatAmount: amt.vat,
+      note: 'บิลขาย ' + (order.order_code || order.record_id) + ' รอบจัดส่งที่ ' + round.round_no
+    }, typeof _normBook === 'function' ? _normBook(tenantId) : '');
+    if (ar && ar.success) {
+      fields.ar_invoice_id = ar.invoiceId; fields.ar_invoice_no = ar.invoiceNo;
+      out.changes.push('ตั้งลูกหนี้ ' + ar.invoiceNo);
+    } else if (ar && ar.duplicate) {
+      fields.ar_invoice_id = ar.invoiceId; fields.ar_invoice_no = ar.invoiceNo;
+    } else {
+      out.warning = 'ยังไม่ได้ตั้งลูกหนี้ของรอบที่ ' + round.round_no + ': ' + ((ar && ar.message) || 'ไม่ทราบสาเหตุ');
+    }
+  }
+  if (Object.keys(fields).length) tenantUpdate(tenantId, 'delivery_rounds', round.record_id, fields);
+  out.fields = fields;
+  out.amounts = amt;
+  out.taxInvoiceNo = fields.tax_invoice_no || round.tax_invoice_no || '';
+  out.arInvoiceNo = fields.ar_invoice_no || round.ar_invoice_no || '';
+  return out;
+}
+
+/* ═══════════ ยอดเงินของรอบจัดส่ง — หัวใจของการออกใบกำกับภาษี/ใบแจ้งหนี้ตามรอบ (15 ต.ค. 2026) ═══════════
+ * ★ คิดจาก **ราคาและส่วนลดที่บิลบันทึกไว้ตอนขาย** คูณสัดส่วนของที่ส่งจริงในรอบนั้น
+ *   ไม่คิดราคาใหม่ ไม่เรียกเครื่องคิดราคาซ้ำ — ชุดราคาอาจเปลี่ยนไปแล้วระหว่างรอของเข้า
+ *   และ `line_discount` ที่บันทึกไว้รวมส่วนลดท้ายบิลที่เฉลี่ยลงบรรทัดแล้ว การหารตามสัดส่วนจึงยุติธรรมทั้งสองฝ่าย
+ *   (ลูกค้าได้ส่วนลดท้ายบิลตามสัดส่วนของที่รับจริง ไม่ใช่รอบแรกกินส่วนลดหมดแล้วรอบสองไม่เหลือ)
+ * ★★ **รอบสุดท้ายรับเศษ** — ผลรวมทุกรอบต้องเท่ากับยอดบิลเป๊ะทั้งสี่ตัว (รวม/ก่อนภาษี/ภาษี/ยกเว้นภาษี)
+ *   คิดแยกรอบแล้วปัดเศษทีละรอบ ผลรวมจะขาด/เกินทีละสตางค์ แล้วงบไม่ลงตัว (หลักเดียวกับ saleVatBreakdown)
+ */
+function deliveryRoundAmounts(tenantId, order, plan, round) {
+  var ov = _orderVat(order), rate = ov.rate, applyVat = ov.applyVat;
+  var qtyOf = {};
+  (plan.linesByRound[String(round.record_id)] || []).forEach(function(ri) {
+    qtyOf[String(ri.item_id)] = (qtyOf[String(ri.item_id)] || 0) + (parseFloat(ri.qty) || 0);
+  });
+
+  var listGross = 0, discount = 0, taxable = 0, exempt = 0;
+  plan.lines.forEach(function(l) {
+    var q = qtyOf[String(l.itemId)] || 0;
+    if (!q || !(l.ordered > 0)) return;
+    var share = q / l.ordered;
+    var net = _round2((l.lineTotal - l.lineDiscount) * share);
+    listGross += _round2(l.lineTotal * share);
+    discount += _round2(l.lineDiscount * share);
+    if (applyVat && (l.taxStatus === TAX_VAT || l.taxStatus === '')) taxable += net; else exempt += net;
+  });
+  var sv = splitVat(_round2(taxable), rate);
+  var out = { subtotal: _round2(listGross), discount: _round2(discount), total: _round2(taxable + exempt),
+    exVat: _round2(sv.exVat + exempt), vat: sv.vat, exempt: _round2(exempt) };
+
+  /* รอบนี้ปิดของที่เหลือทั้งหมดหรือยัง — ถ้าใช่ ให้รับเศษที่เหลือจากยอดบิลไปทั้งหมด */
+  var closesAll = plan.lines.every(function(l) {
+    return (l.ordered - l.shipped - (qtyOf[String(l.itemId)] || 0)) < 0.0001;
+  });
+  if (!closesAll) return out;
+
+  var prev = { subtotal: 0, discount: 0, total: 0, exVat: 0, vat: 0, exempt: 0 };
+  plan.rounds.forEach(function(r) {
+    if (String(r.record_id) === String(round.record_id)) return;
+    if (String(r.total || '') === '') return;            // รอบที่ยังไม่ได้ออกใบ ไม่มียอดให้หัก
+    prev.subtotal += Number(r.subtotal) || 0; prev.discount += Number(r.discount) || 0;
+    prev.total += Number(r.total) || 0; prev.exVat += Number(r.subtotal_ex_vat) || 0;
+    prev.vat += Number(r.vat_amount) || 0; prev.exempt += Number(r.exempt_amount) || 0;
+  });
+  return { subtotal: _round2((Number(order.subtotal) || 0) - prev.subtotal),
+    discount: _round2((Number(order.discount) || 0) - prev.discount),
+    total: _round2((Number(order.total) || 0) - prev.total),
+    exVat: _round2(ov.exVat - prev.exVat), vat: _round2(ov.vat - prev.vat),
+    exempt: _round2(ov.exemptAmount - prev.exempt) };
+}
+
+/**
  * แผนจัดส่ง + ของคงเหลือในคลัง สำหรับหน้ารายละเอียดบิล
  * (แอดมินศูนย์ขอ 14 ต.ค. 2026: "ต้องการเห็นยอดสินค้าคงเหลือในบิลที่เตรียมการจัดส่ง เพื่อรู้ว่าของพอส่งไหม")
  *
@@ -407,6 +521,8 @@ function getSaleDeliveryPlan(session, payload) {
     return { itemId: l.itemId, productId: l.productId, productCode: p.product_code || '', productName: p.name || '(สินค้าถูกลบ)',
       unitCode: l.unitCode, factor: l.factor, baseUnit: p.unit || '',
       ordered: l.ordered, shipped: l.shipped, round: l.round, outstanding: l.outstanding, isFree: l.isFree,
+      /* ราคาที่บันทึกไว้ตอนขาย — หน้าเว็บใช้คิดยอดรายบรรทัดบนใบกำกับภาษีของรอบ (ยอดรวมใช้ภาพนิ่งของรอบ) */
+      lineTotal: l.lineTotal, lineDiscount: l.lineDiscount, taxStatus: l.taxStatus,
       onHand: oh, reservedOther: ro, reservedMine: resMine[l.productId] || 0, available: avail,
       /* "ส่งได้กี่หน่วยขาย" จากของที่ขายได้จริง — ปัดลงเป็นจำนวนเต็มหน่วยขาย (ส่งครึ่งลังไม่ได้)
          ★ ไม่บวกยอดที่กันไว้ให้ใบนี้กลับเข้าไป — ของที่กันไว้ยังนอนอยู่ใน on-hand อยู่แล้ว บวกอีกคือนับซ้ำ */
@@ -423,6 +539,13 @@ function getSaleDeliveryPlan(session, payload) {
     return { id: r.record_id, roundNo: parseInt(r.round_no) || 0, status: String(r.status || ''),
       statusLabel: DR_STATUS_LABELS[String(r.status)] || String(r.status || ''),
       pickingNo: r.picking_no || '', deliveryOrderNo: r.delivery_order_no || '',
+      /* เอกสารเงินของรอบ + ภาพนิ่งยอดเงิน (15 ต.ค. 2026) — ว่าง = รอบนี้ยังไม่ถึงจุดส่งมอบ จึงยังไม่ออกใบ */
+      taxInvoiceNo: r.tax_invoice_no || '', taxInvoiceAt: safeDateStr(r.tax_invoice_at),
+      arInvoiceNo: r.ar_invoice_no || '', arInvoiceId: r.ar_invoice_id || '',
+      invoiced: String(r.total || '') !== '',
+      subtotal: Number(r.subtotal) || 0, discount: Number(r.discount) || 0, total: Number(r.total) || 0,
+      subtotalExVat: Number(r.subtotal_ex_vat) || 0, vatAmount: Number(r.vat_amount) || 0,
+      exemptAmount: Number(r.exempt_amount) || 0,
       shippedAt: safeDateStr(r.shipped_at), createdAt: safeDateStr(r.created_at), note: r.note || '', items: its };
   });
 

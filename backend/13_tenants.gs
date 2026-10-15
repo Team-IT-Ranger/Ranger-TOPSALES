@@ -56,12 +56,18 @@ var TENANT_SHEET_TABS = {
   order_status_log:    ['record_id','order_id','from_status','to_status','from_payment','to_payment','note','changed_by','changed_by_role','changed_at'],
   /* ═══ รอบจัดส่ง (14 ต.ค. 2026) — ของไม่พอส่งทั้งใบในรอบเดียว ต้องแยกส่งภายหลังโดย "บิลคงสภาพเดิมทุกบาท"
      ตัดรายการออกจากบิล = ยอดตกลงมาไม่ถึงขั้นส่วนลดท้ายบิล ลูกค้าเสียส่วนลดที่ตกลงกันไว้ (เหตุผลที่ต้องมีตารางนี้)
-     ★ เอกสารที่แยกตามรอบมีสองใบเท่านั้น: ใบจัดของ (PICK) · ใบส่งสินค้า (DO) — เก็บเลขไว้ที่แถวรอบ
-       ใบเสร็จ/ใบกำกับภาษี/ใบแจ้งหนี้ ยังเป็นใบเดียวของทั้งบิล (ภาระภาษีและหนี้เกิดครั้งเดียวตามบิล)
+     ★ เอกสารของการส่งแยกตามรอบทั้งหมด: ใบจัดของ · ใบส่งสินค้า · ใบกำกับภาษี · ใบแจ้งหนี้ (15 ต.ค. 2026)
+       เก็บเลขและภาพนิ่งยอดเงินไว้ที่แถวรอบ · เหลือใบเสร็จรับเงินใบเดียวที่ยังเป็นของทั้งบิล
      ★★ qty เป็น "หน่วยขาย" เหมือน order_items · base_qty คือหน่วยฐานที่จะตัดสต็อกจริง
        item_id ชี้ไปที่ order_items.record_id — ใบที่แยกรอบไว้แล้ว **แก้รายการบิลไม่ได้**
        (editSalesOrderAdmin ล้างรอบที่ยังไม่ส่งให้ก่อน เพราะบรรทัดบิลถูกสร้างใหม่ทั้งชุด id จะไม่ตรงกันอีก) ═══ */
-  delivery_rounds:     ['record_id','order_id','round_no','status','picking_no','picking_at','delivery_order_no','delivery_order_at','shipped_at','note','created_at','created_by','updated_at','updated_by'],
+  /* ★ 15 ต.ค. 2026 — ใบกำกับภาษี/ใบแจ้งหนี้ออก **ตามรอบ** ตามของที่ส่งจริง (เจ้าของระบบเปลี่ยนมติ
+     หลังดูระบบจริงของบริษัทอื่น) · ภาระภาษีเกิดตอนส่งมอบ การออกใบกำกับเต็มจำนวนทั้งที่ส่งไปแค่ครึ่งเดียว
+     จึงผิดตั้งแต่ต้น · ยอดเงินของรอบเป็น **ภาพนิ่ง** เหมือนทุกอย่างในระบบนี้ — ออกใบไปแล้วตัวเลขห้ามขยับ
+     (subtotal/discount/total = รวม VAT แล้ว · subtotal_ex_vat/vat_amount/exempt_amount = ยอดแยกภาษี) */
+  delivery_rounds:     ['record_id','order_id','round_no','status','picking_no','picking_at','delivery_order_no','delivery_order_at','shipped_at','note','created_at','created_by','updated_at','updated_by',
+    'tax_invoice_no','tax_invoice_at','ar_invoice_id','ar_invoice_no','invoiced_at',
+    'subtotal','discount','total','subtotal_ex_vat','vat_amount','exempt_amount'],
   delivery_round_items:['record_id','round_id','order_id','item_id','product_id','unit_code','unit_factor','qty','base_qty'],
   doc_number_series:   ['record_id','doc_type','prefix','date_format','running_digits','reset_cycle','separator','is_active'],
   doc_number_counters: ['doc_type','period_key','last_number']

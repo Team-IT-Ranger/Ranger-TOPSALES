@@ -560,7 +560,7 @@ function _createArInvoiceCore(session, payload, book) {
   var invDate = payload.invoiceDate || _todayStr();
   if (!_validDate(invDate)) return { success: false, message: 'วันที่ใบแจ้งหนี้ต้องเป็น yyyy-mm-dd' };
   return (function() {
-    var customerId, tenantId = '', salesOrderId = '', subtotal, vat, note = String(payload.note || '');
+    var customerId, tenantId = '', salesOrderId = '', roundId = '', subtotal, vat, note = String(payload.note || '');
     if (payload.salesOrderId) {
       tenantId = payload.tenantId || _salesTenantId(session, payload);
       if (!tenantId) return { success: false, message: 'ไม่ทราบตัวแทนของบิลขายนี้' };
@@ -570,20 +570,31 @@ function _createArInvoiceCore(session, payload, book) {
       order = tenantRowById(tenantId, 'sales_orders', payload.salesOrderId);
       if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
       if (String(order.status) === 'cancelled') return { success: false, message: 'บิลขายนี้ถูกยกเลิกแล้ว' };
+      /* ★ 15 ต.ค. 2026 — บิลที่แยกรอบจัดส่งออกใบแจ้งหนี้ **ใบละรอบ** ตามของที่ส่งจริง
+         กันซ้ำจึงเป็นคู่ (บิล, รอบ) · ใบของทั้งบิล (ไม่ได้แยกรอบ) ยังกันซ้ำแบบเดิมคือบิลละใบ */
+      roundId = String(payload.deliveryRoundId || '');
       var dupe = centralObjects('ar_invoices').filter(function(iv) {
-        return String(iv.tenant_id) === String(tenantId) && String(iv.sales_order_id) === String(order.record_id) && iv.status !== 'void'; })[0];
+        return String(iv.tenant_id) === String(tenantId) && String(iv.sales_order_id) === String(order.record_id) &&
+          String(iv.delivery_round_id || '') === roundId && iv.status !== 'void'; })[0];
       // duplicate:true ให้ผู้เรียกแยกได้ว่า "มีอยู่แล้ว" กับ "ออกไม่สำเร็จ" คนละเรื่องกัน
-      // (บิลที่แยกรอบจัดส่งเดินผ่าน "พร้อมจัดส่ง" ทุกรอบ แต่ใบแจ้งหนี้มีใบเดียวต่อบิล — 48_delivery_rounds.gs)
       if (dupe) return { success: false, duplicate: true, invoiceNo: dupe.invoice_no, invoiceId: dupe.record_id,
         message: 'บิลขายนี้ออกใบแจ้งหนี้ไปแล้ว (' + dupe.invoice_no + ')' };
       customerId = order.customer_id;
-      // ใช้ยอดแยกภาษีที่บิลบันทึกไว้ตอนขาย (_orderVat ใน 18_pricing_engine.gs) — ไม่ถอดเองซ้ำ
-      // ถอดซ้ำคือช่องทางให้ตัวเลขบนกระดาษกับในบัญชีต่างกันทีละสตางค์ แล้วงบไม่ลงตัว
-      var gross = Number(order.total) || 0;
-      if (!(gross > 0)) return { success: false, message: 'บิลขายนี้ยอดเป็นศูนย์' };
-      var ov = _orderVat(order);
-      subtotal = _money(ov.exVat);
-      vat = _money(ov.vat);
+      if (roundId) {
+        /* ยอดของรอบคิดมาจาก 48_delivery_rounds.gs (deliveryRoundAmounts) แล้ว — ที่นี่ไม่คิดซ้ำ
+           คิดซ้ำคือช่องทางให้ใบกำกับภาษีกับใบแจ้งหนี้ของรอบเดียวกันไม่เท่ากันทีละสตางค์ */
+        subtotal = _money(_numOrNull(payload.subtotalExVat));
+        vat = _money(_numOrNull(payload.vatAmount));
+        if (!(subtotal + vat > 0)) return { success: false, message: 'รอบจัดส่งนี้ยอดเป็นศูนย์' };
+      } else {
+        // ใช้ยอดแยกภาษีที่บิลบันทึกไว้ตอนขาย (_orderVat ใน 18_pricing_engine.gs) — ไม่ถอดเองซ้ำ
+        // ถอดซ้ำคือช่องทางให้ตัวเลขบนกระดาษกับในบัญชีต่างกันทีละสตางค์ แล้วงบไม่ลงตัว
+        var gross = Number(order.total) || 0;
+        if (!(gross > 0)) return { success: false, message: 'บิลขายนี้ยอดเป็นศูนย์' };
+        var ov = _orderVat(order);
+        subtotal = _money(ov.exVat);
+        vat = _money(ov.vat);
+      }
       salesOrderId = order.record_id;
       note = note || ('ออกจากบิลขาย ' + (order.order_code || order.record_id));
     } else {
@@ -619,7 +630,7 @@ function _createArInvoiceCore(session, payload, book) {
       ] });
     if (!jr.success) return jr;
     centralAppend('ar_invoices', { record_id: invId, invoice_no: invNo, customer_id: customer.record_id, tenant_id: tenantId,
-      sales_order_id: salesOrderId, invoice_date: invDate, due_date: dueDate, subtotal_ex_vat: _money(subtotal), vat_amount: _money(vat),
+      sales_order_id: salesOrderId, delivery_round_id: roundId, invoice_date: invDate, due_date: dueDate, subtotal_ex_vat: _money(subtotal), vat_amount: _money(vat),
       total: total, received_amount: 0, status: 'open', journal_id: jr.journalId, note: note, created_by: session.adminUserId, created_at: nowStr() });
     return { success: true, invoiceId: invId, invoiceNo: invNo, total: total, journalNo: jr.journalNo,
       message: 'ออกใบแจ้งหนี้ ' + invNo + ' ยอด ' + total.toLocaleString() + ' บาท' };

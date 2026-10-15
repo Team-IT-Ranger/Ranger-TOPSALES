@@ -4161,10 +4161,17 @@ function renderSaleDelivery(dp){
     '<td><span class="pill '+(DR_PILL[r.status]||'')+'">'+esc(r.statusLabel)+'</span></td>' +
     '<td class="mono-data">'+esc(r.pickingNo || '-')+'</td>' +
     '<td class="mono-data">'+esc(r.deliveryOrderNo || '-')+'</td>' +
+    /* ★ เอกสารเงินของรอบ (15 ต.ค. 2026) — ออกตามของที่ส่งจริงในรอบนั้น ของที่เหลือได้ใบใหม่รอบหน้า */
+    '<td class="mono-data">'+esc(r.taxInvoiceNo || '-')+'</td>' +
+    '<td class="mono-data">'+esc(r.arInvoiceNo || '-')+'</td>' +
+    '<td class="mono-data">'+(r.invoiced ? '฿'+baht(r.total) : '-')+'</td>' +
     '<td class="mono-data">'+esc(r.shippedAt || '-')+'</td>' +
     '<td class="wrap">'+(r.items || []).map(it => esc(it.productCode || it.productName) + '×' + sodNum(it.qty) + ' ' + esc(it.unitCode||'')).join(' · ')+'</td>' +
     '<td><button class="btn btn-sm" onclick="printRoundDoc(\'picking\','+r.id+')">ใบจัดของ</button> ' +
-        '<button class="btn btn-sm" onclick="printRoundDoc(\'delivery\','+r.id+')">ใบส่งสินค้า</button></td></tr>').join('');
+        '<button class="btn btn-sm" onclick="printRoundDoc(\'delivery\','+r.id+')">ใบส่งสินค้า</button>' +
+        (r.taxInvoiceNo ? ' <button class="btn btn-sm" onclick="printRoundDoc(\'taxinvoice\','+r.id+')">ใบกำกับภาษี</button>' : '') +
+        (r.arInvoiceNo ? ' <button class="btn btn-sm" onclick="printRoundDoc(\'invoice\','+r.id+')">ใบแจ้งหนี้</button>' : '') +
+    '</td></tr>').join('');
 
   /* ★ ป้ายบนแท็บ = เหตุผลเดียวที่คนจะกดเข้ามาดู · เรียงตามความเร่งด่วนจริง
      ของไม่พอส่ง (ต้องตัดสินใจวันนี้) > มีของค้างส่งที่ยังไม่เข้ารอบ > แค่บอกว่าแยกรอบไว้แล้ว */
@@ -4195,8 +4202,11 @@ function renderSaleDelivery(dp){
     '</tr></thead><tbody>'+rows+'</tbody></table></div>' +
     (roundRows
       ? '<h3 style="margin:14px 0 0">รอบจัดส่งของใบนี้</h3>' +
-        '<p class="form-hint">ใบจัดของและใบส่งสินค้าแยกตามรอบ (เลขของตัวเอง) · ใบเสร็จ ใบกำกับภาษี ใบแจ้งหนี้ เป็นใบเดียวของทั้งบิล</p>' +
-        '<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>สถานะ</th><th>ใบจัดของ</th><th>ใบส่งสินค้า</th><th>ส่งเมื่อ</th><th>รายการ</th><th>พิมพ์</th></tr></thead>' +
+        '<p class="form-hint">ทุกเอกสารของการส่งแยกตามรอบ — ใบจัดของ · ใบส่งสินค้า · <b>ใบกำกับภาษี</b> · <b>ใบแจ้งหนี้</b> ' +
+        'ออกตามของที่ส่งจริงในรอบนั้น (ส่วนลดท้ายบิลเฉลี่ยตามสัดส่วน) · ของที่เหลือได้ใบใหม่เมื่อส่งรอบถัดไป ' +
+        '· ใบเสร็จรับเงินยังเป็นใบเดียวของทั้งบิลตามการรับชำระ</p>' +
+        '<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>สถานะ</th><th>ใบจัดของ</th><th>ใบส่งสินค้า</th>' +
+        '<th>ใบกำกับภาษี</th><th>ใบแจ้งหนี้</th><th>ยอดของรอบ</th><th>ส่งเมื่อ</th><th>รายการ</th><th>พิมพ์</th></tr></thead>' +
         '<tbody>'+roundRows+'</tbody></table></div>'
       : '') +
     '</div>';
@@ -4258,10 +4268,25 @@ function sodRoundLines(roundId){
   rounds.slice(0, idx + 1).forEach(r => (r.items || []).forEach(it => {
     upto[String(it.itemId)] = (upto[String(it.itemId)] || 0) + (it.qty || 0); }));
   (rounds[idx].items || []).forEach(it => { now[String(it.itemId)] = it.qty || 0; });
-  return { round: rounds[idx], lines: SOD_PLAN.lines.map(l => ({
-    productCode: l.productCode, productName: l.productName, unitCode: l.unitCode, isFree: l.isFree,
-    ordered: l.ordered, qty: now[String(l.itemId)] || 0,
-    remain: Math.max(0, l.ordered - (upto[String(l.itemId)] || 0)) })) };
+  const R = rounds[idx];
+  const lines = SOD_PLAN.lines.map(l => {
+    const q = now[String(l.itemId)] || 0;
+    /* ราคาต่อหน่วย "สุทธิหลังส่วนลดที่เฉลี่ยลงบรรทัดแล้ว" — ใบกำกับภาษีของรอบต้องสรุปเงินของรอบนั้นจริงๆ
+       (ยอดรวมใช้ภาพนิ่งที่ backend แช่ไว้ตอนออกใบ ไม่คิดใหม่ตอนพิมพ์) */
+    const unitNet = l.ordered > 0 ? (l.lineTotal - l.lineDiscount) / l.ordered : 0;
+    return { productCode: l.productCode, productName: l.productName, unitCode: l.unitCode, isFree: l.isFree,
+      ordered: l.ordered, qty: q, remain: Math.max(0, l.ordered - (upto[String(l.itemId)] || 0)),
+      unitPrice: Math.round(unitNet * 100) / 100, amount: Math.round(unitNet * q * 100) / 100 };
+  });
+  /* ★ บรรทัดสุดท้ายรับเศษ — ผลรวมรายบรรทัดบนกระดาษต้องเท่ากับยอดสุทธิของรอบเป๊ะ
+     ไม่งั้นลูกค้า/สรรพากรบวกเลขตามใบแล้วไม่ตรงกับยอดท้ายใบ */
+  if (R.invoiced) {
+    const paid = lines.filter(l => l.qty > 0);
+    const sum = Math.round(paid.reduce((s, l) => s + l.amount, 0) * 100) / 100;
+    const diff = Math.round((R.total - sum) * 100) / 100;
+    if (paid.length && diff) paid[paid.length - 1].amount = Math.round((paid[paid.length - 1].amount + diff) * 100) / 100;
+  }
+  return { round: R, lines: lines };
 }
 function printRoundDoc(kind, roundId){
   if (!SOD_DATA) { toast('ยังไม่ได้ข้อมูลบิล', true); return; }
@@ -4489,7 +4514,7 @@ async function printSaleDoc(r, kind, roundId){
   /* ★ ใบจัดของ/ใบส่งสินค้าของบิลที่แยกรอบจัดส่ง = เอกสาร "ของรอบนั้น" ไม่ใช่ของทั้งใบ
      (14 ต.ค. 2026 · ดู 48_delivery_rounds.gs) · เลขที่เอกสารอยู่ที่แถวรอบ ออกไว้ตอนเปิดรอบแล้ว
      จึงไม่ต้องขอ ensureSaleDocNo และไม่มีทางกินตัวนับเพิ่มตอนกดพิมพ์ */
-  const rv = (kind === 'picking' || kind === 'delivery' || kind === 'parcel') && SOD_PLAN && SOD_PLAN.hasRounds
+  const rv = ['picking','delivery','parcel','taxinvoice','invoice','deliveryinv'].indexOf(kind) !== -1 && SOD_PLAN && SOD_PLAN.hasRounds
     && String(o.id) === String(currentSaleOrderId)
     ? sodRoundLines(roundId || (SOD_PLAN.rounds.filter(x => x.status === 'open')[0] || {}).id) : null;
   const needKinds = rv ? [] : (SO_DOC_ISSUE_KINDS[kind] || []).filter(kk => {
@@ -4506,15 +4531,27 @@ async function printSaleDoc(r, kind, roundId){
     }
   }
   // ยังไม่ถึงขั้นที่ออกเลข = ยังไม่มีเลขของตัวเอง → ใช้เลขใบสั่งขายไปก่อน ดีกว่าช่องเลขที่ว่าง
-  const docNo = rv ? ((kind === 'picking' ? rv.round.pickingNo : rv.round.deliveryOrderNo) || o.code)
-    : ((k.noField && o[k.noField]) ? o[k.noField] : o.code);
+  /* เลขที่บนเอกสารของรอบ = เลขของรอบนั้น ไม่ใช่เลขที่แถวบิล (แถวบิลสะท้อนแค่รอบปัจจุบัน) */
+  const rvNo = rv ? { picking: rv.round.pickingNo, delivery: rv.round.deliveryOrderNo, parcel: o.code,
+    taxinvoice: rv.round.taxInvoiceNo, invoice: rv.round.arInvoiceNo, deliveryinv: rv.round.deliveryOrderNo }[kind] : '';
+  const docNo = rv ? (rvNo || o.code) : ((k.noField && o[k.noField]) ? o[k.noField] : o.code);
   if (k.label) return printParcelLabel(r, rv);     // ★ ใบติดกล่องต้องนับของ "เที่ยวนี้" ไม่ใช่ทั้งใบ
   ensureDocPrint().then(() => {
     /* เอกสารของรอบ: ใบจัดของพิมพ์เฉพาะของที่ต้องหยิบรอบนี้ · ใบส่งสินค้าพิมพ์ทุกบรรทัด
        พร้อมคอลัมน์ สั่ง / ส่งรอบนี้ / ค้างส่ง เพื่อให้ลูกค้าเซ็นรับแล้วเห็นว่ายังค้างอะไรอยู่
        (ใบจัดของมีคอลัมน์ค้างส่งด้วย ไว้ให้คนคลังรู้ว่าของที่ยังไม่มีคือตัวไหน) */
-    const lines = rv ? (kind === 'picking' ? rv.lines.filter(l => l.qty > 0) : rv.lines) : r.items;
-    const cols = rv ? [
+    const rvMoney = rv && k.showPrice;      // ใบกำกับภาษี/ใบแจ้งหนี้ของรอบ — พิมพ์เฉพาะของที่ส่งรอบนั้นพร้อมราคา
+    const lines = rvMoney ? rv.lines.filter(l => l.qty > 0)
+      : rv ? (kind === 'picking' ? rv.lines.filter(l => l.qty > 0) : rv.lines) : r.items;
+    const cols = rvMoney ? [
+      { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
+      { label: 'รหัส', code: true, width: '13%', value: l => l.productCode || '-' },
+      { label: 'รายการ', value: l => l.productName + (l.isFree ? '  (ของแถม)' : '') },
+      { label: 'หน่วย', align: 'c', width: '10%', value: l => l.unitCode || '-' },
+      { label: 'จำนวน', align: 'r', width: '9%', value: l => String(l.qty) },
+      { label: 'ราคา/หน่วย', align: 'r', width: '13%', value: l => l.isFree ? '-' : DocPrint.money(l.unitPrice) },
+      { label: 'จำนวนเงิน', align: 'r', width: '14%', value: l => l.isFree ? '-' : DocPrint.money(l.amount) }
+    ] : rv ? [
       { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
       { label: 'รหัส', code: true, width: '14%', value: l => l.productCode || '-' },
       { label: 'รายการ', value: l => l.productName + (l.isFree ? '  (ของแถม)' : '') },
@@ -4529,7 +4566,8 @@ async function printSaleDoc(r, kind, roundId){
       { label: 'หน่วย', align: 'c', width: '11%', value: l => l.unitCode || '-' },
       { label: 'จำนวน', align: 'r', width: '10%', value: l => String(l.qty) }
     ];
-    if (k.showPrice) cols.push(
+    // ใบที่มีราคาของรอบประกอบคอลัมน์เงินมาเองแล้วข้างบน — ไม่ต้องต่อท้ายซ้ำ
+    if (k.showPrice && !rvMoney) cols.push(
       { label: 'ราคา/หน่วย', align: 'r', width: '14%', value: l => l.isFree ? '-' : DocPrint.money(l.price) },
       { label: 'จำนวนเงิน', align: 'r', width: '15%', value: l => l.isFree ? '-' : DocPrint.money(l.lineTotal) });
     /* ★ ใบกำกับภาษีตามกฎหมายไทยต้องแสดง "มูลค่าสินค้า" กับ "ภาษีมูลค่าเพิ่ม" แยกบรรทัดกัน
@@ -4537,7 +4575,16 @@ async function printSaleDoc(r, kind, roundId){
        ตัวเลขถอดมาจากที่ backend บันทึกไว้ตอนขาย ไม่ได้คำนวณเองบนหน้าเว็บ (กันปัดเศษไม่ตรงกับบัญชี) */
     const vatPct = Math.round((o.vatRate != null ? o.vatRate : 0.07) * 100);
     // บิลที่มีของยกเว้นภาษีปนอยู่ ต้องแยกมูลค่าสองก้อนให้เห็น ไม่งั้นสรรพากรตรวจไม่ได้ว่าภาษีคิดจากฐานไหน
-    const totals = k.showPrice ? [
+    /* ★ ยอดรวมของเอกสารรายรอบ = ภาพนิ่งที่ backend แช่ไว้ตอนออกใบ ไม่คิดใหม่ตอนพิมพ์
+       พิมพ์ซ้ำอีกปีหน้าต้องได้ตัวเลขเดียวกับใบที่ลูกค้าถืออยู่ (และเท่ากับที่ลงบัญชีไว้) */
+    const totals = rvMoney ? [
+      ['ยอดรวมก่อนหักส่วนลด', DocPrint.money(rv.round.subtotal)],
+      ...(rv.round.discount ? [['ส่วนลด (เฉลี่ยตามสัดส่วนของที่ส่งรอบนี้)', '-' + DocPrint.money(rv.round.discount)]] : []),
+      ...(rv.round.exemptAmount ? [['มูลค่าสินค้าที่ยกเว้นภาษี', DocPrint.money(rv.round.exemptAmount)]] : []),
+      ['มูลค่าสินค้า' + (rv.round.vatAmount ? ' (ไม่รวมภาษี)' : ''), DocPrint.money(rv.round.subtotalExVat)],
+      ...(rv.round.vatAmount ? [['ภาษีมูลค่าเพิ่ม ' + Math.round((o.vatRate != null ? o.vatRate : 0.07) * 100) + '%', DocPrint.money(rv.round.vatAmount)]] : []),
+      ['ยอดสุทธิ', DocPrint.money(rv.round.total), 'grand']
+    ] : k.showPrice ? [
       ['ยอดรวมก่อนหักส่วนลด', DocPrint.money(o.subtotal)],
       ...(o.discount ? [['ส่วนลด', '-' + DocPrint.money(o.discount)]] : []),
       ...(o.vatMixed

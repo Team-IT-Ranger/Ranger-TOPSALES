@@ -221,7 +221,9 @@ var CENTRAL_SHEETS = {
   ap_payment_allocations: ['record_id','payment_id','bill_id','amount'],
 
   // ลูกหนี้: ใบแจ้งหนี้ลูกค้า (ออกจากบิลขายเครดิตได้) + การรับชำระ
-  ar_invoices: ['record_id','invoice_no','customer_id','tenant_id','sales_order_id','invoice_date','due_date',
+  /* delivery_round_id — ★ 15 ต.ค. 2026 บิลที่แยกรอบจัดส่งออกใบแจ้งหนี้ **ใบละรอบ** ตามของที่ส่งจริง
+     ว่าง = ใบของทั้งบิล (บิลที่ไม่ได้แยกรอบ และใบเก่าทุกใบ) · กันซ้ำจึงเป็นคู่ (บิล, รอบ) ไม่ใช่บิลอย่างเดียว */
+  ar_invoices: ['record_id','invoice_no','customer_id','tenant_id','sales_order_id','delivery_round_id','invoice_date','due_date',
     'subtotal_ex_vat','vat_amount','total','received_amount','status','journal_id','note','created_by','created_at'],
   ar_receipts: ['record_id','tenant_id','receipt_no','customer_id','receipt_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
   ar_receipt_allocations: ['record_id','receipt_id','invoice_id','amount'],

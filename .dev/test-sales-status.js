@@ -49,10 +49,22 @@ const ctx = {
   arCalls: [],
   arShouldFail: false,
   _createArInvoiceCore: function (session, payload, book) {
-    ctx.arCalls.push({ tenantId: payload.tenantId, salesOrderId: payload.salesOrderId, book: book });
-    return ctx.arShouldFail ? { success: false, message: 'ลูกค้ารายนี้ยังไม่ได้ตั้งเครดิต' }
-      : { success: true, invoiceNo: 'INV-TEST-0001', invoiceId: 1 };
+    ctx.arCalls.push({ tenantId: payload.tenantId, salesOrderId: payload.salesOrderId, book: book,
+      deliveryRoundId: payload.deliveryRoundId, subtotalExVat: payload.subtotalExVat, vatAmount: payload.vatAmount });
+    if (ctx.arShouldFail) return { success: false, message: 'ลูกค้ารายนี้ยังไม่ได้ตั้งเครดิต' };
+    const n = ctx.arCalls.length;
+    return { success: true, invoiceNo: 'INV-TEST-' + String(n).padStart(4, '0'), invoiceId: n };
   },
+  /* ── ภาษี: ของจริงอยู่ใน 18_pricing_engine.gs ซึ่งมีเทสต์ของตัวเองแล้ว ที่นี่จำลองแบบรวม VAT 7%
+       ให้พอคิดยอดของรอบได้ (ไฟล์นี้ทดสอบ "ออกใบตอนไหน ยอดเท่าไร" ไม่ใช่สูตรภาษี) ── */
+  TAX_VAT: 'vat',
+  _round2: n => Math.round(n * 100) / 100,
+  splitVat: (gross, rate) => { const r = (rate == null ? 0.07 : rate);
+    const ex = Math.round(gross / (1 + r) * 100) / 100;
+    return { rate: r, exVat: ex, vat: Math.round((gross - ex) * 100) / 100 }; },
+  _orderVat: o => { const total = Number(o.total) || 0, ex = Math.round(total / 1.07 * 100) / 100;
+    return { rate: 0.07, exVat: ex, vat: Math.round((total - ex) * 100) / 100, applyVat: true,
+      vatType: 'inclusive', exemptAmount: 0, taxableExVat: ex, mixed: false }; },
   tenantObjects: (tid, n) => sheetOf(n).map(o => Object.assign({}, o)),
   /* ★ 15 ต.ค. 2026 — ของจริงเลิกอ่านทั้งแท็บมาหาใบเดียวแล้ว (tenantRowById/tenantRowsWhere ใน 02_helpers.gs)
      ตัวจำลองต้องให้ผลเหมือนกันเป๊ะ: หน้าตาแถวเดียวกัน ลำดับเดียวกัน และเป็นสำเนา ไม่ใช่ตัวจริงในชีต */
@@ -678,6 +690,85 @@ console.log('\n══ รอบจัดส่ง · ของค้างส่
     resOf(81), [['302', 12]]);
   ctx.updateSalesOrderStatus(S, { id: 81, status: 'confirmed' });
   eq('ถอยกลับไปยืนยันแล้ว ยังกันของไว้เท่าเดิม (ยังเป็นคำมั่นกับลูกค้า)', resOf(81), [['302', 12]]);
+}
+
+/* ══════════ ใบกำกับภาษี/ใบแจ้งหนี้ ออกตามรอบจัดส่ง (15 ต.ค. 2026 — เจ้าของระบบเปลี่ยนมติ) ══════════
+   ★ เดิมออกใบเดียวเต็มจำนวนตอนพร้อมจัดส่งครั้งแรก ซึ่งผิดตั้งแต่ต้น: ส่งไปครึ่งเดียวแต่ใบกำกับระบุเต็ม
+   ★ ของที่ต้องยืนยันให้ได้คือ **ผลรวมทุกรอบ = ยอดบิลเป๊ะ** ทั้งยอดรวม ยอดก่อนภาษี และภาษี */
+console.log('\n══ ใบกำกับภาษี/ใบแจ้งหนี้ ตามรอบจัดส่ง ══');
+{
+  WH.warehouse_stock.push({ tenant_id: 'T1', warehouse_id: 'W1', product_id: '401', qty: 999, avg_cost: 1 });
+  WH.warehouse_stock.push({ tenant_id: 'T1', warehouse_id: 'W1', product_id: '402', qty: 999, avg_cost: 1 });
+  // บิล 15,000 (ตั้ง 16,000 − ส่วนลด 1,000 ซึ่งเฉลี่ยลงบรรทัดแรกไว้แล้วตอนขาย)
+  t.sales_orders.push({ record_id: 90, order_code: 'SO-90', customer_id: 1, subtotal: 16000, discount: 1000, total: 15000,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'accepted',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-10-15 09:00:00' });
+  t.order_items.push({ record_id: 9001, order_id: 90, product_id: '401', unit_code: 'CT', unit_factor: 1, qty: 10, base_qty: 10,
+    price: 1000, line_total: 10000, line_discount: 1000, is_free: 0, tax_status: 'vat' });
+  t.order_items.push({ record_id: 9002, order_id: 90, product_id: '402', unit_code: 'CT', unit_factor: 1, qty: 5, base_qty: 5,
+    price: 1200, line_total: 6000, line_discount: 0, is_free: 0, tax_status: 'vat' });
+
+  const nAr = ctx.arCalls.length;
+  let s1 = ctx.saveDeliveryRound(S, { id: 90, lines: [{ itemId: 9001, qty: 5 }, { itemId: 9002, qty: 5 }] });
+  eq('แยกรอบ 1 = 401×5 + 402×5 (ค้าง 401 อีก 5)', [s1.success, s1.shortLines], [true, 1]);
+
+  let r1 = ctx.updateSalesOrderStatus(S, { id: 90, status: 'ready_to_ship' });
+  const round1 = t.delivery_rounds.find(x => String(x.order_id) === '90' && x.round_no === 1);
+  eq('รอบ 1 พร้อมจัดส่ง → ออกใบกำกับภาษีของรอบ พร้อมยอดเฉพาะของที่ส่งจริง',
+    [r1.success, /^TAX-IV-/.test(round1.tax_invoice_no || ''), round1.total], [true, true, 10500]);
+  eq('  ★ ส่วนลดท้ายบิลถูกเฉลี่ยตามสัดส่วนของที่ส่ง (ไม่ใช่รอบแรกกินหมด)', round1.discount, 500);
+  eq('  ตั้งลูกหนี้ของรอบ พร้อมเลขรอบและยอดของรอบ', (() => { const a = ctx.arCalls[ctx.arCalls.length - 1];
+    return [a.salesOrderId, a.deliveryRoundId, a.subtotalExVat, a.vatAmount]; })(),
+    [90, round1.record_id, round1.subtotal_ex_vat, round1.vat_amount]);
+  eq('  ยอดของรอบ: ก่อนภาษี + ภาษี = ยอดรวมของรอบเป๊ะ',
+    Math.round((round1.subtotal_ex_vat + round1.vat_amount) * 100) / 100, round1.total);
+
+  // ส่งรอบ 1 เสร็จ → เปิดรอบ 2 ให้ของค้าง
+  ctx.updateSalesOrderStatus(S, { id: 90, status: 'delivering' });
+  ctx.updateSalesOrderStatus(S, { id: 90, status: 'completed' });
+  const nTax = ctx.docNoCalls;
+  let r2 = ctx.updateSalesOrderStatus(S, { id: 90, status: 'ready_to_ship' });
+  const rounds = t.delivery_rounds.filter(x => String(x.order_id) === '90');
+  const round2 = rounds.find(x => x.round_no === 2);
+  eq('รอบ 2 พร้อมจัดส่ง → ได้ใบกำกับภาษี **ใบใหม่** คนละเลขกับรอบ 1',
+    [r2.success, /^TAX-IV-/.test(round2.tax_invoice_no || ''), round2.tax_invoice_no !== round1.tax_invoice_no],
+    [true, true, true]);
+  eq('  และตั้งลูกหนี้ใบใหม่ของรอบ 2 (คนละใบกับรอบ 1)', (() => { const a = ctx.arCalls[ctx.arCalls.length - 1];
+    return [a.deliveryRoundId === round2.record_id, ctx.arCalls.length - nAr]; })(), [true, 2]);
+
+  eq('★★ ผลรวมทุกรอบ = ยอดบิลเป๊ะ (รวม · ก่อนภาษี · ภาษี · ส่วนลด)', [
+    Math.round(rounds.reduce((s, x) => s + x.total, 0) * 100) / 100,
+    Math.round(rounds.reduce((s, x) => s + x.subtotal_ex_vat, 0) * 100) / 100,
+    Math.round(rounds.reduce((s, x) => s + x.vat_amount, 0) * 100) / 100,
+    Math.round(rounds.reduce((s, x) => s + x.discount, 0) * 100) / 100
+  ], [15000, ctx._orderVat(row(90)).exVat, ctx._orderVat(row(90)).vat, 1000]);
+
+  eq('แถวบิลสะท้อนเลขใบกำกับของรอบปัจจุบัน (เลขของรอบก่อนยังอยู่ที่แถวรอบ)',
+    row(90).tax_invoice_no, round2.tax_invoice_no);
+
+  console.log('  -- เดินซ้ำต้องไม่ออกใบใหม่ --');
+  const nDoc3 = ctx.docNoCalls, nAr3 = ctx.arCalls.length;
+  ctx.updateSalesOrderStatus(S, { id: 90, status: 'accepted' });     // ถอยกลับ
+  ctx.updateSalesOrderStatus(S, { id: 90, status: 'ready_to_ship' }); // แล้วเดินหน้าใหม่
+  eq('ถอยแล้วเดินหน้าใหม่ = ใช้ใบเดิมของรอบนั้น ไม่กินตัวนับและไม่ตั้งลูกหนี้ซ้ำ',
+    [ctx.docNoCalls - nDoc3, ctx.arCalls.length - nAr3, t.delivery_rounds.filter(x => String(x.order_id) === '90').length],
+    [0, 0, 2]);
+
+  console.log('  -- บิลที่ไม่ได้แยกรอบ ต้องทำงานเหมือนเดิมทุกอย่าง --');
+  t.sales_orders.push({ record_id: 91, order_code: 'SO-91', customer_id: 1, subtotal: 1000, discount: 0, total: 1000,
+    payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'accepted',
+    payment_status: 'unpaid', paid_amount: 0, created_at: '2026-10-15 09:30:00' });
+  t.order_items.push({ record_id: 9101, order_id: 91, product_id: '401', unit_code: 'CT', unit_factor: 1, qty: 1, base_qty: 1,
+    price: 1000, line_total: 1000, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  const nAr4 = ctx.arCalls.length;
+  const r91 = ctx.updateSalesOrderStatus(S, { id: 91, status: 'ready_to_ship' });
+  eq('ใบเดียวทั้งบิล: ใบกำกับภาษีอยู่บนแถวบิล · ตั้งลูกหนี้แบบไม่ผูกรอบ',
+    [r91.success, /^TAX-IV-/.test(row(91).tax_invoice_no || ''), !ctx.arCalls[ctx.arCalls.length - 1].deliveryRoundId,
+     ctx.arCalls.length - nAr4], [true, true, true, 1]);
+
+  ctx.updateSalesOrderStatus(S, { id: 91, status: 'accepted' });   // ถอยกลับมาขั้นที่แยกรอบได้
+  fails('★ ใบที่ออกใบกำกับเต็มจำนวนไปแล้ว แยกรอบย้อนหลังไม่ได้ (ใบกำกับจะกลายเป็นใบที่ระบุของเกินจริง)',
+    ctx.saveDeliveryRound(S, { id: 91, lines: [{ itemId: 9101, qty: 1 }] }), /ยกเลิกใบกำกับภาษี/);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

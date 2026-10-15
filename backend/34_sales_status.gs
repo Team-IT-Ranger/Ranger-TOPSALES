@@ -289,7 +289,7 @@ function updateSalesOrderStatus(session, payload) {
 
     var fromStatus = _soStatusOf(order), fromPay = orderPaymentStatus(order);
     var toStatus = fromStatus, toPay = fromPay;
-    var fields = {}, changes = [], justBecameReady = false, rollNote = '';
+    var fields = {}, changes = [], justBecameReady = false, rollNote = '', roundWarn = '';
 
     // ── แกนการส่งของ ──
     if (payload.status !== undefined && payload.status !== null && String(payload.status) !== '') {
@@ -367,10 +367,27 @@ function updateSalesOrderStatus(session, payload) {
         if (toStatus === SO_READY) {
           /* ★ ส่งมอบสินค้า = จุดที่ภาระภาษีเกิด (tax point ของการขายสินค้าคือการส่งมอบ)
              ใบจัดของ/ใบส่งสินค้าออกไปตั้งแต่ขั้นรับงานแล้ว — ใส่ไว้ที่นี่ด้วยเป็นกันชนของบิลเก่า
-             ที่ข้ามขั้นมาตั้งแต่ก่อนเปลี่ยนกติกา (issueSaleDocNos ข้ามชนิดที่มีเลขแล้วเสมอ) */
-          var iss = issueSaleDocNos(tenantId, order, ['picking', 'delivery', 'tax']);
-          for (var kk in iss.fields) fields[kk] = iss.fields[kk];
-          iss.issued.forEach(function(t) { changes.push('ออก' + t); });
+             ที่ข้ามขั้นมาตั้งแต่ก่อนเปลี่ยนกติกา (issueSaleDocNos ข้ามชนิดที่มีเลขแล้วเสมอ)
+             ★★ 15 ต.ค. 2026 — บิลที่แยกรอบจัดส่ง ออก **ใบกำกับภาษีและใบแจ้งหนี้ของรอบนั้น** ตามของที่ส่งจริง
+               (เจ้าของระบบเปลี่ยนมติหลังดูระบบจริงของบริษัทอื่น · ถูกต้องกว่าเดิมด้วย เพราะออกใบกำกับ
+               เต็มจำนวนทั้งที่ส่งไปแค่ครึ่งเดียว = ใบกำกับระบุของเกินจริง)
+               ของที่เหลือได้ใบใหม่ตอนรอบถัดไปเข้าพร้อมจัดส่ง — ดู issueRoundInvoices (48_delivery_rounds.gs) */
+          var issR = issueSaleDocNos(tenantId, order, ['picking', 'delivery']);
+          for (var rk2 in issR.fields) fields[rk2] = issR.fields[rk2];
+          issR.issued.forEach(function(t) { changes.push('ออก' + t); });
+
+          var planReady = saleOrderHasRounds(order) ? saleDeliveryPlan(tenantId, order) : null;
+          if (planReady && planReady.currentRound) {
+            var inv = issueRoundInvoices(session, tenantId, order, planReady, planReady.currentRound);
+            inv.changes.forEach(function(c) { changes.push(c); });
+            roundWarn = inv.warning || '';
+            // แถวบิลสะท้อนเลขใบกำกับของ "รอบปัจจุบัน" (หลักเดียวกับใบจัดของ/ใบส่งสินค้า) — เลขของรอบก่อนๆ ยังอยู่ที่แถวรอบ
+            if (inv.taxInvoiceNo) { fields.tax_invoice_no = inv.taxInvoiceNo; fields.tax_invoice_at = nowStr(); }
+          } else {
+            var iss = issueSaleDocNos(tenantId, order, ['tax']);
+            for (var kk in iss.fields) fields[kk] = iss.fields[kk];
+            iss.issued.forEach(function(t) { changes.push('ออก' + t); });
+          }
         }
         justBecameReady = (toStatus === SO_READY);
         changes.push(SO_STATUS_LABELS[fromStatus] + ' → ' + SO_STATUS_LABELS[toStatus]);
@@ -421,8 +438,9 @@ function updateSalesOrderStatus(session, payload) {
        ★★ ออกใบไม่สำเร็จ "ห้ามล้มการเปลี่ยนสถานะ" — ของแพ็คขึ้นรถไปแล้ว ย้อนสถานะกลับไม่ได้
           รายงานเป็นคำเตือนแทน แล้วให้ฝ่ายบัญชีออกเองจากหน้าลูกหนี้ (ปุ่มเดิมยังอยู่ และกันซ้ำให้อยู่แล้ว)
        ★ ลงสมุดของเจ้าของบิล — `_normBook(tenantId)` ไม่ใช่สมุดของคนกด (ฝ่ายคลังอาจเป็นคนบริษัท) */
-    var arNote = '';
-    if (justBecameReady && isCreditPayment(order.payment_method)) {
+    /* ★ บิลที่แยกรอบจัดส่ง ตั้งลูกหนี้ไปแล้วรายรอบ (issueRoundInvoices) — ตรงนี้เหลือเฉพาะบิลที่ส่งรอบเดียวทั้งใบ */
+    var arNote = roundWarn || '';
+    if (justBecameReady && isCreditPayment(order.payment_method) && !saleOrderHasRounds(order)) {
       var ar = _createArInvoiceCore(session, { tenantId: tenantId, salesOrderId: order.record_id },
         typeof _normBook === 'function' ? _normBook(tenantId) : '');
       if (ar && ar.success) changes.push('ตั้งลูกหนี้ ' + ar.invoiceNo);
@@ -514,10 +532,15 @@ function ensureSaleDocNo(session, payload) {
     if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
 
     var status = _soStatusOf(order), paid = orderPaymentStatus(order);
+    /* ★★ 15 ต.ค. 2026 — บิลที่แยกรอบจัดส่ง ใบกำกับภาษีเป็นของ "รอบ" ไม่ใช่ของทั้งบิล
+       ปุ่มพิมพ์จะต้องไม่ออกใบเต็มจำนวนมาทับ (จะกลายเป็นใบที่ระบุของเกินจริง และเลขจะชนกับใบของรอบ)
+       ใบของรอบออกเองตอนรอบเข้า "พร้อมจัดส่ง" (issueRoundInvoices ใน 48_delivery_rounds.gs) */
+    var hasRounds = saleOrderHasRounds(order);
     var want = [];
     kinds.forEach(function(k) {
       var m = SALE_DOC_FIELDS[k];
       if (!m) return;
+      if (k === 'tax' && hasRounds) return;
       if (String(order[m.no] || '').trim()) return;          // มีเลขแล้ว ไม่ต้องทำอะไร
       var okNow = (k === 'receipt') ? (paid !== PAY_UNPAID)
         : ((SALE_DOC_READY_AT[k] || []).indexOf(status) !== -1);
