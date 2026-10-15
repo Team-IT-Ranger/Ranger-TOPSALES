@@ -1781,6 +1781,30 @@
           <div class="form-card" id="ar-aging-card" style="display:none"><h3>อายุหนี้ลูกหนี้</h3><div id="ar-aging"></div></div>
         </section>
 
+        <!-- ═══ ใบลดหนี้ / ใบเพิ่มหนี้ (ม.86/10 · ม.86/9) ═══
+             ★ ตารางเดียวสองชนิด ไม่แยกสองหน้า — คนทำงานถามว่า "ใบนี้ถูกแก้ยอดไปเท่าไรแล้ว"
+               ไม่ได้ถามแยกว่าลดไปเท่าไรกับเพิ่มไปเท่าไร · กรองด้วยช่องชนิดเมื่อต้องการ -->
+        <section class="view" id="view-adjnotes">
+          <div class="view-head">
+            <div><h1>ใบลดหนี้ / ใบเพิ่มหนี้</h1>
+              <p data-book-sub="แก้ยอดใบแจ้งหนี้ที่ออกไปแล้ว · สมุดบัญชีของ">แก้ยอดใบแจ้งหนี้ที่ออกไปแล้ว — กระทบทั้งลูกหนี้ บัญชี และสต็อก (ถ้าของขยับจริง)</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
+              <select id="adj-kind" onchange="renderAdjNotes()" style="min-width:150px">
+                <option value="">ทุกชนิด</option>
+                <option value="credit">ใบลดหนี้</option>
+                <option value="debit">ใบเพิ่มหนี้</option>
+              </select>
+              <button class="btn" onclick="openAdjNotePicker('credit')">+ ออกใบลดหนี้</button>
+              <button class="btn btn-primary" onclick="openAdjNotePicker('debit')">+ ออกใบเพิ่มหนี้</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>ชนิด</th><th>เลขที่</th><th>วันที่</th><th>ลูกค้า</th><th>อ้างใบแจ้งหนี้</th>
+              <th>บิลขาย</th><th>เหตุผล</th><th>ก่อนภาษี</th><th>ภาษี</th><th>รวม</th><th>ของ</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="adj-body"><tr class="empty-row"><td colspan="13">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
         <!-- ═══ บัญชี: แยกประเภท ═══ -->
         <section class="view" id="view-glbooks">
           <div class="view-head">
@@ -2360,8 +2384,11 @@ const NAV_GROUPS = [
   { n:'1', icon:'receipt', label:'งานขาย', subs:[
     { n:'1.1', label:'เอกสารการขาย', items:[
       {n:'1.1.1', label:'ใบสั่งขาย', view:'salesorders', mod:'sales', ready:true, scope:'both'},
-      {n:'1.1.2', label:'ใบลดหนี้ / เพิ่มหนี้', view:'v-cn', mod:'sales', ready:false, scope:'both',
-        soon:'ใบลดหนี้ / เพิ่มหนี้ (Credit/Debit Note)', desc:'แก้ยอดบิลที่ออกไปแล้ว กระทบทั้งลูกหนี้และสต็อก'},
+      /* ★ mod เป็น 'accounting' ไม่ใช่ 'sales' — ต้องตรงกับที่ backend ตรวจจริง
+         (`_requirePermission(session,'accounting',…)` ใน 49_credit_notes.gs) ไม่งั้นคนที่มีสิทธิ์ขาย
+         แต่ไม่มีสิทธิ์บัญชีจะเห็นเมนูกดได้ แล้วเจอ "ไม่มีสิทธิ์" ตอนกดเข้าไป ซึ่งหาสาเหตุยาก
+         ★ อยู่ใต้กลุ่มงานขายเพราะคนออกใบคือแอดมินศูนย์ที่ทำงานอยู่ในกลุ่มนี้ ไม่ใช่ฝ่ายบัญชี */
+      {n:'1.1.2', label:'ใบลดหนี้ / เพิ่มหนี้', view:'adjnotes', mod:'accounting', ready:true, scope:'both'},
       {n:'1.1.3', label:'ใบเสนอราคา', view:'v-quote', mod:'sales', ready:false, scope:'both',
         soon:'ใบเสนอราคา', desc:'เสนอราคาก่อนเปิดบิลจริง แปลงเป็นใบสั่งขายได้'}
     ]},
@@ -2573,9 +2600,13 @@ const canEdit = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] 
 const RO_GUARDS = [
   { mod:'pricing',    views:['pricelists','pricelistdetail','pricelistimport'] },
   { mod:'promotions', views:['promotions','freegoods'] },
-  { mod:'settings',   views:['custgroups','distchannels','paytypes'] }
+  { mod:'settings',   views:['custgroups','distchannels','paytypes'] },
+  /* ★ บทบาทที่มีสิทธิ์บัญชีแบบ "ดูอย่างเดียว" ต้องไม่เห็นปุ่มออกใบ — backend ปฏิเสธอยู่แล้ว
+     (`_requirePermission(session,'accounting','edit')`) แต่ปล่อยให้กดได้แล้วค่อยเด้งข้อความ
+     คือทำให้คนคิดว่าระบบพัง ไม่ใช่คิดว่าตัวเองไม่มีสิทธิ์ */
+  { mod:'accounting', views:['adjnotes'] }
 ];
-const RO_WRITE_FN = /^(add|save|delete|deactivate|create|void|openClone|openCreate|openPriceListImport|openRuleModal|openFgSetModal|openFgItemModal|openPromote|openPromoDistribution|openLineModal|pli|plmAdd|plmToggle|pkgToggleAll|toggleTenantStatus)/;
+const RO_WRITE_FN = /^(add|save|delete|deactivate|create|void|openClone|openCreate|openPriceListImport|openRuleModal|openFgSetModal|openFgItemModal|openPromote|openPromoDistribution|openLineModal|openAdjNotePicker|pli|plmAdd|plmToggle|pkgToggleAll|toggleTenantStatus)/;
 function applyViewOnlyGuards(){
   RO_GUARDS.forEach(g => {
     if (canEdit(g.mod)) return;
@@ -2926,7 +2957,7 @@ const LOADERS = {
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
-  apbills: loadApBills, arinvoices: loadArInvoices, glbooks: loadGlBooks,
+  apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
   helpcenter: loadHelpCenter
@@ -8208,6 +8239,70 @@ function renderArInvoices(){
       (iv.status !== 'void' ? '<button class="btn btn-sm" onclick="openDebitNoteForm('+iv.id+')">ใบเพิ่มหนี้</button>' : '') +
     '</td></tr>').join(''), 10, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
 }
+/* ══════════ หน้ารายการใบลดหนี้ / ใบเพิ่มหนี้ — 16 ต.ค. 2026 ══════════
+   เมนู 1.1.2 เคยเป็น "เร็วๆ นี้" ทั้งที่ของทำเสร็จและใช้บน prod แล้ว — ออกใบได้จากหน้าลูกหนี้
+   และแท็บการจัดส่งของบิลขายเท่านั้น ซึ่งหาย้อนหลังไม่ได้ว่าเคยออกใบอะไรไว้บ้าง */
+let adjCache = [];
+const ADJ_ST = { posted:['ok','ลงบัญชีแล้ว'], voided:['off','กลับรายการ'] };
+
+async function loadAdjNotes(){
+  const body = document.getElementById('adj-body');
+  if (!adjCache.length) adjCache = listSnapLoad('adjnotes') || [];
+  if (adjCache.length) renderAdjNotes(); else tblLoading(body, 13);
+  /* ยิงสองคำขอขนานกัน — วัดแล้วราคาเท่าคำขอเดียว (ดู blueprint แผ่น 02)
+     รวมเป็น action เดียวไม่ช่วยอะไร และจะทำให้ฝั่ง backend ต้องมีทางที่สาม */
+  const [cn, dn] = await Promise.all([
+    callApi('listArCreditNotes', {}), callApi('listArDebitNotes', {})
+  ]);
+  if (!cn.success || !dn.success) { toast((cn.message || dn.message), true); return; }
+  adjCache = [...(cn.data || []), ...(dn.data || [])]
+    .sort((a, b) => String(b.creditDate).localeCompare(String(a.creditDate)) || (b.id - a.id));
+  listSnapSave('adjnotes', adjCache);
+  renderAdjNotes();
+}
+
+function renderAdjNotes(){
+  const want = document.getElementById('adj-kind').value;
+  const rows = adjCache.filter(n => !want || n.kind === want);
+  document.getElementById('adj-body').innerHTML = rowsOrEmpty(rows.map(n => {
+    const K = ADJ_UI[n.kind] || ADJ_UI.credit;
+    return '<tr><td><span class="tag '+(n.kind === 'debit' ? 'tag-info' : 'tag-warn')+'">'+esc(K.label)+'</span></td>' +
+      '<td class="mono-data">'+esc(n.noteNo)+'</td><td class="mono-data">'+esc(n.creditDate)+'</td>' +
+      '<td class="wrap">'+esc(n.customerName)+'</td><td class="mono-data">'+dash(n.invoiceNo)+'</td>' +
+      '<td class="mono-data">'+dash(n.salesOrderId)+'</td><td class="wrap">'+dash(n.reason)+'</td>' +
+      '<td class="mono-data">฿'+bahtPlain(n.subtotalExVat)+'</td><td class="mono-data">฿'+bahtPlain(n.vatAmount)+'</td>' +
+      /* ★ ใส่เครื่องหมายให้เห็นทิศทาง — ตัวเลขเปล่าสองชนิดปนกันในตารางเดียวอ่านผิดได้ง่าย */
+      '<td class="mono-data"><b>'+(n.kind === 'debit' ? '+' : '−')+'฿'+bahtPlain(n.total)+'</b></td>' +
+      '<td>'+(n.stockReturned ? '<span class="tag">'+(n.kind === 'debit' ? 'ตัดออก' : 'รับคืน')+'</span>' : '—')+'</td>' +
+      '<td>'+pill2(ADJ_ST, n.status)+'</td>' +
+      '<td><button class="btn btn-sm" onclick="printAdjustNoteById('+n.id+',\''+n.kind+'\')">พิมพ์</button></td></tr>';
+  }).join(''), 13, 'ยังไม่มีใบลดหนี้หรือใบเพิ่มหนี้');
+}
+
+/* ออกใบใหม่จากหน้านี้ = ต้องเลือกใบแจ้งหนี้ที่จะอ้างถึงก่อน (ใบปรับหนี้ลอยๆ ไม่มีอยู่ตามกฎหมาย
+   ม.86/10 และ 86/9 บังคับให้อ้างเลขใบกำกับภาษีเดิม) */
+async function openAdjNotePicker(kind){
+  const K = ADJ_UI[kind] || ADJ_UI.credit;
+  const r = await callApi('listArInvoices', {});
+  if (!r.success) { toast(r.message, true); return; }
+  const ivs = (r.data || []).filter(iv => iv.status !== 'void' &&
+    (kind === 'debit' || (Number(iv.total) + Number(iv.debitedAmount || 0) - Number(iv.creditedAmount || 0)) > 0.009));
+  plModal('<h3>ออก'+K.label+' — เลือกใบแจ้งหนี้ที่จะอ้างถึง</h3>' +
+    '<p class="form-hint">' + (kind === 'debit'
+      ? 'เพิ่มหนี้ได้ทุกใบที่ยังไม่ถูกยกเลิก (คิดเงินขาดรู้ทีหลังได้เสมอ)'
+      : 'แสดงเฉพาะใบที่ยังลดไม่เต็มยอด — ใบที่รับเงินครบแล้วก็ลดได้ (ลูกค้าคืนของทีหลัง)') + '</p>' +
+    (ivs.length ? '<div class="table-wrap"><table><thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>วันที่</th>' +
+      '<th>ยอดรวม</th><th>คงค้าง</th><th></th></tr></thead><tbody>' +
+      ivs.map(iv => '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td class="wrap">'+esc(iv.customerName)+'</td>' +
+        '<td class="mono-data">'+esc(iv.invoiceDate)+'</td><td class="mono-data">฿'+bahtPlain(iv.total)+'</td>' +
+        '<td class="mono-data">฿'+bahtPlain(iv.outstanding)+'</td>' +
+        '<td><button class="btn btn-sm" onclick="adjPick('+iv.id+',\''+kind+'\')">เลือก</button></td></tr>').join('') +
+      '</tbody></table></div>'
+      : '<p class="form-hint">ไม่มีใบแจ้งหนี้ที่'+K.verb+'หนี้ได้</p>') +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
+}
+function adjPick(invoiceId, kind){ plModalClose(); openAdjustNoteForm(invoiceId, kind); }
+
 /* ══════════ ใบลดหนี้ (Credit Note) — 15 ต.ค. 2026 ══════════
    เกิดจากช่องว่างจริง: ยกเลิกบิลที่ออกใบกำกับภาษีไปแล้ว ไม่มีเอกสารอะไรให้ลูกค้าถือ และบัญชีต้องไปกลับรายการเอง
    ★ เป็นเอกสารภาษี (ม.86/10) ไม่ใช่แค่รายการบัญชี — ใบที่พิมพ์ออกมาต้องมี เลขใบกำกับเดิม · เหตุผล ·
@@ -8320,7 +8415,11 @@ async function cnSave(){
   toast(r.message);
   // ออกใบแล้วพิมพ์ให้เลย — เอกสารพวกนี้ต้องส่งถึงมือลูกค้า ไม่ใช่แค่ลงบัญชีไว้เฉยๆ
   printAdjustNoteById(r.noteId || r.creditNoteId, CN_KIND);
-  if (typeof loadArInvoices === 'function' && document.querySelector('.view.active')?.id === 'view-arinvoices') loadArInvoices();
+  const active = document.querySelector('.view.active')?.id;
+  if (active === 'view-arinvoices') loadArInvoices();
+  /* ★ ออกใบจากหน้ารายการเอง ต้องล้าง snapshot ก่อนโหลดใหม่ ไม่งั้นผู้ใช้เห็นของก่อนออกใบ
+     อยู่สองวินาที แล้วนึกว่าไม่ติดจึงกดซ้ำ (บทเรียนเดิมของ listSnapDrop) */
+  if (active === 'view-adjnotes') { listSnapDrop('adjnotes'); adjCache = []; loadAdjNotes(); }
   if (currentSaleOrderId) sodSnapDrop(currentSaleOrderId);
 }
 const printCreditNoteById = id => printAdjustNoteById(id, 'credit');
@@ -8889,7 +8988,12 @@ function tblLoading(body, cols){
      ส่วนข้อความไทยใช้ localeCompare('th') ไม่งั้น "แ" มาก่อน "ก" ตามรหัสอักขระ */
   const valOf = td => {
     const raw = (td.innerText || '').trim();
-    const num = raw.replace(/[฿,\s%]/g, '').replace(/[\u0E00-\u0E7F]/g, '');
+    /* ★ ลบตัวจริง (−, U+2212) และเครื่องหมายบวกหน้าเลข ต้องนับเป็นตัวเลขด้วย ไม่ใช่แค่ยัติภังค์ ASCII
+       คอลัมน์ที่โชว์ทิศทางของเงิน (ใบลดหนี้ติดลบ · ใบเพิ่มหนี้ติดบวก) ใช้เครื่องหมายลบตัวจริง
+       เพราะเป็นอักขระที่ถูกต้องทางการพิมพ์ · ไม่รองรับแล้วมันเงียบ: ตกไปเรียงแบบข้อความ
+       แล้วได้ลำดับ 900 → 1,000 → 80 ซึ่งไม่ถูกในความหมายใดเลย (เจอ 16 ต.ค. 2026) */
+    const num = raw.replace(/[฿,\s%]/g, '').replace(/[\u0E00-\u0E7F]/g, '')
+                   .replace(/\u2212/g, '-').replace(/^\+/, '');
     if (num !== '' && /^-?\d+(\.\d+)?$/.test(num)) return { n: parseFloat(num), s: raw };
     if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return { n: null, s: raw };        // yyyy-mm-dd เรียงแบบข้อความได้อยู่แล้ว
     return { n: null, s: raw };
