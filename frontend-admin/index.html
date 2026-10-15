@@ -3915,15 +3915,23 @@ async function openSaleOrderDetail(id){
      ★ บิลขายจากรถไม่มีคลังกลางให้ดูและแยกรอบไม่ได้ — รู้ตั้งแต่แถวในรายการแล้วก็ไม่ต้องยิงคำขอที่สอง */
   const known = (salesOrdersCache || []).find(x => String(x.id) === String(id));
   const needPlan = !known || known.fulfillmentType !== 'immediate';
-  const [r, dp] = await Promise.all([
-    callApi('getSalesOrderAdmin', { id }),
-    needPlan ? callApi('getSaleDeliveryPlan', { id }) : Promise.resolve(null)
-  ]);
+  /* ★★ ยิงพร้อมกัน แต่ **วาดทันทีที่ตัวแรกถึง** ไม่ใช่รอให้ครบทั้งคู่ (15 ต.ค. 2026)
+     วัดหลัง deploy: ใบรายละเอียด 4.0 วิ · แผนจัดส่ง 6.3 วิ — Promise.all ทำให้คนรอ 6.3 วิ
+     ทั้งที่เนื้อบิล (รายการสินค้า ยอดเงิน ปุ่มขั้นถัดไป) พร้อมตั้งแต่ 4.0 วิ
+     ★ การ์ดของในคลังกับการ์ดประวัติอยู่คนละที่กับเนื้อบิล โผล่ทีหลังได้โดยไม่รบกวนการอ่าน */
+  const pDetail = callApi('getSalesOrderAdmin', { id });
+  const pPlan = needPlan ? callApi('getSaleDeliveryPlan', { id }) : Promise.resolve(null);
+  const r = await pDetail;
   if (!r.success) { toast(r.message, true); return; }
   if (currentSaleOrderId !== id) return; // ผู้ใช้กดออกไปหน้าอื่นระหว่างรอโหลด
-  // ประวัติสถานะมากับคำขอแผนจัดส่ง (ย้ายออกจากเส้นทางวิกฤตเมื่อ 15 ต.ค. 2026 — ดู 19_sales_admin.gs)
-  if (dp && dp.success && Array.isArray(dp.statusLog) && dp.statusLog.length) r.statusLog = dp.statusLog;
   renderSaleOrderDetail(r);
+  const dp = await pPlan;
+  if (currentSaleOrderId !== id) return;
+  // ประวัติสถานะมากับคำขอแผนจัดส่ง (ย้ายออกจากเส้นทางวิกฤตเมื่อ 15 ต.ค. 2026 — ดู 19_sales_admin.gs)
+  if (dp && dp.success && Array.isArray(dp.statusLog) && dp.statusLog.length) {
+    r.statusLog = dp.statusLog;
+    renderSaleOrderHistory(r);
+  }
   renderSaleDelivery(dp);
   SOD_PRE.set(String(id), { ts: Date.now(), r, dp });
   listSnapSave(sodSnapKey(id), [r, dp]);
