@@ -2331,6 +2331,14 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
     และตัดสต็อกเกลี้ยงคลัง (พลาดมาแล้ว 15 ต.ค. 2026 ต้องตามยกเลิกบิล คืนของด้วยใบรับของ และกลับรายการบัญชี)
   · **★★ ไฟเขียว/ส้มห้ามคาดเป็นค่าตายตัว** — มันตอบว่า "ใบนี้หยิบของได้จริงไหม" ซึ่งขึ้นกับบิลอื่นที่จองของ
     ชิ้นเดียวกันไว้ · เทสต์ต้องเทียบกับ `getSaleDeliveryPlan` ของใบเดียวกัน ไม่ใช่เขียนว่า "ต้องเป็นสีส้ม"
+- `UAT_URL='<uat exec url>' node .dev/uat-ar-adjust-notes-e2e.js` — live UAT test ของใบลดหนี้ (ม.86/10)
+  กับใบเพิ่มหนี้ (ม.86/9): เลขเอกสารจากตัวนับกลาง · ใบสำคัญสองทิศทาง · สต็อกเข้า/ออกคนละทาง ·
+  ยอดค้างที่ `listArInvoices`/`getArAging` ตอบ · เพดานของใบลดหนี้ กับการไม่มีเพดานของใบเพิ่มหนี้
+  · สั่งแค่ 1 ลังของสินค้าที่สต็อกน้อยสุด แล้วปิดงานด้วยการรับชำระยอดที่เพิ่มหนี้ไว้ (เอกสารที่ลงบัญชีแล้วลบไม่ได้)
+  · **★ `receiveArPayment` รับ `{ customerId, allocations:[{invoiceId, amount}] }` ไม่ใช่
+    `{ invoiceId, amount }`** — ส่งผิดรูปแล้วมันตอบ "ยังไม่ได้เลือกใบแจ้งหนี้" ซึ่งหน้าตาเหมือน
+    การปฏิเสธเพราะยอดเกิน → เทสต์ "รับเกินยอด" ผ่านโดยไม่ได้ทดสอบอะไรเลย (พลาดมาแล้ว 15 ต.ค. 2026)
+    **เทสต์กรณีปฏิเสธต้องเช็คข้อความที่ตอบกลับด้วย ไม่ใช่แค่ `!success`**
 - `UAT_URL='<uat exec url>' node .dev/uat-pricelist-edit-e2e.js` — live UAT test of manual price entry
   (clone an active list, edit/delete lines, bill promos, empty list; confirms active lists refuse edits).
   Only touches drafts it creates and deletes them at the end.

@@ -146,10 +146,15 @@ const post = async body => {
     .flatMap(g => g.docs || []).find(x => String(x.docNo) === String(invNo)) || {}).outstanding), r2(dn.total));
 
   console.log('\n══ ปิดงาน: รับชำระยอดที่เพิ่มหนี้ไว้ ══');
-  r = await api('receiveArPayment', { invoiceId: IV, amount: r2(dn.total) + 1, method: 'transfer' });
-  ck('รับเกินยอดค้าง → ปฏิเสธ', !r.success, true);
-  r = await api('receiveArPayment', { invoiceId: IV, amount: r2(dn.total), method: 'transfer',
-    paymentDate: new Date().toISOString().slice(0, 10) });
+  /* ★ receiveArPayment รับ { customerId, allocations:[{invoiceId, amount}] } ไม่ใช่ { invoiceId, amount }
+     ส่งผิดรูปแล้วมันตอบ "ยังไม่ได้เลือกใบแจ้งหนี้" ซึ่งหน้าตาเหมือนถูกปฏิเสธเพราะยอดเกิน
+     → เทสต์ "รับเกินยอด" จึงผ่านโดยไม่ได้ทดสอบอะไรเลย (พลาดมาแล้ว 15 ต.ค. 2026)
+     เช็คข้อความที่ตอบกลับด้วย ไม่ใช่แค่ !success */
+  const pay = amt => api('receiveArPayment', { customerId: CUST, method: 'transfer',
+    receiptDate: new Date().toISOString().slice(0, 10), allocations: [{ invoiceId: IV, amount: amt }] });
+  r = await pay(r2(dn.total) + 1);
+  ck('รับเกินยอดค้าง → ปฏิเสธ พร้อมบอกยอดที่ค้างจริง', !r.success && /ค้าง/.test(r.message || ''), true);
+  r = await pay(r2(dn.total));
   ck('รับครบ → ใบปิด ค้าง 0', r.success, true);
   iv = await ivOf(invNo);
   ck('  ยอดค้างสุดท้าย 0 (ยอดใบ + เพิ่มหนี้ − รับชำระ − ลดหนี้)', r2(iv.outstanding), 0);
