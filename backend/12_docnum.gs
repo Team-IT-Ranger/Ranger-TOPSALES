@@ -53,6 +53,8 @@ var DOC_SERIES_TYPES = [
   { code: 'PV',  label: 'ใบสำคัญจ่าย',        central: true },
   { code: 'INV', label: 'ใบแจ้งหนี้ลูกค้า',     central: true },
   { code: 'RV',  label: 'ใบสำคัญรับ',         central: true },
+  /* ใบลดหนี้ใช้ตัวนับกลางเหมือนใบแจ้งหนี้ — ออกในนามเจ้าของสมุดที่ตั้งลูกหนี้ไว้ (15 ต.ค. 2026) */
+  { code: 'CN',  label: 'ใบลดหนี้',           central: true },
   { code: 'JV',  label: 'ใบสำคัญทั่วไป',       central: true }
 ].map(function(t) {
   // หมวดที่ใช้ตัวนับกลางมีค่าเริ่มต้นชุดเดียวกันหมด: <รหัส>-<yyyyMM>-<รัน 4 หลัก> รีเซ็ตรายเดือน

@@ -96,7 +96,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -735,6 +735,82 @@ eq('สรุปตามกลุ่มสินค้า: วัสดุส�
 eq('สรุปตามหมวดหลัก (Category/subCategory): PACK/ฟิล์ม 2,000 · สินค้าที่ยังไม่มีหมวดรวมเป็น (ไม่มีหมวด) 1,500',
   r.categories.map(c => [c.category, c.subCategory, c.qty, c.freeQty, c.revenue]), [['PACK', 'ฟิล์ม', 40, 5, 2000], ['(ไม่มีหมวด)', '', 30, 0, 1500]]);
 eq('ยอดรวมทั้งรายงาน = 3,500 (เท่ากับ 1.8.1)', r.totalRevenue, 3500);
+
+/* ══════════ ใบลดหนี้ (49_credit_notes.gs · 15 ต.ค. 2026) ══════════
+   เกิดจากช่องว่างจริง: ยกเลิกบิลที่ออกใบกำกับภาษีไปแล้ว ระบบไม่มีอะไรให้ทำต่อ ต้องไปกลับรายการบัญชีเอง
+   ★ ใบลดหนี้เป็นเอกสารภาษี (ม.86/10) ต้องอ้างใบกำกับเดิมและเหตุผลเสมอ
+   ★★ ของที่ต้องยืนยัน: ลงบัญชีกลับทางพอดี · ยอดค้างลดลงจริงทุกที่ที่มีการคิดยอดค้าง · ลดเกินไม่ได้ */
+ctx.HOUSE_TENANT_ID = ctx.HOUSE_TENANT_ID || 'HOUSE';   // 13_tenants.gs ไม่ได้โหลดในชุดนี้ แต่ _saleStockScope ต้องใช้ตอนคืนของ
+console.log('\n── ใบลดหนี้ (Credit Note) ──');
+{
+  append(tenantSheets.sales_orders, { record_id: 91, order_code: 'SO-CN-01', customer_id: 500, subtotal: 10700,
+    discount: 0, total: 10700, payment_method: 'credit_term', status: 'completed', created_at: '2026-10-15 09:00:00',
+    apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07, subtotal_ex_vat: 10000, vat_amount: 700, exempt_amount: 0 });
+  append(tenantSheets.order_items, { record_id: 9101, order_id: 91, product_id: '20', unit_code: 'CT', unit_factor: 10,
+    qty: 10, base_qty: 100, price: 1070, line_total: 10700, line_discount: 0, is_free: 0, tax_status: 'vat' });
+
+  let cr = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 91, invoiceDate: '2026-10-15', dueDays: 30 });
+  ok('ตั้งลูกหนี้จากบิลที่จะใช้ทดสอบใบลดหนี้', cr);
+  const IV = cr.invoiceId;
+  const invRow = () => ctx.listArInvoices(FIN, {}).data.find(x => x.id === IV);
+
+  let d = ctx.getArCreditNoteDraft(FIN, { invoiceId: IV });
+  eq('ร่างใบลดหนี้: ดึงรายการจากบิลขายมาให้ พร้อมยอดที่ลดได้',
+    [d.success, d.lines.length, d.lines[0].qty, d.lines[0].unitPrice, d.invoice.creditable], [true, 1, 10, 1070, 10700]);
+
+  fails('ไม่ระบุเหตุผล → ปฏิเสธ (กฎหมายบังคับให้แสดงบนใบ)',
+    ctx.createArCreditNote(FIN, { invoiceId: IV, lines: [{ productId: '20', qty: 1, unitPrice: 1070 }] }), /เหตุผล/);
+  fails('ไม่มีรายการ → ปฏิเสธ',
+    ctx.createArCreditNote(FIN, { invoiceId: IV, reasonCode: 'return', lines: [] }), /อย่างน้อย 1 รายการ/);
+  fails('ลดเกินยอดใบ → ปฏิเสธ',
+    ctx.createArCreditNote(FIN, { invoiceId: IV, reasonCode: 'return', lines: [{ productId: '20', qty: 20, unitPrice: 1070, taxStatus: 'vat' }] }),
+    /ไม่เกิน/);
+
+  /* ★ ของกลับเข้า "คลังของเจ้าของบิล" — บิลใบนี้เป็นของตัวแทน T1 ของจึงกลับเข้าคลัง T1
+     ไม่ใช่คลังกลางของบริษัท (ซึ่งเป็นคนละ scope กัน) · เทสต์จึงต้องดูที่ scope เดียวกับที่บิลตัดของออกไป */
+  const stockOfT1 = () => (ctx._scoped('warehouse_stock', 'T1').find(w => String(w.product_id) === '20') || { qty: 0 }).qty;
+  const stockBefore = stockOfT1();
+  let r1 = ctx.createArCreditNote(FIN, { invoiceId: IV, reasonCode: 'return', creditDate: '2026-10-16', returnStock: true,
+    vatRate: 0.07, lines: [{ itemId: 9101, productId: '20', unitCode: 'CT', unitFactor: 10, qty: 3, unitPrice: 1070, taxStatus: 'vat' }] });
+  ok('ออกใบลดหนี้บางส่วน (คืนของ 3 ลัง)', r1);
+  eq('  เลขที่ขึ้นต้นด้วย CN · ยอด 3,210', [/^CN-/.test(r1.creditNoteNo || ''), r1.total], [true, 3210]);
+
+  let j2 = ctx.getJournal(FIN, { id: ctx.listArCreditNotes(FIN, {}).data[0].journalId }).journal;
+  eq('  ★ ลงบัญชีกลับทางกับใบแจ้งหนี้พอดี: Dr รายได้ 3,000 + Dr ภาษีขาย 210 / Cr ลูกหนี้ 3,210',
+    j2.lines.map(l => [l.accountCode, l.debit, l.credit]), [['4100', 3000, 0], ['2200', 210, 0], ['1200', 0, 3210]]);
+  eq('  ยอดค้างของใบแจ้งหนี้ลดลงจริง (10,700 − 3,210)', [invRow().outstanding, invRow().creditedAmount], [7490, 3210]);
+  eq('  ★ ของกลับเข้าคลังของเจ้าของบิลตามหน่วยฐาน (3 ลัง × 10 = 30 ชิ้น)', (stockOfT1() - stockBefore), 30);
+
+  fails('รับชำระเกินยอดที่เหลือหลังลดหนี้ → ปฏิเสธ',
+    ctx.receiveArPayment(FIN, { customerId: 500, allocations: [{ invoiceId: IV, amount: 10700 }] }), /ค้าง 7490/);
+  let p = ctx.receiveArPayment(FIN, { customerId: 500, receiptDate: '2026-10-20', method: 'transfer',
+    allocations: [{ invoiceId: IV, amount: 7490 }] });
+  eq('จ่ายส่วนที่เหลือครบ → ใบปิดเป็น paid ทั้งที่ได้เงินไม่เต็มยอดใบ',
+    [p.success, invRow().status, invRow().outstanding], [true, 'paid', 0]);
+
+  console.log('  -- ใบที่ลดหนี้เต็มจำนวน (ยกเลิกการขายหลังออกใบกำกับ) --');
+  append(tenantSheets.sales_orders, { record_id: 92, order_code: 'SO-CN-02', customer_id: 500, subtotal: 1070,
+    discount: 0, total: 1070, payment_method: 'credit_term', status: 'completed', created_at: '2026-10-15 10:00:00',
+    apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07, subtotal_ex_vat: 1000, vat_amount: 70, exempt_amount: 0 });
+  append(tenantSheets.order_items, { record_id: 9201, order_id: 92, product_id: '20', unit_code: 'CT', unit_factor: 10,
+    qty: 1, base_qty: 10, price: 1070, line_total: 1070, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  cr = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 92, invoiceDate: '2026-10-15', dueDays: 30 });
+  const IV2 = cr.invoiceId;
+  const agingBefore = ctx.getArAging(FIN, {}).data.rows ? ctx.getArAging(FIN, {}).data.rows.length : JSON.stringify(ctx.getArAging(FIN, {}).data).length;
+  r1 = ctx.createArCreditNote(FIN, { invoiceId: IV2, reasonCode: 'cancel', creditDate: '2026-10-16', returnStock: false,
+    vatRate: 0.07, lines: [{ itemId: 9201, productId: '20', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 1070, taxStatus: 'vat' }] });
+  ok('ลดหนี้เต็มจำนวน (ไม่คืนของ — ของเสียหาย/ทิ้งไปแล้ว)', r1);
+  const iv2 = ctx.listArInvoices(FIN, {}).data.find(x => x.id === IV2);
+  eq('  ใบปิดด้วยสถานะ credited (ไม่ใช่ paid — ลูกค้าไม่ได้จ่ายเงิน) · ค้าง 0', [iv2.status, iv2.outstanding], ['credited', 0]);
+  eq('  ไม่โผล่ในรายงานอายุหนี้อีก', JSON.stringify(ctx.getArAging(FIN, {}).data).indexOf(iv2.invoiceNo), -1);
+  fails('  ลดซ้ำอีกไม่ได้ ลดไปเต็มจำนวนแล้ว',
+    ctx.createArCreditNote(FIN, { invoiceId: IV2, reasonCode: 'cancel', lines: [{ productId: '20', qty: 1, unitPrice: 1070, taxStatus: 'vat' }] }),
+    /ไม่เกิน/);
+
+  const cns = ctx.listArCreditNotes(FIN, {}).data;
+  eq('รายการใบลดหนี้: สองใบ พร้อมเลขใบกำกับ/ใบแจ้งหนี้ที่อ้างถึง และธงคืนของ',
+    cns.map(c => [/^CN-/.test(c.creditNoteNo), c.total, c.stockReturned]).sort(), [[true, 1070, false], [true, 3210, true]].sort());
+}
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

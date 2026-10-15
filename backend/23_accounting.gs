@@ -501,11 +501,13 @@ function listArInvoices(session, payload) {
   if (payload.customerId) rows = rows.filter(function(iv) { return String(iv.customer_id) === String(payload.customerId); });
   if (payload.openOnly) rows = rows.filter(function(iv) { return iv.status === 'open' || iv.status === 'partial'; });
   var out = rows.map(function(iv) {
-    var total = Number(iv.total) || 0, recv = Number(iv.received_amount) || 0;
+    var total = Number(iv.total) || 0, recv = Number(iv.received_amount) || 0, cred = Number(iv.credited_amount) || 0;
     return { id: iv.record_id, invoiceNo: iv.invoice_no, customerId: iv.customer_id, customerName: customers[String(iv.customer_id)] || '',
       tenantId: iv.tenant_id || '', salesOrderId: iv.sales_order_id || '', invoiceDate: _dOnly(iv.invoice_date), dueDate: _dOnly(iv.due_date),
       subtotalExVat: Number(iv.subtotal_ex_vat) || 0, vatAmount: Number(iv.vat_amount) || 0, total: total, receivedAmount: recv,
-      outstanding: _money(total - recv), status: iv.status, journalId: iv.journal_id || '', note: iv.note || '' };
+      // ★ ยอดค้างต้องหักที่ลดหนี้ไปแล้วด้วย ไม่งั้นจะไปตามเก็บเงินที่ออกใบลดหนี้ให้ลูกค้าไปแล้ว
+      creditedAmount: cred, outstanding: _money(total - recv - cred),
+      status: iv.status, journalId: iv.journal_id || '', note: iv.note || '' };
   });
   out.sort(function(a, b) { return String(b.invoiceDate).localeCompare(String(a.invoiceDate)) || (b.id - a.id); });
   return { success: true, data: out };
@@ -656,7 +658,7 @@ function receiveArPayment(session, payload) {
       if (!iv || !_inBook(iv, book)) return { success: false, message: 'ไม่พบใบแจ้งหนี้ id ' + allocs[i].invoiceId };
       if (String(iv.customer_id) !== String(customer.record_id)) return { success: false, message: 'ใบ ' + iv.invoice_no + ' ไม่ใช่ของลูกค้ารายนี้' };
       if (iv.status === 'void') return { success: false, message: 'ใบ ' + iv.invoice_no + ' ถูกยกเลิกแล้ว' };
-      var outstanding = _money((Number(iv.total) || 0) - (Number(iv.received_amount) || 0));
+      var outstanding = _money((Number(iv.total) || 0) - (Number(iv.received_amount) || 0) - (Number(iv.credited_amount) || 0));
       if (!(allocs[i].amount > 0)) return { success: false, message: 'ใบ ' + iv.invoice_no + ': ยอดรับต้องมากกว่า 0' };
       if (allocs[i].amount > outstanding + 0.009) return { success: false, message: 'ใบ ' + iv.invoice_no + ': ค้าง ' + outstanding + ' แต่รับมา ' + allocs[i].amount };
       invs.push({ inv: iv, amount: _money(allocs[i].amount) });
@@ -681,8 +683,9 @@ function receiveArPayment(session, payload) {
     }));
     invs.forEach(function(x) {
       var recv = _money((Number(x.inv.received_amount) || 0) + x.amount);
-      var total = Number(x.inv.total) || 0;
-      centralUpdate('ar_invoices', x.inv.record_id, { received_amount: recv, status: recv >= total - 0.009 ? 'paid' : 'partial' });
+      var total = Number(x.inv.total) || 0, cred = Number(x.inv.credited_amount) || 0;
+      // ปิดใบเมื่อ "รับเงิน + ลดหนี้" ครบยอดใบ — ใบที่ลดหนี้บางส่วนจึงปิดได้ด้วยเงินที่น้อยกว่ายอดเต็ม
+      centralUpdate('ar_invoices', x.inv.record_id, { received_amount: recv, status: recv + cred >= total - 0.009 ? 'paid' : 'partial' });
     });
     return { success: true, receiptId: rcpId, receiptNo: rcpNo, amount: amount, journalNo: jr.journalNo,
       message: 'รับชำระ ' + rcpNo + ' ยอด ' + amount.toLocaleString() + ' บาท (' + invs.length + ' ใบ)' };
@@ -697,7 +700,7 @@ function getArAging(session, payload) {
   return { success: true, asOf: asOf, data: _aging(centralObjects('ar_invoices').filter(function(iv) { return _inBook(iv, _bookScope(session, payload)) && (iv.status === 'open' || iv.status === 'partial'); })
     .map(function(iv) {
       return { partyId: String(iv.customer_id), partyName: customers[String(iv.customer_id)] || '', docNo: iv.invoice_no,
-        dueDate: _dOnly(iv.due_date), outstanding: _money((Number(iv.total) || 0) - (Number(iv.received_amount) || 0)) };
+        dueDate: _dOnly(iv.due_date), outstanding: _money((Number(iv.total) || 0) - (Number(iv.received_amount) || 0) - (Number(iv.credited_amount) || 0)) };
     }), asOf) };
 }
 

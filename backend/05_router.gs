@@ -250,6 +250,10 @@ var ADMIN_ACTION_MAP = {
   payApBills:             payApBills,
   getApAging:             getApAging,
   listArInvoices:         listArInvoices,
+  createArCreditNote:     createArCreditNote,      // ออกใบลดหนี้ (49_credit_notes.gs)
+  getArCreditNoteDraft:   getArCreditNoteDraft,    // รายการที่ลดหนี้ได้ของใบแจ้งหนี้ใบหนึ่ง
+  listArCreditNotes:      listArCreditNotes,
+  getArCreditNote:        getArCreditNote,         // ใบเดียวพร้อมรายการ — ใช้ตอนพิมพ์
   createArInvoice:        createArInvoice,
   receiveArPayment:       receiveArPayment,
   getArAging:             getArAging,

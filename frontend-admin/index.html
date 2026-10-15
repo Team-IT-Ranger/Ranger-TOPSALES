@@ -1775,7 +1775,7 @@
             </div>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>รับแล้ว</th><th>คงค้าง</th><th>สถานะ</th></tr></thead>
+            <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>รับแล้ว</th><th>คงค้าง</th><th>สถานะ</th><th></th></tr></thead>
             <tbody id="ar-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card" id="ar-aging-card" style="display:none"><h3>อายุหนี้ลูกหนี้</h3><div id="ar-aging"></div></div>
@@ -1886,7 +1886,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'updateStaffAdmin','saveDocSeries','setDocCounter','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
-  'createArInvoice','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
+  'createArInvoice','createArCreditNote','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -4201,6 +4201,8 @@ function renderSaleDelivery(dp){
         '<button class="btn btn-sm" onclick="printRoundDoc(\'delivery\','+r.id+')">ใบส่งสินค้า</button>' +
         (r.taxInvoiceNo ? ' <button class="btn btn-sm" onclick="printRoundDoc(\'taxinvoice\','+r.id+')">ใบกำกับภาษี</button>' : '') +
         (r.arInvoiceNo ? ' <button class="btn btn-sm" onclick="printRoundDoc(\'invoice\','+r.id+')">ใบแจ้งหนี้</button>' : '') +
+        /* ลูกค้าคืนของ/ยกเลิกหลังออกใบกำกับ = ออกใบลดหนี้จากตรงนี้ได้เลย ไม่ต้องไปหาหน้าลูกหนี้ */
+        (r.arInvoiceId ? ' <button class="btn btn-sm" onclick="openCreditNoteForm('+r.arInvoiceId+')">ใบลดหนี้</button>' : '') +
     '</td></tr>').join('');
 
   /* ★ ป้ายบนแท็บ = เหตุผลเดียวที่คนจะกดเข้ามาดู · เรียงตามความเร่งด่วนจริง
@@ -8184,9 +8186,9 @@ function agingTable(rows, partyLabel){
 async function loadArInvoices(){
   const body = document.getElementById('ar-body');
   if (!arCache.length) arCache = listSnapLoad('arinvoices') || [];
-  if (arCache.length) renderArInvoices(); else tblLoading(body, 9);
+  if (arCache.length) renderArInvoices(); else tblLoading(body, 10);
   const r = await callApi('listArInvoices', {});
-  if (!r.success) { if (!arCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!arCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
   arCache = r.data;
   listSnapSave('arinvoices', arCache);
   renderArInvoices();
@@ -8196,8 +8198,141 @@ function renderArInvoices(){
     '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td>'+esc(iv.customerName)+'</td><td class="mono-data">'+dash(iv.salesOrderId)+'</td>' +
     '<td class="mono-data">'+esc(iv.invoiceDate)+'</td><td class="mono-data">'+dash(iv.dueDate)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(iv.total)+'</td><td class="mono-data">฿'+bahtPlain(iv.receivedAmount)+'</td>' +
-    '<td class="mono-data">฿'+bahtPlain(iv.outstanding)+'</td><td>'+pill2(DOC_ST, iv.status)+'</td></tr>').join(''), 9, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
+    '<td class="mono-data">฿'+bahtPlain(iv.outstanding)+'</td><td>'+pill2(DOC_ST, iv.status)+'</td>' +
+    /* ★ ลดหนี้ได้ตราบใดที่ยังลดไม่เต็มยอดใบ — ใบที่รับเงินครบแล้วก็ยังลดได้ (ลูกค้าคืนของทีหลัง = ต้องคืนเงิน/หักบิลหน้า) */
+    '<td>'+((Number(iv.total) - Number(iv.creditedAmount || 0)) > 0.009 && iv.status !== 'void'
+      ? '<button class="btn btn-sm" onclick="openCreditNoteForm('+iv.id+')">ออกใบลดหนี้</button>' : '')+'</td></tr>').join(''), 10, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
 }
+/* ══════════ ใบลดหนี้ (Credit Note) — 15 ต.ค. 2026 ══════════
+   เกิดจากช่องว่างจริง: ยกเลิกบิลที่ออกใบกำกับภาษีไปแล้ว ไม่มีเอกสารอะไรให้ลูกค้าถือ และบัญชีต้องไปกลับรายการเอง
+   ★ เป็นเอกสารภาษี (ม.86/10) ไม่ใช่แค่รายการบัญชี — ใบที่พิมพ์ออกมาต้องมี เลขใบกำกับเดิม · เหตุผล ·
+     มูลค่าตามใบเดิม · มูลค่าที่ถูกต้อง · ผลต่าง ครบทุกช่อง ไม่งั้นใช้ไม่ได้ตามกฎหมาย */
+let CN_DRAFT = null;
+async function openCreditNoteForm(invoiceId){
+  const d = await callApi('getArCreditNoteDraft', { invoiceId });
+  if (!d.success) { toast(d.message, true); return; }
+  if (!(d.invoice.creditable > 0)) { toast('ใบแจ้งหนี้นี้ถูกลดหนี้เต็มจำนวนไปแล้ว', true); return; }
+  CN_DRAFT = d;
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = d.lines.map((l, i) =>
+    '<tr><td class="mono-data">'+esc(l.productCode || '-')+'</td><td class="wrap">'+esc(l.productName)+'</td>' +
+    '<td class="mono-data">'+esc(l.unitCode)+'</td>' +
+    '<td><input type="number" class="cn-qty" data-i="'+i+'" min="0" max="'+l.qty+'" step="1" value="'+l.qty+'" ' +
+      'style="width:80px" oninput="cnRecalc()"></td>' +
+    '<td class="mono-data">฿'+bahtPlain(l.unitPrice)+'</td>' +
+    '<td class="mono-data cn-amt" data-i="'+i+'">฿'+bahtPlain(l.amount)+'</td></tr>').join('');
+  plModal('<h3>ออกใบลดหนี้ — อ้างใบแจ้งหนี้ ' + esc(d.invoice.invoiceNo) + '</h3>' +
+    '<p class="form-hint">ลดหนี้ได้สูงสุด <b>฿'+bahtPlain(d.invoice.creditable)+'</b> (ยอดใบ ฿'+bahtPlain(d.invoice.total)+
+    (d.invoice.credited ? ' · ลดไปแล้ว ฿'+bahtPlain(d.invoice.credited) : '')+')<br>' +
+    'ใบลดหนี้เป็นเอกสารภาษี — ต้องระบุเหตุผล และจะอ้างเลขใบกำกับภาษีเดิมให้อัตโนมัติ</p>' +
+    '<div class="form-grid g2">' +
+      plField('เหตุผลที่ลดหนี้', '<select id="cn-reason">' +
+        Object.keys(d.reasons).map(k => '<option value="'+k+'">'+esc(d.reasons[k])+'</option>').join('') + '</select>') +
+      plField('วันที่ใบลดหนี้', '<input type="date" id="cn-date" value="'+today+'">') +
+    '</div>' +
+    plField('รายละเอียดเพิ่มเติม (ถ้ามี)', '<input id="cn-note" placeholder="เช่น คืนของ 3 ลัง ตามใบรับคืนเลขที่…">') +
+    (d.lines.length ? '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
+      '<th>จำนวนที่ลด</th><th>ราคา/หน่วย</th><th>เป็นเงิน</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      : '<p class="form-hint">ใบแจ้งหนี้นี้ไม่ได้ผูกกับบิลขาย — ระบุยอดที่จะลดเอง</p>' +
+        plField('ยอดที่จะลด (รวม VAT)', '<input id="cn-manual" type="number" min="0" step="0.01" value="'+d.invoice.creditable+'">')) +
+    '<div class="toggle-row" style="margin-top:10px"><input type="checkbox" id="cn-stock">' +
+      '<label for="cn-stock">รับของคืนเข้าคลังตามจำนวนนี้ด้วย</label></div>' +
+    '<p class="form-hint" style="margin-top:4px">★ ติ๊กเฉพาะกรณีของกลับมาจริง — คิดราคาผิดหรือของเสียหายทิ้งไปแล้ว ไม่ต้องติ๊ก</p>' +
+    '<div id="cn-total" class="form-hint" style="margin-top:8px"></div>' +
+    plModalActions('plBusy(cnSave)', '✓ ออกใบลดหนี้'));
+  cnRecalc();
+}
+function cnRecalc(){
+  if (!CN_DRAFT) return;
+  let total = 0;
+  document.querySelectorAll('.cn-qty').forEach(inp => {
+    const l = CN_DRAFT.lines[Number(inp.dataset.i)];
+    const qty = Math.max(0, Math.min(parseFloat(inp.value) || 0, l.qty));
+    const amt = Math.round(qty * l.unitPrice * 100) / 100;
+    total += amt;
+    const cell = document.querySelector('.cn-amt[data-i="'+inp.dataset.i+'"]');
+    if (cell) cell.textContent = '฿' + bahtPlain(amt);
+  });
+  const manual = document.getElementById('cn-manual');
+  if (manual) total = parseFloat(manual.value) || 0;
+  const box = document.getElementById('cn-total');
+  if (box) {
+    const over = total > CN_DRAFT.invoice.creditable + 0.009;
+    box.innerHTML = 'ยอดลดหนี้รวม <b>฿' + bahtPlain(total) + '</b>' +
+      (over ? ' <span style="color:var(--red)">— เกินยอดที่ลดได้ (฿'+bahtPlain(CN_DRAFT.invoice.creditable)+')</span>' : '');
+  }
+}
+async function cnSave(){
+  if (!CN_DRAFT) return;
+  const reasonCode = document.getElementById('cn-reason').value;
+  const note = document.getElementById('cn-note').value.trim();
+  const manual = document.getElementById('cn-manual');
+  let lines;
+  if (manual) {
+    const amt = parseFloat(manual.value) || 0;
+    if (!(amt > 0)) { plModalErr('ระบุยอดที่จะลดให้มากกว่า 0'); return; }
+    lines = [{ productId: '', unitCode: '', qty: 1, unitPrice: amt, taxStatus: 'vat' }];
+  } else {
+    lines = [...document.querySelectorAll('.cn-qty')].map(inp => {
+      const l = CN_DRAFT.lines[Number(inp.dataset.i)];
+      return { itemId: l.itemId, productId: l.productId, unitCode: l.unitCode, unitFactor: l.unitFactor,
+        qty: Math.max(0, Math.min(parseFloat(inp.value) || 0, l.qty)), unitPrice: l.unitPrice, taxStatus: l.taxStatus };
+    }).filter(l => l.qty > 0);
+    if (!lines.length) { plModalErr('ต้องมีรายการที่จะลดหนี้อย่างน้อย 1 รายการ'); return; }
+  }
+  const r = await callApi('createArCreditNote', { invoiceId: CN_DRAFT.invoice.id, reasonCode: reasonCode,
+    reason: note ? (CN_DRAFT.reasons[reasonCode] + ' — ' + note) : CN_DRAFT.reasons[reasonCode],
+    creditDate: document.getElementById('cn-date').value, vatRate: CN_DRAFT.vatRate,
+    returnStock: document.getElementById('cn-stock').checked, lines: lines });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose();
+  toast(r.message);
+  // ออกใบแล้วพิมพ์ให้เลย — ใบลดหนี้ต้องส่งถึงมือลูกค้า ไม่ใช่แค่ลงบัญชีไว้เฉยๆ
+  printCreditNoteById(r.creditNoteId);
+  if (typeof loadArInvoices === 'function' && document.querySelector('.view.active')?.id === 'view-arinvoices') loadArInvoices();
+  if (currentSaleOrderId) { sodSnapDrop(currentSaleOrderId); }
+}
+async function printCreditNoteById(id){
+  const [r] = await Promise.all([callApi('getArCreditNote', { id }), ensureDocPrint()]);
+  if (!r.success) { toast(r.message, true); return; }
+  const cn = r.creditNote, c = r.customer || {}, iss = r.issuer || {};
+  const vatPct = Math.round((cn.vatRate || 0.07) * 100);
+  /* ★ ม.86/10 บังคับให้แสดง "มูลค่าตามใบเดิม · มูลค่าที่ถูกต้อง · ผลต่าง" — คำนวณจากใบเดิมที่อ้างถึง
+     ไม่ใช่แค่โชว์ยอดที่ลด ไม่งั้นใบนี้ใช้เป็นหลักฐานทางภาษีไม่ได้ */
+  const was = cn.invoiceTotal || 0, now = Math.round((was - cn.total) * 100) / 100;
+  DocPrint.doc({
+    title: 'ใบลดหนี้ / ใบกำกับภาษี (Credit Note)', docNo: cn.creditNoteNo, issuer: iss,
+    subLabel: cn.reason,
+    metaRight: [['เลขที่', cn.creditNoteNo], ['วันที่', cn.creditDate]]
+      .concat(cn.taxInvoiceNo ? [['อ้างอิงใบกำกับภาษีเดิม', cn.taxInvoiceNo]] : [])
+      .concat(cn.invoiceNo ? [['อ้างอิงใบแจ้งหนี้', cn.invoiceNo + (cn.invoiceDate ? ' (' + cn.invoiceDate + ')' : '')]] : [])
+      .concat(cn.orderCode ? [['อ้างอิงใบสั่งขาย', cn.orderCode]] : []),
+    parties: [{ label: 'ลูกค้า', name: c.name, code: c.code, address: c.address, taxId: c.taxId,
+      branchCode: c.branchCode, phone: c.phone }],
+    columns: [
+      { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
+      { label: 'รหัส', code: true, width: '14%', value: l => l.productCode || '-' },
+      { label: 'รายการที่ลดหนี้', value: l => l.productName || '-' },
+      { label: 'หน่วย', align: 'c', width: '10%', value: l => l.unitCode || '-' },
+      { label: 'จำนวน', align: 'r', width: '10%', value: l => String(l.qty) },
+      { label: 'ราคา/หน่วย', align: 'r', width: '14%', value: l => DocPrint.money(l.unitPrice) },
+      { label: 'จำนวนเงิน', align: 'r', width: '15%', value: l => DocPrint.money(l.amount) }
+    ],
+    lines: r.items,
+    totals: [
+      ['มูลค่าตามใบกำกับภาษีเดิม', DocPrint.money(was)],
+      ['มูลค่าที่ถูกต้อง', DocPrint.money(now)],
+      ['ผลต่าง (ก่อนภาษี)', DocPrint.money(cn.subtotalExVat)],
+      ['ภาษีมูลค่าเพิ่ม ' + vatPct + '% ที่ลดลง', DocPrint.money(cn.vatAmount)],
+      ['รวมเงินที่ลดหนี้', DocPrint.money(cn.total), 'grand']
+    ],
+    note: 'เหตุผลที่ลดหนี้: ' + cn.reason + (cn.stockReturned ? ' · รับของคืนเข้าคลังแล้ว' : ''),
+    signers: ['ผู้ออกใบลดหนี้', 'ผู้รับใบลดหนี้'], showBank: false, carry: true,
+    xlsx: { filename: cn.creditNoteNo, headers: ['รหัส', 'รายการ', 'หน่วย', 'จำนวน', 'ราคา/หน่วย', 'จำนวนเงิน'],
+      rows: r.items.map(l => [l.productCode, l.productName, l.unitCode, String(l.qty), String(l.unitPrice), String(l.amount)]) }
+  });
+}
+
 async function openArInvoiceForm(){
   const today = new Date().toISOString().slice(0, 10);
   const r = await callApi('listUninvoicedSalesOrders', {});
