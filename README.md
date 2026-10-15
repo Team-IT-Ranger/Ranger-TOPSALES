@@ -1,18 +1,23 @@
 # Ranger TOPSALES
 
-ระบบขาย/บริหารตัวแทนจำหน่ายสำหรับ Cash Van Sales และ Credit Sales — ดูภาพรวมสถาปัตยกรรมได้ที่
-[docs/topshop_architecture.html](docs/topshop_architecture.html)
+ระบบขาย/บริหารตัวแทนจำหน่ายสำหรับ Cash Van Sales และ Credit Sales
+
+> **★ เริ่มที่ [ชุดแบบของระบบ — `docs/blueprint/`](docs/blueprint/README.md)**
+> แบบก่อสร้าง 6 แผ่น: ผังบริเวณ · ผังพื้น · ผังโครงสร้างข้อมูล · ผังระบบ (เส้นทางงานจริง) ·
+> สัญญาที่ห้ามแตะ · รายการประกอบแบบ (สร้างจากโค้ดด้วย `node .dev/gen-blueprint.js`)
+> · ไฟล์นี้บอกวิธี deploy · `CLAUDE.md` เป็นบันทึกบทเรียนเรียงตามเวลา
 
 ## โครงสร้างโปรเจกต์
 
 ```
 backend/          Google Apps Script — JSON API ล้วนๆ (ไม่มีหน้าเว็บ) จัดการ Central + Tenant Sheets
                    deploy ด้วย clasp (มี .clasp.json ผูกกับโปรเจกต์จริงแล้ว) — ดู backend/README.md
-frontend-admin/    Admin App (ตัวแทนจำหน่าย + บริษัทเจ้าของสินค้า) — deploy บน GitHub Pages อัตโนมัติ
-                   (.github/workflows/deploy-admin.yml: main → /admin/, UAT → /admin-uat/)
-frontend-mobile/   Mobile App พนักงานขาย (LINE LIFF) — ยังไม่สร้าง แผนขึ้น Vercel สัปดาห์ 3
-                   มีของเดิม 2 ชุดเก็บไว้อ้างอิง ดู frontend-mobile/README.md
-docs/              เอกสารแผน/สถาปัตยกรรม
+frontend-admin/    Admin App (ตัวแทนจำหน่าย + บริษัทเจ้าของสินค้า) — Cloudflare Pages
+                   prod ranger-topsales-admin.pages.dev · uat uat.ranger-topsales-admin.pages.dev
+frontend-mobile/   Mobile App พนักงานขาย (LINE LIFF) — Cloudflare Pages
+                   prod ranger-topsales-mobile.pages.dev · uat uat.ranger-topsales-mobile.pages.dev
+                   (GitHub Pages เหลือแค่หน้าแจ้งย้าย ดูหัวไฟล์ .github/workflows/deploy-admin.yml)
+docs/              blueprint/ = ชุดแบบ · ที่เหลือเป็นคู่มือเฉพาะเรื่องและบันทึกการส่งงาน
 ```
 
 ## Branch
@@ -22,7 +27,7 @@ docs/              เอกสารแผน/สถาปัตยกรรม
 
 ## Stack
 
-Google Apps Script (backend) + Google Sheets (database, เฟส 1) + GitHub Pages (Admin App) + Vercel (Mobile App — แผนสัปดาห์ 3)
+Google Apps Script (backend) + Google Sheets (database, เฟส 1) + Cloudflare Pages (ทั้งสองแอป)
 — เตรียมโครงสร้างรองรับ Cloud Database เต็มรูปแบบไว้สำหรับเฟสถัดไป ยังไม่ใช้ตอนนี้
 
 ## สภาพแวดล้อม — dev / UAT / production

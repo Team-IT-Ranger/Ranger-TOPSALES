@@ -5,6 +5,13 @@ environment gotchas, and where things stand. Architecture/deploy mechanics are i
 [README.md](README.md) and [backend/README.md](backend/README.md) — this file doesn't repeat those,
 it fills the gaps around them.
 
+> **★ ชุดแบบของระบบอยู่ที่ [`docs/blueprint/`](docs/blueprint/README.md)** (15 ต.ค. 2026)
+> ไฟล์นี้เป็น**บันทึกบทเรียนเรียงตามเวลาที่เจอปัญหา** — หาคำตอบว่า "ของชิ้นนี้อยู่ไฟล์ไหน
+> ต่อกับอะไร ห้ามแตะอะไร" จากมันไม่ได้ · ชุดแบบตอบคำถามนั้น 6 แผ่น และ
+> [แผ่น 05 สัญญาที่ห้ามแตะ](docs/blueprint/05-contracts.md) **ควรอ่านก่อนเขียนโค้ดทุกครั้ง**
+> · แผ่น 06 สร้างจากโค้ดจริง: `node .dev/gen-blueprint.js` (เช็คด้วย `--check`)
+> · **เพิ่ม action / ตาราง / เมนู / เอกสารใหม่แล้ว ต้องรัน generator แล้ว commit แผ่น 06 ไปด้วย**
+
 ## Golden rules
 
 1. **All work lands on git branch `UAT`. Never commit to `main` directly.** `main` only moves via
