@@ -2282,6 +2282,13 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
 - `UAT_URL='<uat exec url>' node .dev/uat-purchasing-e2e.js` — live UAT test ของงานซื้อ+บัญชีทั้งสาย
   (ผู้ขาย → สายอนุมัติ 2 ขั้น → PR → PO → รับของ 2 ครั้ง → ตั้งหนี้ → จ่าย → ลูกหนี้ → งบทดลอง/งบดุล)
   ทิ้งเอกสารทดสอบชื่อขึ้นต้น `E2E` ไว้ใน UAT (เอกสารที่ลงบัญชีแล้วลบไม่ได้ตามหลักบัญชี)
+- `UAT_URL='<uat exec url>' node .dev/uat-delivery-rounds-e2e.js` — live UAT test ของรอบจัดส่งทั้งสาย:
+  ไฟเขียว/ส้มของหน้ารายการ · แยกของค้างส่ง · ตัดสต็อกเฉพาะรอบ · **ใบกำกับภาษี/ใบแจ้งหนี้รายรอบ** ·
+  ของยังไม่เข้าแล้วเดินหน้าไม่ได้ · รับของเข้าแล้วส่งรอบสอง · ผลรวมทุกรอบ = ยอดบิลเป๊ะ · สมุดลูกหนี้ตรงกัน
+  · **★ เลือกสินค้าที่ของน้อยที่สุด** เพราะต้องสั่งเกินของที่มี — หยิบตัวที่ของเยอะจะได้บิลทดสอบหลักแสน
+    และตัดสต็อกเกลี้ยงคลัง (พลาดมาแล้ว 15 ต.ค. 2026 ต้องตามยกเลิกบิล คืนของด้วยใบรับของ และกลับรายการบัญชี)
+  · **★★ ไฟเขียว/ส้มห้ามคาดเป็นค่าตายตัว** — มันตอบว่า "ใบนี้หยิบของได้จริงไหม" ซึ่งขึ้นกับบิลอื่นที่จองของ
+    ชิ้นเดียวกันไว้ · เทสต์ต้องเทียบกับ `getSaleDeliveryPlan` ของใบเดียวกัน ไม่ใช่เขียนว่า "ต้องเป็นสีส้ม"
 - `UAT_URL='<uat exec url>' node .dev/uat-pricelist-edit-e2e.js` — live UAT test of manual price entry
   (clone an active list, edit/delete lines, bill promos, empty list; confirms active lists refuse edits).
   Only touches drafts it creates and deletes them at the end.
