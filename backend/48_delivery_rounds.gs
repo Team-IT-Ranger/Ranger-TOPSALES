@@ -419,6 +419,94 @@ function issueRoundInvoices(session, tenantId, order, plan, round) {
   return out;
 }
 
+/* ═══════════ ไฟเขียว/ส้ม: บิลไหนส่งได้ครบ (15 ต.ค. 2026 — จากระบบจริงของบริษัทอื่นที่น้องแอดมินเอามาให้ดู) ═══════════
+ * คำถามแรกของทุกเช้าคือ "วันนี้ใบไหนส่งได้บ้าง" — ถ้าต้องเปิดทีละใบ (ใบละ 4-6 วินาที) งานค้าง 20 ใบ
+ * ก็หมดไปสองนาทีกับการเปิดดูเฉยๆ · จุดสีท้ายแถวตอบตั้งแต่ยังไม่เปิดใบ
+ *
+ * ★ อ่านทุกตารางครั้งเดียวแล้วคิดให้ทุกใบรวดเดียว — ไม่ใช่วนเรียก getSaleDeliveryPlan ทีละใบ
+ *   (แบบนั้นคือเปิดไฟล์ตัวแทนซ้ำ N รอบ ซึ่งเป็นของแพงที่สุดในระบบนี้ ~2.2 วิ ต่อครั้ง)
+ * ★★ "ของที่กันไว้ให้ใบนี้เอง" ต้องบวกกลับ — ไม่งั้นบิลที่ระบบกันของให้แล้วจะขึ้นส้มทั้งที่ของรอมันอยู่
+ *   ส่วนของที่กันไว้ให้ "ใบอื่น" ต้องหักออก ไม่งั้นสองใบแย่งของชิ้นเดียวกันจะขึ้นเขียวทั้งคู่
+ *   (นี่คือสถานการณ์ที่คู่มือเตือนไว้ตั้งแต่ข้อ 1.3 — สัญญากับลูกค้าสองรายด้วยของชิ้นเดียว)
+ */
+var SO_STOCK_FLAG_STATUSES = [SO_PENDING, SO_CONFIRMED, SO_ACCEPTED];
+function getSalesOrderStockFlags(session, payload) {
+  var err = _requirePermission(session, 'sales', 'view'); if (err) return err;
+  payload = payload || {};
+  var tenantId = _salesTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+
+  var orders = tenantObjects(tenantId, 'sales_orders').filter(function(o) {
+    return String(o.fulfillment_type) !== 'immediate' &&
+      SO_STOCK_FLAG_STATUSES.indexOf(_soStatusOf(o)) !== -1;
+  });
+  if (!orders.length) return { success: true, flags: {} };
+
+  var wanted = {};
+  orders.forEach(function(o) { wanted[String(o.record_id)] = o; });
+
+  // บรรทัดบิลทั้งแท็บครั้งเดียว แล้วจัดกลุ่มเอง (ถูกกว่าไล่อ่านทีละใบมาก)
+  var itemsOf = {};
+  tenantObjects(tenantId, 'order_items').forEach(function(it) {
+    var oid = String(it.order_id);
+    if (!wanted[oid]) return;
+    (itemsOf[oid] = itemsOf[oid] || []).push(it);
+  });
+
+  /* ของที่ส่งไปแล้วในรอบที่ปิดแล้ว — อ่านเฉพาะเมื่อมีบิลที่แยกรอบจริงๆ (ปกติไม่มี จึงไม่จ่ายค่าอ่าน) */
+  var shippedOf = {};
+  if (orders.some(function(o) { return saleOrderHasRounds(o); })) {
+    var closed = {};
+    tenantObjectsIfExists(tenantId, 'delivery_rounds').forEach(function(r) {
+      if (String(r.status) === DR_SHIPPED) closed[String(r.record_id)] = String(r.order_id);
+    });
+    tenantObjectsIfExists(tenantId, 'delivery_round_items').forEach(function(ri) {
+      var oid = closed[String(ri.round_id)];
+      if (!oid || !wanted[oid]) return;
+      var key = oid + '|' + String(ri.item_id);
+      shippedOf[key] = (shippedOf[key] || 0) + (parseFloat(ri.qty) || 0);
+    });
+  }
+
+  var scope = _saleStockScope(tenantId), warehouseId = _ensureScopeWarehouse(scope);
+  var onHand = {};
+  _scoped('warehouse_stock', scope).forEach(function(r) {
+    if (String(r.warehouse_id) !== String(warehouseId)) return;
+    onHand[String(r.product_id)] = Number(r.qty) || 0;
+  });
+  var resAll = {}, resMine = {};
+  _scoped('stock_reservations', scope).forEach(function(r) {
+    if (String(r.status) !== 'active' || String(r.warehouse_id) !== String(warehouseId)) return;
+    var pid = String(r.product_id), q = Number(r.qty) || 0, oid = String(r.order_id);
+    resAll[pid] = (resAll[pid] || 0) + q;
+    if (wanted[oid]) { resMine[oid] = resMine[oid] || {}; resMine[oid][pid] = (resMine[oid][pid] || 0) + q; }
+  });
+
+  var flags = {};
+  orders.forEach(function(o) {
+    var oid = String(o.record_id), its = itemsOf[oid] || [];
+    var need = {};
+    its.forEach(function(it) {
+      var qty = parseFloat(it.qty) || 0, base = parseFloat(it.base_qty) || 0;
+      var sh = shippedOf[oid + '|' + String(it.record_id)] || 0;
+      var left = qty > 0 ? Math.max(0, (qty - sh) / qty) : 1;      // สัดส่วนที่ยังไม่ได้ส่ง
+      var b = base * left;
+      if (b > 0) need[String(it.product_id)] = (need[String(it.product_id)] || 0) + b;
+    });
+    var pids = Object.keys(need);
+    if (!pids.length) { flags[oid] = { flag: 'full', short: 0 }; return; }
+    var short = 0, any = false;
+    pids.forEach(function(pid) {
+      var mine = (resMine[oid] || {})[pid] || 0;
+      var avail = (onHand[pid] || 0) - ((resAll[pid] || 0) - mine);   // ของที่ใบนี้หยิบได้จริง
+      if (avail + 0.0001 < need[pid]) short++;
+      if (avail > 0.0001) any = true;
+    });
+    flags[oid] = { flag: short === 0 ? 'full' : (any ? 'partial' : 'none'), short: short };
+  });
+  return { success: true, flags: flags, warehouse: warehouseId };
+}
+
 /* ═══════════ ยอดเงินของรอบจัดส่ง — หัวใจของการออกใบกำกับภาษี/ใบแจ้งหนี้ตามรอบ (15 ต.ค. 2026) ═══════════
  * ★ คิดจาก **ราคาและส่วนลดที่บิลบันทึกไว้ตอนขาย** คูณสัดส่วนของที่ส่งจริงในรอบนั้น
  *   ไม่คิดราคาใหม่ ไม่เรียกเครื่องคิดราคาซ้ำ — ชุดราคาอาจเปลี่ยนไปแล้วระหว่างรอของเข้า

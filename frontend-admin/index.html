@@ -222,6 +222,9 @@
   @keyframes segpulse{0%,100%{opacity:.4}50%{opacity:1}}
   @media(prefers-reduced-motion:reduce){.segtog .seg.on::before{animation:none;opacity:.85}}
   /* แถบแท็บของหน้ารายละเอียดบิล — ใช้ชิ้นส่วนเดียวกับปุ่มสลับ กระดาน/ตาราง ที่ผู้ใช้คุ้นแล้ว */
+  /* จุดไฟเขียว/ส้มบอกว่าบิลใบนี้ของพร้อมส่งไหม — เล็กและเงียบ แต่เห็นได้ทั้งคอลัมน์ในแวบเดียว */
+  .so-dot{display:inline-block;width:9px;height:9px;border-radius:50%;vertical-align:middle;
+    box-shadow:0 0 0 2px #fff, 0 0 0 3px rgba(15,27,45,.08)}
   .sod-tabs{display:flex;align-items:center;gap:12px;margin:14px 0 2px;flex-wrap:wrap}
   .sod-tabs .unit{font-size:11.5px;color:var(--ink-soft)}
   /* ตัวเลขบนแท็บการจัดส่ง — บอกว่ามีอะไรต้องไปดู โดยไม่ต้องสลับแท็บไปเช็คเอง */
@@ -951,8 +954,8 @@
           <div id="so-board" class="dgb" data-view-scroll></div>
           <p class="form-hint" id="so-board-note" style="margin:6px 0 10px"></p>
           <div class="table-wrap"><table class="tbl-sticky-end">
-            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
-            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th title="ของในคลังพอส่งใบนี้ไหม — เขียว=ครบ · ส้ม=ได้บางส่วน · แดง=ไม่มีของเลย">ของ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
+            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -3548,6 +3551,24 @@ const PAY_PILL   = { unpaid:'off', partial:'wait', paid:'ok' };
 const soStatusKey = st => st === 'pending_delivery' ? 'confirmed' : st;   // ชื่อเดิม = confirmed
 const soStatusPill = st => '<span class="pill '+(SO_PILL[st]||'')+'">'+(SO_LABELS[st]||esc(st||'-'))+'</span>';
 const soPayPill = ps => '<span class="pill '+(PAY_PILL[ps]||'')+'">'+(PAY_LABELS[ps]||'-')+'</span>';
+/* ── ไฟเขียว/ส้ม "ส่งได้ครบไหม" บนรายการบิล (15 ต.ค. 2026) ──
+   คำถามแรกของทุกเช้าคือ "ใบไหนส่งได้บ้าง" — เดิมต้องเปิดทีละใบ ใบละ 4-6 วินาที
+   ★ ยิงขนานไปกับการโหลดรายการ เวลารวมจึงไม่เพิ่ม (คำขอขนานราคาเท่าคำขอเดียว)
+   ★ โชว์เฉพาะใบที่ยังไม่ถึงจุดตัดสต็อก — ใบที่ของออกจากคลังไปแล้วไม่มีอะไรให้ถามอีก */
+let SO_STOCK = {};
+const SO_STOCK_SHOW = ['confirmed', 'pending_delivery', 'accepted'];
+const SO_DOT_TONE = { full: 'var(--green)', partial: 'var(--amber)', none: 'var(--red)' };
+const SO_DOT_TEXT = { full: 'ของพร้อมส่งครบทั้งใบ', partial: 'ของมีไม่ครบ — ส่งได้บางส่วน', none: 'ไม่มีของให้ส่งเลย' };
+function soStockDot(o, withText){
+  if (!o || o.fulfillmentType === 'immediate') return '';
+  if (SO_STOCK_SHOW.indexOf(String(o.status)) === -1) return '';
+  const f = SO_STOCK[String(o.id)];
+  if (!f || !SO_DOT_TONE[f.flag]) return '';
+  const tip = SO_DOT_TEXT[f.flag] + (f.short ? ' (' + f.short + ' รายการ)' : '');
+  return '<span class="so-dot" style="background:' + SO_DOT_TONE[f.flag] + '" title="' + esc(tip) + '"></span>' +
+    (withText ? '<span class="unit" style="margin-left:5px">' + esc(withText === true ? SO_DOT_TEXT[f.flag] : withText) + '</span>' : '');
+}
+
 /* opts.ignoreStatus = ไม่กรองตามสถานะ — ใช้ตอนสร้างแถบหัวคอลัมน์ในโหมดตาราง
    ★ ถ้าแถบนับจากแถวที่กรองแล้ว พอกดกรอง "พร้อมจัดส่ง" คอลัมน์อื่นจะกลายเป็น 0 ทั้งแถบ
      แล้วแถบที่มีไว้ดูภาพรวมก็หมดประโยชน์ทันทีที่เริ่มใช้งานมัน */
@@ -3688,7 +3709,7 @@ async function renderSalesOrderBoard(){
            ทุกบรรทัดในการ์ดเป็นบรรทัดเดียวทั้งหมด การ์ดทุกใบจึงสูงเท่ากันโดยไม่ต้องกำหนดความสูงตายตัว */
         '<div class="mono-data" style="font-size:.84rem;font-weight:600;margin-top:5px;' +
           'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">฿' + baht(o.total) + '</div>' +
-        '<div style="margin-top:4px">' + soPayPill(o.paymentStatus) + '</div>' +
+        '<div style="margin-top:4px;display:flex;align-items:center;gap:6px">' + soStockDot(o) + soPayPill(o.paymentStatus) + '</div>' +
         (soRoundBadge(o) ? '<div style="margin-top:3px">' + soRoundBadge(o) + '</div>' : '')
     })),
     /* ★ ขั้นที่ไปได้มาจาก backend (nextStatuses ← SO_TRANSITIONS) ไม่ได้ก๊อปตารางสถานะมาไว้ที่นี่
@@ -3750,7 +3771,7 @@ function ensureDragBoard(){
 function renderSalesOrdersTable(){
   const body = document.getElementById('salesorders-body');
   const rows = soFilteredRows();
-  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">ไม่พบบิลขาย</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="12">ไม่พบบิลขาย</td></tr>'; return; }
   body.innerHTML = rows.map(o =>
     '<tr class="clickable-row" data-soid="'+o.id+'" onclick="openSaleOrderDetail('+o.id+')">' +
     // วันที่อยู่หน้าสุดและตัดเวลาออก (เจ้าของระบบสั่ง 6 ต.ค. 2026) — เวลายังดูได้ในหน้ารายละเอียด
@@ -3758,7 +3779,9 @@ function renderSalesOrdersTable(){
     '<td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
     '<td class="mono-data">'+esc(o.customerCode || '-')+'</td>' +
     '<td class="mono-data">฿'+baht(o.total)+'</td><td>'+esc(payLabel(o.paymentMethod))+'</td>' +
-    '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+soRoundBadge(o)+'</td><td>'+soPayPill(o.paymentStatus)+'</td>' +
+    '<td>'+soFulfillLabel(o.fulfillmentType)+'</td><td>'+soStatusPill(o.status)+soRoundBadge(o)+'</td>' +
+    '<td style="text-align:center">'+(soStockDot(o) || '<span class="unit">-</span>')+'</td>' +
+    '<td>'+soPayPill(o.paymentStatus)+'</td>' +
     // ★ แอดมินขอมา 6 ต.ค. 2026 — ต้องรู้ว่าบิลมาจากพนักงานคนไหน · backend แปลง LINE user id เป็นชื่อให้แล้ว
     '<td class="wrap">'+esc(o.saleByName || o.saleBy || '-')+'</td>' +
     '<td><button class="btn btn-sm" onclick="event.stopPropagation();printSaleOrderById('+o.id+',\'salesorder\')">พิมพ์</button></td></tr>'
@@ -3803,9 +3826,16 @@ async function loadSalesOrders(){
   const body = document.getElementById('salesorders-body');
   if (!salesOrdersCache.length) salesOrdersCache = listSnapLoad('salesorders') || [];
   if (salesOrdersCache.length) renderSalesOrders();
-  else tblLoading(body, 11);
-  const [, r] = await Promise.all([ensurePaymentTypesCache(), callApi('listSalesOrdersAdmin', {})]);
-  if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="11">'+esc(r.message)+'</td></tr>'; return; }
+  else tblLoading(body, 12);
+  /* ★ ยิงสามอย่างพร้อมกัน — ไฟเขียว/ส้มจึงไม่ทำให้หน้ารายการช้าลงเลย (CLAUDE.md ข้อ 7)
+     ตัวเช็กของในคลังล้มเหลวก็ไม่กระทบรายการ (แค่ไม่มีจุดสี) */
+  const [, r, sf] = await Promise.all([
+    ensurePaymentTypesCache(),
+    callApi('listSalesOrdersAdmin', {}),
+    callApi('getSalesOrderStockFlags', {}, { quiet: true })
+  ]);
+  if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
+  SO_STOCK = (sf && sf.success && sf.flags) ? sf.flags : {};
   salesOrdersCache = r.data;
   listSnapSave('salesorders', salesOrdersCache);
   renderSalesOrders();
