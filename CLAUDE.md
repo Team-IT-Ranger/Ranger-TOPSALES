@@ -2133,6 +2133,14 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
   **GitHub is the single source of truth** — sync only by push/pull, never by copying `.git`.
   Before starting work, compare `git fetch && git log origin/UAT --oneline -1` with
   `git log --oneline -1`.
+- **เปิดอ่านไฟล์วิดีโอได้แล้ว** (15 ต.ค. 2026 — เจ้าของระบบสั่งให้ติดตั้ง) · ไม่มี ffmpeg ในระบบ แต่ติดตั้ง
+  **แบบ user-level** ไว้ที่ `python -m pip install --user imageio-ffmpeg` → ตัวโปรแกรมอยู่ที่
+  `%APPDATA%\Python\Python314\site-packages\imageio_ffmpeg\binaries\ffmpeg-win-x86_64-v7.1.exe`
+  (ไม่แตะ PATH ของระบบ ไม่ต้องสิทธิ์แอดมิน · `python -I` **มองไม่เห็น** เพราะโหมด isolated ตัด user site ออก)
+  · ดูคลิปยาวๆ ให้ทำ **contact sheet ก่อน** แล้วค่อยดึงเฟรมเต็มเฉพาะช่วงที่สนใจ ประหยัดกว่าไล่ดูทีละเฟรมมาก:
+    `ffmpeg -i คลิป -vf "fps=1/21,scale=640:-1,tile=4x5" -frames:v 1 sheet.jpg`
+    แล้ว `ffmpeg -ss <วินาที> -i คลิป -frames:v 1 -q:v 2 frame.jpg`
+  · คลิปอ้างอิงของเจ้าของระบบอยู่ใน `reference/` (gitignored) เช่นคลิป SalesTools ที่ใช้ออกแบบรอบจัดส่ง
 - Mascot source art (~2 MB PNGs) is kept outside the repo at `G:\Shared drives\AppSpace\mascot-source\`.
   Only the web-sized export `frontend-admin/mascot-sr1.png` (344 KB, displayed at 236×236 on the
   login screen and 60×60 in the sidebar) is committed; bump its `?v=` query in `index.html` when
