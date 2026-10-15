@@ -1903,7 +1903,10 @@ function _busyChip(on){
   if (el) el.hidden = _busyCount === 0;
 }
 
-async function callApi(action, payload){
+/* opts.quiet = งานเบื้องหลังที่ผู้ใช้ไม่ได้สั่ง (โหลดล่วงหน้า) — ห้ามขึ้นป้าย "กำลังอัปเดต…"
+   ป้ายมีไว้บอกว่า "สิ่งที่คุณเพิ่งสั่งกำลังทำอยู่" ถ้ามันกะพริบตามเมาส์ด้วย ความหมายนั้นจะหายไป */
+async function callApi(action, payload, opts){
+  const quiet = !!(opts && opts.quiet);
   const body = Object.assign({}, payload || {});
   // Ultra Admin สวมสิทธิ์ตัวแทนอยู่ → แนบ tenantId ให้ทุก action อัตโนมัติ (ฝั่ง backend มีแค่ super_admin เท่านั้นที่ยอมรับค่านี้)
   if (ACTIVE_TENANT_ID && !body.tenantId) body.tenantId = ACTIVE_TENANT_ID;
@@ -1914,15 +1917,15 @@ async function callApi(action, payload){
     // requestId สร้างที่นี่ครั้งเดียวต่อการกดหนึ่งครั้ง — ผู้เรียกส่ง requestId มาเองได้ถ้าต้องการคุมรอบการลองใหม่
     if (IDEMPOTENT_ACTIONS.has(action) && !body.requestId) body.requestId = newRequestId();
   }
-  const btn = guarded ? _pressedButton() : null;
+  const btn = (guarded && !quiet) ? _pressedButton() : null;
   _setBusy(btn, true);
-  _busyChip(true);
+  if (!quiet) _busyChip(true);
   try {
     return await _callApiSend(action, body);
   } finally {
     if (guarded) INFLIGHT.delete(action);
     _setBusy(btn, false);
-    _busyChip(false);
+    if (!quiet) _busyChip(false);
   }
 }
 
@@ -3608,6 +3611,7 @@ function renderSalesOrders(){
   }
   renderSalesOrderBoard();
   if (soViewMode !== 'board') renderSalesOrdersTable();
+  sodWirePrefetch();        // ดักเมาส์ครั้งเดียว ใช้ได้ทั้งสองมุมมอง (delegation — วาดใหม่กี่รอบก็ยังทำงาน)
 }
 async function renderSalesOrderBoard(){
   const el = document.getElementById('so-board');
@@ -3726,7 +3730,7 @@ function renderSalesOrdersTable(){
   const rows = soFilteredRows();
   if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">ไม่พบบิลขาย</td></tr>'; return; }
   body.innerHTML = rows.map(o =>
-    '<tr class="clickable-row" onclick="openSaleOrderDetail('+o.id+')">' +
+    '<tr class="clickable-row" data-soid="'+o.id+'" onclick="openSaleOrderDetail('+o.id+')">' +
     // วันที่อยู่หน้าสุดและตัดเวลาออก (เจ้าของระบบสั่ง 6 ต.ค. 2026) — เวลายังดูได้ในหน้ารายละเอียด
     '<td class="mono-data">'+esc(soDateOnly(o.createdAt))+'</td>' +
     '<td class="mono-data">'+esc(o.code)+'</td><td>'+esc(o.customer)+'</td>' +
@@ -3810,6 +3814,59 @@ function sodPreview(id){
     ' <span class="unit">กำลังโหลดรายการ…</span>';
   return true;
 }
+/* ══════════ โหลดบิลล่วงหน้าตอนเมาส์ค้างบนการ์ด/แถว (15 ต.ค. 2026) ══════════
+   ของที่จำไว้ (snapshot) ช่วยเฉพาะใบที่ "เคยเปิดแล้ว" — ใบที่เพิ่งเห็นครั้งแรกยังต้องรอ ~6 วินาที
+   แต่คนทำงานจะเล็งการ์ดก่อนกดเสมอ ช่วงเล็งนั้นว่างอยู่เฉยๆ เอามาโหลดล่วงหน้าได้
+   ★ 250 ms ก่อนเริ่มยิง — กวาดเมาส์ผ่านไม่ถือว่าสนใจ · ★ ทีละใบเท่านั้น (ไม่ยิงรัวทั้งกระดาน)
+   ★ เพดาน 15 ใบต่อการเปิดหน้าหนึ่งครั้ง — กันเมาส์วนทั้งวันแล้วกินโควตา Apps Script ไปเปล่าๆ
+   ★ จอสัมผัสไม่มี hover จริง (มือถือจะยิงตอนแตะ ซึ่งก็คือตอนกดอยู่แล้ว) จึงปิดไปเลย
+   ★★ ไม่ขึ้นป้าย "กำลังอัปเดต…" ตอนโหลดล่วงหน้า (callApi โหมดเงียบ) — ผู้ใช้แค่เลื่อนเมาส์ผ่าน
+      ไม่ได้สั่งอะไร ป้ายกะพริบตามเมาส์จะกลายเป็นเสียงรบกวนที่คนเลิกเชื่อ */
+const SOD_PRE = new Map();            // id -> { ts, r, dp }
+const SOD_PRE_FRESH = 20000;          // ใหม่พอจะใช้เลยโดยไม่ยิงซ้ำ
+const SOD_PRE_KEEP = 120000;          // เก่ากว่านี้ถือว่าใช้ไม่ได้
+const SOD_PRE_MAX = 15;
+let sodPreBusy = false, sodPreUsed = 0, sodPreTimer = null, sodPreWired = false;
+function sodPreGet(id){
+  const hit = SOD_PRE.get(String(id));
+  if (!hit) return null;
+  if (Date.now() - hit.ts > SOD_PRE_KEEP) { SOD_PRE.delete(String(id)); return null; }
+  return hit;
+}
+async function sodPrefetch(id){
+  if (!id || sodPreBusy || sodPreUsed >= SOD_PRE_MAX || sodPreGet(id)) return;
+  const known = (salesOrdersCache || []).find(x => String(x.id) === String(id));
+  if (!known) return;                                  // ไม่รู้จักใบนี้แล้ว (เปลี่ยนหน้าไป) อย่าเดา
+  sodPreBusy = true; sodPreUsed++;
+  try {
+    const [r, dp] = await Promise.all([
+      callApi('getSalesOrderAdmin', { id }, { quiet: true }),
+      known.fulfillmentType !== 'immediate' ? callApi('getSaleDeliveryPlan', { id }, { quiet: true }) : Promise.resolve(null)
+    ]);
+    if (r && r.success) {
+      if (dp && dp.success && Array.isArray(dp.statusLog) && dp.statusLog.length) r.statusLog = dp.statusLog;
+      SOD_PRE.set(String(id), { ts: Date.now(), r, dp });
+      listSnapSave(sodSnapKey(id), [r, dp]);            // ได้ของจำข้ามการเปิดแอปไปด้วยในตัว
+    }
+  } catch (e) { /* โหลดล่วงหน้าล้มเหลวไม่ต้องบอกใคร ตอนกดจริงจะโหลดใหม่เอง */ }
+  finally { sodPreBusy = false; }
+}
+function sodWirePrefetch(){
+  if (sodPreWired) return;
+  const view = document.getElementById('view-salesorders');
+  if (!view) return;
+  sodPreWired = true;
+  if (!window.matchMedia || !matchMedia('(hover: hover)').matches) return;   // จอสัมผัส: ไม่มีช่วงเล็ง
+  view.addEventListener('mouseover', e => {
+    const el = e.target.closest && e.target.closest('[data-soid], .dgb-card[data-dgb-id]');
+    if (!el) return;
+    const id = el.dataset.soid || el.dataset.dgbId;
+    clearTimeout(sodPreTimer);
+    sodPreTimer = setTimeout(() => sodPrefetch(id), 250);
+  });
+  view.addEventListener('mouseout', () => clearTimeout(sodPreTimer));
+}
+
 /* ★★ บิลที่เคยเปิดดูแล้ว ขึ้นทันทีจากของที่จำไว้ (15 ต.ค. 2026)
    วัดบน UAT: getSalesOrderAdmin 7.3 วิ · พื้นของ Apps Script เอง 2.0 วิ · เปิดไฟล์ตัวแทนอีก ~2.2 วิ
    → ต่อให้ตัดการอ่านทิ้งหมดก็ลงไปได้แค่ ~5 วิ · ทางเดียวที่จะ "ทันที" คือไม่ต้องรอเลย
@@ -3818,7 +3875,7 @@ function sodPreview(id){
    ★ ของที่จำไว้ต้องถูกทิ้งทุกครั้งที่ "เราเป็นคนแก้ใบนั้นเอง" (sodSnapDrop) ไม่งั้นผู้ใช้กดเปลี่ยนสถานะ
      แล้วเห็นสถานะเดิมค้างอยู่หลายวินาที → นึกว่าไม่ติด แล้วกดซ้ำ (บทเรียนเดิมจากหน้ารายการ) */
 const sodSnapKey = id => 'sodetail_' + id;
-function sodSnapDrop(id){ listSnapDrop(sodSnapKey(id)); }
+function sodSnapDrop(id){ listSnapDrop(sodSnapKey(id)); SOD_PRE.delete(String(id)); }
 async function openSaleOrderDetail(id){
   currentSaleOrderId = id;
   _switchProductView('view-saleorderdetail', 'บิลขาย');
@@ -3828,8 +3885,15 @@ async function openSaleOrderDetail(id){
   SOD_PLAN = null;
   document.getElementById('sod-history').innerHTML = '';
   const sodBody = document.getElementById('sod-body');
-  const snap = listSnapLoad(sodSnapKey(id));
-  if (snap && snap[0] && snap[0].order) {
+  const pre = sodPreGet(id);                       // เมาส์ค้างไว้ก่อนกด = โหลดเสร็จแล้ว
+  const snap = pre ? null : listSnapLoad(sodSnapKey(id));
+  if (pre) {
+    sodShowingId = id;
+    renderSaleOrderDetail(pre.r);
+    renderSaleDelivery(pre.dp);
+    /* เพิ่งโหลดมาหมาดๆ = ไม่ต้องยิงซ้ำ · เกิน 20 วินาทีแล้วค่อยโหลดทับ (อีกคนอาจขยับใบนี้ไปแล้ว) */
+    if (Date.now() - pre.ts < SOD_PRE_FRESH) return;
+  } else if (snap && snap[0] && snap[0].order) {
     sodShowingId = id;
     renderSaleOrderDetail(snap[0]);
     renderSaleDelivery(snap[1] || null);
@@ -3861,6 +3925,7 @@ async function openSaleOrderDetail(id){
   if (dp && dp.success && Array.isArray(dp.statusLog) && dp.statusLog.length) r.statusLog = dp.statusLog;
   renderSaleOrderDetail(r);
   renderSaleDelivery(dp);
+  SOD_PRE.set(String(id), { ts: Date.now(), r, dp });
   listSnapSave(sodSnapKey(id), [r, dp]);
 }
 let SOD_DATA = null;   // ข้อมูลใบที่เปิดอยู่ ใช้พิมพ์เอกสารโดยไม่ต้องยิงคำขอซ้ำ

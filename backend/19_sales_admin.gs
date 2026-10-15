@@ -65,7 +65,7 @@ function getSalesOrderAdmin(session, payload) {
 
   ensureTenantSheetsCurrent(tenantId);   // ไฟล์ที่สร้างก่อนมี tab ประวัติ/คอลัมน์สถานะการเงิน ต้องเติมก่อนอ่าน
   var order = null;
-  tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+  order = tenantRowById(tenantId, 'sales_orders', payload.id);
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
 
   var products = {};
@@ -74,7 +74,7 @@ function getSalesOrderAdmin(session, payload) {
   centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c; });
 
   var orderVat = _orderVat(order);
-  var rawItems = tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); });
+  var rawItems = tenantRowsWhere(tenantId, 'order_items', 'order_id', order.record_id);
   var items = rawItems
     .map(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
       var lineTotal = parseFloat(it.line_total) || 0; return {
@@ -395,7 +395,7 @@ function cancelSalesOrderAdmin(session, payload) {
 
 function _cancelSalesOrderCore(session, payload, tenantId) {
   var order = null;
-  tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+  order = tenantRowById(tenantId, 'sales_orders', payload.id);
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
   if (order.status === 'cancelled') return { success: false, message: 'บิลนี้ถูกยกเลิกไปแล้ว' };
 

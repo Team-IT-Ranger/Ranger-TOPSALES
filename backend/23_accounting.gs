@@ -567,7 +567,7 @@ function _createArInvoiceCore(session, payload, book) {
       // ตรวจก่อนเปิดไฟล์ตัวแทน — ไม่มีเหตุต้องอ่านไฟล์ของคนที่กำลังจะปฏิเสธ (และเปิดไฟล์ตัวแทนแพง ~1.5 วิ)
       var blocked = _arBookGate(tenantId, book); if (blocked) return blocked;
       var order = null;
-      tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.salesOrderId)) order = o; });
+      order = tenantRowById(tenantId, 'sales_orders', payload.salesOrderId);
       if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
       if (String(order.status) === 'cancelled') return { success: false, message: 'บิลขายนี้ถูกยกเลิกแล้ว' };
       var dupe = centralObjects('ar_invoices').filter(function(iv) {

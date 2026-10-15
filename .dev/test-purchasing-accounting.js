@@ -69,6 +69,9 @@ const ctx = {
   centralUpdate: (n, id, f) => { const sh = ctx.centralSheet(n), r = sh.rows.find((x, i) => i && String(x[0]) === String(id)); if (!r) return false; Object.keys(f).forEach(k => { const c = sh.rows[0].indexOf(k); if (c >= 0) { while (r.length <= c) r.push(''); r[c] = f[k]; } }); return true; },
   deleteRowsWhere: (sh, col, v) => { const c = sh.rows[0].indexOf(col); let n = 0; for (let i = sh.rows.length - 1; i >= 1; i--) if (String(sh.rows[i][c]) === String(v)) { sh.rows.splice(i, 1); n++; } return n; },
   tenantObjects: (t, n) => objs(tenantSheets[n]),
+  // ของจริงอ่านเฉพาะแถวที่ต้องการแล้ว (02_helpers.gs) — ตัวจำลองต้องให้ผลเหมือนการกรองจากทั้งแท็บ
+  tenantRowById: (t, n, id) => objs(tenantSheets[n]).filter(o => String(o.record_id) === String(id)).pop() || null,
+  tenantRowsWhere: (t, n, col, val) => objs(tenantSheets[n]).filter(o => String(o[col]) === String(val)),
   // สมุดของบริษัทเอง — _nextCentralDocNo ใช้หาว่าจะอ่านรูปแบบเลขจากไฟล์ไหนเมื่อเอกสารเป็นของบริษัท
   _ensureHouseTenant: () => 'TNKI',
   nowStr: () => ctx.Utilities.formatDate(CLOCK, 'tz', 'yyyy-MM-dd HH:mm:ss'),
@@ -83,7 +86,8 @@ vm.createContext(ctx);
 // โหลด 02_helpers.gs ของจริงก่อน (มี isFlagOn/isNotOff ที่โมดูลอื่นเรียกใช้) แล้วคืนค่าชีตจำลองทับ
 const _fakes = { centralSheet: ctx.centralSheet, centralObjects: ctx.centralObjects, centralAppend: ctx.centralAppend,
   centralAppendMany: ctx.centralAppendMany, centralNextId: ctx.centralNextId, centralUpdate: ctx.centralUpdate,
-  deleteRowsWhere: ctx.deleteRowsWhere, tenantObjects: ctx.tenantObjects, nowStr: ctx.nowStr, safeDateStr: ctx.safeDateStr };
+  deleteRowsWhere: ctx.deleteRowsWhere, tenantObjects: ctx.tenantObjects, nowStr: ctx.nowStr, safeDateStr: ctx.safeDateStr,
+  tenantRowById: ctx.tenantRowById, tenantRowsWhere: ctx.tenantRowsWhere };
 ctx.SpreadsheetApp = { openById: () => { throw new Error('should not be called'); } };
 ctx.PropertiesService = { getScriptProperties: () => ({ getProperty: () => '' }) };
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'backend', '02_helpers.gs'), 'utf8'), ctx, { filename: '02_helpers.gs' });

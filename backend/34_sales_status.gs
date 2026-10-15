@@ -284,7 +284,7 @@ function updateSalesOrderStatus(session, payload) {
 
   return _withDocLock(function() {
     var order = null;
-    tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+    order = tenantRowById(tenantId, 'sales_orders', payload.id);
     if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
 
     var fromStatus = _soStatusOf(order), fromPay = orderPaymentStatus(order);
@@ -510,7 +510,7 @@ function ensureSaleDocNo(session, payload) {
 
   return _withDocLock(function() {
     var order = null;
-    tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+    order = tenantRowById(tenantId, 'sales_orders', payload.id);
     if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
 
     var status = _soStatusOf(order), paid = orderPaymentStatus(order);
@@ -637,7 +637,7 @@ function editSalesOrderAdmin(session, payload) {
 
 function _editSalesOrderCore(session, payload, tenantId) {
   var order = null;
-  tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+  order = tenantRowById(tenantId, 'sales_orders', payload.id);
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
   var from = _soStatusOf(order);
   if (from !== SO_ACCEPTED) {

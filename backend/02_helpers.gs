@@ -190,6 +190,67 @@ function tenantObjectsIfExists(tenantId, name) {
   var sh = ss.getSheetByName(name);
   return sh ? sheetObjectsOf(sh) : [];
 }
+/* ═══════════ อ่าน "เฉพาะแถวที่ต้องการ" แทนการลากทั้งแท็บมา (15 ต.ค. 2026) ═══════════
+ * เดิมการหาบิลใบเดียวทำด้วย `tenantObjects(tenantId,'sales_orders').forEach(...)` คือ
+ * **อ่านทุกแถวทุกคอลัมน์ของทะเบียนบิลทั้งเล่ม** แล้วไล่หาใบเดียว · ตอนนี้ตัวแทนมีบิลหลักสิบใบจึงยังไม่รู้สึก
+ * แต่ต้นทุนโตเป็นเส้นตรงตามแถว × คอลัมน์ (sales_orders มี 40 คอลัมน์) พอขึ้นหลักพันใบ
+ * การเปิดบิลหนึ่งใบจะลากทั้งทะเบียนข้ามเน็ตมาทุกครั้ง
+ *
+ * วิธีใหม่: อ่าน **คอลัมน์เดียวที่ใช้ค้น** ก่อน (แคบมาก) แล้วค่อยอ่านเฉพาะช่วงแถวที่ตรงจริง
+ * ★ ค้นจากแถวท้ายขึ้นมาข้างบน — ใบที่คนเปิดดู/แก้ไขคือใบใหม่เกือบทั้งหมด เจอแล้วหยุดทันที
+ * ★★ แลกมาด้วยการเรียก getRange หลายครั้งแทนครั้งเดียว ข้อมูลน้อยๆ จึงอาจไม่เร็วขึ้นทันที
+ *    (วัดบน UAT ที่มี 9 บิล: พอๆ กัน) — ที่ได้คือ "ไม่ช้าลงเมื่อข้อมูลโต" ซึ่งเป็นเรื่องที่แก้ทีหลังไม่ทัน
+ * ★ หัวตารางจำไว้ต่อคำขอ (`_hdrMemo`) เพราะคำขอเดียวมักแตะแท็บเดิมหลายรอบ
+ */
+var _hdrMemo = {};
+function _sheetHeaders(sh, memoKey) {
+  if (_hdrMemo[memoKey]) return _hdrMemo[memoKey];
+  var lastCol = sh.getLastColumn();
+  var hdr = lastCol ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  _hdrMemo[memoKey] = hdr;
+  return hdr;
+}
+function _rowToObj(hdr, row) {
+  var o = {};
+  for (var j = 0; j < hdr.length; j++) o[hdr[j]] = row[j];
+  return o;
+}
+
+/** แถวเดียวจาก record_id — คืน null ถ้าไม่เจอ (หน้าตาเหมือนที่ tenantObjects คืนทุกประการ) */
+function tenantRowById(tenantId, tab, recordId) {
+  return tenantRowsWhere(tenantId, tab, 'record_id', recordId, true)[0] || null;
+}
+
+/**
+ * ทุกแถวที่คอลัมน์ `colName` เท่ากับ `value`
+ * @param one true = พอเจอแถวแรก (นับจากท้าย) ก็หยุด — ใช้กับคีย์ที่ไม่ซ้ำอย่าง record_id
+ */
+function tenantRowsWhere(tenantId, tab, colName, value, one) {
+  var sh = tenantSheet(tenantId, tab);
+  var last = sh.getLastRow();
+  if (last < 2) return [];
+  var hdr = _sheetHeaders(sh, tenantId + '|' + tab);
+  var col = hdr.indexOf(colName);
+  if (col === -1) return [];
+  var keys = sh.getRange(1, col + 1, last, 1).getValues();   // คอลัมน์เดียว (แถวที่ 1 คือหัวตาราง)
+  var rows = [];
+  for (var i = last - 1; i >= 1; i--) {                      // ท้าย → หน้า
+    if (String(keys[i][0]) !== String(value)) continue;
+    rows.push(i + 1);
+    if (one) break;
+  }
+  if (!rows.length) return [];
+  rows.reverse();                                            // คืนตามลำดับในชีตเหมือน tenantObjects
+  var from = rows[0], to = rows[rows.length - 1];
+  var block = sh.getRange(from, 1, to - from + 1, hdr.length).getValues();
+  var out = [];
+  rows.forEach(function(r) {
+    var row = block[r - from];
+    if (row[0] === '' || row[0] === null) return;            // แถวว่างสนิท (หลักเดียวกับ sheetObjectsOf)
+    out.push(_rowToObj(hdr, row));
+  });
+  return out;
+}
 
 // ===================== GENERIC SHEET <-> OBJECT =====================
 function sheetObjectsOf(sh) {

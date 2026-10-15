@@ -54,6 +54,11 @@ const ctx = {
       : { success: true, invoiceNo: 'INV-TEST-0001', invoiceId: 1 };
   },
   tenantObjects: (tid, n) => sheetOf(n).map(o => Object.assign({}, o)),
+  /* ★ 15 ต.ค. 2026 — ของจริงเลิกอ่านทั้งแท็บมาหาใบเดียวแล้ว (tenantRowById/tenantRowsWhere ใน 02_helpers.gs)
+     ตัวจำลองต้องให้ผลเหมือนกันเป๊ะ: หน้าตาแถวเดียวกัน ลำดับเดียวกัน และเป็นสำเนา ไม่ใช่ตัวจริงในชีต */
+  // ★ เอาแถว "ล่างสุด" ที่ตรง เหมือนของจริงที่ค้นจากท้ายขึ้นหน้า (และเหมือน forEach เดิมที่ตัวหลังทับตัวหน้า)
+  tenantRowById: (tid, n, id) => sheetOf(n).filter(o => String(o.record_id) === String(id)).map(o => Object.assign({}, o)).pop() || null,
+  tenantRowsWhere: (tid, n, col, val) => sheetOf(n).filter(o => String(o[col]) === String(val)).map(o => Object.assign({}, o)),
   // tab ที่เพิ่มเข้ามาทีหลัง: ไฟล์ตัวแทนเก่ายังไม่มี → ต้องคืน [] ไม่ใช่ throw (ของจริงอยู่ใน 02_helpers.gs)
   tenantObjectsIfExists: (tid, n) => (t[n] ? t[n].map(o => Object.assign({}, o)) : []),
   tenantAppend: (tid, n, o) => sheetOf(n).push(Object.assign({}, o)),

@@ -70,8 +70,7 @@ function _drItemsOf(tenantId, orderId) {
  * }
  */
 function saleDeliveryPlan(tenantId, order, items) {
-  items = items || tenantObjects(tenantId, 'order_items')
-    .filter(function(it) { return String(it.order_id) === String(order.record_id); });
+  items = items || tenantRowsWhere(tenantId, 'order_items', 'order_id', order.record_id);
 
   var rounds = [], roundItems = [], current = null;
   if (saleOrderHasRounds(order)) {
@@ -233,7 +232,7 @@ function saveDeliveryRound(session, payload) {
 
   return _withDocLock(function() {
     var order = null;
-    tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+    order = tenantRowById(tenantId, 'sales_orders', payload.id);
     if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
     if (String(order.fulfillment_type) === 'immediate') return { success: false, message: 'บิลขายจากรถส่งของไปแล้วตั้งแต่เปิดบิล แยกรอบจัดส่งไม่ได้' };
     var status = _soStatusOf(order);
@@ -372,7 +371,7 @@ function getSaleDeliveryPlan(session, payload) {
   if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
 
   var order = null;
-  tenantObjects(tenantId, 'sales_orders').forEach(function(o) { if (String(o.record_id) === String(payload.id)) order = o; });
+  order = tenantRowById(tenantId, 'sales_orders', payload.id);
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
   // ขายจากรถตัดของจากรถไปแล้วตั้งแต่กดบันทึก ไม่มีคลังกลางให้ดูและแยกรอบไม่ได้
   if (String(order.fulfillment_type) === 'immediate') return { success: true, applicable: false, lines: [], rounds: [] };
