@@ -226,14 +226,20 @@ var CENTRAL_SHEETS = {
   /* credited_amount — ★ 15 ต.ค. 2026 ยอดที่ถูกลดด้วยใบลดหนี้ · ยอดค้างจริง = total − received − credited
      ต้องหักทุกที่ที่คิดยอดค้าง (listArInvoices · ตอนรับชำระ · รายงานอายุหนี้) ไม่งั้นตามเก็บเงินที่ลดไปแล้ว */
   ar_invoices: ['record_id','invoice_no','customer_id','tenant_id','sales_order_id','delivery_round_id','invoice_date','due_date',
-    'subtotal_ex_vat','vat_amount','total','received_amount','credited_amount','status','journal_id','note','created_by','created_at'],
+    'subtotal_ex_vat','vat_amount','total','received_amount','credited_amount','debited_amount','status','journal_id','note','created_by','created_at'],
   /* ═══ ใบลดหนี้ (49_credit_notes.gs) — เอกสารภาษีตามมาตรา 86/10 ไม่ใช่แค่รายการบัญชี
      ต้องเก็บให้ครบ: อ้างใบกำกับเดิม · เหตุผล · มูลค่าที่ลด · ภาษีที่ลด · คืนของเข้าคลังหรือไม่
      ★ ยกเลิกใบลดหนี้ = ออกใบกลับรายการ (status 'void') ไม่ลบแถว — หลักเดียวกับใบสำคัญทุกชนิดในระบบนี้ ═══ */
   ar_credit_notes: ['record_id','credit_note_no','ar_invoice_id','invoice_no','customer_id','tenant_id',
     'sales_order_id','delivery_round_id','credit_date','reason_code','reason','vat_rate',
     'subtotal_ex_vat','vat_amount','total','stock_returned','journal_id','status','created_by','created_at'],
-  ar_credit_note_items: ['record_id','credit_note_id','order_item_id','product_id','unit_code','unit_factor','qty','unit_price','amount','tax_status'],
+  ar_credit_note_items: ['record_id','note_id','credit_note_id','order_item_id','product_id','unit_code','unit_factor','qty','unit_price','amount','tax_status'],
+  /* ใบเพิ่มหนี้ (ม.86/9) — คู่แฝดของใบลดหนี้ ใช้โค้ดเดินทางเดียวกัน (AR_ADJ ใน 49_credit_notes.gs)
+     แยกตารางเพราะเป็นคนละเล่มเอกสารกัน (เลข DN ของตัวเอง) และรายงานต้องแยกกันได้ */
+  ar_debit_notes: ['record_id','debit_note_no','ar_invoice_id','invoice_no','customer_id','tenant_id',
+    'sales_order_id','delivery_round_id','credit_date','reason_code','reason','vat_rate',
+    'subtotal_ex_vat','vat_amount','total','stock_returned','journal_id','status','created_by','created_at'],
+  ar_debit_note_items: ['record_id','note_id','debit_note_id','order_item_id','product_id','unit_code','unit_factor','qty','unit_price','amount','tax_status'],
   ar_receipts: ['record_id','tenant_id','receipt_no','customer_id','receipt_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
   ar_receipt_allocations: ['record_id','receipt_id','invoice_id','amount'],
 

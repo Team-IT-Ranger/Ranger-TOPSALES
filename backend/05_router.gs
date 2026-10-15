@@ -251,6 +251,9 @@ var ADMIN_ACTION_MAP = {
   getApAging:             getApAging,
   listArInvoices:         listArInvoices,
   createArCreditNote:     createArCreditNote,      // ออกใบลดหนี้ (49_credit_notes.gs)
+  createArDebitNote:      createArDebitNote,       // ออกใบเพิ่มหนี้ (คู่แฝด ใช้โค้ดเดินทางเดียวกัน)
+  listArDebitNotes:       listArDebitNotes,
+  getArDebitNote:         getArDebitNote,
   getArCreditNoteDraft:   getArCreditNoteDraft,    // รายการที่ลดหนี้ได้ของใบแจ้งหนี้ใบหนึ่ง
   listArCreditNotes:      listArCreditNotes,
   getArCreditNote:        getArCreditNote,         // ใบเดียวพร้อมรายการ — ใช้ตอนพิมพ์

@@ -812,5 +812,48 @@ console.log('\n── ใบลดหนี้ (Credit Note) ──');
     cns.map(c => [/^CN-/.test(c.creditNoteNo), c.total, c.stockReturned]).sort(), [[true, 1070, false], [true, 3210, true]].sort());
 }
 
+console.log('\n── ใบเพิ่มหนี้ (Debit Note) ──');
+{
+  /* ★ คู่แฝดของใบลดหนี้ — ทางเดินโค้ดเดียวกัน ต่างแค่ทิศทางบัญชี/สต็อก และ "ไม่มีเพดาน"
+     ที่ต้องยืนยันคือ: ลูกหนี้เพิ่มจริง · ใบที่ปิดไปแล้วกลับมาค้างได้ · ของออกจากคลังเมื่อสั่ง */
+  append(tenantSheets.sales_orders, { record_id: 93, order_code: 'SO-DN-01', customer_id: 500, subtotal: 1070,
+    discount: 0, total: 1070, payment_method: 'credit_term', status: 'completed', created_at: '2026-10-15 11:00:00',
+    apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07, subtotal_ex_vat: 1000, vat_amount: 70, exempt_amount: 0 });
+  append(tenantSheets.order_items, { record_id: 9301, order_id: 93, product_id: '20', unit_code: 'CT', unit_factor: 10,
+    qty: 1, base_qty: 10, price: 1070, line_total: 1070, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  let cr3 = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 93, invoiceDate: '2026-10-15', dueDays: 30 });
+  const IV3 = cr3.invoiceId;
+  const iv3 = () => ctx.listArInvoices(FIN, {}).data.find(x => x.id === IV3);
+
+  // จ่ายครบก่อน แล้วค่อยพบว่าคิดเงินขาด
+  ctx.receiveArPayment(FIN, { customerId: 500, receiptDate: '2026-10-18', method: 'cash',
+    allocations: [{ invoiceId: IV3, amount: 1070 }] });
+  eq('ตั้งต้น: ใบนี้จ่ายครบแล้ว', [iv3().status, iv3().outstanding], ['paid', 0]);
+
+  const stockT1 = () => (ctx._scoped('warehouse_stock', 'T1').find(w => String(w.product_id) === '20') || { qty: 0 }).qty;
+  const before = stockT1();
+  let dn = ctx.createArDebitNote(FIN, { invoiceId: IV3, reasonCode: 'extra', creditDate: '2026-10-19', moveStock: true,
+    vatRate: 0.07, lines: [{ itemId: 9301, productId: '20', unitCode: 'CT', unitFactor: 10, qty: 2, unitPrice: 1070, taxStatus: 'vat' }] });
+  ok('ออกใบเพิ่มหนี้ (ส่งของเพิ่ม 2 ลัง)', dn);
+  eq('  เลขขึ้นต้นด้วย DN · ยอด 2,140', [/^DN-/.test(dn.noteNo || ''), dn.total], [true, 2140]);
+
+  let j3 = ctx.getJournal(FIN, { id: ctx.listArDebitNotes(FIN, {}).data[0].journalId }).journal;
+  eq('  ★ ลงบัญชีทางเดียวกับใบแจ้งหนี้: Dr ลูกหนี้ 2,140 / Cr รายได้ 2,000 + Cr ภาษีขาย 140',
+    j3.lines.map(l => [l.accountCode, l.debit, l.credit]), [['1200', 2140, 0], ['4100', 0, 2000], ['2200', 0, 140]]);
+  eq('  ★ ใบที่ปิดไปแล้วกลับมาค้างอีกครั้ง ตามยอดที่เพิ่ม', [iv3().status, iv3().outstanding, iv3().debitedAmount], ['partial', 2140, 2140]);
+  eq('  ★ ของออกจากคลัง (ตรงข้ามกับใบลดหนี้): 2 ลัง × 10 = −20 ชิ้น', (stockT1() - before), -20);
+
+  dn = ctx.createArDebitNote(FIN, { invoiceId: IV3, reasonCode: 'freight', creditDate: '2026-10-19',
+    vatRate: 0.07, lines: [{ productId: '', unitCode: '', qty: 1, unitPrice: 500, taxStatus: 'vat' }] });
+  eq('เพิ่มหนี้ได้เกินยอดใบเดิม (ไม่มีเพดาน — คิดเงินขาดเท่าไรก็เพิ่มได้เท่านั้น)',
+    [dn.success, iv3().outstanding], [true, 2640]);
+  fails('ไม่ระบุเหตุผล → ปฏิเสธ (กฎหมายบังคับเหมือนใบลดหนี้)',
+    ctx.createArDebitNote(FIN, { invoiceId: IV3, lines: [{ productId: '', qty: 1, unitPrice: 100 }] }), /เหตุผล/);
+
+  let p3 = ctx.receiveArPayment(FIN, { customerId: 500, receiptDate: '2026-10-25', method: 'transfer',
+    allocations: [{ invoiceId: IV3, amount: 2640 }] });
+  eq('จ่ายส่วนที่เพิ่มครบ → ใบปิดอีกครั้ง', [p3.success, iv3().status, iv3().outstanding], [true, 'paid', 0]);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
