@@ -221,6 +221,13 @@
     box-shadow:0 0 4px rgba(31,138,95,.55);animation:segpulse 2.6s ease-in-out infinite}
   @keyframes segpulse{0%,100%{opacity:.4}50%{opacity:1}}
   @media(prefers-reduced-motion:reduce){.segtog .seg.on::before{animation:none;opacity:.85}}
+  /* แถบแท็บของหน้ารายละเอียดบิล — ใช้ชิ้นส่วนเดียวกับปุ่มสลับ กระดาน/ตาราง ที่ผู้ใช้คุ้นแล้ว */
+  .sod-tabs{display:flex;align-items:center;gap:12px;margin:14px 0 2px;flex-wrap:wrap}
+  .sod-tabs .unit{font-size:11.5px;color:var(--ink-soft)}
+  /* ตัวเลขบนแท็บการจัดส่ง — บอกว่ามีอะไรต้องไปดู โดยไม่ต้องสลับแท็บไปเช็คเอง */
+  #sod-tabbar .tabbadge{font-size:.72rem;font-weight:700;padding:.05em .5em;border-radius:999px;
+    background:var(--red-soft);color:var(--red);margin-left:.1em}
+  #sod-tabbar .tabbadge.calm{background:var(--blue-pale);color:var(--blue)}
   /* ลากหัวคอลัมน์เพื่อสลับตำแหน่ง (initTableColOrder) — จับได้ทั้งเมาส์และนิ้ว
      ★ touch-action:none เฉพาะตอนเริ่มลากจริง ไม่ใช่ตั้งไว้ตลอด ไม่งั้นเลื่อนตารางด้วยนิ้วไม่ได้เลย */
   th.th-movable{ cursor:grab; }
@@ -959,8 +966,18 @@
             <div id="sod-actions"></div>
           </div>
           <div id="sod-status-card"></div>
-          <!-- ของในคลัง + รอบจัดส่ง/ของค้างส่ง (getSaleDeliveryPlan — ยิงขนานกับใบรายละเอียด) -->
-          <div id="sod-delivery"></div>
+          <!-- ★ แยกสองเรื่องออกจากกันด้วยแท็บ (เจ้าของระบบสั่ง 15 ต.ค. 2026)
+               ของเดิมวางการ์ดจัดส่งคร่อมอยู่เหนือตารางรายการขาย คนทำงานอ่านรวดเดียวแล้วแยกไม่ออกว่า
+               ตารางไหนเป็น "ของที่ขาย" ตารางไหนเป็น "ของที่จะส่งรอบนี้" — ทั้งสองตารางมีคอลัมน์จำนวน
+               เหมือนกันแต่คนละความหมาย · แท็บบังคับให้ตอบตัวเองก่อนว่ากำลังดูเรื่องอะไรอยู่ -->
+          <div class="sod-tabs">
+            <div class="segtog" id="sod-tabbar" role="group" aria-label="เลือกหัวข้อของบิลนี้">
+              <button type="button" class="seg on" data-t="items" aria-pressed="true" onclick="sodTab('items')">รายการขาย</button>
+              <button type="button" class="seg" data-t="ship" aria-pressed="false" onclick="sodTab('ship')">การจัดส่ง<span class="tabbadge" id="sod-tab-badge" hidden></span></button>
+            </div>
+            <span class="unit" id="sod-tab-note"></span>
+          </div>
+          <div id="sod-pane-items">
           <!-- แก้ไขรายการหลังบันทึกรับงาน (editSalesOrderAdmin) — เปิดจากปุ่ม "แก้ไขรายการ" เฉพาะใบขั้นบันทึกรับงานแล้ว -->
           <div class="form-card" id="sod-edit-card" style="display:none">
             <h3>แก้ไขรายการในใบนี้</h3>
@@ -979,6 +996,11 @@
             <thead><tr><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา/หน่วย (ไม่รวม VAT)</th><th>ส่วนลด/หน่วย</th><th>รวมก่อนลด</th><th>ส่วนลดรวม</th><th>หลังหักส่วนลด</th><th>รวมภาษีแล้ว</th></tr></thead>
             <tbody id="sod-body"></tbody>
           </table></div>
+          </div><!-- /sod-pane-items -->
+          <div id="sod-pane-ship" hidden>
+            <!-- ของในคลัง + รอบจัดส่ง/ของค้างส่ง (getSaleDeliveryPlan — ยิงขนานกับใบรายละเอียด) -->
+            <div id="sod-delivery"></div>
+          </div>
           <div id="sod-history"></div>
         </section>
 
@@ -3814,6 +3836,35 @@ function sodPreview(id){
     ' <span class="unit">กำลังโหลดรายการ…</span>';
   return true;
 }
+/* ── แท็บของหน้ารายละเอียดบิล: รายการขาย ↔ การจัดส่ง (15 ต.ค. 2026) ──
+   ★ ตั้งต้นที่ "รายการขาย" ทุกครั้งที่เปิดใบ — **ไม่จำแท็บล่าสุด** และไม่สลับให้อัตโนมัติเวลาของไม่พอ
+     เปิดใบแล้วเจอคนละหน้ากับที่คาด คือสิ่งที่ทำให้คนไม่เชื่อหน้าจอ · ของที่ต้องไปดูบอกด้วยป้ายตัวเลข
+     บนแท็บแทน (เห็นได้โดยไม่ต้องกดเข้าไปเช็ค) */
+let sodTabCur = 'items';
+function sodTab(t){
+  sodTabCur = (t === 'ship') ? 'ship' : 'items';
+  document.querySelectorAll('#sod-tabbar .seg').forEach(b => {
+    const on = b.dataset.t === sodTabCur;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const pi = document.getElementById('sod-pane-items'), ps = document.getElementById('sod-pane-ship');
+  if (pi) pi.hidden = sodTabCur !== 'items';
+  if (ps) ps.hidden = sodTabCur !== 'ship';
+}
+/* ป้ายบนแท็บการจัดส่ง + คำอธิบายสั้นๆ ข้างแถบ — เรียกจาก renderSaleDelivery ที่เดียว */
+function sodTabBadge(txt, calm, note){
+  const b = document.getElementById('sod-tab-badge'), n = document.getElementById('sod-tab-note');
+  if (b) { b.textContent = txt || ''; b.hidden = !txt; b.classList.toggle('calm', !!calm); }
+  if (n) n.textContent = note || '';
+}
+/* แท็บจัดส่งที่ไม่มีอะไรให้จัดการ ต้อง "บอกว่าทำไม" ไม่ใช่ปล่อยว่าง —
+   แท็บว่างเปล่าทำให้คนคิดว่าโหลดไม่ขึ้นแล้วกดวนอยู่ตรงนั้น */
+function sodShipNote(html){
+  const box = document.getElementById('sod-delivery');
+  if (box) box.innerHTML = '<div class="form-card"><p class="form-hint" style="margin:0">' + html + '</p></div>';
+}
+
 /* ══════════ โหลดบิลล่วงหน้าตอนเมาส์ค้างบนการ์ด/แถว (15 ต.ค. 2026) ══════════
    ของที่จำไว้ (snapshot) ช่วยเฉพาะใบที่ "เคยเปิดแล้ว" — ใบที่เพิ่งเห็นครั้งแรกยังต้องรอ ~6 วินาที
    แต่คนทำงานจะเล็งการ์ดก่อนกดเสมอ ช่วงเล็งนั้นว่างอยู่เฉยๆ เอามาโหลดล่วงหน้าได้
@@ -3882,6 +3933,8 @@ async function openSaleOrderDetail(id){
   document.getElementById('sod-actions').innerHTML = '';
   document.getElementById('sod-status-card').innerHTML = '';
   document.getElementById('sod-delivery').innerHTML = '';
+  sodTab('items');                    // เปิดใบไหนก็เริ่มที่รายการขายเสมอ (คาดเดาได้ > ฉลาด)
+  sodTabBadge('');
   SOD_PLAN = null;
   document.getElementById('sod-history').innerHTML = '';
   const sodBody = document.getElementById('sod-body');
@@ -4069,11 +4122,21 @@ function renderSaleDelivery(dp){
   const box = document.getElementById('sod-delivery');
   if (!box) return;
   SOD_PLAN = (dp && dp.success && dp.applicable) ? dp : null;
-  if (!SOD_PLAN) { box.innerHTML = ''; return; }
-  /* ใบที่ปิดแล้ว/ยกเลิก และไม่เคยแยกรอบ = ไม่มีอะไรให้ตัดสินใจ ไม่ต้องมีการ์ด
+  if (!SOD_PLAN) {
+    sodTabBadge('');
+    sodShipNote(dp && dp.success && dp.applicable === false
+      ? 'บิลนี้ขายจากรถ — ของออกจากรถถึงมือลูกค้าตั้งแต่ตอนเปิดบิลแล้ว จึงไม่มีรอบจัดส่งและไม่มีของในคลังกลางให้ดู'
+      : 'ยังไม่ได้ข้อมูลของในคลังสำหรับใบนี้ — ลองเปิดใบใหม่อีกครั้ง');
+    return;
+  }
+  /* ใบที่ปิดแล้ว/ยกเลิก และไม่เคยแยกรอบ = ไม่มีอะไรให้ตัดสินใจ
      (แต่ใบที่เคยแยกรอบต้องเห็นประวัติรอบตลอดไป ไว้พิมพ์ใบส่งสินค้าซ้ำ) */
   const live = ['confirmed','pending_delivery','accepted','ready_to_ship','delivering'].indexOf(dp.status) !== -1;
-  if (!live && !dp.hasRounds) { box.innerHTML = ''; return; }
+  if (!live && !dp.hasRounds) {
+    sodTabBadge('');
+    sodShipNote('ใบนี้ส่งรอบเดียวทั้งใบและปิดงานแล้ว — ไม่มีรอบจัดส่งให้จัดการ');
+    return;
+  }
 
   const short = dp.lines.filter(l => l.shortBase > 0 && (l.ordered - l.shipped) > 0);
   const rows = dp.lines.map(l => {
@@ -4103,9 +4166,15 @@ function renderSaleDelivery(dp){
     '<td><button class="btn btn-sm" onclick="printRoundDoc(\'picking\','+r.id+')">ใบจัดของ</button> ' +
         '<button class="btn btn-sm" onclick="printRoundDoc(\'delivery\','+r.id+')">ใบส่งสินค้า</button></td></tr>').join('');
 
+  /* ★ ป้ายบนแท็บ = เหตุผลเดียวที่คนจะกดเข้ามาดู · เรียงตามความเร่งด่วนจริง
+     ของไม่พอส่ง (ต้องตัดสินใจวันนี้) > มีของค้างส่งที่ยังไม่เข้ารอบ > แค่บอกว่าแยกรอบไว้แล้ว */
+  if (short.length) sodTabBadge(String(short.length), false, 'ของไม่พอส่ง ' + short.length + ' รายการ — ดูแท็บการจัดส่ง');
+  else if (dp.shortLines) sodTabBadge(String(dp.shortLines), false, 'มีของค้างส่ง ' + dp.shortLines + ' รายการ');
+  else if (dp.hasRounds) sodTabBadge('รอบ ' + (dp.currentRoundNo || dp.rounds.length), true, '');
+  else sodTabBadge('');
+
   box.innerHTML = '<div class="form-card">' +
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
-      '<h3 style="margin:0">ของในคลังและรอบจัดส่ง</h3>' +
       '<span class="unit">คลัง '+esc(dp.warehouse||'')+' · จำนวนคงเหลือเป็นหน่วยฐาน</span>' +
       (dp.canSplit ? '<button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="openSodSplit()">แยกของค้างส่ง…</button>'
         : '<span class="unit" style="margin-left:auto">แยกของค้างส่งได้ตอนใบอยู่ขั้น "'+esc(SO_LABELS.accepted)+'"</span>') +
@@ -4688,6 +4757,7 @@ async function sedAddRow(it){
   }
 }
 async function openSodEdit(){
+  sodTab('items');                    // ฟอร์มแก้ไขอยู่ในแท็บรายการขาย — ไม่งั้นกดแล้วเหมือนไม่มีอะไรเกิดขึ้น
   const o = SOD_DATA.order, card = document.getElementById('sod-edit-card');
   card.style.display = '';
   document.getElementById('sed-rows').innerHTML = ''; document.getElementById('sed-result').innerHTML = '';
