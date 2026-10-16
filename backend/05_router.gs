@@ -272,6 +272,9 @@ var ADMIN_ACTION_MAP = {
   saveAccountingSettings: saveAccountingSettings,
   createArCreditNote:     createArCreditNote,      // ออกใบลดหนี้ (49_credit_notes.gs)
   createArDebitNote:      createArDebitNote,       // ออกใบเพิ่มหนี้ (คู่แฝด ใช้โค้ดเดินทางเดียวกัน)
+  voidArAdjustNote:       voidArAdjustNote,        // ยกเลิกใบลดหนี้/ใบเพิ่มหนี้ = กลับรายการ ไม่ลบของเดิม
+  // ซ่อมบิลที่พ้นร่างแล้วแต่เลขยังเป็น DRAFT- (super_admin · 34_sales_status.gs)
+  repairDraftOrderCodes:  repairDraftOrderCodes,
   listArDebitNotes:       listArDebitNotes,
   getArDebitNote:         getArDebitNote,
   getArCreditNoteDraft:   getArCreditNoteDraft,    // รายการที่ลดหนี้ได้ของใบแจ้งหนี้ใบหนึ่ง

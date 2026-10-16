@@ -1318,5 +1318,70 @@ console.log('\n── ใบรับคืนสินค้า ──');
     [g.success, g.items.length, g.items[0].restock, g.items[1].restock], [true, 2, true, false]);
 }
 
+/* ══════════ ยกเลิกใบลดหนี้ / ใบเพิ่มหนี้ (49_credit_notes.gs · 16 ต.ค. 2026) ══════════
+   ★★ "ยกเลิก" = กลับรายการ ไม่ลบของเดิม — แถวใบยังอยู่ (voided) เพราะเป็นเอกสารภาษีที่ส่ง
+     ลูกค้าไปแล้ว และเลขที่ใบต้องไม่ถูกนำกลับมาใช้ซ้ำ
+   ★ สามอย่างต้องย้อนพร้อมกัน: ใบสำคัญบัญชี · ยอดสะสมบนใบแจ้งหนี้ · สต็อก (เฉพาะใบที่เคยขยับจริง) */
+console.log('\n── ยกเลิกใบลดหนี้ / ใบเพิ่มหนี้ ──');
+{
+  const stockOf = pid => ctx.centralObjects('warehouse_stock')
+    .filter(r => String(r.product_id) === String(pid)).reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const SCV = ctx._saleStockScope('T1'), WHV = ctx._ensureScopeWarehouse(SCV);
+  ctx._applyStockIn(SCV, WHV, '90', 100, 10, 'receipt', 'TEST', 'V0', 'ตั้งต้น', 'tester');
+
+  append(tenantSheets.sales_orders, { record_id: 200, order_code: 'SO-VOID-1', customer_id: 500,
+    subtotal: 10700, discount: 0, total: 10700, payment_method: 'credit_term', status: 'completed',
+    created_at: '2026-10-16 09:00:00', apply_vat: 'TRUE', vat_rate: 0.07,
+    subtotal_ex_vat: 10000, vat_amount: 700, exempt_amount: 0 });
+  append(tenantSheets.order_items, { record_id: 20001, order_id: 200, product_id: '90', unit_code: 'CT',
+    unit_factor: 10, qty: 10, base_qty: 100, price: 1070, line_total: 10700, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  const IVV = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 200, invoiceDate: '2026-10-16', dueDays: 30 }).invoiceId;
+  const ivRow = () => ctx.listArInvoices(FIN, {}).data.find(x => x.id === IVV);
+
+  // ── ใบลดหนี้ที่คืนของเข้าคลัง ──
+  const s0 = stockOf('90');
+  let r = ctx.createArCreditNote(FIN, { invoiceId: IVV, reasonCode: 'return', reason: 'คืนของ',
+    creditDate: '2026-10-18', returnStock: true,
+    lines: [{ itemId: 20001, productId: '90', unitCode: 'CT', unitFactor: 10, qty: 3, unitPrice: 1070, taxStatus: 'vat' }] });
+  ok('ออกใบลดหนี้ที่คืนของเข้าคลัง', r);
+  const CN = r.noteId;
+  eq('  ของเข้าคลังแล้ว 30 ชิ้น · ยอดค้างลดลง', [stockOf('90') - s0, ivRow().outstanding], [30, 10700 - 3210]);
+
+  eq('ไม่ระบุเหตุผล → ปฏิเสธ (เป็นเอกสารภาษี ต้องอธิบายได้)',
+    ctx.voidArAdjustNote(FIN, { id: CN, kind: 'credit' }).success, false);
+
+  r = ctx.voidArAdjustNote(FIN, { id: CN, kind: 'credit', reason: 'ออกผิดใบ' });
+  eq('★ ยกเลิกใบลดหนี้ได้ พร้อมกลับรายการบัญชี', [r.success, !!r.journalNo, r.stockMoved], [true, true, 1]);
+  eq('★★ ยอดค้างกลับมาเท่าเดิม', ivRow().outstanding, 10700);
+  eq('★★ ของที่เคยรับคืนถูกตัดออกจากคลังคืน', stockOf('90'), s0);
+  eq('  แถวใบเดิมยังอยู่ สถานะ voided (เอกสารภาษี ลบไม่ได้)',
+    ctx.centralObjects('ar_credit_notes').filter(x => String(x.record_id) === String(CN))[0].status, 'voided');
+  eq('  ยกเลิกซ้ำไม่ได้', ctx.voidArAdjustNote(FIN, { id: CN, kind: 'credit', reason: 'ซ้ำ' }).success, false);
+  eq('★ ยกเลิกแล้วลดหนี้ใหม่ได้เต็มยอด',
+    ctx.getArCreditNoteDraft(FIN, { invoiceId: IVV }).invoice.creditable, 10700);
+
+  // ── ★ ใบลดหนี้ที่ "ไม่ได้คืนของ" ต้องไม่ย้อนสต็อก (ของไม่เคยขยับ) ──
+  const s1 = stockOf('90');
+  r = ctx.createArCreditNote(FIN, { invoiceId: IVV, reasonCode: 'overcharge', reason: 'คิดราคาผิด',
+    creditDate: '2026-10-18', returnStock: false,
+    lines: [{ itemId: 20001, productId: '90', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 1070, taxStatus: 'vat' }] });
+  ok('ออกใบลดหนี้แบบไม่คืนของ (คิดราคาผิด)', r);
+  eq('  ของไม่ขยับตอนออกใบ', stockOf('90'), s1);
+  r = ctx.voidArAdjustNote(FIN, { id: r.noteId, kind: 'credit', reason: 'ยกเลิก' });
+  eq('★★ ยกเลิกแล้วของก็ต้องไม่ขยับ (ไม่งั้นของงอกจากอากาศ)',
+    [r.success, r.stockMoved, stockOf('90')], [true, 0, s1]);
+
+  // ── ใบเพิ่มหนี้ ──
+  const s2 = stockOf('90');
+  r = ctx.createArDebitNote(FIN, { invoiceId: IVV, reasonCode: 'extra', reason: 'ส่งของเพิ่ม',
+    creditDate: '2026-10-18', moveStock: true,
+    lines: [{ itemId: 20001, productId: '90', unitCode: 'CT', unitFactor: 10, qty: 2, unitPrice: 1070, taxStatus: 'vat' }] });
+  ok('ออกใบเพิ่มหนี้ที่ตัดของออกจากคลัง', r);
+  eq('  ของออกจากคลัง 20 ชิ้น · ยอดค้างเพิ่ม', [stockOf('90') - s2, ivRow().outstanding], [-20, 10700 + 2140]);
+  r = ctx.voidArAdjustNote(FIN, { id: r.noteId, kind: 'debit', reason: 'ออกผิดยอด' });
+  eq('★ ยกเลิกใบเพิ่มหนี้: ยอดค้างกลับเดิม · ของกลับเข้าคลัง',
+    [r.success, ivRow().outstanding, stockOf('90')], [true, 10700, s2]);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

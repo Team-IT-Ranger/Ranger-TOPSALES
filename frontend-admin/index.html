@@ -996,6 +996,9 @@
             <input id="so-filter-search" data-table-search placeholder="ค้นหาชื่อร้าน / รหัสร้าน / เลขที่บิล / พนักงานขาย" oninput="renderSalesOrders()" style="flex:1;min-width:200px">
             <button class="btn btn-sm" onclick="printSalesOrderList()">พิมพ์รายงาน</button>
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
+            <!-- ★ ซ่อมบิลที่พ้นร่างแล้วแต่เลขยังเป็น DRAFT- (บั๊กที่แก้ไปแล้ว 16 ต.ค. 2026)
+                 ใบที่ค้างอยู่ก่อนหน้านั้นไม่ซ่อมตัวเองจนกว่าจะเปลี่ยนสถานะอีกครั้ง -->
+            <button class="btn btn-sm" id="so-fix-codes" style="display:none" onclick="repairDraftCodes()">ซ่อมเลขที่เอกสาร</button>
           </div>
           <!-- กระดานลากการ์ด — มุมมองที่สองของหน้าเดียวกัน ใช้ข้อมูล/ตัวกรอง/snapshot ชุดเดียวกับตาราง -->
           <div id="so-board" class="dgb sheet-mid" data-view-scroll></div>
@@ -2008,7 +2011,8 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
   'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings',
-  'createBillingNote','cancelBillingNote','createGoodsReturn','cancelGoodsReturn','createCreditNoteFromReturn','organizeDatabaseFiles','syncTenantSheets',
+  'createBillingNote','cancelBillingNote','createGoodsReturn','cancelGoodsReturn','createCreditNoteFromReturn',
+  'voidArAdjustNote','repairDraftOrderCodes','organizeDatabaseFiles','syncTenantSheets',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -3823,8 +3827,33 @@ function setSalesOrderView(mode){
   if (sel) sel.value = '';
   renderSalesOrders();
 }
+/* ★ ปุ่มซ่อมโผล่เฉพาะตอน "มีของให้ซ่อมจริง" และผู้ใช้เป็น Ultra Admin — ปุ่มที่โผล่ตลอดเวลา
+   ทั้งที่ไม่มีอะไรให้ทำ คือปุ่มที่วันหนึ่งจะมีคนกดเล่นแล้วสงสัยว่าเกิดอะไรขึ้น */
+function soSyncFixButton(){
+  const btn = document.getElementById('so-fix-codes');
+  if (!btn) return;
+  const bad = (salesOrdersCache || []).filter(o =>
+    String(o.code || '').indexOf('DRAFT-') === 0 && soStatusKey(o.status) !== 'draft').length;
+  btn.style.display = (bad && MY_PERMS.isSuper) ? '' : 'none';
+  btn.textContent = 'ซ่อมเลขที่เอกสาร (' + bad + ')';
+}
+async function repairDraftCodes(){
+  const d = await callApi('repairDraftOrderCodes', { dry: true });
+  if (!d.success) { toast(d.message, true); return; }
+  if (!d.data.length) { toast('ไม่มีบิลที่ต้องซ่อม'); soSyncFixButton(); return; }
+  if (!confirm('พบ ' + d.data.length + ' ใบที่พ้นร่างแล้วแต่เลขยังเป็น DRAFT-\n\n' +
+      d.data.slice(0, 10).map(x => '· ' + x.oldCode + ' (' + x.createdAt + ')').join('\n') +
+      (d.data.length > 10 ? '\n· … อีก ' + (d.data.length - 10) + ' ใบ' : '') +
+      '\n\nออกเลขที่เอกสารจริงให้ทั้งหมด? (เรียงตามลำดับที่เปิดบิล)')) return;
+  const r = await callApi('repairDraftOrderCodes', {});
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  listSnapDrop('salesorders'); salesOrdersCache = []; loadSalesOrders();
+}
+
 function renderSalesOrders(){
-  renderSoTabs();                       // ตัวเลขบนแท็บคิดจากข้อมูลชุดเดียวกับตาราง ต้องวาดคู่กันเสมอ
+  renderSoTabs();
+  soSyncFixButton();                       // ตัวเลขบนแท็บคิดจากข้อมูลชุดเดียวกับตาราง ต้องวาดคู่กันเสมอ
   const board = document.getElementById('so-board');
   const wrap = document.querySelector('#view-salesorders .table-wrap');
   const seg = document.getElementById('so-view-seg');
@@ -8897,7 +8926,22 @@ async function acctSave(){
    เมนู 1.1.2 เคยเป็น "เร็วๆ นี้" ทั้งที่ของทำเสร็จและใช้บน prod แล้ว — ออกใบได้จากหน้าลูกหนี้
    และแท็บการจัดส่งของบิลขายเท่านั้น ซึ่งหาย้อนหลังไม่ได้ว่าเคยออกใบอะไรไว้บ้าง */
 let adjCache = [];
-const ADJ_ST = { posted:['ok','ลงบัญชีแล้ว'], voided:['off','กลับรายการ'] };
+const ADJ_ST = { posted:['ok','ลงบัญชีแล้ว'], voided:['off','ยกเลิกแล้ว'], void:['off','ยกเลิกแล้ว'] };
+
+/* ★★ ยกเลิกใบลดหนี้/ใบเพิ่มหนี้ = **กลับรายการ ไม่ลบของเดิม** — แถวใบยังอยู่เพราะเป็นเอกสารภาษี
+   ที่ส่งลูกค้าไปแล้ว และเลขที่ใบต้องไม่ถูกนำกลับมาใช้ซ้ำ
+   ★ สามอย่างย้อนพร้อมกัน: ใบสำคัญบัญชี · ยอดบนใบแจ้งหนี้ · สต็อก (เฉพาะใบที่เคยขยับของจริง) */
+async function voidAdjustNote(id, kind){
+  const K = ADJ_UI[kind] || ADJ_UI.credit;
+  const why = prompt('ยกเลิก' + K.label + 'นี้เพราะอะไร?\n★ ระบบจะกลับรายการบัญชี คืนยอดบนใบแจ้งหนี้ ' +
+    'และย้อนสต็อกให้ (ถ้าใบนี้เคยขยับของ) — ใบเดิมยังอยู่เป็นประวัติ ลบไม่ได้');
+  if (why === null) return;
+  if (!why.trim()) { toast('ต้องระบุเหตุผล (เป็นเอกสารภาษี ต้องอธิบายได้)', true); return; }
+  const r = await callApi('voidArAdjustNote', { id, kind, reason: why.trim() });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  listSnapDrop('adjnotes'); adjCache = []; loadAdjNotes();
+}
 
 async function loadAdjNotes(){
   const body = document.getElementById('adj-body');
@@ -8929,7 +8973,11 @@ function renderAdjNotes(){
       '<td class="mono-data"><b>'+(n.kind === 'debit' ? '+' : '−')+'฿'+bahtPlain(n.total)+'</b></td>' +
       '<td>'+(n.stockReturned ? '<span class="tag">'+(n.kind === 'debit' ? 'ตัดออก' : 'รับคืน')+'</span>' : '—')+'</td>' +
       '<td>'+pill2(ADJ_ST, n.status)+'</td>' +
-      '<td><button class="btn btn-sm" onclick="printAdjustNoteById('+n.id+',\''+n.kind+'\')">พิมพ์</button></td></tr>';
+      '<td style="white-space:nowrap"><button class="btn btn-sm" onclick="printAdjustNoteById('+n.id+',\''+n.kind+'\')">พิมพ์</button>' +
+        /* ★ ใบที่ยกเลิกแล้วยังพิมพ์ได้ (ลูกค้าอาจถือสำเนาอยู่ ต้องพิมพ์ซ้ำให้ดูได้) แต่ยกเลิกซ้ำไม่ได้ */
+        (n.status === 'voided' ? '' :
+          ' <button class="btn btn-sm" onclick="voidAdjustNote('+n.id+',\''+n.kind+'\')">ยกเลิก</button>') +
+      '</td></tr>';
   }).join(''), 13, 'ยังไม่มีใบลดหนี้หรือใบเพิ่มหนี้');
 }
 

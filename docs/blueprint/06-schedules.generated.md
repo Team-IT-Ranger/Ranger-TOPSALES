@@ -12,11 +12,11 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 56 ไฟล์ `.gs` | 15,305 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,159 |
+| Backend (Apps Script) | 56 ไฟล์ `.gs` | 15,472 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,221 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,369 |
 | ตารางข้อมูล | 65 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
-| Action | 18 มือถือ + 206 แอดมิน |  |
+| Action | 18 มือถือ + 208 แอดมิน |  |
 
 ## B. ไฟล์ backend — ผังพื้นแบบละเอียด
 
@@ -29,7 +29,7 @@
 | `02_helpers.gs` | 446 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 226 | AUTH |
-| `05_router.gs` | 314 | ROUTER |
+| `05_router.gs` | 317 | ROUTER |
 | `06_bootstrap.gs` | 292 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 387 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 61 | VAN STOCK (Mobile App) |
@@ -58,7 +58,7 @@
 | `31_sales_rollup.gs` | 82 | สรุปยอดขายรายวัน (rollup) |
 | `32_admin_bootstrap.gs` | 37 | เปิดแอปแอดมินด้วยคำขอเดียว |
 | `33_customers.gs` | 309 | ทะเบียนลูกค้า (customer master) |
-| `34_sales_status.gs` | 787 | สถานะบิลขาย |
+| `34_sales_status.gs` | 856 | สถานะบิลขาย |
 | `35_idempotency.gs` | 84 | กันบันทึกซ้ำ (idempotency) |
 | `36_price_rules.gs` | 451 | สิทธิ์เข้าถึงชุดราคา (price list eligibility) |
 | `37_customer_bulk.gs` | 129 | จัดกลุ่มลูกค้าเป็นชุด (bulk assign) |
@@ -73,7 +73,7 @@
 | `46_customer_requests.gs` | 368 | null \|\| v |
 | `47_address_refs.gs` | 133 | ══════════════════════════════════════════════════════════════════════ |
 | `48_delivery_rounds.gs` | 649 | รอบจัดส่ง · ของค้างส่ง (แอดมินศูนย์ขอ 14 ต.ค. 2026) |
-| `49_credit_notes.gs` | 356 | ใบลดหนี้ (Credit Note) · ใบเพิ่มหนี้ (Debit Note) — 15 ต.ค. 2026 |
+| `49_credit_notes.gs` | 451 | ใบลดหนี้ (Credit Note) · ใบเพิ่มหนี้ (Debit Note) — 15 ต.ค. 2026 |
 | `50_cogs.gs` | 280 | ต้นทุนขาย (COGS) |
 | `51_tax_reports.gs` | 211 | รายงานภาษีขาย / ภาษีซื้อ (สำหรับยื่น ภ.พ.30) |
 | `52_cash_sales_gl.gs` | 131 | ลงบัญชีการขายสด |
@@ -275,6 +275,7 @@
 | `rejectAdminUser` | `29_admin_signup.gs` | users_roles:edit | กันกดซ้ำ |
 | `rejectCustomerRequest` | `46_customer_requests.gs` | customers:edit | กันกดซ้ำ |
 | `removeCustomerListMember` | `40_customer_lists.gs` | customers:edit | กันกดซ้ำ |
+| `repairDraftOrderCodes` | `34_sales_status.gs` | — | กันกดซ้ำ |
 | `resetAdminUserPasswordByAdmin` | `16_admin_users.gs` | users_roles:edit | กันกดซ้ำ |
 | `salesReportByCustomer` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByProduct` | `41_sales_reports.gs` | sales_report:view |  |
@@ -318,6 +319,7 @@
 | `updateTenantStatus` | `13_tenants.gs` | tenants:edit | กันกดซ้ำ |
 | `uploadProductImage` | `10_master_data.gs` | products:edit | กันกดซ้ำ |
 | `uploadTenantLogo` | `13_tenants.gs` | tenants:edit | กันกดซ้ำ |
+| `voidArAdjustNote` | `49_credit_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `voidJournal` | `23_accounting.gs` | accounting:edit | กันกดซ้ำ |
 | `withdrawExternalGoodsReceipt` | `43_external_sales_import.gs` | inventory:edit | กันกดซ้ำ |
 
@@ -570,11 +572,11 @@
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,323 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,388 |
 | `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 218 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
-| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 778 |
+| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 838 |
 | `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 197 |
 | `.dev/test-sheet-cache.js` | หน่วย (ไม่ยิงเน็ต) | 114 |
 | `.dev/test-unit-rescale.js` | หน่วย (ไม่ยิงเน็ต) | 56 |

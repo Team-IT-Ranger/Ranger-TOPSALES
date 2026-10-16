@@ -773,5 +773,65 @@ console.log('\n══ ใบกำกับภาษี/ใบแจ้งหน
     ctx.saveDeliveryRound(S, { id: 91, lines: [{ itemId: 9101, qty: 1 }] }), /ยกเลิกใบกำกับภาษี/);
 }
 
+/* ══════════ บั๊ก prod: ใบที่พ้นร่างแล้วแต่เลขยังเป็น DRAFT- (16 ต.ค. 2026) ══════════
+   ★★ สาเหตุ: มีสองทางที่พาใบออกจากร่าง แต่ออกเลขจริงอยู่ทางเดียว
+     - พนักงานกดยืนยันในแอปมือถือ → confirmSalesOrder ออกเลขให้
+     - ศูนย์เลื่อนสถานะเองจากหน้าแอดมิน → updateSalesOrderStatus **ไม่เคยแตะ order_code**
+   ซึ่งทางหลังคือทางที่ศูนย์ใช้จริงเป็นส่วนใหญ่ เลขจึงค้างเป็น DRAFT- ตลอดชีวิตของใบนั้น
+   (เจ้าของระบบเห็นบน prod: บิลสถานะ "พร้อมจัดส่ง" ถือเลข DRAFT-37) */
+const SUPER_S = { adminUserId: '9', username: 'ultra', displayName: 'Ultra', role_code: 'super_admin', tenant_id: '' };
+console.log('\n── เลขที่เอกสารตอนพ้นร่าง ──');
+{
+  const mkDraft = id => {
+    t.sales_orders.push({ record_id: id, order_code: 'DRAFT-' + id, customer_id: 1,
+      subtotal: 1000, discount: 0, total: 1000, payment_method: 'credit_term',
+      fulfillment_type: 'office_delivery', status: 'draft', created_at: '2026-10-16 09:00:00' });
+    return ctx.tenantRowById('T1', 'sales_orders', id);
+  };
+  const codeOf = id => (ctx.tenantRowById('T1', 'sales_orders', id) || {}).order_code;
+
+  mkDraft(500);
+  let r = ctx.updateSalesOrderStatus(S, { id: 500, status: 'confirmed' });
+  eq('★★ ศูนย์เลื่อนร่าง → รออนุมัติ: ต้องได้เลขจริง ไม่ใช่ DRAFT-',
+    [r.success, /^DRAFT-/.test(codeOf(500))], [true, false]);
+  const real500 = codeOf(500);
+  eq('  และเลขที่ได้ต้องเป็นรูปแบบเลขบิลจริง', /^SO-/.test(real500) || /\d{4}/.test(real500), true);
+  /* changes ถูกรวมเป็นข้อความเดียวใน message (ไม่ได้คืนเป็น array) — เช็คที่ message
+     และ backend คืน orderCode กลับมาด้วย หน้าจอจะได้ไม่ต้องโหลดใหม่เพื่อเห็นเลขที่เพิ่งออก */
+  eq('  บอกด้วยว่าออกเลขอะไรให้ และคืนเลขใหม่กลับมา',
+    [/ออกเลขที่เอกสาร/.test(r.message || ''), r.orderCode === real500], [true, true]);
+
+  r = ctx.updateSalesOrderStatus(S, { id: 500, status: 'accepted' });
+  eq('★ ขั้นถัดไปต้องไม่ออกเลขใหม่ทับของเดิม', codeOf(500), real500);
+
+  // ใบที่มีเลขจริงอยู่แล้ว (เปิดจากแอดมิน) ต้องไม่ถูกเปลี่ยน
+  t.sales_orders.push({ record_id: 501, order_code: 'SO-REAL-1', customer_id: 1,
+    subtotal: 500, discount: 0, total: 500, payment_method: 'credit_term',
+    fulfillment_type: 'office_delivery', status: 'draft', created_at: '2026-10-16 09:00:00' });
+  ctx.updateSalesOrderStatus(S, { id: 501, status: 'confirmed' });
+  eq('★ ใบที่มีเลขจริงอยู่แล้ว ห้ามออกเลขใหม่ทับ', codeOf(501), 'SO-REAL-1');
+
+  // ── ตัวซ่อมของเก่าที่ค้างอยู่แล้ว ──
+  mkDraft(502); mkDraft(503);
+  ctx.tenantUpdate('T1', 'sales_orders', 502, { status: 'ready_to_ship' });
+  ctx.tenantUpdate('T1', 'sales_orders', 503, { status: 'completed' });
+  mkDraft(504);                       // ยังเป็นร่างจริงๆ — ต้องไม่ถูกแตะ
+
+  let dry = ctx.repairDraftOrderCodes(SUPER_S, { tenantId: 'T1', dry: true });
+  eq('★ ดูก่อนซ่อม: เจอเฉพาะใบที่พ้นร่างแล้ว ไม่นับร่างจริง',
+    [dry.success, dry.data.map(x => x.id).sort((a, b) => a - b)], [true, [502, 503]]);
+  eq('  โหมดดูอย่างเดียวต้องไม่แก้อะไร', codeOf(502), 'DRAFT-502');
+
+  r = ctx.repairDraftOrderCodes(SUPER_S, { tenantId: 'T1' });
+  eq('★ ซ่อมแล้วได้เลขจริงทั้งสองใบ',
+    [r.fixed, /^DRAFT-/.test(codeOf(502)), /^DRAFT-/.test(codeOf(503))], [2, false, false]);
+  eq('★★ เรียงเลขตามลำดับที่เปิดบิล ไม่ใช่ตามลำดับที่เจอในชีต',
+    codeOf(502) < codeOf(503), true);
+  eq('  ร่างจริงยังไม่ถูกแตะ (ยังไม่ควรกินเลข)', codeOf(504), 'DRAFT-504');
+  eq('  รันซ้ำไม่มีอะไรให้ซ่อมแล้ว', ctx.repairDraftOrderCodes(SUPER_S, { tenantId: 'T1' }).fixed, 0);
+  eq('  คนที่ไม่ใช่ Ultra Admin เรียกไม่ได้',
+    ctx.repairDraftOrderCodes(S, { tenantId: 'T1' }).success, false);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

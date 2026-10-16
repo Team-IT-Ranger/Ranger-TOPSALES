@@ -341,6 +341,14 @@ function updateSalesOrderStatus(session, payload) {
           }
         }
         fields.status = toStatus;
+        /* ★ ออกเลขจริงตรงนี้ด้วย — ศูนย์เลื่อนสถานะเองโดยที่พนักงานไม่เคยกดยืนยันในแอปเป็นเรื่องปกติ
+           (ศูนย์เปิดบิลแทน / พนักงานลืมกด) ใบพวกนั้นเคยค้างเลข DRAFT- ตลอดไป
+           ★★ ต้องออกก่อนบล็อกออกเลขเอกสารอื่นข้างล่าง เพราะใบส่งของ/ใบกำกับภาษีอ้างเลขบิลใบนี้ */
+        if (toStatus !== SO_DRAFT && isDraftOrderCode(order.order_code)) {
+          fields.order_code = realOrderCodeFor(tenantId, order);
+          order.order_code = fields.order_code;          // ให้โค้ดที่เหลือในฟังก์ชันเห็นเลขใหม่
+          changes.push('ออกเลขที่เอกสาร ' + fields.order_code);
+        }
         if (roll) {
           var rv = rolloverDeliveryRound(tenantId, order, session, roll);
           for (var fk in rv.fields) fields[fk] = rv.fields[fk];
@@ -472,6 +480,8 @@ function updateSalesOrderStatus(session, payload) {
     }
 
     return { success: true, status: toStatus, statusLabel: SO_STATUS_LABELS[toStatus],
+      // ★ เลขบิลอาจเพิ่งถูกออกให้ในรอบนี้ (ใบที่พ้นร่าง) — หน้าจอต้องได้เลขใหม่ไปแสดงทันที
+      orderCode: fields.order_code || order.order_code || '',
       deliveryOrderNo: fields.delivery_order_no || order.delivery_order_no || '',
       warning: arNote || undefined,
       paymentStatus: toPay, paymentLabel: SO_PAYMENT_LABELS[toPay],
@@ -604,6 +614,20 @@ function _mobileOwnOrder(user, orderCode) {
   return found;
 }
 
+/* ═══════════ รหัสชั่วคราวของใบร่าง → เลขที่เอกสารจริง ═══════════
+ * ★★ บั๊กที่เจอบน prod (16 ต.ค. 2026): บิลสถานะ "รออนุมัติ" / "พร้อมจัดส่ง" หลายใบยังถือเลข
+ *   `DRAFT-nn` อยู่ · สาเหตุคือ **มีสองทางที่พาใบออกจากร่าง แต่ออกเลขจริงอยู่ทางเดียว**
+ *     - พนักงานกดยืนยันในแอปมือถือ → `confirmSalesOrder` ออกเลขให้
+ *     - ศูนย์เลื่อนสถานะเองจากหน้าแอดมิน → `updateSalesOrderStatus` **ไม่เคยแตะ order_code เลย**
+ *   ซึ่งทางหลังคือทางที่ศูนย์ใช้จริงเป็นส่วนใหญ่ เลขจึงค้างเป็น DRAFT- ไปตลอดชีวิตของใบนั้น
+ * ★ แก้ด้วยการให้ทั้งสองทางเรียกตัวเดียวกัน — ทางที่สามที่จะเพิ่มทีหลังก็ต้องเรียกตัวนี้
+ * ★ ใบที่มีเลขจริงอยู่แล้วไม่ออกซ้ำ (เลขเอกสารที่ออกไปแล้วห้ามเปลี่ยน) */
+function isDraftOrderCode(code) { return String(code || '').indexOf('DRAFT-') === 0; }
+function realOrderCodeFor(tenantId, order) {
+  return isDraftOrderCode(order && order.order_code)
+    ? getNextDocNumber(tenantId, 'SO') : (order && order.order_code) || '';
+}
+
 /** มือถือกดยืนยันว่าใบนี้ถูกต้องครบถ้วน → ส่งให้ศูนย์รับงาน */
 function confirmSalesOrder(user, payload) {
   ensureTenantSheetsCurrent(user.tenantId);
@@ -616,8 +640,7 @@ function confirmSalesOrder(user, payload) {
     /* ★ ออกเลขที่เอกสารจริงตรงนี้ — ใบร่างถือรหัสชั่วคราว `DRAFT-<id>` มาก่อน (ดู recordSale ใน 07_sales.gs)
        ร่างที่ถูกทิ้งจึงไม่กินเลข และเลขที่ออกไปแล้วเรียงต่อเนื่องเสมอ
        ใบที่ได้เลขจริงมาแล้ว (เช่นบิลเก่าก่อนกติกานี้) ไม่ออกซ้ำ */
-    var newCode = String(order.order_code || '').indexOf('DRAFT-') === 0
-      ? getNextDocNumber(user.tenantId, 'SO') : order.order_code;
+    var newCode = realOrderCodeFor(user.tenantId, order);
     tenantUpdate(user.tenantId, 'sales_orders', order.record_id,
       { status: SO_CONFIRMED, order_code: newCode, updated_at: nowStr(), updated_by: user.lineUserId });
     logOrderStatus(user.tenantId, order.record_id, from, SO_CONFIRMED, '', '', 'พนักงานยืนยันความถูกต้องจากแอปมือถือ',
@@ -783,4 +806,50 @@ function _editSalesOrderCore(session, payload, tenantId) {
     by, _adminRoleLabel(session));
   return { success: true, total: calc.total, discount: calc.discount, previousTotal: oldTotal, stockWarning: stockCheck.warning || '',
     message: 'แก้ไขใบ ' + order.order_code + ' แล้ว — ยอดใหม่ ฿' + calc.total + (stockCheck.warning ? ' · ⚠️ ' + stockCheck.warning : '') };
+}
+
+/**
+ * ซ่อมบิลที่พ้นร่างไปแล้วแต่ยังถือรหัสชั่วคราว `DRAFT-nn` (super_admin)
+ * payload: { tenantId?, dry? }  — `dry: true` = ดูอย่างเดียว ไม่แก้
+ *
+ * ★ เกิดจากบั๊กที่ `updateSalesOrderStatus` ไม่เคยออกเลขจริงให้ (แก้แล้ว 16 ต.ค. 2026)
+ *   ใบที่ค้างอยู่ก่อนหน้านั้นจะไม่ซ่อมตัวเองจนกว่าจะมีการเปลี่ยนสถานะอีกครั้ง — ตัวนี้ซ่อมให้ทีเดียว
+ * ★★ เรียงตามลำดับที่เปิดบิล (record_id) ก่อนออกเลข — ออกเลขตามลำดับที่เจอในชีตจะได้เลขสลับกับ
+ *   วันที่ ซึ่งผิดหลักการออกเลขเอกสารและอธิบายกับผู้ตรวจไม่ได้
+ * ★ ไม่แตะใบที่ยังเป็นร่างจริงๆ (ยังไม่ควรกินเลข) และไม่แตะใบที่มีเลขจริงอยู่แล้ว
+ */
+function repairDraftOrderCodes(session, payload) {
+  // ใช้รูปแบบเดียวกับ syncTenantSheets (13_tenants.gs) — โปรเจกต์นี้ไม่มี helper กลางสำหรับ super_admin
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  payload = payload || {};
+  // ใช้ _salesTenantId เหมือน action อื่นในไฟล์นี้ — คนละตัวกับ _effectiveTenantId (ดู blueprint แผ่น 03)
+  var tenantId = _salesTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'ไม่ทราบตัวแทนที่ต้องการซ่อม' };
+  ensureTenantSheetsCurrent(tenantId);
+
+  return _withDocLock(function() {
+    var bad = tenantObjects(tenantId, 'sales_orders').filter(function(o) {
+      return isDraftOrderCode(o.order_code) && _soStatusOf(o) !== SO_DRAFT;
+    });
+    bad.sort(function(a, b) { return (Number(a.record_id) || 0) - (Number(b.record_id) || 0); });
+    if (!bad.length) return { success: true, fixed: 0, data: [], message: 'ไม่มีบิลที่ต้องซ่อม' };
+    if (payload.dry) {
+      return { success: true, fixed: 0, dry: true,
+        data: bad.map(function(o) { return { id: o.record_id, oldCode: o.order_code, status: o.status,
+          createdAt: safeDateStr(o.created_at), total: Number(o.total) || 0 }; }),
+        message: 'พบ ' + bad.length + ' ใบที่ยังถือรหัสชั่วคราว (ยังไม่ได้แก้ — ส่ง dry:false เพื่อซ่อมจริง)' };
+    }
+    var out = [];
+    bad.forEach(function(o) {
+      var code = getNextDocNumber(tenantId, 'SO');
+      tenantUpdate(tenantId, 'sales_orders', o.record_id,
+        { order_code: code, updated_at: nowStr(), updated_by: session.adminUserId });
+      logOrderStatus(tenantId, o.record_id, _soStatusOf(o), _soStatusOf(o), '', '',
+        'ซ่อมเลขที่เอกสาร: ' + o.order_code + ' → ' + code,
+        session.displayName || session.username, _adminRoleLabel(session));
+      out.push({ id: o.record_id, oldCode: o.order_code, newCode: code });
+    });
+    return { success: true, fixed: out.length, data: out,
+      message: 'ออกเลขที่เอกสารจริงให้ ' + out.length + ' ใบแล้ว' };
+  });
 }

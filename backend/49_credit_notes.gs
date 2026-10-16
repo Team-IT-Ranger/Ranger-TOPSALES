@@ -51,7 +51,11 @@ function _arAdjSumOf(kindDef, invoiceId) {
   var sum = 0;
   centralObjects(kindDef.table).forEach(function(n) {
     if (String(n.ar_invoice_id) !== String(invoiceId)) return;
-    if (String(n.status) === 'void') return;
+    /* ★★ รับทั้ง 'void' และ 'voided' — ไฟล์นี้เคยใช้สองคำขัดกันเองมาก่อนแล้ว
+       (`_listArAdjustNotes` กรอง 'voided' ส่วนที่นี่กรอง 'void') — ไม่เคยระเบิดเพราะ
+       ยังยกเลิกใบไม่ได้ · พอทำปุ่มยกเลิกขึ้นมา รายการหายแต่ยอดยังถูกหักอยู่
+       ★ ค่ามาตรฐานคือ 'voided' (ตรงกับ gl_journals) — รับอีกค่าไว้เผื่อข้อมูลเก่า */
+    if (String(n.status) === 'void' || String(n.status) === 'voided') return;
     sum += Number(n.total) || 0;
   });
   return _money(sum);
@@ -352,4 +356,95 @@ function getArCreditNote(session, payload) {
 }
 function getArDebitNote(session, payload) {
   return getArCreditNote(session, Object.assign({}, payload || {}, { kind: 'debit' }));
+}
+
+/**
+ * ยกเลิกใบลดหนี้ / ใบเพิ่มหนี้ (ออกผิดใบ · ออกผิดยอด · ลูกค้าไม่รับ)
+ * payload: { id, kind?, reason, tenantId? }
+ *
+ * ★★ "ยกเลิก" ที่นี่ = **กลับรายการ ไม่ลบของเดิม** ตามหลักเดียวกับใบสำคัญอื่นทั้งระบบ
+ *   แถวใบเดิมยังอยู่ (status = 'voided') เพราะเป็นเอกสารภาษีที่ส่งลูกค้าไปแล้ว ลูกค้าอาจถือสำเนาอยู่
+ *   และเลขที่ใบต้องไม่ถูกนำกลับมาใช้ซ้ำ
+ *
+ * ★ สามอย่างต้องย้อนพร้อมกัน ไม่งั้นค้างครึ่งๆ กลางๆ แล้วหาไม่เจอ:
+ *     1. ใบสำคัญบัญชี → ออกใบกลับรายการ (ยอดเดิม สมุดเดิม)
+ *     2. ยอดสะสมบนใบแจ้งหนี้ (`credited_amount`/`debited_amount`) → หักออก แล้วคิดสถานะใหม่
+ *     3. สต็อก (ถ้าใบนั้นติ๊กขยับของไว้) → ขยับกลับทางตรงข้าม
+ *   ★★ ข้อ 3 ใช้ `stock_returned` ของใบเดิมเป็นตัวตัดสิน **ไม่ใช่เดาจากชนิดใบ** — ใบลดหนี้ที่ไม่ได้
+ *     รับของคืน (คิดราคาผิด) ไม่เคยขยับสต็อก ย้อนให้ = ของงอกขึ้นมาจากอากาศ
+ */
+function voidArAdjustNote(session, payload) {
+  var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
+  payload = payload || {};
+  return _withDocLock(function() {
+    var K = AR_ADJ[String(payload.kind || 'credit')] || AR_ADJ.credit;
+    var n = _findById(K.table, payload.id);
+    if (!n) return { success: false, message: 'ไม่พบ' + K.label + 'นี้' };
+    var book = _bookScope(session, payload);
+    if (!_inBook(n, book)) return { success: false, message: 'ไม่พบ' + K.label + 'นี้' };
+    if (String(n.status) === 'voided') return { success: false, message: K.label + 'นี้ถูกยกเลิกไปแล้ว' };
+
+    var reason = String(payload.reason || '').trim();
+    if (!reason) return { success: false, message: 'ต้องระบุเหตุผลที่ยกเลิก (เป็นเอกสารภาษี ต้องอธิบายได้)' };
+
+    /* ★ ใบลดหนี้ที่ออกจากใบรับคืนสินค้า ต้องไปปลดที่ใบรับคืนก่อน ไม่งั้นใบรับคืนจะชี้ไปยังใบลดหนี้
+       ที่ถูกยกเลิกแล้ว และออกใบลดหนี้ใหม่จากใบรับคืนนั้นไม่ได้ตลอดไป (54_goods_returns.gs) */
+    var linkedReturn = null;
+    centralObjects('goods_returns').forEach(function(g) {
+      if (String(g.credit_note_id) === String(n.record_id)) linkedReturn = g;
+    });
+
+    // 1. กลับรายการใบสำคัญบัญชี
+    var jr = { success: true };
+    if (String(n.journal_id || '').trim()) {
+      jr = _reverseJournalCore(session, n.journal_id, K.label + ' ' + n[K.noField] + ' — ' + reason, payload.voidDate);
+      if (!jr.success) return jr;
+    }
+
+    // 2. คืนยอดสะสมบนใบแจ้งหนี้ แล้วคิดสถานะใหม่จากยอดจริง
+    var iv = _findById('ar_invoices', n.ar_invoice_id);
+    if (iv) {
+      var amt = Number(n.total) || 0;
+      var patch = {};
+      patch[K.invCol] = _money(Math.max(0, (Number(iv[K.invCol]) || 0) - amt));
+      var recv = Number(iv.received_amount) || 0;
+      var credited = K.kind === 'credit' ? patch[K.invCol] : (Number(iv.credited_amount) || 0);
+      var debited = K.kind === 'debit' ? patch[K.invCol] : (Number(iv.debited_amount) || 0);
+      var left = _money((Number(iv.total) || 0) + debited - recv - credited);
+      /* ใช้กติกาเดียวกับตอนออกใบเป๊ะ — ลอกมาเขียนใหม่เมื่อไหร่จะเพี้ยนกันวันที่มีใครแก้ข้างเดียว */
+      patch.status = left <= 0.009 ? (recv > 0.009 ? 'paid' : 'credited') : (recv > 0.009 ? 'partial' : 'open');
+      if (String(iv.status) === 'void') delete patch.status;      // ใบที่ยกเลิกแล้วอย่าปลุกกลับมา
+      centralUpdate('ar_invoices', iv.record_id, patch);
+    }
+
+    // 3. ย้อนสต็อก เฉพาะใบที่เคยขยับของจริง
+    var moved = 0;
+    if (isFlagOn(n.stock_returned) && n.tenant_id) {
+      var scope = _saleStockScope(n.tenant_id), warehouseId = _ensureScopeWarehouse(scope);
+      var cost = {};
+      _scoped('warehouse_stock', scope).forEach(function(r) {
+        if (String(r.warehouse_id) === String(warehouseId)) cost[String(r.product_id)] = Number(r.avg_cost) || 0;
+      });
+      centralObjects(K.itemsTable).forEach(function(it) {
+        if (String(it.note_id) !== String(n.record_id)) return;
+        var pid = it.product_id, qty = parseFloat(it.qty) || 0;
+        if (!pid || !(qty > 0)) return;
+        // กลับทางของเดิม: ใบลดหนี้เคยรับเข้า (+) ตอนยกเลิกต้องตัดออก (−) และกลับกันสำหรับใบเพิ่มหนี้
+        _applyStockIn(scope, warehouseId, pid, -K.stockDir * qty * (parseFloat(it.unit_factor) || 1),
+          cost[String(pid)] || 0, K.stockDir > 0 ? 'sale_out' : 'sale_return', K.refType, n.record_id,
+          'ยกเลิก' + K.label + ' ' + n[K.noField], session.adminUserId);
+        moved++;
+      });
+    }
+
+    centralUpdate(K.table, n.record_id, { status: 'voided',
+      reason: [n.reason, 'ยกเลิก: ' + reason].filter(function(x) { return x; }).join(' · ') });
+    if (linkedReturn) centralUpdate('goods_returns', linkedReturn.record_id, { credit_note_id: '' });
+
+    return { success: true, noteNo: n[K.noField], journalNo: jr.journalNo || '', stockMoved: moved,
+      message: 'ยกเลิก' + K.label + ' ' + n[K.noField] + ' แล้ว' +
+        (jr.journalNo ? ' · กลับรายการด้วยใบสำคัญ ' + jr.journalNo : '') +
+        (moved ? ' · ย้อนสต็อก ' + moved + ' รายการ' : '') +
+        (linkedReturn ? ' · ใบรับคืน ' + linkedReturn.return_no + ' ออกใบลดหนี้ใหม่ได้แล้ว' : '') };
+  });
 }
