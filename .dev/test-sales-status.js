@@ -426,7 +426,7 @@ console.log('\n── ★ ใบส่งสินค้ามีเลขขอ
 
   eq('ก่อนถึงพร้อมจัดส่ง ยังไม่มีเลขใบส่งของ', !row(50).delivery_order_no, true);
 
-  /* ★ 8 ต.ค. 2026 เจ้าของระบบย้ายจุดออกเลข: ใบจัดของ+ใบส่งสินค้าออกตอน "รับงานเตรียมการจัดส่ง"
+  /* ★ 8 ต.ค. 2026 เจ้าของระบบย้ายจุดออกเลข: ใบจัดของ+ใบส่งสินค้าออกตอน "อนุมัติ/เตรียมจัดส่ง"
      (คนคลังต้องถือใบไปหยิบของ ต้องมีตั้งแต่เริ่มจัด) ส่วนใบกำกับภาษียังออกตอนส่งมอบตามภาระภาษี */
   t.sales_orders.push({ record_id: 52, order_code: 'SO-52', customer_id: 1, total: 100,
     payment_method: 'credit_term', fulfillment_type: 'office_delivery', status: 'confirmed',
@@ -638,7 +638,7 @@ console.log('\n══ รอบจัดส่ง · ของค้างส่
   ctx.updateSalesOrderStatus(S, { id: 80, status: 'delivering' });
   const nDoc2 = ctx.docNoCalls;
   r = ctx.updateSalesOrderStatus(S, { id: 80, status: 'completed' });
-  eq('บิลกลับไปขั้น "รับงานเตรียมการจัดส่ง" แทนที่จะปิดใบ · ไม่มีสถานะใหม่ในระบบ',
+  eq('บิลกลับไปขั้น "อนุมัติ/เตรียมจัดส่ง" แทนที่จะปิดใบ · ไม่มีสถานะใหม่ในระบบ',
     [r.success, row(80).status, r.status], [true, 'accepted', 'accepted']);
   eq('  ★ ของที่ส่งไปแล้วไม่งอกคืนเข้าคลัง (ถึงมือลูกค้าแล้ว)', [whQty(301), whQty(302)], [0, 30]);
   eq('  รอบ 1 ปิดเป็น "ส่งสำเร็จ" · รอบ 2 เปิดขึ้นใหม่พร้อมเลข PICK/DO ของตัวเอง',

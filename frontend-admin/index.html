@@ -490,8 +490,10 @@
      แยกบรรทัดแทนที่จะต่อท้ายชื่อ — ต่อท้ายแล้วชื่อเอกสารกับหมายเหตุปนกันจนอ่านไม่ออกว่าอันไหนคือชื่อใบ */
   .sod-print-list .btn .s{ font-size:11px; font-weight:400; color:var(--ink-faint); }
   .sod-print-list .btn:disabled .s{ color:var(--orange); }
-  .sod-print-list .grp{ font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
-    color:var(--ink-faint); padding:8px 10px 3px; }
+  /* ★ หัวข้อกลุ่มคือชื่อขั้นสถานะแล้ว (16 ต.ค. 2026) ไม่ใช่คำประเภทสั้นๆ อีกต่อไป จึงเลิกย่อ
+     ตัวอักษรกับบีบระยะ — "อนุมัติ/เตรียมจัดส่ง" อ่านไม่ออกถ้าเล็กกว่านี้ */
+  .sod-print-list .grp{ font-size:11.5px; font-weight:700; color:var(--ink-soft); padding:9px 10px 3px; }
+  .sod-print-list .grp .done{ color:var(--green); font-weight:800; margin-left:2px; }
   .sod-print-list .grp:first-child{ padding-top:3px; }
   /* tag เล็กในตาราง — ใช้กับคุณสมบัติสินค้า/สถานะภาษี (คนละตัวกับ .pill ที่ใช้กับสถานะเอกสาร) */
   .tag{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:11.5px; font-weight:600; line-height:1.6;
@@ -932,7 +934,7 @@
                    ซึ่งเป็นขั้นที่คนดูบ่อยที่สุดไม่ได้เลย · ค่า confirmed ครอบบิลเก่าที่ยังเป็น
                    pending_delivery ด้วย (ดู soStatusKey) -->
               <option value="draft">ใหม่ (ร่าง)</option>
-              <option value="confirmed">รอแอดมินรับงาน</option>
+              <option value="confirmed">รออนุมัติ</option>
               <option value="accepted">เตรียมการจัดส่ง</option>
               <option value="ready_to_ship">พร้อมจัดส่ง</option>
               <option value="delivering">กำลังจัดส่ง</option>
@@ -3571,8 +3573,8 @@ const payLabel = code => { const p = paymentTypesCache.find(x => x.code === code
 /* สถานะบิลขายสองแกน — ป้ายต้องตรงกับ backend (34_sales_status.gs) เป๊ะ */
 /* สายงาน 1 ต.ค. 2026 — ต้องตรงกับ SO_STATUS_LABELS ใน 34_sales_status.gs
    `pending_delivery` = ชื่อเดิมของ `confirmed` (บิลเก่ายังเป็นค่านี้ ห้ามตัดทิ้ง) */
-const SO_LABELS = { draft:'ใหม่ (ร่าง)', confirmed:'รอแอดมินรับงาน', pending_delivery:'รอแอดมินรับงาน',
-  accepted:'รับงานเตรียมการจัดส่ง', ready_to_ship:'พร้อมจัดส่ง', delivering:'กำลังจัดส่ง',
+const SO_LABELS = { draft:'ใหม่ (ร่าง)', confirmed:'รออนุมัติ', pending_delivery:'รออนุมัติ',
+  accepted:'อนุมัติ/เตรียมจัดส่ง', ready_to_ship:'พร้อมจัดส่ง', delivering:'กำลังจัดส่ง',
   completed:'จัดส่งสำเร็จ', rejected:'ปฏิเสธการขาย', cancelled:'ยกเลิกแล้ว' };
 const SO_PILL   = { draft:'off', confirmed:'wait', pending_delivery:'wait', accepted:'wait', ready_to_ship:'wait',
   delivering:'wait', completed:'ok', rejected:'off', cancelled:'off' };
@@ -3609,7 +3611,7 @@ function soFilteredRows(opts){
   const q = document.getElementById('so-filter-search').value.trim().toLowerCase();
   let rows = salesOrdersCache;
   /* ★ บิลเก่าเก็บ pending_delivery ซึ่งมีความหมายเท่า confirmed — เทียบตรงๆ แล้วเลือก
-     "รอแอดมินรับงาน" จะไม่เห็นบิลเก่าสักใบ ทั้งที่มันอยู่ขั้นนั้นจริง (หลักเดียวกับ soBoardCol) */
+     "รออนุมัติ" จะไม่เห็นบิลเก่าสักใบ ทั้งที่มันอยู่ขั้นนั้นจริง (หลักเดียวกับ soBoardCol) */
   if (statusF) rows = rows.filter(o => soStatusKey(o.status) === statusF);
   if (payF) rows = rows.filter(o => (o.paymentStatus || 'unpaid') === payF);
   if (q) rows = rows.filter(o => (o.customer||'').toLowerCase().indexOf(q) !== -1 || (o.code||'').toLowerCase().indexOf(q) !== -1
@@ -3628,7 +3630,7 @@ function soDateOnly(v){ return String(v || '').substring(0, 10); }
      สลับกลับไปดูตารางต้องเห็นผลทันทีโดยไม่ต้องโหลดใหม่ */
 let soViewMode = 'table';
 const SO_BOARD_COLS = [
-  { key:'confirmed',     label:'รอแอดมินรับงาน', also:['pending_delivery'], tone:'var(--col-wait)' },
+  { key:'confirmed',     label:'รออนุมัติ', also:['pending_delivery'], tone:'var(--col-wait)' },
   { key:'accepted',      label:'เตรียมการจัดส่ง', tone:'var(--col-accept)' },
   { key:'ready_to_ship', label:'พร้อมจัดส่ง',    tone:'var(--col-ready)' },
   { key:'delivering',    label:'กำลังจัดส่ง',    tone:'var(--col-ship)' },
@@ -4076,7 +4078,10 @@ function renderSaleOrderDetail(r){
     '<div class="sod-print-menu">' +
       '<button class="btn btn-sm" onclick="toggleSoPrintMenu(event)">พิมพ์เอกสาร ▾</button>' +
       '<div class="sod-print-list" id="sod-print-list">' +
-        soDocMenu(o).map((code, i, arr) => {
+        /* เรียงตามขั้นสถานะ แล้วค่อยวาด — ลำดับในลิสต์ของแต่ละชุดเป็นแค่ลำดับ "ภายในขั้นเดียวกัน" */
+        soDocMenu(o).slice()
+          .sort((a, b) => SO_DOC_STAGES.indexOf(soDocStage(a)) - SO_DOC_STAGES.indexOf(soDocStage(b)))
+          .map((code, i, arr) => {
           const k = SO_DOC_KINDS[code];
           /* ★ ใบที่เป็นหลักฐาน "ได้รับเงินแล้ว" พิมพ์ก่อนได้เงินไม่ได้ — ปิดปุ่มพร้อมบอกเหตุผล
              ไม่ซ่อน เพราะแอดมินต้องเห็นว่ามีใบนี้อยู่และรู้ว่าต้องทำอะไรก่อนถึงจะพิมพ์ได้
@@ -4089,10 +4094,15 @@ function renderSaleOrderDetail(r){
                        (k.showPrice === false || k.label) ? 'ไม่มีราคา' : ''].filter(Boolean).join(' · ');
           const head = '<span class="t">' + esc(info.short || k.title) + '</span>' +
                        (sub ? '<span class="s">' + esc(sub) + '</span>' : '');
-          /* หัวข้อกลุ่มขึ้นเมื่อกลุ่มเปลี่ยนจากตัวก่อนหน้า — เทียบกับเพื่อนบ้านตรงๆ ไม่ต้องมีตัวแปรจำสถานะ
-             (เมนูทุกชุดเรียงให้กลุ่มติดกันอยู่แล้ว ดู SO_DOC_MENUS) */
-          const prevGrp = i ? (SO_DOC_MENU_INFO[arr[i - 1]] || {}).grp : '';
-          const grp = info.grp && info.grp !== prevGrp ? '<div class="grp">' + esc(info.grp) + '</div>' : '';
+          /* หัวข้อกลุ่มขึ้นเมื่อขั้นเปลี่ยนจากตัวก่อนหน้า — เทียบกับเพื่อนบ้านตรงๆ ไม่ต้องมีตัวแปรจำสถานะ
+             (เรียงมาแล้วข้างบน ตัวที่ขั้นเดียวกันจึงติดกันเสมอ)
+             ★ ติ๊กถูกหน้าขั้นที่บิลผ่านมาแล้ว — เมนูบอกทั้ง "พิมพ์ใบไหนได้แล้ว" และ "เดินมาถึงไหน"
+               ในภาพเดียว ซึ่งเป็นสองคำถามที่แอดมินถามพร้อมกันเสมอตอนเปิดบิลขึ้นมา */
+          const stage = soDocStage(code);
+          const grp = (i === 0 || soDocStage(arr[i - 1]) !== stage)
+            ? '<div class="grp">' + ['①','②','③','④'][SO_DOC_STAGES.indexOf(stage)] + ' ' +
+              esc(soStageLabel(stage)) + (soStageDone(o, stage) ? ' <span class="done">✓</span>' : '') + '</div>'
+            : '';
           return grp + (why
             ? '<button class="btn btn-ghost btn-sm" disabled title="' + esc(why) +
               ' — เอกสารชนิดนี้ออกเลขที่ของตัวเองตามขั้นงาน พิมพ์ก่อนถึงขั้นนั้นจะไม่มีเลขอ้างอิง">' +
@@ -4464,17 +4474,41 @@ function ensureDocPrint(){
    แต่เมนูต้องกวาดตาเจอเร็ว · `en` ยังเก็บไว้เพราะแอดมินเคยสับสนใบแจ้งหนี้กับใบกำกับภาษีมาแล้ว
    แค่ย้ายไปอยู่บรรทัดรองแทนที่จะต่อท้ายชื่อ · `grp` = หัวข้อกลุ่มในเมนู (เรียงตามลำดับงานจริง) */
 const SO_DOC_MENU_INFO = {
-  salesorder:    { short: 'ใบสั่งขาย',                         en: 'Sales Order',                          grp: 'ขาย' },
-  picking:       { short: 'ใบจัดของ',                          en: 'Picking List',                         grp: 'คลังและการจัดส่ง' },
-  delivery:      { short: 'ใบส่งสินค้า',                        en: 'Delivery Note',                        grp: 'คลังและการจัดส่ง' },
-  parcel:        { short: 'ใบปะหน้าพัสดุ',                      en: 'Shipping Label · 100×150 มม.',          grp: 'คลังและการจัดส่ง' },
-  deliveryinv:   { short: 'ใบส่งสินค้า / ใบแจ้งหนี้',            en: 'Delivery Note / Invoice',              grp: 'เงินและภาษี' },
-  invoice:       { short: 'ใบแจ้งหนี้',                         en: 'Invoice',                              grp: 'เงินและภาษี' },
-  taxinvoice:    { short: 'ใบกำกับภาษี',                        en: 'Tax Invoice',                          grp: 'เงินและภาษี' },
-  receipt:       { short: 'ใบเสร็จรับเงิน',                     en: 'Receipt',                              grp: 'เงินและภาษี' },
-  receiptdlv:    { short: 'ใบเสร็จรับเงิน / ใบส่งสินค้า',        en: 'Receipt / Delivery Note',              grp: 'เงินและภาษี' },
-  receipttaxdlv: { short: 'ใบเสร็จ / ใบกำกับภาษี / ใบส่งสินค้า', en: 'Receipt / Tax Invoice / Delivery Note', grp: 'เงินและภาษี' }
+  salesorder:    { short: 'ใบสั่งขาย',                         en: 'Sales Order' },
+  picking:       { short: 'ใบจัดของ',                          en: 'Picking List' },
+  delivery:      { short: 'ใบส่งสินค้า',                        en: 'Delivery Note' },
+  parcel:        { short: 'ใบปะหน้าพัสดุ',                      en: 'Shipping Label · 100×150 มม.' },
+  deliveryinv:   { short: 'ใบส่งสินค้า / ใบแจ้งหนี้',            en: 'Delivery Note / Invoice' },
+  invoice:       { short: 'ใบแจ้งหนี้',                         en: 'Invoice' },
+  taxinvoice:    { short: 'ใบกำกับภาษี',                        en: 'Tax Invoice' },
+  receipt:       { short: 'ใบเสร็จรับเงิน',                     en: 'Receipt' },
+  receiptdlv:    { short: 'ใบเสร็จรับเงิน / ใบส่งสินค้า',        en: 'Receipt / Delivery Note' },
+  receipttaxdlv: { short: 'ใบเสร็จ / ใบกำกับภาษี / ใบส่งสินค้า', en: 'Receipt / Tax Invoice / Delivery Note' }
 };
+
+/* ═══ กลุ่มในเมนูพิมพ์ = "ขั้นสถานะที่เอกสารใบนั้นออก" (เจ้าของระบบสั่ง 16 ต.ค. 2026) ═══
+   เดิมจัดกลุ่มตามประเภทเอกสาร (ขาย / คลังและการจัดส่ง / เงินและภาษี) ซึ่งบอกว่าใบนั้น "เป็นอะไร"
+   แต่ไม่บอกสิ่งที่คนกดอยากรู้จริงๆ คือ **"ตอนนี้พิมพ์ใบไหนได้แล้วบ้าง"**
+
+   ★★ กลุ่มคิดจาก `SO_DOC_MIN` ที่มีอยู่แล้ว ไม่ตั้งลิสต์ชุดที่สอง — ลิสต์ที่สองจะเพี้ยนจากของจริง
+     วันที่มีคนย้ายจุดออกเลขเอกสารแล้วลืมแก้อีกที่ (เคยเกิดมาแล้วกับจุดออกเลข PICK/DO ที่ย้ายจาก
+     "พร้อมจัดส่ง" มา "อนุมัติ/เตรียมจัดส่ง" เมื่อ 8 ต.ค.) · ป้ายกลุ่มก็อ่านจาก `SO_LABELS`
+     เปลี่ยนคำของสถานะที่เดียวแล้วหัวข้อกลุ่มเปลี่ยนตาม
+   ★ ใบที่ล็อกด้วย `needsPaid` ไปอยู่กลุ่ม "เก็บเงินแล้ว" เสมอ ไม่ว่า SO_DOC_MIN จะบอกขั้นไหน
+     เพราะสิ่งที่กั้นจริงคือเงิน ไม่ใช่สถานะการส่งของ — จัดตามสิ่งที่กั้นจริง คนถึงจะรู้ว่าต้องทำอะไรก่อน */
+const SO_DOC_STAGES = ['confirmed', 'accepted', 'ready_to_ship', 'paid'];
+const soDocStage = code => (SO_DOC_KINDS[code] || {}).needsPaid ? 'paid' : (SO_DOC_MIN[code] || 'confirmed');
+const soStageLabel = st => st === 'paid' ? 'เก็บเงิน' : (SO_LABELS[st] || st);
+/* ★ ข้อความ "ยังพิมพ์ไม่ได้" ต้องบอก **สิ่งที่ต้องไปกด** ไม่ใช่ชื่อสถานะ — ชื่อสถานะเป็นคำอธิบาย
+   สภาพ ("รออนุมัติ") เอามาต่อท้าย "ต้อง…ก่อน" แล้วอ่านเป็นคำสั่งไม่ได้ ("ต้องรออนุมัติก่อน")
+   คนอ่านข้อความนี้ตอนกดปุ่มไม่ได้ เขาต้องการรู้ว่าจะทำอะไรต่อ ไม่ใช่ว่าตอนนี้เรียกว่าอะไร */
+const SO_STAGE_ACTION = { confirmed:'ยืนยันบิล', accepted:'กดอนุมัติบิล', ready_to_ship:'กดพร้อมจัดส่ง' };
+/* บิลใบนี้ผ่านขั้นนั้นมาแล้วหรือยัง — ใช้ติ๊กถูกหน้าหัวข้อกลุ่ม ให้เห็นว่าเดินมาถึงไหน */
+function soStageDone(o, st){
+  if (st === 'paid') return !!o.receiptNo || String(o.paymentStatus || '') === 'paid';
+  const at = SO_FLOW.indexOf(soStatusKey(o.status));
+  return at !== -1 && at >= SO_FLOW.indexOf(st);
+}
 const SO_DOC_KINDS = {
   salesorder:  { title: 'ใบสั่งขาย', signers: ['ผู้สั่งซื้อ','ผู้ขาย','ผู้อนุมัติ'], showPrice: true, showBank: true },
   /* ★ `withTaxNo` — ใบเสร็จของธุรกิจนี้เป็นใบกำกับภาษีในแผ่นเดียวกัน (เจ้าของระบบเลือกแบบนี้ 7 ต.ค. 2026)
@@ -4543,7 +4577,7 @@ function soDocBlockReason(o, code){
      บรรทัดแรกของฟังก์ชัน ที่ตกมาถึงตรงนี้คือใบที่ "ไม่เคยออกเลขนี้เลย" จึงไม่มีอะไรให้พิมพ์ซ้ำ
      (ใบสั่งขายเป็นข้อยกเว้น — ใช้เลขบิลซึ่งมีอยู่แล้ว และบิลที่ยกเลิกต้องพิมพ์ได้พร้อมลายน้ำ "ยกเลิก") */
   if (at === -1) return code === 'salesorder' ? '' : 'ใบนี้ไม่เคยออกเอกสารนี้';
-  return at >= want ? '' : 'ต้อง' + (SO_LABELS[need] || need) + 'ก่อน';
+  return at >= want ? '' : 'ต้อง' + (SO_STAGE_ACTION[need] || SO_LABELS[need] || need) + 'ก่อน';
 }
 const SO_DOC_MENUS = {
   // ขายเชื่อ ส่งจากสำนักงาน — ใบแจ้งหนี้ไปกับของ แล้วค่อยออกใบเสร็จตอนเก็บเงินได้
@@ -4555,6 +4589,9 @@ const SO_DOC_MENUS = {
   credit_van:    ['salesorder', 'deliveryinv', 'invoice', 'taxinvoice', 'receipt'],
   cash_van:      ['salesorder', 'receiptdlv', 'taxinvoice', 'receipt']
 };
+/* ★ ลิสต์ข้างบนบอกแค่ "ชุดนี้มีใบอะไรบ้าง" ส่วน **ลำดับ** คิดจากขั้นสถานะเอาเอง
+   เพิ่มใบใหม่เข้าชุดไหนก็วางต่อท้ายได้เลย มันจะไปโผล่ใต้หัวข้อกลุ่มที่ถูกต้องเอง
+   (เรียงแบบ stable ของเดิมในกลุ่มเดียวกันจึงคงลำดับที่ตั้งใจไว้) */
 function soDocMenuKey(o){
   const credit = String((o && o.paymentMethod) || '').toLowerCase().indexOf('credit') === 0;
   const van = String((o && o.fulfillmentType) || '') === 'immediate';
