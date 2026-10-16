@@ -12,11 +12,11 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 54 ไฟล์ `.gs` | 14,770 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 10,766 |
+| Backend (Apps Script) | 55 ไฟล์ `.gs` | 14,983 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 10,909 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,369 |
-| ตารางข้อมูล | 61 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
-| Action | 18 มือถือ + 195 แอดมิน |  |
+| ตารางข้อมูล | 63 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
+| Action | 18 มือถือ + 200 แอดมิน |  |
 
 ## B. ไฟล์ backend — ผังพื้นแบบละเอียด
 
@@ -24,19 +24,19 @@
 
 | ไฟล์ | บรรทัด | หัวเรื่องในไฟล์ |
 |---|---|---|
-| `00_setup_sheets.gs` | 534 | SETUP: CENTRAL SHEET |
+| `00_setup_sheets.gs` | 540 | SETUP: CENTRAL SHEET |
 | `01_config.gs` | 23 | CONFIG |
 | `02_helpers.gs` | 446 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 226 | AUTH |
-| `05_router.gs` | 301 | ROUTER |
+| `05_router.gs` | 307 | ROUTER |
 | `06_bootstrap.gs` | 292 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 387 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 61 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
 | `10_master_data.gs` | 436 | MASTER DATA |
 | `11_promotions.gs` | 198 | PROMOTION ENGINE |
-| `12_docnum.gs` | 348 | DOCUMENT NUMBER CONTROL (ต่อตัวแทน) |
+| `12_docnum.gs` | 351 | DOCUMENT NUMBER CONTROL (ต่อตัวแทน) |
 | `13_tenants.gs` | 509 | TENANT ONBOARDING (บริษัทเจ้าของสินค้าเท่านั้น) |
 | `14_permissions.gs` | 164 | RBAC (Admin App) |
 | `15_import_export_express.gs` | 229 | เชื่อมโปรแกรม EXPRESS (Export/Import ไฟล์) |
@@ -77,6 +77,7 @@
 | `50_cogs.gs` | 280 | ต้นทุนขาย (COGS) |
 | `51_tax_reports.gs` | 211 | รายงานภาษีขาย / ภาษีซื้อ (สำหรับยื่น ภ.พ.30) |
 | `52_cash_sales_gl.gs` | 131 | ลงบัญชีการขายสด |
+| `53_billing_notes.gs` | 198 | ใบวางบิล (Billing Note) |
 | `99_dev_tools.gs` | 282 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -127,6 +128,7 @@
 | `backfillCustomerAreas` | `47_address_refs.gs` | customers:edit | กันกดซ้ำ |
 | `backfillGrJournals` | `23_accounting.gs` | — |  |
 | `backfillUserAffiliations` | `13_tenants.gs` | — | กันกดซ้ำ |
+| `cancelBillingNote` | `53_billing_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `cancelGoodsReceipt` | `22_purchase_order.gs` | inventory:edit | กันกดซ้ำ |
 | `cancelPurchaseOrder` | `22_purchase_order.gs` | purchasing:edit | กันกดซ้ำ |
 | `cancelPurchaseRequisition` | `21_purchase_requisition.gs` | purchasing:edit | กันกดซ้ำ |
@@ -140,6 +142,7 @@
 | `createArCreditNote` | `49_credit_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `createArDebitNote` | `49_credit_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `createArInvoice` | `23_accounting.gs` | accounting:edit | กันกดซ้ำ · requestId |
+| `createBillingNote` | `53_billing_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `createPriceList` | `17_pricing.gs` | pricing:edit | กันกดซ้ำ |
 | `createTenant` | `13_tenants.gs` | tenants:edit | กันกดซ้ำ · requestId |
 | `deactivatePromotion` | `11_promotions.gs` | promotions:edit | กันกดซ้ำ |
@@ -166,6 +169,7 @@
 | `getArCreditNoteDraft` | `49_credit_notes.gs` | accounting:view |  |
 | `getArDebitNote` | `49_credit_notes.gs` | — |  |
 | `getBalanceSheet` | `23_accounting.gs` | accounting:view |  |
+| `getBillingNote` | `53_billing_notes.gs` | accounting:view |  |
 | `getCompanyProfile` | `25_company.gs` | — |  |
 | `getCustomerAdmin` | `10_master_data.gs` | customers:view |  |
 | `getDatabaseLayout` | `24_drive_layout.gs` | tenants:view |  |
@@ -201,6 +205,8 @@
 | `listArCreditNotes` | `49_credit_notes.gs` | accounting:view |  |
 | `listArDebitNotes` | `49_credit_notes.gs` | accounting:view |  |
 | `listArInvoices` | `23_accounting.gs` | accounting:view |  |
+| `listBillableInvoices` | `53_billing_notes.gs` | accounting:view |  |
+| `listBillingNotes` | `53_billing_notes.gs` | accounting:view |  |
 | `listCustomerGroups` | `10_master_data.gs` | settings:view |  |
 | `listCustomerListMembers` | `40_customer_lists.gs` | customers:view |  |
 | `listCustomerLists` | `40_customer_lists.gs` | customers:view |  |
@@ -338,6 +344,8 @@
 | `ar_invoices` | 19 |  | `record_id` `invoice_no` `customer_id` `tenant_id` `sales_order_id` `delivery_round_id` `invoice_date` `due_date` `subtotal_ex_vat` `vat_amount` `total` `received_amount` `credited_amount` `debited_amount` `status` `journal_id` `note` `created_by` `created_at` |
 | `ar_receipt_allocations` | 4 |  | `record_id` `receipt_id` `invoice_id` `amount` |
 | `ar_receipts` | 13 |  | `record_id` `tenant_id` `receipt_no` `customer_id` `receipt_date` `amount` `method` `bank_account` `note` `status` `journal_id` `created_by` `created_at` |
+| `billing_note_items` | 7 |  | `record_id` `note_id` `invoice_id` `invoice_no` `invoice_date` `due_date` `amount` |
+| `billing_notes` | 12 |  | `record_id` `tenant_id` `note_no` `customer_id` `note_date` `due_date` `invoice_count` `total` `status` `note` `created_by` `created_at` |
 | `central_doc_counters` | 3 |  | `doc_type` `period_key` `last_number` |
 | `company_profile` | 18 | ✓ | `record_id` `name` `legal_name` `tax_id` `branch_code` `address` `phone` `email` `website` `logo_url` `bank_name` `bank_account_no` `bank_account_name` `note` `updated_at` `updated_by` `vat_rate` `default_vat_type` |
 | `customer_groups` | 3 | ✓ | `record_id` `name` `description` |
@@ -454,6 +462,7 @@
 | `RV` | ใบสำคัญรับ | กลาง |  |  |
 | `CN` | ใบลดหนี้ | กลาง |  |  |
 | `DN` | ใบเพิ่มหนี้ | กลาง |  |  |
+| `BN` | ใบวางบิล | กลาง | BN-yyyyMM-xxxx · รีเซ็ตรายเดือน | รวมใบแจ้งหนี้หลายใบของลูกค้ารายเดียวไปวางบิลครั้งเดียว — ไม่ใช่เอกสารภาษี |
 | `JV` | ใบสำคัญทั่วไป | กลาง |  |  |
 
 ## G. รหัสบัญชีที่ระบบอ้างอิงเอง (`GL_ACCT` — `23_accounting.gs`)
@@ -513,6 +522,7 @@
 | 5.1.1 | งานบัญชีการเงิน › บัญชีทั่วไป › สมุดรายวัน / งบทดลอง | `glbooks` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.2.1 | งานบัญชีการเงิน › เจ้าหนี้ › ใบแจ้งหนี้และการจ่าย | `apbills` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.3.1 | งานบัญชีการเงิน › ลูกหนี้ › ใบแจ้งหนี้และการรับชำระ | `arinvoices` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 5.3.2 | งานบัญชีการเงิน › ลูกหนี้ › ใบวางบิล | `billingnotes` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.8.1 | งานบัญชีการเงิน › รายงานภาษี › รายงานภาษีขาย / ภาษีซื้อ (ภ.พ.30) | `vatreport` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.9.1 | งานบัญชีการเงิน › ตั้งค่าทางบัญชี › วิธีตัดต้นทุนขาย | `acctsettings` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 8.1.1 | คู่มือใช้งานระบบ › คู่มือใช้งานระบบ › คู่มือใช้งานระบบ | `helpcenter` | `` | ทั้งสองฝั่ง | ใช้งานได้ |
@@ -550,7 +560,7 @@
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,164 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,246 |
 | `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 218 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |

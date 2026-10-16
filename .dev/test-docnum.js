@@ -151,9 +151,9 @@ series = [];
    ★ ลิสต์นี้ต้องตามทุกครั้งที่เพิ่มหมวดเอกสารใหม่ — ตั้งใจให้เป็นแบบนั้น เพราะหมวดที่โผล่มาเอง
      โดยไม่มีใครตั้งใจแปลว่ามีคนเพิ่มเอกสารแล้วไม่ได้คิดเรื่องรูปแบบเลขกับสิทธิ์การตั้งค่า */
 eq('ครบทุกหมวดที่ต้องมีเลขกำกับ', ctx.listDocSeries(SESSION, {}).types.map(t => t.code),
-  ['SO', 'DO', 'PICK', 'RC', 'TAX-IV', 'PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'CN', 'DN', 'JV']);
+  ['SO', 'DO', 'PICK', 'RC', 'TAX-IV', 'PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'CN', 'DN', 'BN', 'JV']);
 eq('  หมวดที่ใช้ตัวนับกลางถูกติดธงไว้', ctx.listDocSeries(SESSION, {}).types.filter(t => t.central).map(t => t.code),
-  ['PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'CN', 'DN', 'JV']);
+  ['PR', 'PO', 'GR', 'AP', 'PV', 'INV', 'RV', 'CN', 'DN', 'BN', 'JV']);
 r = ctx.saveDocSeries(SESSION, { docType: 'PO', prefix: 'PO' });
 eq('★ ตั้ง PO ได้แล้ว (เดิมฮาร์ดโค้ด แก้ไม่ได้)', r.success, true);
 series = [];

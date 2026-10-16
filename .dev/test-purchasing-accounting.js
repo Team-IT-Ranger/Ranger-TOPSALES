@@ -107,7 +107,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs', '53_billing_notes.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -1157,6 +1157,88 @@ console.log('\n── ลงบัญชีขายสด ──');
   eq('★★ ขายสดที่ลงบัญชีแล้ว ต้องไม่ถูกนับว่า "ยังไม่ได้ลงบัญชี" อีก',
     rep.unposted.bills < unpostedDocs, true);
   eq('  และใบที่ยังไม่ได้ลงจริง (142 ที่ไม่ได้เดินผ่าน GL) ยังถูกนับอยู่', rep.unposted.bills >= 1, true);
+}
+
+/* ══════════ ใบวางบิล (53_billing_notes.gs · 16 ต.ค. 2026) ══════════
+   ★★ ใบวางบิล **ไม่ใช่เอกสารภาษีและไม่ลงบัญชี** — เป็นแค่ "ซองรวมใบแจ้งหนี้" ภาระหนี้เกิดที่
+     ใบแจ้งหนี้ไปแล้ว · เผลอลงบัญชีเมื่อไหร่ ลูกหนี้โตเป็นสองเท่าทันที (เทสต์ข้อแรกคุมเรื่องนี้)
+   ★ สิ่งที่ต้องคุม: ใบเดียวกันวางบิลซ้ำไม่ได้ · ข้ามลูกค้าไม่ได้ · ใบที่เก็บครบแล้วไม่ต้องวาง ·
+     ยอดในเอกสารเป็นภาพนิ่ง แต่ยอดคงค้างที่รายงานต้องเป็นของวันนี้ */
+console.log('\n── ใบวางบิล ──');
+{
+  const jCount = () => ctx.centralObjects('gl_journals').length;
+  const mkInv = (orderId, code, total) => {
+    append(tenantSheets.sales_orders, { record_id: orderId, order_code: code, customer_id: 500,
+      subtotal: total, discount: 0, total: total, payment_method: 'credit_term', status: 'completed',
+      created_at: '2026-10-16 09:00:00', apply_vat: 'TRUE', vat_rate: 0.07,
+      subtotal_ex_vat: Math.round((total / 1.07) * 100) / 100,
+      vat_amount: Math.round((total - total / 1.07) * 100) / 100, exempt_amount: 0 });
+    append(tenantSheets.order_items, { record_id: orderId * 10, order_id: orderId, product_id: '20',
+      unit_code: 'CT', unit_factor: 10, qty: 1, base_qty: 10, price: total, line_total: total, tax_status: 'vat' });
+    const r = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: orderId, invoiceDate: '2026-10-16', dueDays: 30 });
+    return r.invoiceId;
+  };
+
+  const IV1 = mkInv(160, 'SO-BN-1', 1070), IV2 = mkInv(161, 'SO-BN-2', 2140), IV3 = mkInv(162, 'SO-BN-3', 3210);
+
+  let r = ctx.listBillableInvoices(FIN, { customerId: 500 });
+  const ids = (r.data || []).map(x => String(x.id));
+  eq('ใบที่ยังค้างอยู่ขึ้นในรายการที่วางบิลได้',
+    [ids.indexOf(String(IV1)) !== -1, ids.indexOf(String(IV2)) !== -1], [true, true]);
+
+  const before = jCount();
+  r = ctx.createBillingNote(FIN, { customerId: 500, invoiceIds: [IV1, IV2], noteDate: '2026-10-20', dueDate: '2026-11-05' });
+  eq('★ ออกใบวางบิลได้ รวม 2 ใบ ยอด 3,210', [r.success, r.count, r.total], [true, 2, 3210]);
+  eq('  เลขที่ขึ้นต้นด้วย BN', /^BN-/.test(r.noteNo), true);
+  eq('★★ ไม่ลงบัญชีเลยสักใบ (ลงเมื่อไหร่ลูกหนี้โตเป็นสองเท่า)', jCount(), before);
+  const BN = r.noteId;
+
+  // ── ใบเดิมวางบิลซ้ำไม่ได้ ──
+  r = ctx.createBillingNote(FIN, { customerId: 500, invoiceIds: [IV1], noteDate: '2026-10-20' });
+  eq('★ ใบที่วางบิลไปแล้ว วางซ้ำไม่ได้', [r.success, /วางบิลไปแล้ว/.test(r.message || '')], [false, true]);
+  eq('  และหายจากรายการที่วางบิลได้',
+    (ctx.listBillableInvoices(FIN, { customerId: 500 }).data || []).map(x => String(x.id)).indexOf(String(IV1)), -1);
+
+  // ── ข้ามลูกค้าไม่ได้ ──
+  append(sheets.customers, { record_id: 501, name: 'ร้านอีกราย', tenant_id: 'T1', is_active: true });
+  append(tenantSheets.sales_orders, { record_id: 163, order_code: 'SO-BN-X', customer_id: 501,
+    subtotal: 500, discount: 0, total: 500, payment_method: 'credit_term', status: 'completed',
+    created_at: '2026-10-16 09:00:00', apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 467.29, vat_amount: 32.71 });
+  append(tenantSheets.order_items, { record_id: 1630, order_id: 163, product_id: '20', unit_code: 'CT',
+    unit_factor: 10, qty: 1, base_qty: 10, price: 500, line_total: 500, tax_status: 'vat' });
+  const IVX = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 163, invoiceDate: '2026-10-16', dueDays: 30 }).invoiceId;
+  r = ctx.createBillingNote(FIN, { customerId: 500, invoiceIds: [IV3, IVX], noteDate: '2026-10-20' });
+  eq('★★ วางบิลข้ามลูกค้าไม่ได้ (พนักงานเก็บเงินจะถือไปผิดร้าน)',
+    [r.success, /ลูกค้ารายอื่น/.test(r.message || '')], [false, true]);
+
+  // ── เก็บเงินแล้ว ยอดคงค้างของใบวางบิลต้องลดตาม แต่ยอดในเอกสารคงเดิม ──
+  ctx.receiveArPayment(FIN, { customerId: 500, receiptDate: '2026-10-25', method: 'transfer',
+    allocations: [{ invoiceId: IV1, amount: 1070 }] });
+  const note = (ctx.listBillingNotes(FIN, {}).data || []).find(x => x.id === BN);
+  eq('★★ ยอดในเอกสารเป็นภาพนิ่ง (3,210) แต่ยอดคงค้างเป็นของวันนี้ (2,140)',
+    [note.total, note.outstanding, note.collected], [3210, 2140, 1070]);
+
+  const d = ctx.getBillingNote(FIN, { id: BN });
+  const l1 = (d.items || []).find(x => String(x.invoiceId) === String(IV1));
+  eq('  รายละเอียดบอกทั้งยอดตอนวางบิลและยอดค้างตอนนี้ของแต่ละใบ',
+    [d.success, d.items.length, l1.amount, l1.outstandingNow], [true, 2, 1070, 0]);
+
+  // ── ยกเลิกแล้วใบแจ้งหนี้กลับมาวางบิลใหม่ได้ ──
+  r = ctx.cancelBillingNote(FIN, { id: BN, reason: 'ร้านขอใบใหม่' });
+  eq('ยกเลิกใบวางบิลได้', r.success, true);
+  /* ★ เช็คแบบ "มี/ไม่มี" ไม่ใช่เท่ากันทั้งชุด — ลูกค้า 500 มีใบแจ้งหนี้จากหมวดอื่นค้างอยู่ด้วย
+     ผูกกับชุดเต็มเมื่อไหร่ เทสต์จะพังทุกครั้งที่มีคนเพิ่มหมวดใหม่ที่ใช้ลูกค้ารายเดียวกัน */
+  {
+    const back = (ctx.listBillableInvoices(FIN, { customerId: 500 }).data || []).map(x => String(x.id));
+    eq('★ ใบแจ้งหนี้ที่ยังค้างกลับมาวางบิลใหม่ได้ (ใบที่เก็บครบแล้วไม่กลับมา)',
+      [back.indexOf(String(IV2)) !== -1, back.indexOf(String(IV3)) !== -1, back.indexOf(String(IV1))],
+      [true, true, -1]);
+  }
+  eq('  แต่แถวเดิมยังอยู่เป็นประวัติ (ร้านอาจถือสำเนาอยู่)',
+    (ctx.listBillingNotes(FIN, {}).data || []).find(x => x.id === BN).status, 'cancelled');
+  eq('  ยกเลิกซ้ำไม่ได้', ctx.cancelBillingNote(FIN, { id: BN }).success, false);
+
+  eq('ไม่เลือกใบเลย → ปฏิเสธ', ctx.createBillingNote(FIN, { customerId: 500, invoiceIds: [] }).success, false);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

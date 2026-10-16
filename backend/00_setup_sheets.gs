@@ -243,6 +243,12 @@ var CENTRAL_SHEETS = {
     'sales_order_id','delivery_round_id','credit_date','reason_code','reason','vat_rate',
     'subtotal_ex_vat','vat_amount','total','stock_returned','journal_id','status','created_by','created_at'],
   ar_debit_note_items: ['record_id','note_id','debit_note_id','order_item_id','product_id','unit_code','unit_factor','qty','unit_price','amount','tax_status'],
+  /* ═══ ใบวางบิล (53_billing_notes.gs) — รวมใบแจ้งหนี้หลายใบของลูกค้ารายเดียวไปวางบิลครั้งเดียว
+     ★ ไม่ใช่เอกสารภาษีและไม่ลงบัญชี เป็นแค่ "ซองรวมใบแจ้งหนี้" — ภาระหนี้เกิดที่ใบแจ้งหนี้ไปแล้ว
+       เผลอลงบัญชีเมื่อไหร่ ลูกหนี้โตเป็นสองเท่าทันที · รับชำระยังทำที่ใบแจ้งหนี้เหมือนเดิม */
+  billing_notes: ['record_id','tenant_id','note_no','customer_id','note_date','due_date',
+    'invoice_count','total','status','note','created_by','created_at'],
+  billing_note_items: ['record_id','note_id','invoice_id','invoice_no','invoice_date','due_date','amount'],
   ar_receipts: ['record_id','tenant_id','receipt_no','customer_id','receipt_date','amount','method','bank_account','note','status','journal_id','created_by','created_at'],
   ar_receipt_allocations: ['record_id','receipt_id','invoice_id','amount'],
 

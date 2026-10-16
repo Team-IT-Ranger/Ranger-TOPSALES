@@ -250,6 +250,12 @@ var ADMIN_ACTION_MAP = {
   payApBills:             payApBills,
   getApAging:             getApAging,
   listArInvoices:         listArInvoices,
+  // ใบวางบิล (53_billing_notes.gs) — รวมใบแจ้งหนี้ไปวางบิลครั้งเดียว ไม่ลงบัญชี
+  listBillableInvoices:   listBillableInvoices,
+  createBillingNote:      createBillingNote,
+  listBillingNotes:       listBillingNotes,
+  getBillingNote:         getBillingNote,
+  cancelBillingNote:      cancelBillingNote,
   // รายงานภาษีขาย/ภาษีซื้อ สำหรับยื่น ภ.พ.30 (51_tax_reports.gs) — อ่านอย่างเดียว
   getVatSalesReport:      getVatSalesReport,
   getVatPurchaseReport:   getVatPurchaseReport,

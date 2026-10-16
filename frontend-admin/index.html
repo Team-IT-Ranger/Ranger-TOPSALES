@@ -1815,6 +1815,20 @@
           </table></div>
         </section>
 
+        <!-- ═══ ใบวางบิล (53_billing_notes.gs) ═══ -->
+        <section class="view" id="view-billingnotes">
+          <div class="view-head">
+            <div><h1>ใบวางบิล</h1>
+              <p data-book-sub="รวมใบแจ้งหนี้หลายใบของลูกค้ารายเดียวไปวางบิลครั้งเดียว · สมุดบัญชีของ">รวมใบแจ้งหนี้หลายใบของลูกค้ารายเดียวไปวางบิลครั้งเดียว — รับชำระยังทำที่ใบแจ้งหนี้เหมือนเดิม</p></div>
+            <div><button class="btn btn-primary" onclick="openBillingNoteForm()">+ ออกใบวางบิล</button></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>วันที่วางบิล</th><th>ลูกค้า</th><th>จำนวนใบ</th>
+              <th>ยอดวางบิล</th><th>เก็บได้แล้ว</th><th>คงค้าง</th><th>นัดชำระ</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="bn-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
         <!-- ═══ รายงานภาษีขาย/ภาษีซื้อ สำหรับยื่น ภ.พ.30 (51_tax_reports.gs) ═══ -->
         <section class="view" id="view-vatreport">
           <div class="view-head">
@@ -1942,7 +1956,8 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'updateStaffAdmin','saveDocSeries','setDocCounter','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
-  'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings','organizeDatabaseFiles','syncTenantSheets',
+  'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings',
+  'createBillingNote','cancelBillingNote','organizeDatabaseFiles','syncTenantSheets',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -2500,7 +2515,8 @@ const NAV_GROUPS = [
     { n:'5.2', label:'เจ้าหนี้', items:[
       {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'both'} ]},
     { n:'5.3', label:'ลูกหนี้', items:[
-      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'both'} ]},
+      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'both'},
+      {n:'5.3.2', label:'ใบวางบิล', view:'billingnotes', mod:'accounting', ready:true, scope:'both'} ]},
     /* ★ ตั้งค่าของ "สมุด" ที่เปิดอยู่ ไม่ใช่ของทั้งระบบ — ตัวแทนเป็นคนละนิติบุคคล
        จะใช้วิธีคิดต้นทุนคนละแบบกับบริษัทก็ได้ จึงอยู่ในกลุ่มบัญชี ไม่ใช่กลุ่มตั้งค่าระบบ */
     /* ★ เจ้าของระบบจัดเลขเอง 16 ต.ค. 2026 — รายงานเป็น 5.8 · ตั้งค่าเป็น 5.9
@@ -2999,7 +3015,7 @@ const LOADERS = {
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
   apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes,
-  acctsettings: loadAcctSettings, vatreport: loadVatReport, glbooks: loadGlBooks,
+  acctsettings: loadAcctSettings, vatreport: loadVatReport, billingnotes: loadBillingNotes, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
   helpcenter: loadHelpCenter
@@ -8316,6 +8332,133 @@ function renderArInvoices(){
       (iv.status !== 'void' ? '<button class="btn btn-sm" onclick="openDebitNoteForm('+iv.id+')">ใบเพิ่มหนี้</button>' : '') +
     '</td></tr>').join(''), 10, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
 }
+/* ══════════ ใบวางบิล — 16 ต.ค. 2026 ══════════
+   ★★ ใบวางบิลไม่ใช่เอกสารภาษีและไม่ลงบัญชี เป็นแค่ "ซองรวมใบแจ้งหนี้" ที่พนักงานเก็บเงิน
+     ถือไปวางที่ร้าน · **รับชำระยังทำที่ใบแจ้งหนี้เหมือนเดิม** เพราะลูกค้าจ่ายไม่ครบตามที่วางบิล
+     เป็นเรื่องปกติ (จ่ายบางใบ ค้างบางใบ) ยอดคงค้างต้องอยู่ที่ใบจริงเสมอ */
+let bnCache = [];
+const BN_PILL = { open:'wait', cancelled:'off' };
+async function loadBillingNotes(){
+  const body = document.getElementById('bn-body');
+  if (!bnCache.length) bnCache = listSnapLoad('billingnotes') || [];
+  if (bnCache.length) renderBillingNotes(); else tblLoading(body, 10);
+  const r = await callApi('listBillingNotes', {});
+  if (!r.success) { toast(r.message, true); return; }
+  bnCache = r.data || [];
+  listSnapSave('billingnotes', bnCache);
+  renderBillingNotes();
+}
+function renderBillingNotes(){
+  document.getElementById('bn-body').innerHTML = rowsOrEmpty(bnCache.map(n =>
+    '<tr><td class="mono-data">'+esc(n.noteNo)+'</td><td class="mono-data">'+esc(n.noteDate)+'</td>' +
+    '<td class="wrap">'+esc(n.customerName)+'</td><td class="mono-data">'+n.invoiceCount+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(n.total)+'</td><td class="mono-data">฿'+bahtPlain(n.collected)+'</td>' +
+    /* คงค้างเป็นยอด "วันนี้" ไม่ใช่ยอดวันวางบิล — คนถามเสมอว่าวางไปแล้วเก็บได้เท่าไร */
+    '<td class="mono-data"><b>฿'+bahtPlain(n.outstanding)+'</b></td>' +
+    '<td class="mono-data">'+dash(n.dueDate)+'</td><td>'+pill2({ open:['wait','วางบิลแล้ว'], cancelled:['off','ยกเลิก'] }, n.status)+'</td>' +
+    '<td style="white-space:nowrap"><button class="btn btn-sm" onclick="printBillingNote('+n.id+')">พิมพ์</button>' +
+      (n.status === 'open' ? ' <button class="btn btn-sm" onclick="cancelBillingNoteUi('+n.id+')">ยกเลิก</button>' : '') +
+    '</td></tr>').join(''), 10, 'ยังไม่มีใบวางบิล');
+}
+
+let BN_PICK = { customerId: '', rows: [] };
+async function openBillingNoteForm(){
+  const r = await callApi('listBillableInvoices', {});
+  if (!r.success) { toast(r.message, true); return; }
+  const rows = r.data || [];
+  if (!rows.length) { toast('ไม่มีใบแจ้งหนี้ที่ค้างอยู่ให้วางบิล', true); return; }
+  /* จัดกลุ่มตามลูกค้า — วางบิลข้ามร้านไม่ได้ (พนักงานเก็บเงินจะถือไปผิดร้าน)
+     จึงให้เลือกร้านก่อน แล้วค่อยติ๊กใบของร้านนั้น */
+  const byCust = {};
+  rows.forEach(x => { (byCust[x.customerId] = byCust[x.customerId] || { name: x.customerName, rows: [] }).rows.push(x); });
+  BN_PICK = { customerId: '', rows: rows };
+  const today = new Date().toISOString().slice(0, 10);
+  plModal('<h3>ออกใบวางบิล</h3>' +
+    '<p class="form-hint">เลือกร้านก่อน แล้วติ๊กใบแจ้งหนี้ที่จะวางบิลให้ร้านนั้น · ' +
+      'ใบที่วางบิลไปแล้วจะไม่ขึ้นในรายการนี้</p>' +
+    '<div class="form-grid g2">' +
+      plField('ลูกค้า', '<select id="bn-cust" onchange="bnPickCustomer()"><option value="">— เลือกร้าน —</option>' +
+        Object.keys(byCust).map(id => '<option value="'+esc(id)+'">'+esc(byCust[id].name)+' ('+byCust[id].rows.length+' ใบ)</option>').join('') + '</select>') +
+      plField('วันที่วางบิล', '<input type="date" id="bn-date" value="'+today+'">') +
+    '</div>' +
+    plField('วันนัดชำระ (ถ้ามี)', '<input type="date" id="bn-due">') +
+    '<div id="bn-list"><p class="form-hint">เลือกร้านก่อน</p></div>' +
+    plField('หมายเหตุ', '<input id="bn-note" placeholder="เช่น วางบิลรอบสิ้นเดือน">') +
+    '<div id="bn-total" class="form-hint" style="margin-top:8px"></div>' +
+    plModalActions('plBusy(bnSave)', '✓ ออกใบวางบิล'));
+}
+function bnPickCustomer(){
+  const id = document.getElementById('bn-cust').value;
+  BN_PICK.customerId = id;
+  const mine = BN_PICK.rows.filter(x => String(x.customerId) === String(id));
+  document.getElementById('bn-list').innerHTML = !id ? '<p class="form-hint">เลือกร้านก่อน</p>' :
+    '<div class="table-wrap" style="margin-top:8px"><table><thead><tr>' +
+      '<th><input type="checkbox" id="bn-all" onchange="bnToggleAll(this.checked)"></th>' +
+      '<th>เลขที่</th><th>วันที่</th><th>ครบกำหนด</th><th>คงค้าง</th></tr></thead><tbody>' +
+      mine.map(x => '<tr><td><input type="checkbox" class="bn-pick" value="'+esc(x.id)+'" data-amt="'+x.outstanding+'" checked onchange="bnRecalc()"></td>' +
+        '<td class="mono-data">'+esc(x.invoiceNo)+'</td><td class="mono-data">'+esc(x.invoiceDate)+'</td>' +
+        '<td class="mono-data">'+dash(x.dueDate)+'</td><td class="mono-data">฿'+bahtPlain(x.outstanding)+'</td></tr>').join('') +
+      '</tbody></table></div>';
+  bnRecalc();
+}
+function bnToggleAll(on){ document.querySelectorAll('.bn-pick').forEach(c => { c.checked = on; }); bnRecalc(); }
+function bnRecalc(){
+  const picked = [...document.querySelectorAll('.bn-pick:checked')];
+  const sum = picked.reduce((s, c) => s + (parseFloat(c.dataset.amt) || 0), 0);
+  const box = document.getElementById('bn-total');
+  if (box) box.innerHTML = 'เลือกไว้ <b>' + picked.length + '</b> ใบ · ยอดรวม <b>฿' + bahtPlain(sum) + '</b>';
+}
+async function bnSave(){
+  if (!BN_PICK.customerId) { plModalErr('เลือกร้านก่อน'); return; }
+  const ids = [...document.querySelectorAll('.bn-pick:checked')].map(c => c.value);
+  if (!ids.length) { plModalErr('ติ๊กใบแจ้งหนี้อย่างน้อย 1 ใบ'); return; }
+  const r = await callApi('createBillingNote', { customerId: BN_PICK.customerId, invoiceIds: ids,
+    noteDate: document.getElementById('bn-date').value,
+    dueDate: document.getElementById('bn-due').value,
+    note: document.getElementById('bn-note').value.trim() });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose();
+  toast(r.message);
+  printBillingNote(r.noteId);         // ออกแล้วพิมพ์ให้เลย — เอกสารนี้ต้องถือไปที่ร้าน
+  listSnapDrop('billingnotes'); bnCache = []; loadBillingNotes();
+}
+async function cancelBillingNoteUi(id){
+  const why = prompt('ยกเลิกใบวางบิลนี้เพราะอะไร? (ใบแจ้งหนี้จะกลับไปวางบิลใหม่ได้)');
+  if (why === null) return;
+  const r = await callApi('cancelBillingNote', { id, reason: why });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  listSnapDrop('billingnotes'); bnCache = []; loadBillingNotes();
+}
+async function printBillingNote(id){
+  const [r] = await Promise.all([callApi('getBillingNote', { id }), ensureDocPrint()]);
+  if (!r.success) { toast(r.message, true); return; }
+  const n = r.note, c = r.customer || {};
+  DocPrint.doc({
+    title: 'ใบวางบิล (Billing Note)', docNo: n.noteNo, issuer: r.issuer || {},
+    subLabel: n.status === 'cancelled' ? 'ยกเลิกแล้ว' : '',
+    metaRight: [['เลขที่', n.noteNo], ['วันที่วางบิล', n.noteDate]]
+      .concat(n.dueDate ? [['นัดชำระ', n.dueDate]] : []),
+    parties: [{ label: 'วางบิลที่', name: c.name, code: c.code, address: c.address, taxId: c.taxId,
+      branchCode: c.branchCode, phone: c.phone }],
+    columns: [
+      { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
+      { label: 'เลขที่ใบแจ้งหนี้', code: true, width: '26%', value: l => l.invoiceNo },
+      { label: 'วันที่', align: 'c', width: '16%', value: l => l.invoiceDate || '-' },
+      { label: 'ครบกำหนด', align: 'c', width: '16%', value: l => l.dueDate || '-' },
+      { label: 'จำนวนเงิน', align: 'r', width: '20%', value: l => DocPrint.money(l.amount) }
+    ],
+    lines: r.items,
+    totals: [['รวมเงินที่วางบิล', DocPrint.money(n.total), 'grand']],
+    note: n.note || '',
+    /* ★ ใบวางบิลไม่ใช่ใบเสร็จ — ช่องลงชื่อคือ "ผู้วางบิล / ผู้รับวางบิล" ไม่ใช่ผู้รับเงิน
+       ใช้คำผิดเมื่อไหร่ ร้านจะเข้าใจว่าจ่ายเงินไปแล้ว */
+    signers: ['ผู้วางบิล', 'ผู้รับวางบิล'], showBank: true, carry: true,
+    xlsx: { filename: n.noteNo, headers: ['เลขที่ใบแจ้งหนี้', 'วันที่', 'ครบกำหนด', 'จำนวนเงิน'],
+      rows: r.items.map(l => [l.invoiceNo, l.invoiceDate, l.dueDate, String(l.amount)]) }
+  });
+}
+
 /* ══════════ รายงานภาษีขาย / ภาษีซื้อ (ภ.พ.30) — 16 ต.ค. 2026 ══════════
    ★★ อ่านจาก **เอกสารภาษีที่ออกจริง ไม่ใช่ใบสำคัญบัญชี** — ภ.พ.30 รายงานใบกำกับภาษี
      ซึ่งเป็นคนละสิ่งกับรายการที่ลงบัญชีแล้ว · การ์ด "เทียบกับบัญชี" จึงสำคัญที่สุดในหน้านี้
