@@ -214,16 +214,25 @@
        เพราะ `initViewFrames` ถือว่า "ของที่ข้างในมี .table-wrap" คือบล็อกข้อมูล แล้วจะเลิกตรึง
        ตัวกรองไว้ด้านบน — แผ่นจึงทำจากสองชิ้นที่แยกกัน (`.sheet-top` + `.sheet-bot`) ที่ต่อเส้นขอบกัน */
   .filetabs{display:flex;gap:4px;padding:0 4px;margin:0 0 -1px;position:relative;z-index:2;flex-wrap:wrap}
-  .ftab{font:inherit;font-size:.84rem;font-weight:600;color:var(--ink-soft);cursor:pointer;
-    background:var(--surface-2);border:1px solid var(--border);border-radius:10px 10px 0 0;
-    padding:7px 14px 8px;display:inline-flex;align-items:center;gap:7px;transition:background .12s,color .12s}
-  .ftab:hover{color:var(--ink);background:#fbfcfe}
-  .ftab.on{background:#fff;color:var(--blue);border-bottom-color:#fff;
-    box-shadow:inset 0 2px 0 var(--blue)}
-  .ftab:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-  .ftab .n{font-size:.74rem;font-weight:700;background:var(--grey-soft);color:var(--ink-faint);
-    border-radius:999px;padding:1px 7px;min-width:20px;text-align:center;line-height:1.5}
-  .ftab.on .n{background:var(--blue-soft);color:var(--blue)}
+  /* ★ แต่ละแท็บมีสีประจำตัว (เจ้าของระบบสั่ง 16 ต.ค. 2026) — สีสื่อความหมายของกลุ่ม
+     ฟ้า = งานที่กำลังเดิน · เทา = ร่างที่ยังไม่เป็นเรื่อง · เหลือง = ปฏิเสธ · แดง = ยกเลิก
+     ★★ สีต้องอ่านออกตอน **ยังไม่ได้เลือก** ด้วย ไม่ใช่โผล่เฉพาะตอนเลือก — ไม่งั้นมันก็เป็น
+       แถบเทาเหมือนกันหมดอยู่ดี · แท็บที่ไม่ได้เลือกจึงใช้พื้นอ่อนของสีตัวเอง + ตัวอักษรสีเข้ม
+     ค่าสีส่งมาทาง `--tt` (เข้ม) / `--ts` (อ่อน) ที่ตัว element — ไม่ต้องมีคลาสต่อแท็บ
+     เพิ่มแท็บใหม่แค่ใส่ `tone` ใน SO_TABS */
+  .ftab{font:inherit;font-size:.84rem;font-weight:600;cursor:pointer;
+    color:var(--tt,var(--ink-soft));background:var(--ts,var(--surface-2));
+    border:1px solid var(--border);border-radius:10px 10px 0 0;
+    padding:7px 14px 8px;display:inline-flex;align-items:center;gap:7px;
+    transition:background .12s,color .12s,box-shadow .12s,opacity .12s;opacity:.78}
+  .ftab:hover{opacity:1}
+  .ftab.on{background:#fff;border-bottom-color:#fff;opacity:1;
+    box-shadow:inset 0 3px 0 var(--tt,var(--blue))}
+  .ftab:focus-visible{outline:2px solid var(--tt,var(--blue));outline-offset:2px}
+  .ftab .n{font-size:.74rem;font-weight:700;background:#fff;color:var(--tt,var(--ink-faint));
+    border:1px solid var(--border);border-radius:999px;padding:0 7px;min-width:20px;
+    text-align:center;line-height:1.7}
+  .ftab.on .n{background:var(--ts,var(--grey-soft));border-color:transparent}
   /* ★ ต้องชนะกฎ .table-wrap ที่ตั้ง border-radius/box-shadow ไว้ทีหลังในไฟล์ (บรรทัด ~455)
      จึงเขียนแบบเจาะจงกว่า (.table-wrap.sheet-bot) แทนการย้ายบล็อกนี้ไปไว้ท้ายสุด
      — ย้ายแล้วใครมาเพิ่มกฎต่อท้ายทีหลังก็ทับได้อีก วนไม่จบ */
@@ -3710,10 +3719,13 @@ function soStockDot(o, withText){
      (ดูคอมเมนต์ใน markup) — สองทางที่ทำเรื่องเดียวกันจะขัดกันเองเสมอ
    ★ `confirmed` ครอบ `pending_delivery` ผ่าน soStatusKey อยู่แล้ว ไม่ต้องเขียนซ้ำที่นี่ */
 const SO_TABS = [
-  { key:'active',    label:'กำลังดำเนินการ', statuses:['confirmed','accepted','ready_to_ship','delivering','completed'] },
-  { key:'draft',     label:'ร่าง',           statuses:['draft'] },
-  { key:'rejected',  label:'ปฏิเสธการขาย',   statuses:['rejected'] },
-  { key:'cancelled', label:'ยกเลิก',         statuses:['cancelled'] }
+  /* tone = สีประจำแท็บ [เข้ม, อ่อน] — สื่อความหมายของกลุ่ม ไม่ใช่แค่ให้ต่างกันเฉยๆ
+     ★ ใช้ตัวแปรสีชุดเดียวกับทั้งแอป ไม่ฮาร์ดโค้ดค่าสี ธีมเปลี่ยนเมื่อไหร่แท็บเปลี่ยนตาม */
+  { key:'active',    label:'กำลังดำเนินการ', tone:['var(--blue)','var(--blue-soft)'],
+    statuses:['confirmed','accepted','ready_to_ship','delivering','completed'] },
+  { key:'draft',     label:'ร่าง',           tone:['var(--ink-faint)','var(--grey-soft)'], statuses:['draft'] },
+  { key:'rejected',  label:'ปฏิเสธการขาย',   tone:['var(--amber)','var(--amber-soft)'],    statuses:['rejected'] },
+  { key:'cancelled', label:'ยกเลิก',         tone:['var(--red)','var(--red-soft)'],        statuses:['cancelled'] }
 ];
 let soTabKey = 'active';
 function soTabDef(){ return SO_TABS.find(t => t.key === soTabKey) || SO_TABS[0]; }
@@ -3739,7 +3751,9 @@ function renderSoTabs(){
   const base = soFilteredRows({ ignoreStatus: true, ignoreTab: true });
   bar.innerHTML = SO_TABS.map(t => {
     const n = base.filter(o => t.statuses.includes(soStatusKey(o.status))).length;
+    const tone = t.tone || ['var(--blue)', 'var(--blue-soft)'];
     return '<button type="button" role="tab" class="ftab'+(t.key === soTabKey ? ' on' : '')+'"' +
+      ' style="--tt:'+tone[0]+';--ts:'+tone[1]+'"' +
       ' aria-selected="'+(t.key === soTabKey)+'" onclick="setSalesOrderTab(\''+t.key+'\')">' +
       esc(t.label) + '<span class="n">' + n + '</span></button>';
   }).join('');
