@@ -310,6 +310,9 @@ function recordSale(user, payload) {
 
   if (fulfillmentType === 'immediate') {
     _cutVanStock(user.tenantId, user.lineUserId, need, orderId);
+    /* ★ ต้นทุนขายของการขายจากรถ (55_van_stock_link.gs) — ใช้ต้นทุนที่รถพกมาตั้งแต่ตอนเบิก
+       ไม่ใช่ต้นทุนคลัง ณ ตอนขาย · ปิดอยู่ก็แค่ข้ามไป ไม่กระทบการบันทึกบิล */
+    postVanSaleCogs(user.tenantId, tenantRowById(user.tenantId, 'sales_orders', orderId), need, user.lineUserId);
   }
   /* ★ ขายจากรถลงบัญชีตรงนี้ เพราะใบกำกับภาษีออกไปพร้อมบิลแล้ว (52_cash_sales_gl.gs)
      บิลพวกนี้ปิดเป็น completed ทันที ไม่เคยเดินผ่าน "พร้อมจัดส่ง" ซึ่งเป็นจุดลงบัญชีของฝั่งสำนักงาน

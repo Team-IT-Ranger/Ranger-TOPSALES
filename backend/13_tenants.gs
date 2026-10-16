@@ -44,7 +44,10 @@ var TENANT_SHEET_TABS = {
   // (ดู _lineListBreakdown, 18_pricing_engine.gs) ว่าง = ไม่มีราคาตั้งอ้างอิง (บิลจากเส้นทางโปรโมชั่นเดิม ไม่มีชุดราคา)
   order_items:         ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','unit_discount','line_discount','list_price_ex_vat','is_free','tax_status'],
   order_discounts:     ['record_id','order_id','rule_id','rule_name','type','value','free_product_id','free_qty'],
-  van_stock:           ['line_user_id','product_id','qty'],
+  /* ★ avg_cost = ต้นทุนที่ของชิ้นนี้ "พกขึ้นรถมา" ตอนเบิกจากคลังกลาง (55_van_stock_link.gs)
+     ไม่ใช่ไปอ่านต้นทุนคลังตอนขาย — ต้นทุนคลังขยับทุกครั้งที่รับของเข้า อ่านตอนขายจะได้
+     ต้นทุนของล็อตที่รถไม่ได้เอาไป · ว่าง = ของที่ขึ้นรถก่อนเปิดใช้การเชื่อมคลัง */
+  van_stock:           ['line_user_id','product_id','qty','avg_cost'],
   stock_movements:     ['record_id','line_user_id','product_id','change_qty','type','ref_id','created_at'],
   stock_counts:        ['record_id','line_user_id','product_id','system_qty','counted_qty','diff_qty','created_at'],
   visits:              ['record_id','customer_id','line_user_id','check_in_at','lat','lng','has_order'],

@@ -107,7 +107,7 @@ const ctx = {
 vm.createContext(ctx);
 // 50/52: recordSale ลงบัญชีขายสดแล้ว (16 ต.ค. 2026) — บน Apps Script ทุกไฟล์อยู่ scope เดียวกัน
 // กล่องทดสอบโหลดเป็นชุดย่อย จึงต้องใส่เอง ไม่งั้น ReferenceError ตอนเรียก postCashSaleGl
-['50_cogs.gs', '52_cash_sales_gl.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
+['50_cogs.gs', '52_cash_sales_gl.gs', '55_van_stock_link.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 vm.runInContext(B('07_sales.gs'), ctx, { filename: '07_sales.gs' });
 
 // override หลังโหลดไฟล์ — recordSale เรียก _priceSaleCart() แบบ global lookup ตอนรันจริง ไม่ใช่ closure

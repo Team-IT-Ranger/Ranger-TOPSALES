@@ -107,7 +107,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs', '53_billing_notes.gs', '54_goods_returns.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs', '53_billing_notes.gs', '54_goods_returns.gs', '55_van_stock_link.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -1381,6 +1381,84 @@ console.log('\n── ยกเลิกใบลดหนี้ / ใบเพ�
   r = ctx.voidArAdjustNote(FIN, { id: r.noteId, kind: 'debit', reason: 'ออกผิดยอด' });
   eq('★ ยกเลิกใบเพิ่มหนี้: ยอดค้างกลับเดิม · ของกลับเข้าคลัง',
     [r.success, ivRow().outstanding, stockOf('90')], [true, 10700, s2]);
+}
+
+/* ══════════ สต็อกรถเชื่อมคลัง + ต้นทุนขายจากรถ (55_van_stock_link.gs · 16 ต.ค. 2026) ══════════
+   ★★ โมเดล: เบิกขึ้นรถ = **ย้ายคลัง ไม่ลงบัญชี** (ของยังเป็นสินค้าคงเหลือของกิจการ)
+     ขายจากรถ = ตัดต้นทุน Dr 5100 / Cr 1300 (ของออกจากกิจการตรงนี้)
+     ★★★ ลงบัญชีตอนเบิกเมื่อไหร่ = ตัดต้นทุนให้ของที่ยังขายไม่ออก กำไรเดือนนั้นหายไปเฉยๆ
+   ★ รถพกต้นทุนติดตัวมาตั้งแต่ตอนเบิก ไม่ใช่อ่านต้นทุนคลังตอนขาย — ต้นทุนคลังขยับทุกครั้ง
+     ที่รับของเข้า อ่านตอนขายจะได้ต้นทุนของล็อตที่รถไม่ได้เอาไป (เทสต์ข้อ ★★★ พิสูจน์) */
+console.log('\n── สต็อกรถเชื่อมคลัง ──');
+{
+  const stockOf = pid => ctx.centralObjects('warehouse_stock')
+    .filter(r => String(r.product_id) === String(pid)).reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const bal = code => {
+    let d = 0, c = 0;
+    ctx.centralObjects('gl_journal_lines').forEach(l => {
+      if (String(l.account_code) !== code) return;
+      d += Number(l.debit) || 0; c += Number(l.credit) || 0;
+    });
+    return Math.round((d - c) * 100) / 100;
+  };
+  const SCV2 = ctx._saleStockScope('T1'), WHV2 = ctx._ensureScopeWarehouse(SCV2);
+  const DRV = 'U-VAN-1';
+  ctx._applyStockIn(SCV2, WHV2, '95', 100, 20, 'receipt', 'TEST', 'VAN0', 'ล็อตแรก @20', 'tester');
+
+  // ── ปิดอยู่: ทุกอย่างเหมือนเดิมเป๊ะ ──
+  ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', vanIssue: 'off' });
+  const w0 = stockOf('95');
+  let r = ctx.issueVanStockFromWarehouse('T1', [{ productId: '95', qty: 10 }], 'tester', 'E2E');
+  eq('★ ปิดอยู่ → ไม่แตะคลังกลาง และไม่คืนต้นทุน', [r.success, r.cost, stockOf('95')], [true, null, w0]);
+
+  // ── เปิดใช้ ──
+  ok('เปิดการเชื่อมสต็อกรถกับคลังกลาง + ต้นทุนเฉลี่ย',
+    ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'average', cogsFrom: '2026-10-16', vanIssue: 'on' }));
+
+  const cogs0 = bal('5100'), inv0 = bal('1300');
+  r = ctx.issueVanStockFromWarehouse('T1', [{ productId: '95', qty: 10 }], 'tester', 'E2E เบิก');
+  eq('★★ เบิกขึ้นรถ → คลังกลางลดลงจริง 10 ชิ้น', [r.success, w0 - stockOf('95')], [true, 10]);
+  eq('  ต้นทุนที่รถพกมา = ต้นทุนเฉลี่ยคลังตอนเบิก (20)', r.cost['95'], 20);
+  eq('★★★ เบิกขึ้นรถ **ไม่ลงบัญชี** (ของยังเป็นสินค้าคงเหลือของกิจการ)',
+    [bal('5100') - cogs0, bal('1300') - inv0], [0, 0]);
+
+  // ── รถพกต้นทุนเดิม แม้คลังจะรับของแพงเข้ามาทีหลัง ──
+  ctx._applyStockIn(SCV2, WHV2, '95', 100, 90, 'receipt', 'TEST', 'VAN1', 'ล็อตแพง @90', 'tester');
+  const avgNow = ctx._scoped('warehouse_stock', SCV2)
+    .filter(x => String(x.product_id) === '95')[0].avg_cost;
+  eq('  คลังรับของแพงเข้ามา ต้นทุนเฉลี่ยคลังขยับขึ้นจริง', avgNow > 20, true);
+
+  // จำลอง van_stock ที่ถือต้นทุน 20 มาจากตอนเบิก
+  append(tenantSheets.van_stock, { line_user_id: DRV, product_id: '95', qty: 10, avg_cost: 20 });
+  append(tenantSheets.sales_orders, { record_id: 300, order_code: 'SO-VAN-1', customer_id: 500,
+    subtotal: 1000, discount: 0, total: 1000, payment_method: 'cash', fulfillment_type: 'immediate',
+    status: 'completed', sale_by: DRV, created_at: '2026-10-16 09:00:00',
+    tax_invoice_no: 'TAX-IV-VAN-1', tax_invoice_at: '2026-10-16 09:00:00',
+    apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 934.58, vat_amount: 65.42 });
+
+  const c1 = bal('5100'), i1 = bal('1300');
+  r = ctx.postVanSaleCogs('T1', ctx.tenantRowById('T1', 'sales_orders', 300), { '95': 6 }, 'tester');
+  eq('★★★ ขายจากรถ 6 ชิ้น → ต้นทุน 6 × 20 = 120 (ต้นทุนที่รถพกมา ไม่ใช่ค่าเฉลี่ยคลังตอนนี้)',
+    [r.posted, r.amount], [true, 120]);
+  eq('★ Dr 5100 ต้นทุนขาย 120 / Cr 1300 สินค้าคงเหลือ 120',
+    [bal('5100') - c1, bal('1300') - i1], [120, -120]);
+  eq('  ลงซ้ำไม่ได้', ctx.postVanSaleCogs('T1', ctx.tenantRowById('T1', 'sales_orders', 300), { '95': 6 }, 'tester').posted, false);
+
+  r = ctx.reverseVanSaleCogs('T1', ctx.tenantRowById('T1', 'sales_orders', 300), 'tester', 'ยกเลิกบิล');
+  eq('★ ยกเลิกบิล → กลับรายการด้วยยอดเดิม และหักล้างกันสนิท',
+    [r.posted, r.amount, bal('5100') - c1, bal('1300') - i1], [true, 120, 0, 0]);
+
+  // ── ของในคลังไม่พอ = ปฏิเสธทั้งใบ ──
+  const left = stockOf('95');
+  r = ctx.issueVanStockFromWarehouse('T1', [{ productId: '95', qty: left + 50 }], 'tester', 'E2E เกิน');
+  eq('★★ เบิกเกินของในคลัง → ปฏิเสธทั้งใบ ไม่เบิกครึ่งๆ กลางๆ',
+    [r.success, /ไม่พอ/.test(r.message || ''), stockOf('95')], [false, true, left]);
+
+  /* ★ `bumpVanAvgCost` เขียนชีตผ่าน `tenantSheet` ซึ่งกล่องทดสอบนี้ไม่ได้ stub (ไปเปิดไฟล์บน Drive)
+     การถ่วงน้ำหนักต้นทุนบนรถจึงพิสูจน์บน UAT จริงแทน — ที่นี่ยืนยันแค่ว่าแถวเก็บต้นทุนไว้จริง */
+  const row = ctx.tenantObjectsIfExists('T1', 'van_stock')
+    .filter(x => String(x.line_user_id) === DRV && String(x.product_id) === '95')[0];
+  eq('  แถวบนรถเก็บต้นทุนไว้จริง', Number(row.avg_cost), 20);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

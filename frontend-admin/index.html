@@ -8890,16 +8890,36 @@ async function loadAcctSettings(){
     '</div></div>' +
     (editable ? '<div class="form-actions" style="justify-content:flex-start"><button class="btn btn-primary" onclick="plBusy(acctSave)">บันทึก</button></div>' : '') +
     (cur.updatedAt ? '<p class="form-hint">แก้ล่าสุด '+esc(cur.updatedAt)+'</p>' : '') +
+    /* ★★ สวิตช์นี้เปลี่ยน "พฤติกรรมของสต็อก" ไม่ใช่แค่การลงบัญชี — เปิดแล้วการเบิกของขึ้นรถ
+       จะถูกปฏิเสธถ้าคลังกลางมีของไม่พอ ต้องเตือนให้ชัดก่อนกด */
+    '<div class="form-card"><h3>เชื่อมสต็อกรถกับคลังกลาง</h3>' +
+    '<p class="form-hint">เปิดแล้ว <b>การเบิกของขึ้นรถจะตัดจากคลังกลางจริง</b> ' +
+      '(ย้ายคลัง ไม่ลงบัญชี เพราะของยังเป็นสินค้าคงเหลือของกิจการ) และ ' +
+      '<b>การขายจากรถจะตัดต้นทุนขายได้</b> โดยใช้ต้นทุนที่ของพกขึ้นรถมาตั้งแต่ตอนเบิก</p>' +
+    '<p class="form-hint" style="color:var(--orange)">★ <b>เปิดได้ก็ต่อเมื่อข้อมูลคลังกลางตรงกับของจริงแล้ว</b> — ' +
+      'ตัวแทนที่ยังไม่เคยทำใบรับของเข้าคลัง คลังจะเป็นศูนย์ทั้งที่รถวิ่งขายอยู่ทุกวัน ' +
+      'เปิดตอนนั้นพนักงานจะเบิกของขึ้นรถไม่ได้เลย</p>' +
+    '<label class="acct-opt'+(cur.vanIssue === 'on' ? ' on' : '')+'">' +
+      '<input type="checkbox" id="acct-van"'+(cur.vanIssue === 'on' ? ' checked' : '')+(editable ? '' : ' disabled') +
+        ' onchange="acctToggleVan(this.checked)">' +
+      '<span><b>เบิกของขึ้นรถให้ตัดจากคลังกลาง</b><span class="s">ของไม่พอ = ปฏิเสธทั้งใบ ไม่เบิกครึ่งๆ กลางๆ ' +
+      '(เบิกบางส่วนแล้วไม่บอก = พนักงานขับรถออกไปโดยคิดว่ามีของครบ)</span></span></label>' +
+    '</div>' +
     /* ★ บอกขอบเขตให้ชัด — ไม่งั้นผู้ทำบัญชีจะคิดว่าต้นทุนครบแล้วทั้งที่ครอบคลุมแค่ส่วนเดียว */
     '<div class="form-card"><h3>ครอบคลุมแค่ไหน</h3>' +
       '<p class="form-hint">' +
         '<span class="tag tag-ok">ตัดต้นทุนให้</span> การขายที่ตัดของจากคลัง (สำนักงานจัดส่ง)<br>' +
-        '<span class="tag tag-warn">ยังไม่ตัด</span> การขายจากรถ (Cash Van) — สต็อกบนรถยังไม่ได้เชื่อมกับคลังกลาง ' +
-        'จึงไม่มีฐานต้นทุนให้คิด การเบิกของขึ้นรถต้องทำให้เป็นการย้ายคลังจริงก่อน ซึ่งเป็นงานคนละชิ้น' +
+        (cur.vanIssue === 'on'
+          ? '<span class="tag tag-ok">ตัดต้นทุนให้</span> การขายจากรถ (Cash Van) — ของบนรถพกต้นทุนมาตั้งแต่ตอนเบิก'
+          : '<span class="tag tag-warn">ยังไม่ตัด</span> การขายจากรถ (Cash Van) — ต้องเปิด ' +
+            '"เชื่อมสต็อกรถกับคลังกลาง" ข้างบนก่อน ไม่งั้นของบนรถไม่มีฐานต้นทุนให้คิด') +
       '</p>' +
       '<p class="form-hint">ยกเลิกบิลหรือรับของกลับเข้าคลัง ระบบจะ<b>กลับรายการด้วยยอดเดิมที่เคยลงไว้</b> ' +
         'ไม่ใช่คิดต้นทุนใหม่ ขาไปกับขากลับจึงหักล้างกันสนิทเสมอ</p>' +
     '</div>';
+}
+function acctToggleVan(on){
+  document.getElementById('acct-van').closest('.acct-opt').classList.toggle('on', !!on);
 }
 function acctToggleCash(on){
   document.getElementById('acct-cashfrom-wrap').style.display = on ? '' : 'none';
@@ -8916,7 +8936,8 @@ async function acctSave(){
   const r = await callApi('saveAccountingSettings', { costMethod: m.value,
     cogsFrom: m.value === 'none' ? '' : document.getElementById('acct-from').value,
     cashSales: cash && cash.checked ? 'on' : 'off',
-    cashFrom: cash && cash.checked ? document.getElementById('acct-cashfrom').value : '' });
+    cashFrom: cash && cash.checked ? document.getElementById('acct-cashfrom').value : '',
+    vanIssue: document.getElementById('acct-van')?.checked ? 'on' : 'off' });
   if (!r.success) { toast(r.message, true); return; }
   toast(r.message);
   loadAcctSettings();

@@ -418,6 +418,9 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
         tenantObjects(tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
           .forEach(function(it) { need[String(it.product_id)] = (need[String(it.product_id)] || 0) - (parseFloat(it.base_qty) || 0); });
         if (Object.keys(need).length) { _cutVanStock(tenantId, order.sale_by, need, order.record_id, 'cancel'); cacheClearUser(order.sale_by); }
+        /* ★ ของกลับขึ้นรถแล้ว ต้นทุนที่เคยลงต้องกลับรายการด้วย ไม่งั้นต้นทุนขายค้างอยู่ในสมุด
+           ทั้งที่บิลถูกยกเลิก (หลักเดียวกับขายจากคลัง — reverseSaleCogs) */
+        reverseVanSaleCogs(tenantId, order, session.adminUserId, 'ยกเลิกบิล');
       }
     } else {
       // สำนักงานจัดส่ง: ของถูกตัดจากคลังกลางตอนเข้าสถานะ "กำลังจัดส่ง" — คืนกลับเข้าคลังเดิม

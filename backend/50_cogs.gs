@@ -49,6 +49,9 @@ function _acctSettings(book) {
          เปิดย้อนหลังทับของเดิม = นับซ้ำ ซึ่งหาทีหลังยากกว่าขาดไปเสียอีก */
     cashSales: row && String(row.cash_sales) === 'on' ? 'on' : 'off',
     cashFrom: row ? _dOnly(row.cash_from) : '',
+    /* เบิกของขึ้นรถ = ตัดจากคลังกลางจริง (55_van_stock_link.gs) — เปิดแล้วการขายจากรถตัดต้นทุนได้
+       ★ ปิดไว้เป็นค่าเริ่มต้นเพราะเปิดแล้ว **เบิกของไม่ได้ถ้าคลังกลางมีของไม่พอ** */
+    vanIssue: row && String(row.van_issue) === 'on' ? 'on' : 'off',
     updatedAt: row ? safeDateStr(row.updated_at) : '',
     updatedBy: row ? (row.updated_by || '') : ''
   };
@@ -65,9 +68,12 @@ function getAccountingSettings(session, payload) {
     /* บอกไปด้วยว่าครอบคลุมแค่ไหน — หน้าจอเอาไปแสดงตรงๆ ไม่ต้องเขียนข้อความซ้ำสองที่ */
     cashSalesNote: 'ลง Dr เงินสด/ธนาคาร / Cr รายได้ + Cr ภาษีขาย ตอนออกใบกำกับภาษีของบิลขายสด' +
       ' — บิลเครดิตลงผ่านใบแจ้งหนี้ลูกหนี้อยู่แล้ว ไม่เกี่ยวกับช่องนี้',
-    coverage: { warehouse: true, van: false,
-      note: 'ตัดต้นทุนเฉพาะการขายที่ตัดของจากคลัง (สำนักงานจัดส่ง) · ขายจากรถยังไม่ตัด เพราะสต็อกบนรถ' +
-            'ยังไม่ได้เชื่อมกับคลังกลาง จึงไม่มีฐานต้นทุนให้คิด' } };
+    /* ★ ขอบเขตไม่ใช่ค่าตายตัวอีกแล้ว — ขายจากรถตัดต้นทุนได้เมื่อเปิดการเชื่อมสต็อกรถกับคลังกลาง */
+    coverage: { warehouse: true, van: s.vanIssue === 'on',
+      note: s.vanIssue === 'on'
+        ? 'ตัดต้นทุนทั้งการขายที่ส่งจากคลังและการขายจากรถ — ของบนรถพกต้นทุนมาตั้งแต่ตอนเบิก'
+        : 'ตัดต้นทุนเฉพาะการขายที่ตัดของจากคลัง (สำนักงานจัดส่ง) · ขายจากรถยังไม่ตัด ' +
+          'เพราะสต็อกบนรถยังไม่ได้เชื่อมกับคลังกลาง จึงไม่มีฐานต้นทุนให้คิด' } };
 }
 
 function saveAccountingSettings(session, payload) {
@@ -90,16 +96,19 @@ function saveAccountingSettings(session, payload) {
     if (!_validDate(cashFrom)) return { success: false, message: 'วันที่เริ่มลงบัญชีขายสดต้องเป็น yyyy-MM-dd' };
   }
 
+  var vanIssue = String(payload.vanIssue || 'off') === 'on' ? 'on' : 'off';
+
   var cur = _acctSettings(book);
   var row = { tenant_id: book || '', cost_method: method, cogs_from: method === 'none' ? '' : from,
-    cash_sales: cash, cash_from: cash === 'on' ? cashFrom : '',
+    cash_sales: cash, cash_from: cash === 'on' ? cashFrom : '', van_issue: vanIssue,
     updated_at: nowStr(), updated_by: session.adminUserId };
   if (cur.recordId) centralUpdate('accounting_settings', cur.recordId, row);
   else { row.record_id = centralNextId('accounting_settings'); centralAppend('accounting_settings', row); }
 
   var msg = [method === 'none' ? 'ปิดการตัดต้นทุนอัตโนมัติ'
       : 'ต้นทุน: ' + COGS_METHODS[method].label + ' เริ่ม ' + from,
-    cash === 'on' ? 'ลงบัญชีขายสด เริ่ม ' + cashFrom : 'ไม่ลงบัญชีขายสด'].join(' · ');
+    cash === 'on' ? 'ลงบัญชีขายสด เริ่ม ' + cashFrom : 'ไม่ลงบัญชีขายสด',
+    vanIssue === 'on' ? 'เบิกของขึ้นรถตัดจากคลังกลาง' : 'เบิกของขึ้นรถไม่ตัดคลังกลาง'].join(' · ');
   return { success: true, settings: _acctSettings(book), message: 'บันทึกแล้ว — ' + msg };
 }
 
