@@ -31,6 +31,9 @@
     '.docsheet{width:210mm;height:297mm;padding:13mm 12mm;overflow:hidden;background:#fff;color:#111;',
     '  display:flex;flex-direction:column;font-size:var(--doc-fs,10px);line-height:1.45;margin:0 auto 14px;',
     '  box-shadow:0 8px 28px rgba(0,0,0,.25);font-family:"Sarabun","Noto Sans Thai",system-ui,sans-serif;position:relative}',
+    /* ★ A4 นอน — รายงานที่มีคอลัมน์มาก บีบลงแนวตั้งแล้วเหลือคอลัมน์ละ ~70px อ่านไม่ออก
+       (เปลี่ยนเฉพาะขนาดแผ่น ที่เหลือใช้กฎเดียวกับแนวตั้งทั้งหมด) */
+    '.docsheet.dp-land{width:297mm;height:210mm}',
     '.docsheet *{box-sizing:border-box}',
     '.docsheet .dp-measure{position:absolute;left:-10000px;top:0;visibility:hidden}',
     /* หัวเอกสาร */
@@ -55,7 +58,19 @@
     '.docsheet .dp-tbl td{border:1px solid #CFD6E0;padding:.4em .5em;vertical-align:top}',
     '.docsheet .dp-tbl td.r,.docsheet .dp-tbl th.r{text-align:right}',
     '.docsheet .dp-tbl td.c,.docsheet .dp-tbl th.c{text-align:center}',
+    /* ★★ ตารางต้องกว้างไม่เกินแผ่นเสมอ — ของเดิมเป็น table-layout:auto ซึ่ง "ยอม" ให้เซลล์กว้าง
+       เกินสัดส่วนใน <colgroup> เมื่อเนื้อในตัดบรรทัดไม่ได้ · **ชื่อร้าน/ชื่อคนภาษาไทยไม่มีช่องว่าง
+       เบราว์เซอร์จึงนับเป็นคำเดียวยาวๆ** ตารางเลยกว้างเกิน 210mm แล้วถูก .docsheet{overflow:hidden}
+       ตัดหายไปทางขวา **โดยไม่มีแถบเลื่อนให้รู้ตัว** (เจ้าของระบบเจอกับรายงานบิลขาย 10 คอลัมน์
+       16 ต.ค. 2026 · วัดได้ตารางกว้าง 826px ในพื้นที่ 704px = หายไป 1 คอลัมน์ครึ่ง)
+       แก้สองอย่างที่ต้องมาคู่กัน:
+       1) `dp-fixed` = เชื่อ <colgroup> เป๊ะ — **ใส่ได้เฉพาะตารางที่กำหนดความกว้างครบทุกคอลัมน์**
+          (ตารางที่กำหนดไม่ครบ fixed จะหารเท่ากันให้ ซึ่งพังกว่าเดิม)
+       2) ตัดคำกลางคำได้ — ไม่งั้น fixed จะดันเนื้อล้นออกนอกเซลล์แทนที่จะตกขอบกระดาษ เท่านั้น */
+    '.docsheet .dp-tbl.dp-fixed{table-layout:fixed}',
+    '.docsheet .dp-tbl td,.docsheet .dp-tbl th{overflow-wrap:anywhere;word-break:break-word}',
     '.docsheet .dp-tbl tr.dp-bold td{font-weight:700;background:#F6F8FC}',
+    '.docsheet .dp-tbl tr.dp-grand td{border-top:.16em solid #111}',
     '.docsheet .dp-code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.95em}',
     '.docsheet .dp-free{background:#F2F7FF}',
     /* ท้ายเอกสาร */
@@ -259,10 +274,11 @@
   function setPaper(paper) {
     var st = document.getElementById('dp-page-size');
     if (!st) { st = document.createElement('style'); st.id = 'dp-page-size'; document.head.appendChild(st); }
-    st.textContent = paper === 'label100x150'
-      ? '@media print{@page{size:100mm 150mm;margin:0}}'
-      : '@media print{@page{size:A4;margin:0}}';
-    return paper === 'label100x150' ? '@page{size:100mm 150mm;margin:0}' : '@page{size:A4;margin:0}';
+    var rule = paper === 'label100x150' ? '@page{size:100mm 150mm;margin:0}'
+      : paper === 'a4land' ? '@page{size:A4 landscape;margin:0}'
+      : '@page{size:A4;margin:0}';
+    st.textContent = '@media print{' + rule + '}';
+    return rule;
   }
 
   function show(title, pagesHtml, opts) {
@@ -368,6 +384,9 @@
     ensureShell();
     var colgroup = '<colgroup>' + spec.columns.map(function (c) {
       return '<col' + (c.width ? ' style="width:' + c.width + '"' : '') + '>'; }).join('') + '</colgroup>';
+    /* กำหนดความกว้างครบทุกคอลัมน์เท่านั้นที่เชื่อ colgroup ได้ — ไม่ครบแล้วบังคับ fixed
+       จะหารเท่ากันให้ทุกคอลัมน์ ชื่อสินค้าจะแคบเท่าคอลัมน์จำนวน */
+    var tblCls = 'dp-tbl' + (spec.columns.every(function (c) { return !!c.width; }) ? ' dp-fixed' : '');
     var thead = '<thead><tr>' + spec.columns.map(function (c) {
       return '<th class="' + (c.align || '') + '">' + E(c.label) + '</th>'; }).join('') + '</tr></thead>';
     var wm = spec.watermark ? '<div class="dp-wm"><span>' + E(spec.watermark) + '</span></div>' : '';
@@ -379,7 +398,7 @@
       return '<div class="docsheet">' + wm +
         docHead(spec, pageNo || 1, pageCount || 1) + docParty(spec) +
         (carryIn !== null && carryIn !== undefined ? carryRow('ยอดยกมาจากหน้าที่แล้ว', carryIn) : '') +
-        '<table class="dp-tbl">' + colgroup + thead + '<tbody>' + rows.join('') + '</tbody></table>' +
+        '<table class="' + tblCls + '">' + colgroup + thead + '<tbody>' + rows.join('') + '</tbody></table>' +
         (withFooter ? docFoot(spec)
           : (carryOut !== null && carryOut !== undefined ? carryRow('ยอดยกไปหน้าถัดไป', carryOut) : '') +
             '<div class="dp-foot"><div class="dp-pg">มีต่อหน้าถัดไป →</div></div>') +
@@ -437,8 +456,35 @@
   }
 
   /* ── รายงานตาราง ────────────────────────────────────────────────────────── */
+  /* ★★ สเปกของ DocPrint.table รับได้สองแบบ — **ต้องรับทั้งคู่จริงๆ ไม่ใช่รับแต่ในคอมเมนต์**
+       ก) headers[] + rows[] ที่เป็นอาเรย์ของค่า (รายงานบิลขาย)
+       ข) columns[] ที่มี label/value(row)/align/width + rows[] ที่เป็นอ็อบเจกต์ (รายงานภาษีขาย)
+       แบบ ข เคยเรียกใช้อยู่แล้วทั้งที่ตัวพิมพ์ไม่รองรับ → กดพิมพ์รายงานภาษีแล้วค้างไปเฉยๆ
+       (`spec.headers` เป็น undefined แล้ว throw ใน callback ซึ่งไม่มีใครเห็น — เจอ 16 ต.ค. 2026
+       ตอนไล่ดูคนเรียกใช้ทั้งหมดหลังแก้เรื่องตกขอบ) · แปลงเป็นแบบ ก ที่เดียวตรงนี้ */
+  function normalizeTableSpec(spec) {
+    if (!spec.columns || spec.headers) return spec;
+    var cols = spec.columns, out = {}, k;
+    for (k in spec) if (Object.prototype.hasOwnProperty.call(spec, k)) out[k] = spec[k];
+    out.headers = cols.map(function (c) { return c.label; });
+    out.align = cols.map(function (c) { return c.align || ''; });
+    out.weights = spec.weights || cols.map(function (c) { return parseFloat(c.width) || 1; });
+    out.rows = (spec.rows || []).map(function (r, i) {
+      return cols.map(function (c) {
+        return typeof c.value === 'function' ? c.value(r, i) : (r[c.key] === undefined ? '' : r[c.key]);
+      });
+    });
+    return out;
+  }
+
   function docPrintTable(spec) {
     ensureShell();
+    spec = normalizeTableSpec(spec);
+    /* ★ รายงานกี่คอลัมน์ขึ้นไปจึงพิมพ์ A4 นอน — ตัดสินที่นี่ที่เดียว หน้าเรียกใช้ไม่ต้องจำ
+       (ที่ 9 คอลัมน์ขึ้นไป แนวตั้งเหลือคอลัมน์ละ ~78px ซึ่งชื่อร้านไทยขึ้นบรรทัดละ 4-5 ตัวอักษร)
+       หน้าเรียกใช้สั่งทับได้ด้วย spec.landscape = true/false ถ้ารู้ว่าข้อมูลของตัวเองสั้นหรือยาวกว่าปกติ */
+    var land = spec.landscape === undefined ? spec.headers.length >= 9 : !!spec.landscape;
+    var sheetCls = 'docsheet' + (land ? ' dp-land' : '');
     var weights = spec.weights || spec.headers.map(function () { return 1; });
     var sum = weights.reduce(function (a, b) { return a + b; }, 0);
     var colgroup = '<colgroup>' + weights.map(function (w) {
@@ -449,8 +495,15 @@
       return '<tr' + ((spec.boldRows || []).indexOf(ri) >= 0 ? ' class="dp-bold"' : '') + '>' +
         r.map(function (c, ci) { return '<td class="' + ((spec.align && spec.align[ci]) || '') + '">' + E(c) + '</td>'; }).join('') + '</tr>';
     });
+    /* ยอดรวมเป็นแถวท้ายตาราง — ป้ายกินทุกคอลัมน์ยกเว้นช่องสุดท้ายที่เป็นตัวเลข
+       (ต่อท้าย rowsHtml จึงไปอยู่ท้ายหน้าสุดท้ายเองโดยไม่ต้องยุ่งกับตัวแบ่งหน้า) */
+    (spec.totals || []).forEach(function (t) {
+      rowsHtml.push('<tr class="dp-bold' + (t[2] === 'grand' ? ' dp-grand' : '') + '">' +
+        '<td colspan="' + (spec.headers.length - 1) + '" class="r">' + E(t[0]) + '</td>' +
+        '<td class="r">' + E(t[1]) + '</td></tr>');
+    });
     var render = function (rows, withFooter, pageNo, pageCount) {
-      return '<div class="docsheet">' +
+      return '<div class="' + sheetCls + '">' +
         '<div class="dp-head"><div class="dp-issuer"><div class="dp-name">' + E(spec.title) + '</div>' +
           (spec.subtitle ? '<div>' + E(spec.subtitle) + '</div>' : '') + '</div>' +
           '<div class="dp-docbox"><div class="dp-meta">' +
@@ -458,7 +511,7 @@
             '<div><span>พิมพ์เมื่อ</span><span>' + E(spec.printedAt || new Date().toLocaleString('th-TH')) + '</span></div>' +
             (pageCount > 1 ? '<div><span>หน้า</span><span>' + pageNo + ' / ' + pageCount + '</span></div>' : '') +
           '</div></div></div>' +
-        '<table class="dp-tbl">' + colgroup + thead + '<tbody>' + rows.join('') + '</tbody></table>' +
+        '<table class="dp-tbl dp-fixed">' + colgroup + thead + '<tbody>' + rows.join('') + '</tbody></table>' +
         (withFooter ? '<div class="dp-foot">' + (spec.note ? '<div class="dp-note">' + E(spec.note) + '</div>' : '') +
             '<div class="dp-pg">รวม ' + spec.rows.length + ' รายการ</div></div>'
           : '<div class="dp-foot"><div class="dp-pg">มีต่อหน้าถัดไป →</div></div>') +
@@ -466,7 +519,8 @@
     };
     var pages = paginate(rowsHtml, function (rows, withFooter) { return render(rows, withFooter, 1, 2); });
     var html = pages.map(function (p, i) { return render(p.rows, p.last, i + 1, pages.length); });
-    show(spec.title, html, { xlsx: { filename: spec.filename || spec.title, headers: spec.headers, rows: spec.rows, note: spec.note } });
+    show(spec.title, html, { paper: land ? 'a4land' : 'a4',
+      xlsx: spec.xlsx || { filename: spec.filename || spec.title, headers: spec.headers, rows: spec.rows, note: spec.note } });
   }
 
   /* ── ส่งออก Excel จริง (ไม่ใช่ CSV: Excel ตัดศูนย์นำหน้าทิ้ง และไทยเพี้ยนถ้าลืม BOM) ── */

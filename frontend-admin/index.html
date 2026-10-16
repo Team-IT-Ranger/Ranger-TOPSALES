@@ -1896,7 +1896,8 @@
               <p data-book-sub="ตัวเลขสำหรับกรอก ภ.พ.30 · สมุดบัญชีของ">ตัวเลขสำหรับกรอก ภ.พ.30 — อ่านจากใบกำกับภาษีที่ออกและที่ได้รับจริง</p></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
               <input type="month" id="vat-month" onchange="loadVatReport()">
-              <button class="btn" onclick="printVatReport()">พิมพ์</button>
+              <button class="btn" onclick="printVatReport('sales')">พิมพ์ภาษีขาย</button>
+              <button class="btn" onclick="printVatReport('purchase')">พิมพ์ภาษีซื้อ</button>
             </div>
           </div>
           <div id="vat-body"><p class="form-hint">กำลังโหลด...</p></div>
@@ -4660,7 +4661,7 @@ function ensureDocPrint(){
   if (window.DocPrint) return Promise.resolve(window.DocPrint);
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'doc-print.js?v=20261008';
+    s.src = 'doc-print.js?v=20261016';
     s.onload = () => resolve(window.DocPrint);
     s.onerror = () => { toast('โหลดตัวพิมพ์เอกสารไม่สำเร็จ', true); reject(new Error('doc-print')); };
     document.head.appendChild(s);
@@ -8830,21 +8831,33 @@ async function loadVatReport(){
     '</div>';
 }
 
-async function printVatReport(){
+/* ★★ ภาษีขายกับภาษีซื้อเป็น **คนละรายงาน** ตามที่ ภ.พ.30 กำหนด ห้ามพิมพ์รวมใบเดียว
+     (ของเดิมเป็นปุ่ม "พิมพ์" ปุ่มเดียวและคอมเมนต์บอกว่าพิมพ์สองตารางต่อกัน ซึ่งไม่เคยเกิดขึ้นจริง
+      — ที่จริงมันพิมพ์ไม่ออกเลยเพราะส่งสเปกคนละแบบกับที่ DocPrint.table รองรับ · เจอ 16 ต.ค. 2026)
+   ★ ไฟล์ Excel ยังรวมทั้งสองฝั่งไว้ไฟล์เดียวตามเดิม — เอาไปทำงานต่อสะดวกกว่า ต่างจากกระดาษที่ต้องยื่น */
+const VAT_PRINT = {
+  sales: { title: 'รายงานภาษีขาย', who: 'ลูกค้า', sumLabel: 'รวมภาษีขาย', pick: r => r.customer },
+  purchase: { title: 'รายงานภาษีซื้อ', who: 'ผู้ขาย', sumLabel: 'รวมภาษีซื้อ', pick: r => r.vendor }
+};
+async function printVatReport(kind){
   if (!VAT_REPORT) { toast('ยังไม่มีข้อมูลให้พิมพ์', true); return; }
-  await ensureDocPrint();
+  const K = VAT_PRINT[kind] || VAT_PRINT.sales;
   const { sales, pur, month } = VAT_REPORT;
-  /* พิมพ์เป็นสองตารางต่อกัน — เจ้าหน้าที่สรรพากรขอดูรายใบ ไม่ใช่ยอดรวมอย่างเดียว */
-  DocPrint.table({ title: 'รายงานภาษีขาย เดือน ' + month, landscape: true,
-    columns: [{ label:'วันที่', value:r=>r.date }, { label:'เลขที่ใบกำกับ', value:r=>r.docNo },
-      { label:'ชนิด', value:r=>r.kind }, { label:'ลูกค้า', value:r=>r.customer },
-      { label:'เลขผู้เสียภาษี', value:r=>r.taxId || '-' },
-      { label:'มูลค่า', align:'r', value:r=>DocPrint.money(r.exVat) },
-      { label:'ภาษี', align:'r', value:r=>DocPrint.money(r.vat) }],
-    rows: sales.rows,
-    totals: [['รวมมูลค่า', DocPrint.money(sales.totals.exVat)], ['รวมภาษีขาย', DocPrint.money(sales.totals.vat), 'grand']],
-    xlsx: { filename: 'ภาษีขาย-' + month,
-      headers: ['วันที่','เลขที่ใบกำกับ','ชนิด','ลูกค้า','เลขผู้เสียภาษี','มูลค่า','ภาษี'],
+  const src = kind === 'purchase' ? pur : sales;
+  if (!src.rows.length) { toast('เดือนนี้ไม่มีรายการ' + K.title.replace('รายงาน',''), true); return; }
+  await ensureDocPrint();
+  DocPrint.table({ title: K.title + ' เดือน ' + month, landscape: true,
+    subtitle: 'ตัวเลขสำหรับกรอก ภ.พ.30 — อ่านจากใบกำกับภาษีรายใบ',
+    issuerName: (SESSION && SESSION.displayName) || '',
+    columns: [{ label:'วันที่', width:'11%', value:r=>r.date }, { label:'เลขที่ใบกำกับ', width:'16%', value:r=>r.docNo },
+      { label:'ชนิด', width:'13%', value:r=>r.kind }, { label:K.who, width:'28%', value:K.pick },
+      { label:'เลขผู้เสียภาษี', width:'14%', value:r=>r.taxId || '-' },
+      { label:'มูลค่า', align:'r', width:'9%', value:r=>DocPrint.money(r.exVat) },
+      { label:'ภาษี', align:'r', width:'9%', value:r=>DocPrint.money(r.vat) }],
+    rows: src.rows,
+    totals: [['รวมมูลค่า', DocPrint.money(src.totals.exVat)], [K.sumLabel, DocPrint.money(src.totals.vat), 'grand']],
+    xlsx: { filename: 'ภาษีขาย-ภาษีซื้อ-' + month,
+      headers: ['วันที่','เลขที่ใบกำกับ','ชนิด','คู่ค้า','เลขผู้เสียภาษี','มูลค่า','ภาษี'],
       rows: sales.rows.map(r => [r.date, r.docNo, r.kind, r.customer, r.taxId, String(r.exVat), String(r.vat)])
         .concat(pur.rows.map(r => ['[ซื้อ] '+r.date, r.docNo, 'ภาษีซื้อ', r.vendor, r.taxId, String(r.exVat), String(r.vat)])) } });
 }
