@@ -12,11 +12,11 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 57 ไฟล์ `.gs` | 15,686 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,242 |
-| แอปมือถือ (LIFF) | `frontend-mobile/` | 1,369 |
-| ตารางข้อมูล | 65 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
-| Action | 18 มือถือ + 208 แอดมิน |  |
+| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,020 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,439 |
+| แอปมือถือ (LIFF) | `frontend-mobile/` | 1,406 |
+| ตารางข้อมูล | 66 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
+| Action | 18 มือถือ + 212 แอดมิน |  |
 
 ## B. ไฟล์ backend — ผังพื้นแบบละเอียด
 
@@ -24,14 +24,14 @@
 
 | ไฟล์ | บรรทัด | หัวเรื่องในไฟล์ |
 |---|---|---|
-| `00_setup_sheets.gs` | 550 | SETUP: CENTRAL SHEET |
+| `00_setup_sheets.gs` | 557 | SETUP: CENTRAL SHEET |
 | `01_config.gs` | 23 | CONFIG |
 | `02_helpers.gs` | 446 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 226 | AUTH |
-| `05_router.gs` | 317 | ROUTER |
-| `06_bootstrap.gs` | 292 | BOOTSTRAP / DASHBOARD (Mobile App) |
-| `07_sales.gs` | 390 | SALES (Mobile App — Cash Van) |
+| `05_router.gs` | 322 | ROUTER |
+| `06_bootstrap.gs` | 304 | BOOTSTRAP / DASHBOARD (Mobile App) |
+| `07_sales.gs` | 402 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 73 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
 | `10_master_data.gs` | 436 | MASTER DATA |
@@ -43,7 +43,7 @@
 | `16_admin_users.gs` | 149 | จัดการบัญชีแอดมิน (Admin App) |
 | `17_pricing.gs` | 553 | ชุดราคาและส่วนลด (ใบรายการขายตามกลุ่มลูกค้า × ช่วงเวลา) |
 | `18_pricing_engine.gs` | 423 | เครื่องยนต์คิดราคา (ใช้ทั้งตอนขายจริง recordSale และหน้า "ทดลองคิดราคา |
-| `19_sales_admin.gs` | 466 | SALES (Admin App) |
+| `19_sales_admin.gs` | 474 | SALES (Admin App) |
 | `20_purchasing_master.gs` | 312 | งานซื้อ: ข้อมูลตั้งต้น (ผู้ขาย / คลัง / สายอนุมัติ) |
 | `21_purchase_requisition.gs` | 252 | ใบขอซื้อ (Purchase Requisition) |
 | `22_purchase_order.gs` | 538 | ใบสั่งซื้อ (PO) และการรับของเข้าคลัง (GR) |
@@ -80,6 +80,7 @@
 | `53_billing_notes.gs` | 198 | ใบวางบิล (Billing Note) |
 | `54_goods_returns.gs` | 303 | ใบรับคืนสินค้า (Goods Return Note) |
 | `55_van_stock_link.gs` | 183 | เชื่อมสต็อกรถกับคลังกลาง + ต้นทุนขายของการขายจากรถ |
+| `56_customer_credit.gs` | 290 | วงเงินเครดิตและหนี้ค้างของลูกค้า |
 | `99_dev_tools.gs` | 282 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -176,7 +177,9 @@
 | `getBalanceSheet` | `23_accounting.gs` | accounting:view |  |
 | `getBillingNote` | `53_billing_notes.gs` | accounting:view |  |
 | `getCompanyProfile` | `25_company.gs` | — |  |
+| `getCreditSettings` | `56_customer_credit.gs` | customers:view |  |
 | `getCustomerAdmin` | `10_master_data.gs` | customers:view |  |
+| `getCustomerCredit` | `56_customer_credit.gs` | customers:view |  |
 | `getDatabaseLayout` | `24_drive_layout.gs` | tenants:view |  |
 | `getExternalSalesAutoImportStatus` | `43_external_sales_import.gs` | purchasing:view |  |
 | `getFreeGoodsSet` | `39_free_goods.gs` | promotions:view |  |
@@ -214,6 +217,7 @@
 | `listArInvoices` | `23_accounting.gs` | accounting:view |  |
 | `listBillableInvoices` | `53_billing_notes.gs` | accounting:view |  |
 | `listBillingNotes` | `53_billing_notes.gs` | accounting:view |  |
+| `listCustomerCredit` | `56_customer_credit.gs` | customers:view |  |
 | `listCustomerGroups` | `10_master_data.gs` | settings:view |  |
 | `listCustomerListMembers` | `40_customer_lists.gs` | customers:view |  |
 | `listCustomerLists` | `40_customer_lists.gs` | customers:view |  |
@@ -284,6 +288,7 @@
 | `saveAccountingSettings` | `50_cogs.gs` | accounting:edit | กันกดซ้ำ |
 | `saveApprovalFlow` | `20_purchasing_master.gs` | purchasing:edit | กันกดซ้ำ |
 | `saveCompanyProfile` | `25_company.gs` | settings:edit | กันกดซ้ำ |
+| `saveCreditSettings` | `56_customer_credit.gs` | customers:edit | กันกดซ้ำ |
 | `saveCustomerList` | `40_customer_lists.gs` | customers:edit | กันกดซ้ำ |
 | `saveDeliveryRound` | `48_delivery_rounds.gs` | sales:edit | กันกดซ้ำ |
 | `saveDocSeries` | `12_docnum.gs` | docnum:edit | กันกดซ้ำ |
@@ -358,6 +363,7 @@
 | `billing_notes` | 12 |  | `record_id` `tenant_id` `note_no` `customer_id` `note_date` `due_date` `invoice_count` `total` `status` `note` `created_by` `created_at` |
 | `central_doc_counters` | 3 |  | `doc_type` `period_key` `last_number` |
 | `company_profile` | 18 | ✓ | `record_id` `name` `legal_name` `tax_id` `branch_code` `address` `phone` `email` `website` `logo_url` `bank_name` `bank_account_no` `bank_account_name` `note` `updated_at` `updated_by` `vat_rate` `default_vat_type` |
+| `credit_settings` | 6 |  | `record_id` `tenant_id` `mode` `overdue_days` `updated_at` `updated_by` |
 | `customer_groups` | 3 | ✓ | `record_id` `name` `description` |
 | `customer_list_members` | 4 | ✓ | `record_id` `list_id` `customer_id` `added_at` |
 | `customer_lists` | 6 | ✓ | `record_id` `name` `tenant_id` `note` `created_at` `created_by` |
@@ -514,6 +520,7 @@
 | 1.4.4 | งานขาย › ข้อมูลลูกค้า › ช่องทางการจัดจำหน่าย | `distchannels` | `settings` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.4.5 | งานขาย › ข้อมูลลูกค้า › ประเภทการชำระเงิน | `paytypes` | `settings` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.4.6 | งานขาย › ข้อมูลลูกค้า › คำขอเปิดร้านใหม่ | `custrequests` | `customers` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 1.4.7 | งานขาย › ข้อมูลลูกค้า › วงเงินเครดิตและหนี้ค้าง | `creditcontrol` | `customers` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.5.1 | งานขาย › พนักงานและเขตขาย › เขตการขายของพนักงาน | `v-zone` | `zones` | ทั้งสองฝั่ง | **ยังไม่ได้ทำ** |
 | 1.6.1 | งานขาย › การจัดส่ง › สถานะการจัดส่ง | `v-ship` | `shipping` | ตัวแทน | **ยังไม่ได้ทำ** |
 | 1.8.1 | งานขาย › รายงานขาย › รายงานการขายแยกพนักงาน | `v-rep-staff` | `sales_report` | ทั้งสองฝั่ง | ใช้งานได้ |
@@ -554,6 +561,7 @@
 | `.dev/test-address-refs.js` | หน่วย (ไม่ยิงเน็ต) | 116 |
 | `.dev/test-barcode.js` | หน่วย (ไม่ยิงเน็ต) | 111 |
 | `.dev/test-customer-bulk.js` | หน่วย (ไม่ยิงเน็ต) | 191 |
+| `.dev/test-customer-credit.js` | หน่วย (ไม่ยิงเน็ต) | 224 |
 | `.dev/test-customer-lists.js` | หน่วย (ไม่ยิงเน็ต) | 137 |
 | `.dev/test-customer-requests.js` | หน่วย (ไม่ยิงเน็ต) | 263 |
 | `.dev/test-customers.js` | หน่วย (ไม่ยิงเน็ต) | 195 |

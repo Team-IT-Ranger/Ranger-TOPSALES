@@ -270,6 +270,11 @@ var ADMIN_ACTION_MAP = {
   // ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย (50_cogs.gs)
   getAccountingSettings:  getAccountingSettings,
   saveAccountingSettings: saveAccountingSettings,
+  // วงเงินเครดิตและหนี้ค้างของลูกค้า (56_customer_credit.gs)
+  getCreditSettings:      getCreditSettings,
+  saveCreditSettings:     saveCreditSettings,
+  getCustomerCredit:      getCustomerCredit,
+  listCustomerCredit:     listCustomerCredit,
   createArCreditNote:     createArCreditNote,      // ออกใบลดหนี้ (49_credit_notes.gs)
   createArDebitNote:      createArDebitNote,       // ออกใบเพิ่มหนี้ (คู่แฝด ใช้โค้ดเดินทางเดียวกัน)
   voidArAdjustNote:       voidArAdjustNote,        // ยกเลิกใบลดหนี้/ใบเพิ่มหนี้ = กลับรายการ ไม่ลบของเดิม

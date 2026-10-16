@@ -35,15 +35,27 @@ function getBootstrap(user) {
       units: unitsByProduct[String(p.record_id)] || []
     }; });
 
+  /* ★ หนี้ค้างรายร้าน — ยัดมากับ bootstrap ตามกติกาข้อ 1 ("หน้าแรกยิงคำขอเดียว")
+     พนักงานต้องเห็นว่าร้านนี้ค้างเท่าไหร่ **ตอนยืนอยู่หน้าร้าน** ไม่ใช่ตอนกลับมาถึงศูนย์
+     อ่านชีตเพิ่ม 2 ตาราง แต่ผลถูกแคชไว้ 10 นาที (CACHE_TTL) และล้างทุกครั้งที่คนนี้เปิดบิล
+     → ต้นทุนจริงคือครั้งเดียวต่อคนต่อรอบ ไม่ใช่ทุกครั้งที่กดหน้าจอ
+     ★★ ตัวเลขนี้ใช้ "แสดง" เท่านั้น การกั้นจริงคิดใหม่ทุกครั้งตอนบันทึก (creditSaleGate) */
+  var debtMap = customerOutstandingMap(user.tenantId);
+
   var customers = centralObjects('customers')
     .filter(function(c) { return String(c.tenant_id) === String(user.tenantId) && isNotOff(c.is_active); })
-    .map(function(c) { return {
+    .map(function(c) {
+      var d = debtMap[String(c.record_id)] || null;
+      return {
       id: parseInt(c.record_id), code: c.customer_code || '', name: customerFullName(c), groupId: parseInt(c.group_id) || 0,
       phone: c.phone || '', address: c.address || '',
       lat: parseFloat(c.lat) || 0, lng: parseFloat(c.lng) || 0,
       // เครดิตประจำร้าน + สถานะ: แอปมือถือใช้ตั้งค่าเริ่มต้นช่องชำระเงิน และกันการเปิดบิลเชื่อให้ร้านที่ถูกระงับ
       paymentType: c.payment_type || 'cash', termsDays: parseInt(c.payment_terms_days) || 0,
-      creditBlocked: String(c.status || '').toLowerCase() === CUSTOMER_STATUS_BLOCKED
+      creditBlocked: String(c.status || '').toLowerCase() === CUSTOMER_STATUS_BLOCKED,
+      creditLimit: parseFloat(c.credit_limit) || 0,
+      // ไม่มีหนี้ = ส่ง 0 ทั้งคู่ (ไม่ส่ง object ว่างมาให้แอปต้องเช็ค null ทุกจุด)
+      debt: d ? d.outstanding : 0, debtOverdue: d ? d.overdue : 0, debtDocs: d ? d.docs : 0
     }; });
 
   var rules = _activeRules();

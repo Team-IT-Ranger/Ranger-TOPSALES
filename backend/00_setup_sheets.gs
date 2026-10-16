@@ -180,6 +180,13 @@ var CENTRAL_SHEETS = {
      ★ ไม่มีแถว = ปิดอยู่ (cost_method 'none') เปิดใช้ต้องตั้งใจเลือกเอง ดู 50_cogs.gs */
   accounting_settings: ['record_id','tenant_id','cost_method','cogs_from','cash_sales','cash_from',
     'van_issue','updated_at','updated_by'],
+  /* การคุมวงเงินเครดิตต่อ "ตัวแทนที่ขาย" (tenant_id ว่าง = บริษัท) — 56_customer_credit.gs
+     ★ คนละมิติกับ accounting_settings ข้างบน: ตัวนั้นเป็น "สมุดบัญชี" ตัวนี้เป็น "ขอบเขตการขาย"
+       หน้าตาเหมือนกันจนหลงได้ง่าย แต่ถ้าเอาไปรวมแถวเดียวกัน ตัวแทนที่ไม่มีสมุดบัญชีของตัวเอง
+       จะตั้งนโยบายเครดิตของตัวเองไม่ได้เลย
+     ★ ไม่มีแถว = ไม่ตรวจ (mode 'off') — วงเงินที่กรอกไว้ในทะเบียนลูกค้ายังไม่เคยมีใครตรวจสอบ
+       เปิดด่านให้เองตอน deploy = เช้าวันถัดมาเปิดบิลไม่ได้ทั้งศูนย์ */
+  credit_settings: ['record_id','tenant_id','mode','overdue_days','updated_at','updated_by'],
 
   // ── สายอนุมัติ: ออกแบบขั้นตอน (steps) เงื่อนไข (ช่วงวงเงิน) และจำนวนผู้อนุมัติต่อขั้นได้ ──
   // approval_flows: 1 สาย = 1 ประเภทเอกสาร (PR) × ช่วงวงเงิน [min_amount, max_amount] (max ว่าง = ไม่จำกัด)

@@ -82,6 +82,12 @@
      ★ ช่องกรอกต้อง min-width:0 ด้วย — flex item ที่เป็น <input> ไม่ยอมหดต่ำกว่าความกว้าง
        ตั้งต้นของเบราว์เซอร์ (size=20) ไม่ใส่แล้วมันจะล้นออกนอกจอบนจอแคบ */
   .field-row{ display:flex; align-items:center; gap:8px; }
+  /* แถบหนี้ค้างของร้าน: เทาเมื่อค้างปกติ · แดงเมื่อเลยกำหนดหรือเกินวงเงิน (สองเรื่องที่ต้องคุยกับร้านก่อนขายต่อ) */
+  .cust-debt{ margin-top:8px; padding:8px 10px; border-radius:10px; font-size:13px; line-height:1.6;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--ink-soft); }
+  .cust-debt b{ color:var(--ink); }
+  .cust-debt.hot{ background:#FDF2F2; border-color:#F0C9C9; color:#8C2F2F; }
+  .cust-debt.hot b{ color:#8C2F2F; }
   .field-row label{ flex:none; }
   .field-row .inp{ flex:1; min-width:0; padding:8px 10px; font-size:13.5px; }
   .inp{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:15px; }
@@ -288,7 +294,10 @@
       <div class="field">
         <div class="field-row"><label for="s-cust-q">ลูกค้า</label>
           <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()"></div>
-        <select class="inp" id="s-cust" onchange="cartChanged()"></select></div>
+        <select class="inp" id="s-cust" onchange="cartChanged()"></select>
+        <!-- ★ หนี้ค้างของร้าน — ต้องเห็น "ตอนยืนอยู่หน้าร้าน" ไม่ใช่ตอนกลับถึงศูนย์
+             ตัวเลขมากับ bootstrap (06_bootstrap.gs) จึงไม่ต้องยิงคำขอเพิ่มตอนเลือกร้าน -->
+        <div id="s-cust-debt" class="cust-debt" style="display:none"></div></div>
       <!-- ★ 8 ต.ค. 2026 เจ้าของระบบสั่ง: ปุ่มสลับแบบเดียวกับหน้าบิลขายฝั่งแอดมิน ทั้งชุดจ่ายเงินและชุดส่งของ
            และวางให้อยู่ระนาบเดียวกัน — เป็นสองคำถามของบิลใบเดียวกัน คนขายตอบพร้อมกันเสมอ
            ★ ของเดิมชุดส่งของเป็น "ช่องติ๊ก ส่งจากสำนักงาน" ซึ่งบอกออกมาทางเดียว อีกทางคนต้องแปลเอง
@@ -870,6 +879,29 @@ const unitsOf = p => [{ unitCode: '', unitLabel: p.unit || 'ชิ้น', unitF
 const unitOf = (p, code) => unitsOf(p).find(u => u.unitCode === code) || unitsOf(p)[0];
 const UNIT_PICK = {};   // productId → unitCode ที่เลือกไว้บนการ์ด
 
+/* แถบ "ร้านนี้ค้างอยู่เท่าไหร่" — อ่านจาก DATA.customers ที่ bootstrap ส่งมา
+   ★ ตัวเลขนี้เก่าได้ถึง 10 นาที (อายุแคช bootstrap) จึงใช้ "เพื่อให้เห็น" เท่านั้น
+     การกั้นจริงคิดใหม่ทุกครั้งที่กดบันทึกฝั่งเซิร์ฟเวอร์ (creditSaleGate) ไม่ได้เชื่อตัวเลขนี้ */
+function renderCustDebt(){
+  const box = $('s-cust-debt'); if (!box) return;
+  const id = Number($('s-cust').value) || 0;
+  const c = DATA.customers.find(x => Number(x.id) === id);
+  const debt = c ? Number(c.debt) || 0 : 0, overdue = c ? Number(c.debtOverdue) || 0 : 0;
+  const limit = c ? Number(c.creditLimit) || 0 : 0;
+  if (!c || (!debt && !limit)) { box.style.display = 'none'; return; }
+  const left = limit ? limit - debt : null;
+  const parts = [];
+  parts.push(debt ? 'ค้างชำระ <b>฿' + baht(debt) + '</b>' + (c.debtDocs ? ' (' + c.debtDocs + ' ใบ)' : '') : 'ไม่มียอดค้าง');
+  if (overdue) parts.push('เลยกำหนด <b>฿' + baht(overdue) + '</b>');
+  /* ★ เกินวงเงินแล้วต้องเขียนว่า "เกินวงเงิน" ไม่ใช่ "เหลือ -12,000" — เครื่องหมายลบหลังสัญลักษณ์เงิน
+     อ่านพลาดง่ายที่สุดตอนยืนหน้าร้าน และคำว่า "เหลือ" กับยอดติดลบขัดกันในตัวเอง */
+  if (limit) parts.push('วงเงิน ฿' + baht(limit) + (left < 0 ? ' · <b>เกินวงเงิน ฿' + baht(-left) + '</b>'
+    : ' · เหลือ <b>฿' + baht(left) + '</b>'));
+  box.innerHTML = parts.join(' · ');
+  box.className = 'cust-debt' + (overdue > 0 || (limit && debt > limit) ? ' hot' : '');
+  box.style.display = '';
+}
+
 function renderCustSelect(){
   const q = $('s-cust-q').value.trim().toLowerCase(), sel = $('s-cust'), cur = sel.value;
   const list = DATA.customers.filter(c => !q || String(c.name).toLowerCase().includes(q));
@@ -877,6 +909,7 @@ function renderCustSelect(){
   // พิมพ์ค้นหาแล้วร้านที่เลือกอยู่ไม่ตรงคำค้น → เลือกร้านแรกที่เจอให้เลย (ไม่งั้นค้างที่ "ลูกค้าทั่วไป")
   if (q && list.length && !list.some(c => String(c.id) === cur)) { sel.value = String(list[0].id); cartChanged(); }
   else if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  renderCustDebt();
 }
 /* ★ 1 ต.ค. 2026 เจ้าของระบบสั่ง: เลือกจ่ายแบบ "เครดิต" เมื่อไหร่ ให้ติ๊ก "ส่งจากสำนักงาน" อัตโนมัติ
    เดิมติ๊กให้เฉพาะบทบาทเครดิตเซลส์ตอนเปิดแอป — หน่วยรถที่เปลี่ยนมาเลือกเครดิตกลางคันจึงยังเป็นบิลขายจากรถ
@@ -955,6 +988,7 @@ function setQty(pid, v){
 // แยก fetchQuote() ออกมาให้ปุ่ม "คำนวณราคา" (2026-09-30, เจ้าของระบบสั่ง — อยากได้จุดยืนยันชัดๆ ก่อนบันทึก
 // เหมือนหน้าเปิดบิลขายฝั่งแอดมิน) เรียกซ้ำได้ทันทีโดยไม่ต้องรอ debounce
 function cartChanged(){
+  renderCustDebt();
   QUOTE = null; renderCartBar();
   clearTimeout(quoteTimer);
   if (!CART.length || !navigator.onLine) return;
@@ -1125,7 +1159,10 @@ async function submitSale(){
     afterSale();
     // ★ 2026-09-30 เจ้าของระบบสั่ง: ของในคลังไม่พอสำหรับบิลส่งจากสำนักงาน = แค่เตือน ไม่บล็อกการบันทึก (checkOfficeDeliveryStock, 34_sales_status.gs)
     const isDraft = String(r.orderCode || '').indexOf('DRAFT-') === 0;
-    toast((isDraft ? 'บันทึกร่างแล้ว' : 'บิล ' + (r.orderCode || '')) + ' · ฿' + baht(r.total) + (r.stockWarning ? ' — ⚠️ ' + r.stockWarning : ''), r.stockWarning ? 'err' : 'ok');
+    /* ★ คำเตือนวงเงินมาจากเซิร์ฟเวอร์ (โหมด "เตือนแต่ขายได้") — บิลบันทึกแล้วจริง
+       แต่ต้องบอกให้พนักงานรู้ทันที เพราะเขาคือคนที่จะคุยกับร้านเรื่องเก็บเงิน */
+    const warn = r.stockWarning || r.creditWarning || '';
+    toast((isDraft ? 'บันทึกร่างแล้ว' : 'บิล ' + (r.orderCode || '')) + ' · ฿' + baht(r.total) + (warn ? ' — ⚠️ ' + warn : ''), warn ? 'err' : 'ok');
     refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
     /* ★ 1 ต.ค. 2026 เจ้าของระบบสั่ง: บันทึกใบนัดส่งแล้วให้เปิดฉบับร่างให้ดูทันที
        พนักงานจะได้ตรวจความถูกต้องแล้วกด "ยืนยัน" ต่อได้เลยในจังหวะเดียว ไม่ต้องไปตามหาในบิลล่าสุด

@@ -1889,6 +1889,32 @@
           </table></div>
         </section>
 
+        <!-- ═══ วงเงินเครดิตและหนี้ค้าง (56_customer_credit.gs) ═══
+             ★ หน้านี้ทำสองหน้าที่ในที่เดียวโดยตั้งใจ: ตั้งนโยบาย (ด้านบน) กับดูว่าใครค้างอยู่ (ด้านล่าง)
+               เพราะคนที่จะตัดสินใจว่าจะกั้นหรือไม่กั้น ต้องเห็นก่อนว่าถ้ากั้นแล้วใครจะเปิดบิลไม่ได้ -->
+        <section class="view" id="view-creditcontrol">
+          <div class="view-head">
+            <div><h1>วงเงินเครดิตและหนี้ค้าง</h1>
+              <p data-book-sub="ใครค้างเท่าไหร่ · เลยกำหนดหรือยัง · ของ">ใครค้างเท่าไหร่ · เลยกำหนดหรือยัง · เกินวงเงินที่ตั้งไว้หรือยัง</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
+              <label class="form-hint" style="margin:0">ณ วันที่</label>
+              <input type="date" id="cc-asof" onchange="loadCreditControl()">
+              <button class="btn" onclick="printCreditList()">พิมพ์</button>
+            </div>
+          </div>
+          <div id="cc-settings"></div>
+          <div id="cc-summary"></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>รหัส</th><th>ร้าน</th><th>เครดิต (วัน)</th><th>วงเงิน</th><th>ค้างชำระ</th>
+                <th>ยังไม่ออกใบแจ้งหนี้</th><th>เลยกำหนด</th><th>ค้างมา (วัน)</th><th>วงเงินคงเหลือ</th><th>เกินวงเงิน</th>
+              </tr></thead>
+              <tbody id="cc-body"><tr><td colspan="10">กำลังโหลด...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- ═══ รายงานภาษีขาย/ภาษีซื้อ สำหรับยื่น ภ.พ.30 (51_tax_reports.gs) ═══ -->
         <section class="view" id="view-vatreport">
           <div class="view-head">
@@ -2019,7 +2045,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
   'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings',
   'createBillingNote','cancelBillingNote','createGoodsReturn','cancelGoodsReturn','createCreditNoteFromReturn',
-  'voidArAdjustNote','repairDraftOrderCodes','organizeDatabaseFiles','syncTenantSheets',
+  'voidArAdjustNote','repairDraftOrderCodes','organizeDatabaseFiles','syncTenantSheets','saveCreditSettings',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -2515,7 +2541,8 @@ const NAV_GROUPS = [
       {n:'1.4.3', label:'กลุ่มลูกค้า', view:'custgroups', mod:'settings', ready:true, scope:'both'},
       {n:'1.4.4', label:'ช่องทางการจัดจำหน่าย', view:'distchannels', mod:'settings', ready:true, scope:'both'},
       {n:'1.4.5', label:'ประเภทการชำระเงิน', view:'paytypes', mod:'settings', ready:true, scope:'both'},
-      {n:'1.4.6', label:'คำขอเปิดร้านใหม่', view:'custrequests', mod:'customers', ready:true, scope:'both'}
+      {n:'1.4.6', label:'คำขอเปิดร้านใหม่', view:'custrequests', mod:'customers', ready:true, scope:'both'},
+      {n:'1.4.7', label:'วงเงินเครดิตและหนี้ค้าง', view:'creditcontrol', mod:'customers', ready:true, scope:'both'}
     ]},
     { n:'1.5', label:'พนักงานและเขตขาย', items:[
       /* รายชื่อพนักงานขายย้ายไปรวมกับ "ผู้ใช้งานและอนุมัติ" (9.4.1) แล้ว 2026-09-29 — คนละหน้าที่ทับซ้อนกันเดิม */
@@ -3079,6 +3106,7 @@ const LOADERS = {
   externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
   apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes,
   acctsettings: loadAcctSettings, vatreport: loadVatReport, billingnotes: loadBillingNotes,
+  creditcontrol: loadCreditControl,
   goodsreturns: loadGoodsReturns, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
@@ -5149,7 +5177,8 @@ async function sonSubmit(){
   const r = await callApi('recordSaleAdmin', sonPreviewData);
   if (!r.success) { toast(r.message, true); return; }
   // ★ 2026-09-30 เจ้าของระบบสั่ง: ของในคลังไม่พอสำหรับบิลส่งจากสำนักงาน = แค่เตือน ไม่บล็อกการบันทึก (checkOfficeDeliveryStock, 34_sales_status.gs)
-  toast('เปิดบิลขายสำเร็จ ('+r.orderCode+')' + (r.stockWarning ? ' — ⚠️ ' + r.stockWarning : ''), !!r.stockWarning);
+  const soWarn = r.stockWarning || r.creditWarning || '';   // วงเงินเครดิต (56_customer_credit.gs) โหมด "เตือนแต่ขายได้"
+  toast('เปิดบิลขายสำเร็จ ('+r.orderCode+')' + (soWarn ? ' — ⚠️ ' + soWarn : ''), !!soWarn);
   // แพตช์ cache ในเครื่องแทนการโหลดรายการทั้งหมดซ้ำ
   const cust = customersCache.find(c => String(c.id) === String(sonPreviewData.customerId));
   salesOrdersCache.unshift({
@@ -8860,6 +8889,101 @@ async function printVatReport(kind){
       headers: ['วันที่','เลขที่ใบกำกับ','ชนิด','คู่ค้า','เลขผู้เสียภาษี','มูลค่า','ภาษี'],
       rows: sales.rows.map(r => [r.date, r.docNo, r.kind, r.customer, r.taxId, String(r.exVat), String(r.vat)])
         .concat(pur.rows.map(r => ['[ซื้อ] '+r.date, r.docNo, 'ภาษีซื้อ', r.vendor, r.taxId, String(r.exVat), String(r.vat)])) } });
+}
+
+/* ══════════ วงเงินเครดิตและหนี้ค้าง (เมนู 1.4.7) — 16 ต.ค. 2026 ══════════
+   ★★ ก่อนมีหน้านี้ `customers.credit_limit` เป็นช่องที่กรอกได้แต่ไม่มีใครอ่าน และพนักงานที่ไปหน้าร้าน
+     ไม่มีทางรู้ว่าร้านนี้ค้างอยู่เท่าไหร่ — ตามเก็บเงินไม่ได้ และขายเชื่อเพิ่มให้ร้านที่ค้างอยู่แล้ว
+   ★ ด่านกั้นปิดไว้เป็นค่าเริ่มต้น เปิดเองที่การ์ดด้านบนของหน้านี้ */
+let CC_DATA = null;
+async function loadCreditControl(){
+  const asOfEl = document.getElementById('cc-asof');
+  if (!asOfEl.value) asOfEl.value = new Date().toISOString().slice(0, 10);
+  const body = document.getElementById('cc-body');
+  // มีของเดิมอยู่ = คงไว้ให้อ่าน/ค้นหาต่อได้ระหว่างรอ (กติกาข้อ 5 ของหัวข้อความเร็ว)
+  tblLoading(body, 10);
+  const r = await callApi('listCustomerCredit', { asOf: asOfEl.value });
+  if (!r.success) { body.innerHTML = '<tr><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
+  CC_DATA = r;
+  renderCreditSettings(r.settings);
+  renderCreditSummary(r);
+  renderCreditRows(r.rows);
+}
+
+function renderCreditSettings(set){
+  const opt = (v, label) => '<option value="'+v+'"'+(set.mode === v ? ' selected' : '')+'>'+label+'</option>';
+  document.getElementById('cc-settings').innerHTML =
+    '<div class="form-card"><h3>การคุมวงเงิน</h3>' +
+      '<div class="form-grid g2">' +
+        '<label>เมื่อร้านเกินวงเงินหรือค้างเลยกำหนด' +
+          '<select id="cc-mode">' + opt('off','ไม่ตรวจ — แสดงให้ดูอย่างเดียว') +
+            opt('warn','เตือนแต่ยังเปิดบิลได้') + opt('block','เปิดบิลเชื่อไม่ได้') + '</select></label>' +
+        '<label>ถือว่า "ค้างเลยกำหนด" เมื่อเกิน (วัน) — 0 = ไม่ตรวจเรื่องวัน' +
+          '<input type="number" id="cc-days" min="0" max="3650" value="'+(set.overdueDays||0)+'"></label>' +
+      '</div>' +
+      '<p class="form-hint">วงเงิน 0 = ไม่กำหนดวงเงิน (ร้านนั้นไม่ถูกกั้น) · ตั้งวงเงินรายร้านที่ทะเบียนลูกค้า ' +
+        '· <b>การขายเงินสดไม่ถูกกั้นไม่ว่าตั้งค่าแบบไหน</b> · ร้านที่ถูกระงับเครดิตเป็นคนละด่าน</p>' +
+      '<div class="form-actions"><button class="btn primary" onclick="saveCreditSettingsUi()">บันทึกการตั้งค่า</button>' +
+        (set.updatedAt ? '<span class="form-hint">แก้ล่าสุด '+esc(set.updatedAt)+'</span>' : '') + '</div>' +
+    '</div>';
+}
+
+async function saveCreditSettingsUi(){
+  const mode = document.getElementById('cc-mode').value;
+  const days = parseInt(document.getElementById('cc-days').value, 10) || 0;
+  const r = await callApi('saveCreditSettings', { mode, overdueDays: days });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  renderCreditSettings(r.settings);
+  if (CC_DATA) CC_DATA.settings = r.settings;
+}
+
+function renderCreditSummary(r){
+  const t = r.totals || { outstanding: 0, overdue: 0, over: 0 };
+  const kpi = (label, value, tone) =>
+    '<div class="kpi"'+(tone ? ' style="border-color:'+tone+'"' : '')+'><div class="lbl">'+label+'</div>' +
+    '<div class="val">'+value+'</div></div>';
+  document.getElementById('cc-summary').innerHTML =
+    '<div class="kpi-row">' +
+      kpi('ค้างชำระรวม', '฿'+baht(t.outstanding)) +
+      kpi('เลยกำหนด', '฿'+baht(t.overdue), t.overdue > 0 ? '#E9B4B4' : '') +
+      kpi('ร้านที่เกินวงเงิน', (r.overLimitCount||0) + ' ร้าน', r.overLimitCount ? '#E9B4B4' : '') +
+      kpi('ร้านที่มีหนี้/มีวงเงิน', (r.rows||[]).length + ' ร้าน') +
+    '</div>';
+}
+
+function renderCreditRows(rows){
+  const body = document.getElementById('cc-body');
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="10">ยังไม่มีร้านที่ค้างชำระหรือตั้งวงเงินไว้</td></tr>'; return; }
+  body.innerHTML = rows.map(c =>
+    '<tr>' +
+      '<td class="mono-data">'+esc(c.code || '-')+'</td>' +
+      '<td>'+esc(c.name)+(c.status === 'blocked' ? ' <span class="tag tag-warn">ระงับเครดิต</span>' : '')+'</td>' +
+      '<td class="num">'+(c.termsDays || 0)+'</td>' +
+      '<td class="num">'+(c.limit ? '฿'+baht(c.limit) : '<span class="form-hint">ไม่กำหนด</span>')+'</td>' +
+      '<td class="num">฿'+baht(c.outstanding)+'</td>' +
+      '<td class="num">'+(c.unbilled ? '฿'+baht(c.unbilled) : '-')+'</td>' +
+      '<td class="num">'+(c.overdue ? '<b style="color:#B3261E">฿'+baht(c.overdue)+'</b>' : '-')+'</td>' +
+      '<td class="num">'+(c.overdueDays > 0 ? c.overdueDays : '-')+'</td>' +
+      '<td class="num">'+(c.available === null ? '-' : '฿'+baht(c.available))+'</td>' +
+      '<td class="num">'+(c.over ? '<b style="color:#B3261E">฿'+baht(c.over)+'</b>' : '-')+'</td>' +
+    '</tr>').join('');
+}
+
+function printCreditList(){
+  if (!CC_DATA || !CC_DATA.rows.length) { toast('ไม่มีรายการให้พิมพ์', true); return; }
+  ensureDocPrint().then(() => DocPrint.table({
+    title: 'รายงานหนี้ค้างและวงเงินเครดิต', subtitle: scopeLabelForPrint() + ' · ณ ' + CC_DATA.asOf,
+    issuerName: (SESSION && SESSION.displayName) || '',
+    headers: ['รหัส','ร้าน','เครดิต (วัน)','วงเงิน','ค้างชำระ','ยังไม่ออกใบแจ้งหนี้','เลยกำหนด','ค้างมา (วัน)','เกินวงเงิน'],
+    weights: [1.1,3,1,1.3,1.3,1.5,1.3,1.1,1.3],
+    align: ['','','c','r','r','r','r','c','r'],
+    rows: CC_DATA.rows.map(c => [c.code || '-', c.name, String(c.termsDays || 0),
+      c.limit ? baht(c.limit) : 'ไม่กำหนด', baht(c.outstanding), c.unbilled ? baht(c.unbilled) : '-',
+      c.overdue ? baht(c.overdue) : '-', c.overdueDays > 0 ? String(c.overdueDays) : '-', c.over ? baht(c.over) : '-']),
+    note: 'ค้างชำระรวม ฿' + baht(CC_DATA.totals.outstanding) + ' บาท · เลยกำหนด ฿' + baht(CC_DATA.totals.overdue) + ' บาท',
+    filename: 'หนี้ค้าง-' + CC_DATA.asOf
+  }));
 }
 
 /* ══════════ ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย — 16 ต.ค. 2026 ══════════

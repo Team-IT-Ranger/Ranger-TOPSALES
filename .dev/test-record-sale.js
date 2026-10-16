@@ -69,8 +69,18 @@ const ctx = {
   initialPaymentStatus: (pay, ful) => (ful === 'immediate' ? 'paid' : 'unpaid'),
   // ── I/O ที่ recordSale เรียกตรงๆ ──
   ensureTenantSheetsCurrent: () => {},
-  centralObjects: name => (name === 'products' ? PRODUCTS : []),
+  centralObjects: name => (name === 'products' ? PRODUCTS : name === 'customers' ? CUSTOMERS : []),
   customerSaleGate: () => null,   // ไม่บล็อกลูกค้าในชุดทดสอบนี้ (คุมแยกแล้วใน test-customers.js)
+  /* ด่านวงเงินเครดิต (56_customer_credit.gs) — ตรรกะของมันมีเทสต์ของตัวเองใน test-customer-credit.js
+     ที่นี่ดักไว้เพื่อตรวจ **การต่อสาย**: recordSale เรียกมันไหม · ส่งยอดบิลที่คิดเสร็จแล้วไปหรือเปล่า ·
+     และพอปฏิเสธแล้ว "ต้องไม่เหลือร่องรอย" (ไม่มีแถวบิล ไม่แตะสต็อก) */
+  creditGateCalls: [],
+  creditGateResult: null,
+  creditSaleGate: function (tenantId, customer, paymentType, total) {
+    ctx.creditGateCalls.push({ tenantId: tenantId, customerId: customer && customer.record_id,
+      paymentType: paymentType, total: total });
+    return ctx.creditGateResult;
+  },
   isStockProduct: p => !(p && String(p.is_stock) === 'FALSE'),
   getNextDocNumber: () => 'SO-TEST-0001',
   tenantObjects: (tid, n) => sheets[n].map(r => Object.assign({}, r)),
@@ -124,6 +134,8 @@ function stubPriced(items) {
     }
   };
 }
+
+const CUSTOMERS = [{ record_id: 1, name: 'ร้านทดสอบ', tenant_id: 'T1', credit_limit: 0, status: 'active' }];
 
 const U1 = { tenantId: 'T1', lineUserId: 'U1', role: 'van_sales', displayName: 'คนขับ 1' };
 
@@ -212,6 +224,32 @@ console.log('\n── ★ ขายสดจากรถได้เลขใบ
   eq('  ★ ใบร่าง/ใบนัดส่งต้องยังไม่มีเลข (ยังไม่ได้ส่งของและยังไม่ได้เงิน)',
     drafts.every(o => !o.receipt_no && !o.tax_invoice_no), true);
 }
+
+/* ══ ด่านวงเงินเครดิต: การต่อสาย (56_customer_credit.gs) ══ */
+console.log('\n── ด่านวงเงินเครดิต ──');
+ctx.creditGateCalls = [];
+ctx.creditGateResult = null;
+r = ctx.recordSale(U1, { customerId: 1, paymentType: 'credit_term', fulfillmentType: 'office_delivery',
+  items: [{ productId: 101, unitCode: 'PC', qty: 2 }] });
+eq('★ recordSale เรียกด่านด้วยยอดบิลที่คิดเสร็จแล้ว',
+  [r.success, ctx.creditGateCalls.length, ctx.creditGateCalls[0] && ctx.creditGateCalls[0].total], [true, 1, r.total]);
+
+const ordersBefore = sheets.sales_orders.length;
+const stockBefore = JSON.stringify(sheets.van_stock);
+ctx.creditGateCalls = [];
+ctx.creditGateResult = { success: false, message: 'เกินวงเงินเครดิต', creditBlocked: true };
+r = ctx.recordSale(U1, { customerId: 1, paymentType: 'credit_term', fulfillmentType: 'office_delivery',
+  items: [{ productId: 101, unitCode: 'PC', qty: 2 }] });
+eq('★★ ด่านปฏิเสธ → ไม่บันทึกบิล และไม่แตะสต็อกเลย',
+  [r.success, sheets.sales_orders.length - ordersBefore, JSON.stringify(sheets.van_stock) === stockBefore],
+  [false, 0, true]);
+
+ctx.creditGateResult = { warning: 'ร้านทดสอบ: เกินวงเงินเครดิต' };
+r = ctx.recordSale(U1, { customerId: 1, paymentType: 'credit_term', fulfillmentType: 'office_delivery',
+  items: [{ productId: 101, unitCode: 'PC', qty: 1 }] });
+eq('โหมดเตือน → บันทึกบิลได้ และส่งคำเตือนกลับไปให้พนักงานเห็น',
+  [r.success, r.creditWarning], [true, 'ร้านทดสอบ: เกินวงเงินเครดิต']);
+ctx.creditGateResult = null;
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

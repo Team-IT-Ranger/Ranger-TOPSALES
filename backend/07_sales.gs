@@ -173,8 +173,8 @@ function recordSale(user, payload) {
   var fulfillmentType = payload.fulfillmentType === 'office_delivery' ? 'office_delivery' : 'immediate';
 
   // สถานะลูกค้าเป็นตัวกั้น: ปิดการใช้งาน = ขายไม่ได้ · ระงับเครดิต = ขายได้เฉพาะเงินสด (ดู 33_customers.gs)
+  var custRow = null;
   if (payload.customerId) {
-    var custRow = null;
     centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(payload.customerId)) custRow = c; });
     var gate = customerSaleGate(custRow, payload.paymentType);
     if (gate) return gate;
@@ -183,6 +183,18 @@ function recordSale(user, payload) {
   var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales');
   if (!priced.success) return priced;
   var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;
+
+  /* ★ ด่านวงเงินเครดิต (56_customer_credit.gs) — ต้องอยู่ **หลังคิดราคา** เพราะต้องรู้ยอดบิลก่อน
+     แต่ **ก่อนตัดสต็อก/เขียนแถว** เพราะถ้าไม่ให้ผ่านต้องไม่เหลือร่องรอยอะไรเลย
+     ปิดอยู่เป็นค่าเริ่มต้น → ไม่เสียเวลาอ่านชีตเพิ่มเลยจนกว่าจะเปิดใช้ */
+  var creditWarning = '';
+  if (payload.customerId && custRow) {
+    /* แก้ใบเดิมไม่ต้องหักยอดตัวเองออก เพราะมือถือแก้ได้เฉพาะ "ร่าง" (SO_MOBILE_EDITABLE)
+       ซึ่งไม่ถูกนับเป็นหนี้ค้างอยู่แล้ว — วันไหนเปิดให้แก้สถานะอื่นได้ ต้องส่ง excludeAmount ด้วย */
+    var cg = creditSaleGate(user.tenantId, custRow, payload.paymentType, calc.total, {});
+    if (cg && cg.success === false) return cg;
+    if (cg && cg.warning) creditWarning = cg.warning;
+  }
 
   var productMap = {};
   centralObjects('products').forEach(function(p) { productMap[String(p.record_id)] = p; });
@@ -340,7 +352,7 @@ function recordSale(user, payload) {
   cacheClearUser(user.lineUserId);
 
   return { success: true, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType,
-    stockWarning: stockCheck.warning || '' };
+    stockWarning: stockCheck.warning || '', creditWarning: creditWarning };
 }
 
 // need: { productId: จำนวนหน่วยฐานที่จะตัดออกจากสต็อกรถ } — ค่าติดลบ = คืนสต็อกกลับ (ใช้ตอนยกเลิกบิล)

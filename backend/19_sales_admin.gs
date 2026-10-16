@@ -277,6 +277,14 @@ function recordSaleAdmin(session, payload) {
   if (!priced.success) return priced;
   var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;
 
+  /* ด่านวงเงินเครดิต — ด่านเดียวกับฝั่งมือถือ (creditSaleGate ใน 56_customer_credit.gs)
+     ★ ฝั่งแอดมินก็ต้องผ่านด่านนี้ ไม่งั้นพนักงานถูกกั้นแต่ศูนย์เปิดให้แทนได้โดยไม่มีใครรู้ว่าทำไม
+       ถ้าต้องการขายเกินวงเงินจริงๆ ให้ไปปรับวงเงินที่ทะเบียนลูกค้า ซึ่งมีคนรับผิดชอบและมี audit */
+  var creditWarning = '';
+  var cgate = creditSaleGate(tenantId, custRow, payload.paymentType, calc.total, {});
+  if (cgate && cgate.success === false) return cgate;
+  if (cgate && cgate.warning) creditWarning = cgate.warning;
+
   var requestedFreeOff = {};
   (payload.freeGoods || []).forEach(function(f) { if (f.applied === false) requestedFreeOff[String(f.ruleId) + '_' + String(f.productId)] = true; });
   var freeGoods = calc.freeGoods.filter(function(f) { return !requestedFreeOff[String(f.ruleId) + '_' + String(f.productId)]; });
@@ -386,7 +394,7 @@ function recordSaleAdmin(session, payload) {
   });
 
   return { success: true, orderId: orderId, orderCode: orderCode, total: calc.total, discount: calc.discount, fulfillmentType: fulfillmentType,
-    stockWarning: stockCheck.warning || '' };
+    stockWarning: stockCheck.warning || '', creditWarning: creditWarning };
 }
 
 // ยกเลิกบิลขาย — คืนของเข้าที่เดิมให้อัตโนมัติถ้าบิลนี้เลยจุดตัดสต็อกไปแล้ว (สต็อกรถ หรือ คลังกลาง)
