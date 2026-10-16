@@ -593,4 +593,5 @@
 | `.dev/uat-purchasing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 121 |
 | `.dev/uat-sale-docs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 130 |
 | `.dev/uat-sale-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 122 |
+| `.dev/uat-van-cogs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 156 |
 
