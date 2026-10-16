@@ -1815,6 +1815,19 @@
           </table></div>
         </section>
 
+        <!-- ═══ รายงานภาษีขาย/ภาษีซื้อ สำหรับยื่น ภ.พ.30 (51_tax_reports.gs) ═══ -->
+        <section class="view" id="view-vatreport">
+          <div class="view-head">
+            <div><h1>รายงานภาษีขาย / ภาษีซื้อ</h1>
+              <p data-book-sub="ตัวเลขสำหรับกรอก ภ.พ.30 · สมุดบัญชีของ">ตัวเลขสำหรับกรอก ภ.พ.30 — อ่านจากใบกำกับภาษีที่ออกและที่ได้รับจริง</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
+              <input type="month" id="vat-month" onchange="loadVatReport()">
+              <button class="btn" onclick="printVatReport()">พิมพ์</button>
+            </div>
+          </div>
+          <div id="vat-body"><p class="form-hint">กำลังโหลด...</p></div>
+        </section>
+
         <!-- ═══ ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย (50_cogs.gs) ═══ -->
         <section class="view" id="view-acctsettings">
           <div class="view-head">
@@ -2491,7 +2504,9 @@ const NAV_GROUPS = [
     /* ★ ตั้งค่าของ "สมุด" ที่เปิดอยู่ ไม่ใช่ของทั้งระบบ — ตัวแทนเป็นคนละนิติบุคคล
        จะใช้วิธีคิดต้นทุนคนละแบบกับบริษัทก็ได้ จึงอยู่ในกลุ่มบัญชี ไม่ใช่กลุ่มตั้งค่าระบบ */
     { n:'5.4', label:'ตั้งค่าทางบัญชี', items:[
-      {n:'5.4.1', label:'วิธีตัดต้นทุนขาย', view:'acctsettings', mod:'accounting', ready:true, scope:'both'} ]}
+      {n:'5.4.1', label:'วิธีตัดต้นทุนขาย', view:'acctsettings', mod:'accounting', ready:true, scope:'both'} ]},
+    { n:'5.5', label:'ภาษี', items:[
+      {n:'5.5.1', label:'รายงานภาษีขาย / ภาษีซื้อ (ภ.พ.30)', view:'vatreport', mod:'accounting', ready:true, scope:'both'} ]}
   ]},
   /* กลุ่ม 6/7 สำรองไว้ (เจ้าของระบบสั่ง 2026-09-29 — ย้ายตัวแทนจำหน่าย + ผู้ใช้งาน/สิทธิ์ เข้าไปรวมกับ
      "ตั้งค่าระบบ" หมดแล้ว เพื่อลดจำนวนโมดูลบนสุดที่ต้องไล่ดู) — อย่าเอาไปใช้โดยไม่ถาม
@@ -2981,7 +2996,7 @@ const LOADERS = {
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
   apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes,
-  acctsettings: loadAcctSettings, glbooks: loadGlBooks,
+  acctsettings: loadAcctSettings, vatreport: loadVatReport, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
   helpcenter: loadHelpCenter
@@ -8298,6 +8313,97 @@ function renderArInvoices(){
       (iv.status !== 'void' ? '<button class="btn btn-sm" onclick="openDebitNoteForm('+iv.id+')">ใบเพิ่มหนี้</button>' : '') +
     '</td></tr>').join(''), 10, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
 }
+/* ══════════ รายงานภาษีขาย / ภาษีซื้อ (ภ.พ.30) — 16 ต.ค. 2026 ══════════
+   ★★ อ่านจาก **เอกสารภาษีที่ออกจริง ไม่ใช่ใบสำคัญบัญชี** — ภ.พ.30 รายงานใบกำกับภาษี
+     ซึ่งเป็นคนละสิ่งกับรายการที่ลงบัญชีแล้ว · การ์ด "เทียบกับบัญชี" จึงสำคัญที่สุดในหน้านี้
+     เพราะมันคือที่เดียวที่บอกว่ามีเอกสารที่ยังไม่ได้ลงบัญชีเหลืออยู่เท่าไร */
+let VAT_REPORT = null;
+async function loadVatReport(){
+  const mEl = document.getElementById('vat-month');
+  if (!mEl.value) mEl.value = new Date().toISOString().slice(0, 7);
+  const box = document.getElementById('vat-body');
+  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  const [sum, sales, pur] = await Promise.all([
+    callApi('getVatSummary', { month: mEl.value }),
+    callApi('getVatSalesReport', { month: mEl.value }),
+    callApi('getVatPurchaseReport', { month: mEl.value })
+  ]);
+  if (!sum.success) { box.innerHTML = '<p class="form-hint">'+esc(sum.message)+'</p>'; return; }
+  VAT_REPORT = { sum, sales, pur, month: mEl.value };
+
+  /* ใบลดหนี้เป็นค่าติดลบ — เครื่องหมายต้องอยู่หน้าสัญลักษณ์เงิน ไม่ใช่หลัง ("-฿70.00" ไม่ใช่ "฿-70.00")
+     และใช้ยัติภังค์ ASCII เพื่อให้ตัวเรียงตารางอ่านเป็นตัวเลขได้ */
+  const money = n => (Number(n) < 0 ? '-฿' + bahtPlain(Math.abs(n)) : '฿' + bahtPlain(n));
+  const warn = (sum.warnings || []).length
+    ? '<div class="form-card" style="border-color:#F0DCB4;background:#FDF9F1"><h3>ต้องดูก่อนยื่น</h3>' +
+      '<ul style="margin:0;padding-left:18px;line-height:1.9;font-size:13px">' +
+      sum.warnings.map(w => '<li>'+esc(w)+'</li>').join('') + '</ul>' +
+      '<p class="form-hint" style="margin-top:8px">★ รายงานนี้นับ<b>เอกสารที่ออกจริง</b> ส่วนบัญชีนับ<b>รายการที่ลงสมุดแล้ว</b> ' +
+      'สองอย่างนี้ต่างกันได้ และส่วนต่างคือสิ่งที่ต้องตามให้ครบก่อนยื่น</p></div>'
+    : '';
+
+  const tbl = (rows, cols, empty) =>
+    '<div class="table-wrap"><table><thead><tr>' + cols.map(c => '<th>'+c.label+'</th>').join('') + '</tr></thead><tbody>' +
+    rowsOrEmpty(rows.map(r => '<tr>' + cols.map(c => '<td'+(c.cls ? ' class="'+c.cls+'"' : '')+'>'+c.v(r)+'</td>').join('') + '</tr>').join(''),
+      cols.length, empty) + '</tbody></table></div>';
+
+  box.innerHTML = warn +
+    '<div class="form-card"><h3>สรุปเดือน '+esc(sum.month)+'</h3>' +
+      '<div class="table-wrap"><table><thead><tr><th></th><th>มูลค่าไม่รวมภาษี</th><th>ภาษี</th><th>จำนวนใบ</th></tr></thead><tbody>' +
+      '<tr><td>ภาษีขาย</td><td class="mono-data">'+money(sum.sales.exVat)+'</td><td class="mono-data">'+money(sum.sales.vat)+'</td><td class="mono-data">'+sum.sales.docs+'</td></tr>' +
+      '<tr><td>ภาษีซื้อ</td><td class="mono-data">'+money(sum.purchase.exVat)+'</td><td class="mono-data">'+money(sum.purchase.vat)+'</td><td class="mono-data">'+sum.purchase.docs+'</td></tr>' +
+      '<tr><td><b>'+esc(sum.netLabel)+'</b></td><td></td><td class="mono-data"><b>'+money(Math.abs(sum.net))+'</b></td><td></td></tr>' +
+      '</tbody></table></div>' +
+      (sum.sales.exempt ? '<p class="form-hint">รวมมูลค่าสินค้าที่ยกเว้นภาษี '+money(sum.sales.exempt)+' (ไม่นำมาคิดภาษีขาย)</p>' : '') +
+    '</div>' +
+    '<div class="form-card"><h3>ภาษีขาย — ใบกำกับภาษีที่ออก ('+sales.rows.length+' ใบ)</h3>' +
+      tbl(sales.rows, [
+        { label:'วันที่', cls:'mono-data', v:r=>esc(r.date) },
+        { label:'เลขที่', cls:'mono-data', v:r=>esc(r.docNo) },
+        { label:'ชนิด', v:r=>esc(r.kind) },
+        { label:'ลูกค้า', cls:'wrap', v:r=>esc(r.customer) },
+        { label:'เลขผู้เสียภาษี', cls:'mono-data', v:r=>r.taxId ? esc(r.taxId)+(r.branch ? ' / '+esc(r.branch) : '') : '<span class="tag tag-warn">ไม่มี</span>' },
+        { label:'มูลค่า', cls:'mono-data', v:r=>money(r.exVat) },
+        { label:'ภาษี', cls:'mono-data', v:r=>money(r.vat) },
+        { label:'หมายเหตุ', cls:'wrap', v:r=>esc(r.note || '') }
+      ], 'ไม่มีใบกำกับภาษีในเดือนนี้') +
+      '<p class="form-hint">ตามบัญชี (2200 ภาษีขาย) '+money(sales.ledger.amount)+
+        (Math.abs(sales.ledger.diff) > 0.009 ? ' · <b style="color:var(--orange)">ต่างจากเอกสาร '+money(sales.ledger.diff)+'</b>' : ' · ตรงกับเอกสาร')+'</p>' +
+    '</div>' +
+    '<div class="form-card"><h3>ภาษีซื้อ — ใบกำกับภาษีที่ได้รับ ('+pur.rows.length+' ใบ)</h3>' +
+      tbl(pur.rows, [
+        { label:'วันที่', cls:'mono-data', v:r=>esc(r.date) },
+        { label:'เลขใบกำกับผู้ขาย', cls:'mono-data', v:r=>r.note ? '<span class="tag tag-warn">ยังไม่กรอก</span>' : esc(r.docNo) },
+        { label:'ใบตั้งหนี้', cls:'mono-data', v:r=>esc(r.billNo) },
+        { label:'ผู้ขาย', cls:'wrap', v:r=>esc(r.vendor) },
+        { label:'เลขผู้เสียภาษี', cls:'mono-data', v:r=>r.taxId ? esc(r.taxId) : '<span class="tag tag-warn">ไม่มี</span>' },
+        { label:'มูลค่า', cls:'mono-data', v:r=>money(r.exVat) },
+        { label:'ภาษี', cls:'mono-data', v:r=>money(r.vat) }
+      ], 'ไม่มีใบตั้งหนี้ในเดือนนี้') +
+      '<p class="form-hint">ตามบัญชี (1400 ภาษีซื้อ) '+money(pur.ledger.amount)+
+        (Math.abs(pur.ledger.diff) > 0.009 ? ' · <b style="color:var(--orange)">ต่างจากเอกสาร '+money(pur.ledger.diff)+'</b>' : ' · ตรงกับเอกสาร')+'</p>' +
+    '</div>';
+}
+
+async function printVatReport(){
+  if (!VAT_REPORT) { toast('ยังไม่มีข้อมูลให้พิมพ์', true); return; }
+  await ensureDocPrint();
+  const { sales, pur, month } = VAT_REPORT;
+  /* พิมพ์เป็นสองตารางต่อกัน — เจ้าหน้าที่สรรพากรขอดูรายใบ ไม่ใช่ยอดรวมอย่างเดียว */
+  DocPrint.table({ title: 'รายงานภาษีขาย เดือน ' + month, landscape: true,
+    columns: [{ label:'วันที่', value:r=>r.date }, { label:'เลขที่ใบกำกับ', value:r=>r.docNo },
+      { label:'ชนิด', value:r=>r.kind }, { label:'ลูกค้า', value:r=>r.customer },
+      { label:'เลขผู้เสียภาษี', value:r=>r.taxId || '-' },
+      { label:'มูลค่า', align:'r', value:r=>DocPrint.money(r.exVat) },
+      { label:'ภาษี', align:'r', value:r=>DocPrint.money(r.vat) }],
+    rows: sales.rows,
+    totals: [['รวมมูลค่า', DocPrint.money(sales.totals.exVat)], ['รวมภาษีขาย', DocPrint.money(sales.totals.vat), 'grand']],
+    xlsx: { filename: 'ภาษีขาย-' + month,
+      headers: ['วันที่','เลขที่ใบกำกับ','ชนิด','ลูกค้า','เลขผู้เสียภาษี','มูลค่า','ภาษี'],
+      rows: sales.rows.map(r => [r.date, r.docNo, r.kind, r.customer, r.taxId, String(r.exVat), String(r.vat)])
+        .concat(pur.rows.map(r => ['[ซื้อ] '+r.date, r.docNo, 'ภาษีซื้อ', r.vendor, r.taxId, String(r.exVat), String(r.vat)])) } });
+}
+
 /* ══════════ ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย — 16 ต.ค. 2026 ══════════
    ★★ ก่อนมีตัวนี้ การตัดสต็อกไม่ลงบัญชีเลย → งบกำไรขาดทุนไม่มีต้นทุนขายสักบาท (กำไรที่โชว์
      ≈ ยอดขายทั้งก้อน) และบัญชีสินค้าคงเหลือโตขึ้นเรื่อยๆ ไม่เคยลด — ผิดแบบที่ดูจากหน้าจอไม่ออก

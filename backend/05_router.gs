@@ -250,6 +250,10 @@ var ADMIN_ACTION_MAP = {
   payApBills:             payApBills,
   getApAging:             getApAging,
   listArInvoices:         listArInvoices,
+  // รายงานภาษีขาย/ภาษีซื้อ สำหรับยื่น ภ.พ.30 (51_tax_reports.gs) — อ่านอย่างเดียว
+  getVatSalesReport:      getVatSalesReport,
+  getVatPurchaseReport:   getVatPurchaseReport,
+  getVatSummary:          getVatSummary,
   // ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย (50_cogs.gs)
   getAccountingSettings:  getAccountingSettings,
   saveAccountingSettings: saveAccountingSettings,

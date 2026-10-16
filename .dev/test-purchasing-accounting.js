@@ -23,14 +23,22 @@ class FakeSheet {
 }
 const sheets = {}, tenantSheets = {};
 Object.keys(CENTRAL_SHEETS).forEach(n => { sheets[n] = new FakeSheet(CENTRAL_SHEETS[n]); });
-const TENANT_COLS = {
-  sales_orders: ['record_id','order_code','customer_id','subtotal','discount','total','payment_method','fulfillment_type','status','sale_by','lat','lng','map','note','created_at'],
-  order_items: ['record_id','order_id','product_id','unit_code','unit_factor','qty','base_qty','price','line_total','is_free','tax_status'],
-  /* ★ 1 ต.ค. 2026 — เลขเอกสารกลางอ่านรูปแบบจาก doc_number_series แล้ว (ดู _nextCentralDocNo)
-     ปล่อยว่างไว้ตั้งใจ: จะได้ทดสอบว่า "ไม่เคยตั้งค่า → เลขออกมาเหมือนเดิมทุกตัวอักษร"
-     ซึ่งเป็นสิ่งที่ต้องไม่พังที่สุดของการเปลี่ยนรอบนี้ */
-  doc_number_series: ['record_id','doc_type','prefix','date_format','running_digits','reset_cycle','separator','is_active']
-};
+/* ★★ หัวคอลัมน์ของชีตตัวแทนต้องมาจาก `TENANT_SHEET_TABS` ของจริง เหมือนที่ทำกับ CENTRAL_SHEETS
+   เดิมก๊อปมาเขียนไว้เอง แล้ว **เงียบ**: `append()` เขียนเฉพาะคอลัมน์ที่มีในหัว ฟิลด์ที่ลิสต์นี้
+   ไม่มี (tax_invoice_no, vat_amount, ship_round_no, …) จึงถูกทิ้งไปโดยไม่มีอะไรฟ้อง
+   เทสต์ที่พึ่งฟิลด์พวกนั้นเลยผ่านด้วยค่า fallback แทนค่าจริง (เจอ 16 ต.ค. 2026 ตอนทำรายงานภาษี)
+   ★ `doc_number_series` ยังต้องไม่มีแถวข้อมูล (คนละเรื่องกับไม่มีคอลัมน์) — ทดสอบว่า
+     "ไม่เคยตั้งค่า → เลขออกมาเหมือนเดิมทุกตัวอักษร" ซึ่งห้ามพังเด็ดขาด */
+const TENANT_COLS = (() => {
+  const c = { Utilities: {}, Session: {}, PropertiesService: {}, LockService: {}, SpreadsheetApp: {},
+    DriveApp: {}, CacheService: {}, Logger: { log() {} },
+    // 13_tenants.gs อ้างค่าคงที่จาก 02_helpers.gs ตอนโหลด — ใส่ให้พอให้ไฟล์ประเมินผ่าน
+    // (เราต้องการแค่ TENANT_SHEET_TABS ซึ่งเป็นข้อมูลล้วน)
+    OWNER_TENANT_ID: 'HOUSE' };
+  vm.createContext(c);
+  vm.runInContext(B('13_tenants.gs') + '\nthis.__T = TENANT_SHEET_TABS;', c);
+  return c.__T;
+})();
 Object.keys(TENANT_COLS).forEach(n => { tenantSheets[n] = new FakeSheet(TENANT_COLS[n]); });
 
 const objs = sh => sh.rows.slice(1).filter(r => r[0] !== '' && r[0] != null).map(r => Object.fromEntries(sh.rows[0].map((h, i) => [h, r[i] === undefined ? '' : r[i]])));
@@ -69,6 +77,9 @@ const ctx = {
   centralUpdate: (n, id, f) => { const sh = ctx.centralSheet(n), r = sh.rows.find((x, i) => i && String(x[0]) === String(id)); if (!r) return false; Object.keys(f).forEach(k => { const c = sh.rows[0].indexOf(k); if (c >= 0) { while (r.length <= c) r.push(''); r[c] = f[k]; } }); return true; },
   deleteRowsWhere: (sh, col, v) => { const c = sh.rows[0].indexOf(col); let n = 0; for (let i = sh.rows.length - 1; i >= 1; i--) if (String(sh.rows[i][c]) === String(v)) { sh.rows.splice(i, 1); n++; } return n; },
   tenantObjects: (t, n) => objs(tenantSheets[n]),
+  // ตัวจริงใน 02_helpers.gs ไปเปิดไฟล์บน Drive ผ่าน CacheService — กล่องทดสอบใช้ชีตจำลองแทน
+  // (★ คืน [] ถ้าไม่มีชีตนั้น เหมือนของจริง — ไฟล์ตัวแทนเก่าอาจยังไม่มีแท็บใหม่)
+  tenantObjectsIfExists: (t, n) => (tenantSheets[n] ? objs(tenantSheets[n]) : []),
   // ของจริงอ่านเฉพาะแถวที่ต้องการแล้ว (02_helpers.gs) — ตัวจำลองต้องให้ผลเหมือนการกรองจากทั้งแท็บ
   tenantRowById: (t, n, id) => objs(tenantSheets[n]).filter(o => String(o.record_id) === String(id)).pop() || null,
   tenantRowsWhere: (t, n, col, val) => objs(tenantSheets[n]).filter(o => String(o[col]) === String(val)),
@@ -86,7 +97,7 @@ vm.createContext(ctx);
 // โหลด 02_helpers.gs ของจริงก่อน (มี isFlagOn/isNotOff ที่โมดูลอื่นเรียกใช้) แล้วคืนค่าชีตจำลองทับ
 const _fakes = { centralSheet: ctx.centralSheet, centralObjects: ctx.centralObjects, centralAppend: ctx.centralAppend,
   centralAppendMany: ctx.centralAppendMany, centralNextId: ctx.centralNextId, centralUpdate: ctx.centralUpdate,
-  deleteRowsWhere: ctx.deleteRowsWhere, tenantObjects: ctx.tenantObjects, nowStr: ctx.nowStr, safeDateStr: ctx.safeDateStr,
+  deleteRowsWhere: ctx.deleteRowsWhere, tenantObjects: ctx.tenantObjects, tenantObjectsIfExists: ctx.tenantObjectsIfExists, nowStr: ctx.nowStr, safeDateStr: ctx.safeDateStr,
   tenantRowById: ctx.tenantRowById, tenantRowsWhere: ctx.tenantRowsWhere };
 ctx.SpreadsheetApp = { openById: () => { throw new Error('should not be called'); } };
 ctx.PropertiesService = { getScriptProperties: () => ({ getProperty: () => '' }) };
@@ -96,7 +107,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -983,6 +994,69 @@ console.log('\n── ต้นทุนขาย (COGS) ──');
   eq('★★ งบกำไรขาดทุนมีบรรทัดต้นทุนขายแล้ว (ก่อนหน้านี้ไม่มีเลย) · ยอด 990 − 600 = 390',
     [!!cogsRow, cogsRow && cogsRow.debit, cogsRow && cogsRow.credit, cogsRow && cogsRow.balance],
     [true, 990, 600, 390]);
+}
+
+/* ══════════ รายงานภาษีขาย/ภาษีซื้อ (51_tax_reports.gs · 16 ต.ค. 2026) ══════════
+   ★★ ฐานของรายงานคือ **เอกสารภาษีที่ออกจริง ไม่ใช่ใบสำคัญบัญชี** — ภ.พ.30 รายงานใบกำกับภาษี
+     ซึ่งเป็นคนละสิ่งกับรายการที่ลงบัญชีแล้ว · สร้างจากบัญชีเมื่อไหร่จะยื่นขาดทุกครั้งที่มีเอกสาร
+     ที่ยังไม่ได้ลงบัญชี ซึ่งในระบบนี้มีจริง (ขายสดไม่เคยลงบัญชีเลย)
+   ★ สิ่งที่ต้องคุม: นับใบกำกับครบทุกทาง (บิลเดี่ยว · รายรอบ · ใบลด/เพิ่มหนี้) ไม่นับซ้ำ
+     ไม่นับใบที่ยกเลิก และ **ช่องเทียบกับบัญชีต้องชี้ส่วนต่างให้เห็น ไม่ใช่กลบ** */
+console.log('\n── รายงานภาษีขาย / ภาษีซื้อ ──');
+{
+  const M = '2026-10';
+  // บิลขายสด: ออกใบกำกับภาษีจริง แต่ไม่มีใบแจ้งหนี้ = ไม่เคยลงบัญชี
+  append(tenantSheets.sales_orders, { record_id: 120, order_code: 'SO-VAT-CASH', customer_id: 500,
+    subtotal: 1070, discount: 0, total: 1070, payment_method: 'cash', status: 'completed',
+    created_at: '2026-10-05 09:00:00', tax_invoice_no: 'TAX-IV-202610-0100', tax_invoice_at: '2026-10-05 09:00:00',
+    apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07, subtotal_ex_vat: 1000, vat_amount: 70, exempt_amount: 0 });
+  // บิลที่ยกเลิกแล้ว ต้องไม่เข้ารายงาน
+  append(tenantSheets.sales_orders, { record_id: 121, order_code: 'SO-VAT-CANCEL', customer_id: 500,
+    subtotal: 5350, discount: 0, total: 5350, payment_method: 'cash', status: 'cancelled',
+    created_at: '2026-10-06 09:00:00', tax_invoice_no: 'TAX-IV-202610-0101', tax_invoice_at: '2026-10-06 09:00:00',
+    apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 5000, vat_amount: 350, exempt_amount: 0 });
+  // บิลเดือนก่อน ต้องไม่เข้าเดือนนี้
+  append(tenantSheets.sales_orders, { record_id: 122, order_code: 'SO-VAT-SEP', customer_id: 500,
+    subtotal: 2140, discount: 0, total: 2140, payment_method: 'cash', status: 'completed',
+    created_at: '2026-09-20 09:00:00', tax_invoice_no: 'TAX-IV-202609-0099', tax_invoice_at: '2026-09-20 09:00:00',
+    apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 2000, vat_amount: 140, exempt_amount: 0 });
+
+  const rep = ctx.getVatSalesReport(FIN, { month: M });
+  const docs = (rep.rows || []).map(r => r.docNo);
+  eq('★ นับเฉพาะใบกำกับของเดือนนั้น ไม่นับใบที่ยกเลิก',
+    [docs.indexOf('TAX-IV-202610-0100') !== -1, docs.indexOf('TAX-IV-202610-0101'), docs.indexOf('TAX-IV-202609-0099')],
+    [true, -1, -1]);
+  const cash = (rep.rows || []).find(r => r.docNo === 'TAX-IV-202610-0100');
+  eq('  แถวใบกำกับมีเลขผู้เสียภาษีของลูกค้า + มูลค่า/ภาษีแยกช่อง',
+    [cash.exVat, cash.vat, cash.kind, cash.note], [1000, 70, 'ใบกำกับภาษี', 'ขายสด']);
+
+  // ใบลดหนี้/ใบเพิ่มหนี้ของเดือนนั้นต้องเข้ารายงานด้วย (ลดหนี้ติดลบ)
+  const cn = (rep.rows || []).filter(r => r.kind === 'ใบลดหนี้');
+  const dn = (rep.rows || []).filter(r => r.kind === 'ใบเพิ่มหนี้');
+  eq('★ ใบลดหนี้เข้ารายงานแบบติดลบ · ใบเพิ่มหนี้เป็นบวก',
+    [cn.length > 0, cn.length ? cn[0].vat < 0 : null, dn.length > 0, dn.length ? dn[0].vat > 0 : null],
+    [true, true, true, true]);
+
+  eq('  ยอดรวมภาษี = ผลรวมทุกแถวเป๊ะ',
+    rep.totals.vat, Math.round(rep.rows.reduce((s, r) => s + r.vat, 0) * 100) / 100);
+
+  /* ★★ หัวใจของรายงาน: เอกสารกับบัญชีต้องตรงกัน ไม่ตรง = มีเอกสารที่ยังไม่ได้ลงบัญชี */
+  eq('★★ ขายสดถูกนับว่า "ยังไม่ได้ลงบัญชี" และรายงานชี้ส่วนต่างให้เห็น',
+    [rep.unposted.bills >= 1, rep.unposted.vat >= 70, Math.abs(rep.ledger.diff) > 0.009], [true, true, true]);
+
+  const pur = ctx.getVatPurchaseReport(FIN, { month: M });
+  eq('รายงานภาษีซื้ออ่านจากใบตั้งหนี้ผู้ขาย', pur.success, true);
+  eq('  ยอดรวม = ผลรวมทุกแถว',
+    pur.totals.vat, Math.round(pur.rows.reduce((s, r) => s + r.vat, 0) * 100) / 100);
+
+  const sum = ctx.getVatSummary(FIN, { month: M });
+  eq('★ สรุป: ภาษีขาย − ภาษีซื้อ = ยอดที่ต้องชำระ/ขอคืน',
+    [sum.success, sum.net], [true, Math.round((rep.totals.vat - pur.totals.vat) * 100) / 100]);
+  eq('  ป้ายบอกทิศทางถูกต้อง', sum.net >= 0 ? sum.netLabel === 'ภาษีที่ต้องชำระ' : /ขอคืน/.test(sum.netLabel), true);
+  eq('★★ สรุปเตือนเรื่องเอกสารที่ยังไม่ได้ลงบัญชี (ไม่ปล่อยให้ยื่นด้วยยอดที่ขาด)',
+    (sum.warnings || []).some(w => /ยังไม่ได้ลงบัญชี/.test(w)), true);
+
+  eq('เดือนผิดรูป → ปฏิเสธ', ctx.getVatSalesReport(FIN, { month: '2026/10' }).success, false);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
