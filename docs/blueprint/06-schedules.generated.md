@@ -13,7 +13,7 @@
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
 | Backend (Apps Script) | 56 ไฟล์ `.gs` | 15,305 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,078 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,159 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,369 |
 | ตารางข้อมูล | 65 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 206 แอดมิน |  |
@@ -583,6 +583,7 @@
 | `.dev/uat-cash-and-billing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 159 |
 | `.dev/uat-cogs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 161 |
 | `.dev/uat-delivery-rounds-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 144 |
+| `.dev/uat-goods-returns-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 125 |
 | `.dev/uat-pricelist-edit-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 85 |
 | `.dev/uat-purchasing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 121 |
 | `.dev/uat-sale-docs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 130 |

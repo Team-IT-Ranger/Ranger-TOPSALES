@@ -207,6 +207,32 @@
   .view-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; gap:16px; }
   /* ปุ่มสลับมุมมองแบบแถบ — โชว์ทั้งสองคำพร้อมกัน ผู้ใช้จะได้รู้ว่ามีสองแบบให้เลือก
      (ปุ่มเดี่ยวที่สลับข้อความไปมาบอกไม่ได้ว่ามีอะไรให้เลือกบ้าง จนกว่าจะกดไปแล้ว) */
+  /* ═══ แท็บแฟ้ม — หัวแท็บต่อเนื่องเป็นแผ่นเดียวกับหน้างานข้างล่าง (เจ้าของระบบสั่ง 16 ต.ค. 2026)
+     ★ ไม่ใช่ปุ่ม: แท็บที่เลือกอยู่ต้อง "กลืน" เข้ากับแผ่น ทำด้วยการดันแถบแท็บลงมาทับเส้นขอบบน
+       ของแผ่น 1px (`margin-bottom:-1px`) แล้วให้แท็บที่เลือกมีพื้นขาวและขอบล่างสีขาว
+     ★★ แถบแท็บต้องเป็นลูกระดับบนของ .view เหมือนแถบตัวกรอง **ห้ามห่อตัวกรอง+ตารางไว้ด้วยกัน**
+       เพราะ `initViewFrames` ถือว่า "ของที่ข้างในมี .table-wrap" คือบล็อกข้อมูล แล้วจะเลิกตรึง
+       ตัวกรองไว้ด้านบน — แผ่นจึงทำจากสองชิ้นที่แยกกัน (`.sheet-top` + `.sheet-bot`) ที่ต่อเส้นขอบกัน */
+  .filetabs{display:flex;gap:4px;padding:0 4px;margin:0 0 -1px;position:relative;z-index:2;flex-wrap:wrap}
+  .ftab{font:inherit;font-size:.84rem;font-weight:600;color:var(--ink-soft);cursor:pointer;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:10px 10px 0 0;
+    padding:7px 14px 8px;display:inline-flex;align-items:center;gap:7px;transition:background .12s,color .12s}
+  .ftab:hover{color:var(--ink);background:#fbfcfe}
+  .ftab.on{background:#fff;color:var(--blue);border-bottom-color:#fff;
+    box-shadow:inset 0 2px 0 var(--blue)}
+  .ftab:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .ftab .n{font-size:.74rem;font-weight:700;background:var(--grey-soft);color:var(--ink-faint);
+    border-radius:999px;padding:1px 7px;min-width:20px;text-align:center;line-height:1.5}
+  .ftab.on .n{background:var(--blue-soft);color:var(--blue)}
+  /* ★ ต้องชนะกฎ .table-wrap ที่ตั้ง border-radius/box-shadow ไว้ทีหลังในไฟล์ (บรรทัด ~455)
+     จึงเขียนแบบเจาะจงกว่า (.table-wrap.sheet-bot) แทนการย้ายบล็อกนี้ไปไว้ท้ายสุด
+     — ย้ายแล้วใครมาเพิ่มกฎต่อท้ายทีหลังก็ทับได้อีก วนไม่จบ */
+  .sheet-top{background:#fff;border:1px solid var(--border);border-bottom:0;border-radius:0 10px 0 0}
+  .sheet-mid{background:#fff;border-left:1px solid var(--border);border-right:1px solid var(--border)}
+  /* ป้ายใต้กระดานว่างบ่อย — ปล่อยไว้จะเห็นเป็นขีดสองเส้นลอยๆ คั่นระหว่างแผ่นบนกับแผ่นล่าง */
+  .sheet-mid:empty{border:0}
+  .table-wrap.sheet-bot{background:#fff;border:1px solid var(--border);border-top:0;
+    border-radius:0 0 var(--r-card) var(--r-card);box-shadow:none}
   .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
     border-radius:999px;padding:3px;gap:2px;vertical-align:middle}
   .segtog .seg{font:inherit;font-size:.82rem;font-weight:600;color:var(--ink-soft);background:transparent;
@@ -935,20 +961,22 @@
             </div>
             <button class="btn btn-primary" onclick="openSaleOrderNew()">+ เปิดบิลขาย</button>
           </div>
-          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+          <!-- ★ แท็บแฟ้ม: แยกบิลที่ "จบไปแล้วหรือไม่ได้เกิดขึ้น" ออกจากงานที่กำลังเดินอยู่
+               (เจ้าของระบบสั่ง 16 ต.ค. 2026) — ร่าง/ปฏิเสธ/ยกเลิก ปนอยู่ในรายการเดียวกัน
+               ทำให้คนทำงานต้องกรองทิ้งเองทุกครั้งที่เปิดหน้านี้ -->
+          <div class="filetabs" id="so-tabs" role="tablist" aria-label="กลุ่มบิลขาย"></div>
+          <div class="sheet-top" style="display:flex;gap:10px;padding:10px;flex-wrap:wrap;align-items:center">
             <select id="so-filter-status" onchange="renderSalesOrders()">
               <option value="">ทุกสถานะการส่ง</option>
-              <!-- ★ ครบทุกขั้นแล้ว (8 ต.ค. 2026) — เดิมมีแค่ 4 ตัว กรองหา "เตรียมการจัดส่ง"/"พร้อมจัดส่ง"
-                   ซึ่งเป็นขั้นที่คนดูบ่อยที่สุดไม่ได้เลย · ค่า confirmed ครอบบิลเก่าที่ยังเป็น
-                   pending_delivery ด้วย (ดู soStatusKey) -->
-              <option value="draft">ใหม่ (ร่าง)</option>
+              <!-- ★ ร่าง / ปฏิเสธการขาย / ยกเลิกแล้ว **ไม่อยู่ในนี้แล้ว** — ย้ายไปเป็นแท็บของตัวเอง
+                   เหลือไว้จะมีสองทางที่ทำเรื่องเดียวกันแล้วขัดกันเอง (เลือกแท็บ "ร่าง" + กรอง "ยกเลิก"
+                   = ไม่เจออะไรเลยโดยที่คนกดไม่เข้าใจว่าทำไม)
+                   ★ ค่า confirmed ครอบบิลเก่าที่ยังเป็น pending_delivery ด้วย (ดู soStatusKey) -->
               <option value="confirmed">รออนุมัติ</option>
               <option value="accepted">เตรียมการจัดส่ง</option>
               <option value="ready_to_ship">พร้อมจัดส่ง</option>
               <option value="delivering">กำลังจัดส่ง</option>
               <option value="completed">จัดส่งสำเร็จ</option>
-              <option value="rejected">ปฏิเสธการขาย</option>
-              <option value="cancelled">ยกเลิกแล้ว</option>
             </select>
             <select id="so-filter-pay" onchange="renderSalesOrders()">
               <option value="">ทุกสถานะการเงิน</option>
@@ -961,9 +989,9 @@
             <button class="btn btn-sm" onclick="exportSalesOrderList()">ส่งออก Excel</button>
           </div>
           <!-- กระดานลากการ์ด — มุมมองที่สองของหน้าเดียวกัน ใช้ข้อมูล/ตัวกรอง/snapshot ชุดเดียวกับตาราง -->
-          <div id="so-board" class="dgb" data-view-scroll></div>
-          <p class="form-hint" id="so-board-note" style="margin:6px 0 10px"></p>
-          <div class="table-wrap"><table class="tbl-sticky-end">
+          <div id="so-board" class="dgb sheet-mid" data-view-scroll></div>
+          <p class="form-hint sheet-mid" id="so-board-note" style="margin:0;padding:0 10px"></p>
+          <div class="table-wrap sheet-bot"><table class="tbl-sticky-end">
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th title="ของในคลังพอส่งใบนี้ไหม — เขียว=ครบ · ส้ม=ได้บางส่วน · แดง=ไม่มีของเลย">ของ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
             <tbody id="salesorders-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
           </table></div>
@@ -3677,6 +3705,45 @@ function soStockDot(o, withText){
 /* opts.ignoreStatus = ไม่กรองตามสถานะ — ใช้ตอนสร้างแถบหัวคอลัมน์ในโหมดตาราง
    ★ ถ้าแถบนับจากแถวที่กรองแล้ว พอกดกรอง "พร้อมจัดส่ง" คอลัมน์อื่นจะกลายเป็น 0 ทั้งแถบ
      แล้วแถบที่มีไว้ดูภาพรวมก็หมดประโยชน์ทันทีที่เริ่มใช้งานมัน */
+/* ═══ แท็บแฟ้มของหน้าบิลขาย — แยก "งานที่กำลังเดิน" ออกจาก "จบไปแล้ว/ไม่ได้เกิดขึ้น" ═══
+   ★ แท็บเป็นตัวกรองสถานะชั้นนอก ตัว select ในแถบตัวกรองจึงเหลือเฉพาะสถานะของแท็บแรก
+     (ดูคอมเมนต์ใน markup) — สองทางที่ทำเรื่องเดียวกันจะขัดกันเองเสมอ
+   ★ `confirmed` ครอบ `pending_delivery` ผ่าน soStatusKey อยู่แล้ว ไม่ต้องเขียนซ้ำที่นี่ */
+const SO_TABS = [
+  { key:'active',    label:'กำลังดำเนินการ', statuses:['confirmed','accepted','ready_to_ship','delivering','completed'] },
+  { key:'draft',     label:'ร่าง',           statuses:['draft'] },
+  { key:'rejected',  label:'ปฏิเสธการขาย',   statuses:['rejected'] },
+  { key:'cancelled', label:'ยกเลิก',         statuses:['cancelled'] }
+];
+let soTabKey = 'active';
+function soTabDef(){ return SO_TABS.find(t => t.key === soTabKey) || SO_TABS[0]; }
+function setSalesOrderTab(key){
+  if (!SO_TABS.some(t => t.key === key)) return;
+  soTabKey = key;
+  try { localStorage.setItem(snapKey() + 'so_tab', key); } catch(e){}
+  /* ★ กระดานมีคอลัมน์เฉพาะสถานะของแท็บแรก — แท็บอื่นเปิดกระดานแล้วจะว่างเปล่าโดยไม่มีคำอธิบาย
+     จึงบังคับกลับเป็นตารางและซ่อนปุ่มสลับมุมมองไปเลย ไม่ให้กดแล้วเจอหน้าว่าง */
+  if (key !== 'active' && soViewMode !== 'table') setSalesOrderView('table');
+  const seg = document.getElementById('so-view-seg');
+  if (seg) seg.style.display = key === 'active' ? '' : 'none';
+  const sel = document.getElementById('so-filter-status');
+  if (sel && key !== 'active') sel.value = '';     // ตัวกรองของแท็บแรกใช้กับแท็บอื่นไม่ได้
+  if (sel) sel.disabled = key !== 'active';
+  renderSalesOrders();
+}
+function renderSoTabs(){
+  const bar = document.getElementById('so-tabs');
+  if (!bar) return;
+  /* นับจำนวนโดยใช้ตัวกรองอื่นที่เปิดอยู่ (การเงิน/คำค้น) แต่ไม่ใช้สถานะ — ตัวเลขบนแท็บจึงตรงกับ
+     สิ่งที่จะเห็นจริงเมื่อกดเข้าไป ไม่ใช่ยอดดิบที่หลอกตา */
+  const base = soFilteredRows({ ignoreStatus: true, ignoreTab: true });
+  bar.innerHTML = SO_TABS.map(t => {
+    const n = base.filter(o => t.statuses.includes(soStatusKey(o.status))).length;
+    return '<button type="button" role="tab" class="ftab'+(t.key === soTabKey ? ' on' : '')+'"' +
+      ' aria-selected="'+(t.key === soTabKey)+'" onclick="setSalesOrderTab(\''+t.key+'\')">' +
+      esc(t.label) + '<span class="n">' + n + '</span></button>';
+  }).join('');
+}
 function soFilteredRows(opts){
   const statusF = (opts && opts.ignoreStatus) ? '' : document.getElementById('so-filter-status').value;
   const payF = document.getElementById('so-filter-pay').value;
@@ -3684,6 +3751,11 @@ function soFilteredRows(opts){
   let rows = salesOrdersCache;
   /* ★ บิลเก่าเก็บ pending_delivery ซึ่งมีความหมายเท่า confirmed — เทียบตรงๆ แล้วเลือก
      "รออนุมัติ" จะไม่เห็นบิลเก่าสักใบ ทั้งที่มันอยู่ขั้นนั้นจริง (หลักเดียวกับ soBoardCol) */
+  // แท็บกรองชั้นนอกก่อน แล้ว select ค่อยกรองซ้ำภายในแท็บนั้น
+  if (!(opts && opts.ignoreTab)) {
+    const allow = soTabDef().statuses;
+    rows = rows.filter(o => allow.includes(soStatusKey(o.status)));
+  }
   if (statusF) rows = rows.filter(o => soStatusKey(o.status) === statusF);
   if (payF) rows = rows.filter(o => (o.paymentStatus || 'unpaid') === payF);
   if (q) rows = rows.filter(o => (o.customer||'').toLowerCase().indexOf(q) !== -1 || (o.code||'').toLowerCase().indexOf(q) !== -1
@@ -3738,6 +3810,7 @@ function setSalesOrderView(mode){
   renderSalesOrders();
 }
 function renderSalesOrders(){
+  renderSoTabs();                       // ตัวเลขบนแท็บคิดจากข้อมูลชุดเดียวกับตาราง ต้องวาดคู่กันเสมอ
   const board = document.getElementById('so-board');
   const wrap = document.querySelector('#view-salesorders .table-wrap');
   const seg = document.getElementById('so-view-seg');
@@ -3928,6 +4001,14 @@ async function loadSalesOrders(){
   /* จำมุมมองที่เลือกไว้ต่อผู้ใช้ · ★ ยังไม่เคยเลือก = กระดาน (เจ้าของระบบสั่ง 7 ต.ค. 2026)
      กระดานตอบคำถามแรกของวันได้ทันที — งานค้างอยู่ตรงไหน — ส่วนตารางเหมาะกับการค้นหาใบที่รู้ชื่ออยู่แล้ว */
   try { soViewMode = localStorage.getItem(snapKey() + 'so_view') === 'table' ? 'table' : 'board'; } catch(e){ soViewMode = 'board'; }
+  /* ★ แท็บเริ่มที่ "กำลังดำเนินการ" เสมอเมื่อไม่เคยเลือก — เปิดหน้านี้มาต้องเห็นงานที่ต้องทำ
+     ไม่ใช่กองบิลที่ยกเลิกไปแล้ว · ที่จำไว้คือกรณีคนกำลังไล่ดูของเก่าอยู่แล้วสลับหน้าไปกลับ */
+  try { const t = localStorage.getItem(snapKey() + 'so_tab'); if (SO_TABS.some(x => x.key === t)) soTabKey = t; } catch(e){}
+  if (soTabKey !== 'active' && soViewMode !== 'table') soViewMode = 'table';
+  { const seg = document.getElementById('so-view-seg');
+    if (seg) seg.style.display = soTabKey === 'active' ? '' : 'none';
+    const sel = document.getElementById('so-filter-status');
+    if (sel) sel.disabled = soTabKey !== 'active'; }
   const body = document.getElementById('salesorders-body');
   if (!salesOrdersCache.length) salesOrdersCache = listSnapLoad('salesorders') || [];
   if (salesOrdersCache.length) renderSalesOrders();
