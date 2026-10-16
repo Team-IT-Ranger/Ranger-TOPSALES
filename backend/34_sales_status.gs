@@ -454,6 +454,13 @@ function updateSalesOrderStatus(session, payload) {
        ★ ลงสมุดของเจ้าของบิล — `_normBook(tenantId)` ไม่ใช่สมุดของคนกด (ฝ่ายคลังอาจเป็นคนบริษัท) */
     /* ★ บิลที่แยกรอบจัดส่ง ตั้งลูกหนี้ไปแล้วรายรอบ (issueRoundInvoices) — ตรงนี้เหลือเฉพาะบิลที่ส่งรอบเดียวทั้งใบ */
     var arNote = roundWarn || '';
+    /* ★ ขายสดแบบสำนักงานจัดส่ง: ใบกำกับภาษีออกตรงนี้ จึงลงบัญชีตรงนี้ (52_cash_sales_gl.gs)
+       ขายจากรถลงไปแล้วตอนบันทึกบิล เพราะใบกำกับออกตั้งแต่ตอนนั้นและไม่เดินผ่านสถานะนี้
+       ★ ตัวฟังก์ชันกันซ้ำเองด้วยเลขบิล บิลที่แยกรอบจึงเดินผ่านจุดนี้ซ้ำได้โดยไม่ลงซ้ำ */
+    if (justBecameReady && !isCreditPayment(order.payment_method)) {
+      var cashGl = postCashSaleGl(tenantId, tenantRowById(tenantId, 'sales_orders', order.record_id), session.adminUserId);
+      if (cashGl && cashGl.posted) changes.push('ลงบัญชีขายสด ' + cashGl.journalNo);
+    }
     if (justBecameReady && isCreditPayment(order.payment_method) && !saleOrderHasRounds(order)) {
       var ar = _createArInvoiceCore(session, { tenantId: tenantId, salesOrderId: order.record_id },
         typeof _normBook === 'function' ? _normBook(tenantId) : '');

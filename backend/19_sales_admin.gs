@@ -336,6 +336,14 @@ function recordSaleAdmin(session, payload) {
     session.displayName || session.username, _adminRoleLabel(session));
 
   bumpSalesDaily(tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
+
+  /* ★ ขายสดลงบัญชีตรงนี้ เพราะใบกำกับภาษีเพิ่งออกไปพร้อมบิล (52_cash_sales_gl.gs)
+     บิลพวกนี้ไม่เคยเดินผ่าน "พร้อมจัดส่ง" ซึ่งเป็นจุดลงบัญชีของฝั่งสำนักงาน
+     ★★ ลงไม่สำเร็จห้ามล้มการบันทึกบิล — ของส่งให้ลูกค้าไปแล้วและเงินรับมาแล้ว
+        ตัวฟังก์ชันจับ error เองและคืนเหตุผลมา (ดูได้ที่ใบสำคัญที่ไม่มี) */
+  if (fulfillmentType === 'immediate') {
+    postCashSaleGl(tenantId, tenantRowById(tenantId, 'sales_orders', orderId), session.adminUserId);
+  }
   touchCustomerLastSale(payload.customerId, createdAt);                  // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
 
   items.forEach(function(it) {
@@ -425,6 +433,11 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
   /* ★ บิลที่ส่งของไปแล้วบางส่วน (แยกรอบจัดส่ง — 48_delivery_rounds.gs) ยกเลิกได้ แต่ต้องบอกให้ชัด
      ของที่ส่งไปแล้วไม่ถูกคืนเข้าคลัง (มันอยู่กับลูกค้าแล้วจริงๆ) แต่ยอดขายถูกหักคืนทั้งใบ
      → ต้องมีคนตามเก็บของคืนหรือออกใบลดหนี้ ไม่ใช่เรื่องที่ระบบตัดสินใจแทนได้ */
+  /* ★ ขายสดที่ลงบัญชีไปแล้ว ต้องกลับรายการด้วย ไม่งั้นรายได้กับภาษีขายค้างอยู่ในสมุด
+     ทั้งที่บิลถูกยกเลิกไปแล้ว — แล้วจะไปโผล่ในรายงานภาษีของเดือนนั้นโดยไม่มีบิลรองรับ
+     (บิลเครดิตไม่ต้องทำตรงนี้ ใบแจ้งหนี้ลูกหนี้มีเส้นทางยกเลิกของตัวเองอยู่แล้ว) */
+  var cashRev = reverseCashSaleGl(tenantId, order, session.adminUserId, 'ยกเลิกบิล');
+
   var shippedWarn = '';
   if (saleOrderHasRounds(order)) {
     var cp = saleDeliveryPlan(tenantId, order);

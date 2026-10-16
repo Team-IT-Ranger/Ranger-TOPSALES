@@ -107,7 +107,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -1057,6 +1057,106 @@ console.log('\n── รายงานภาษีขาย / ภาษีซ�
     (sum.warnings || []).some(w => /ยังไม่ได้ลงบัญชี/.test(w)), true);
 
   eq('เดือนผิดรูป → ปฏิเสธ', ctx.getVatSalesReport(FIN, { month: '2026/10' }).success, false);
+}
+
+/* ══════════ ลงบัญชีขายสด (52_cash_sales_gl.gs · 16 ต.ค. 2026) ══════════
+   ★★ ช่องว่างที่ปิด: รายได้กับภาษีขายเคยเข้าบัญชีผ่าน createArInvoice ทางเดียว ซึ่งเรียกเฉพาะ
+     บิลเครดิต — ขายสดออกใบกำกับภาษีให้ลูกค้าจริงแต่ไม่มีรายการในสมุดสักบรรทัด
+   ★ สิ่งที่ต้องคุม: ปิดไว้เป็นค่าเริ่มต้น · เดบิต = เครดิตเสมอ · ลงซ้ำไม่ได้ ·
+     กลับรายการตอนยกเลิกด้วยยอดเดิม · บิลเครดิตต้องไม่ถูกลงซ้ำทางนี้ */
+console.log('\n── ลงบัญชีขายสด ──');
+{
+  const bal = code => {
+    let d = 0, c = 0;
+    ctx.centralObjects('gl_journal_lines').forEach(l => {
+      if (String(l.account_code) !== code) return;
+      d += Number(l.debit) || 0; c += Number(l.credit) || 0;
+    });
+    return { dr: Math.round(d * 100) / 100, cr: Math.round(c * 100) / 100 };
+  };
+  const mkCash = (id, code, method, total, exVat, vat, taxNo) => {
+    append(tenantSheets.sales_orders, { record_id: id, order_code: code, customer_id: 500,
+      subtotal: total, discount: 0, total: total, payment_method: method, fulfillment_type: 'immediate',
+      status: 'completed', created_at: '2026-10-16 09:00:00',
+      tax_invoice_no: taxNo, tax_invoice_at: '2026-10-16 09:00:00',
+      apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07,
+      subtotal_ex_vat: exVat, vat_amount: vat, exempt_amount: 0 });
+    return ctx.tenantRowById('T1', 'sales_orders', id);
+  };
+
+  // ── ปิดไว้เป็นค่าเริ่มต้น ──
+  ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'off' });
+  let o = mkCash(140, 'SO-CASH-OFF', 'cash', 1070, 1000, 70, 'TAX-IV-900');
+  let r = ctx.postCashSaleGl('T1', o, 'tester');
+  eq('★ ปิดอยู่ → ไม่ลงบัญชี', [r.posted, /ยังไม่ได้เปิด/.test(r.skipped)], [false, true]);
+
+  // ── เปิดใช้ ──
+  r = ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'on' });
+  eq('เปิดแล้วไม่ระบุวันที่เริ่ม → ปฏิเสธ', r.success, false);
+  ok('เปิดลงบัญชีขายสด เริ่ม 16 ต.ค.',
+    ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'on', cashFrom: '2026-10-16' }));
+
+  const cash0 = bal('1110'), sales0 = bal('4100'), vat0 = bal('2200');
+  o = mkCash(141, 'SO-CASH-1', 'cash', 1070, 1000, 70, 'TAX-IV-901');
+  r = ctx.postCashSaleGl('T1', o, 'tester');
+  eq('★ ลงบัญชีขายสดได้ ยอด 1,070', [r.posted, r.amount, r.vat, r.revenue], [true, 1070, 70, 1000]);
+  eq('★★ Dr 1110 เงินสด 1,070 / Cr 4100 รายได้ 1,000 + Cr 2200 ภาษีขาย 70',
+    [bal('1110').dr - cash0.dr, bal('4100').cr - sales0.cr, bal('2200').cr - vat0.cr], [1070, 1000, 70]);
+
+  // ── ลงซ้ำไม่ได้ ──
+  r = ctx.postCashSaleGl('T1', o, 'tester');
+  eq('★ เรียกซ้ำ → ไม่ลงใบที่สอง', [r.posted, /ไปแล้ว/.test(r.skipped)], [false, true]);
+
+  // ── โอนเงินเข้าแบงก์ ──
+  const bank0 = bal('1120');
+  o = mkCash(142, 'SO-CASH-TRANSFER', 'transfer', 2140, 2000, 140, 'TAX-IV-902');
+  r = ctx.postCashSaleGl('T1', o, 'tester');
+  eq('★ จ่ายแบบโอน → เดบิตเงินฝากธนาคาร (1120) ไม่ใช่เงินสด', [r.posted, bal('1120').dr - bank0.dr], [true, 2140]);
+
+  // ── บิลเครดิตต้องไม่เข้าทางนี้ (ลงผ่านใบแจ้งหนี้ลูกหนี้อยู่แล้ว) ──
+  append(tenantSheets.sales_orders, { record_id: 143, order_code: 'SO-CREDIT', customer_id: 500,
+    subtotal: 1070, discount: 0, total: 1070, payment_method: 'credit_term', fulfillment_type: 'office_delivery',
+    status: 'completed', created_at: '2026-10-16 09:00:00', tax_invoice_no: 'TAX-IV-903',
+    apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 1000, vat_amount: 70, exempt_amount: 0 });
+  r = ctx.postCashSaleGl('T1', ctx.tenantRowById('T1', 'sales_orders', 143), 'tester');
+  eq('★★ บิลเครดิตไม่ลงทางนี้ (กันลงซ้ำกับใบแจ้งหนี้ลูกหนี้)', r.posted, false);
+
+  // ── ยังไม่ออกใบกำกับ = ภาระภาษียังไม่เกิด ──
+  append(tenantSheets.sales_orders, { record_id: 144, order_code: 'SO-NOTAX', customer_id: 500,
+    subtotal: 500, discount: 0, total: 500, payment_method: 'cash', fulfillment_type: 'office_delivery',
+    status: 'accepted', created_at: '2026-10-16 09:00:00', tax_invoice_no: '' });
+  eq('★ ยังไม่ออกใบกำกับภาษี → ยังไม่ลงบัญชี',
+    ctx.postCashSaleGl('T1', ctx.tenantRowById('T1', 'sales_orders', 144), 'tester').posted, false);
+
+  // ── ไม่ย้อนหลัง ──
+  append(tenantSheets.sales_orders, { record_id: 145, order_code: 'SO-CASH-OLD', customer_id: 500,
+    subtotal: 100, discount: 0, total: 100, payment_method: 'cash', fulfillment_type: 'immediate',
+    status: 'completed', created_at: '2026-09-30 09:00:00', tax_invoice_no: 'TAX-IV-904',
+    tax_invoice_at: '2026-09-30 09:00:00', apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 93.46, vat_amount: 6.54 });
+  eq('★ บิลก่อนวันเริ่ม → ไม่ลง (ผู้ทำบัญชีอาจบันทึกด้วยมือไว้แล้ว ลงทับ = นับซ้ำ)',
+    ctx.postCashSaleGl('T1', ctx.tenantRowById('T1', 'sales_orders', 145), 'tester').posted, false);
+
+  // ── กลับรายการตอนยกเลิก ──
+  const c1 = bal('1110'), s1 = bal('4100'), v1 = bal('2200');
+  const o141 = ctx.tenantRowById('T1', 'sales_orders', 141);
+  r = ctx.reverseCashSaleGl('T1', o141, 'tester', 'ยกเลิกบิล');
+  eq('★ กลับรายการได้ ยอดเท่าเดิม', [r.posted, r.amount], [true, 1070]);
+  /* ★ เทียบกับยอด "หลังลงบัญชีแล้ว" การกลับรายการจึงต้องหักออกเท่ายอดเดิมพอดีทั้งสามบัญชี
+     (เทียบกับยอดก่อนลงไม่ได้ เพราะมีบิลใบอื่นลงคั่นอยู่ระหว่างนั้น) */
+  eq('★★ กลับรายการหักออกเท่ายอดเดิมเป๊ะทั้งสามบัญชี',
+    [bal('1110').dr - bal('1110').cr - (c1.dr - c1.cr),
+     bal('4100').cr - bal('4100').dr - (s1.cr - s1.dr),
+     bal('2200').cr - bal('2200').dr - (v1.cr - v1.dr)], [-1070, -1000, -70]);
+  eq('  กลับซ้ำอีกไม่ได้', ctx.reverseCashSaleGl('T1', o141, 'tester', 'ซ้ำ').posted, false);
+
+  /* ── รายงานภาษีต้องเลิกนับใบที่ลงบัญชีแล้วว่า "ยังไม่ลง" ──
+     ★★ ตอนแรกรายงานดูแค่ "มีใบแจ้งหนี้ลูกหนี้ไหม" ซึ่งขายสดไม่มีวันมี → นับว่ายังไม่ลงตลอดไป
+       แม้จะลงบัญชีไปแล้วจริง · แก้ให้ดูใบสำคัญ SALES_CASH ด้วย (เทสต์ข้อนี้คือตัวจับ) */
+  const rep = ctx.getVatSalesReport(FIN, { month: '2026-10' });
+  const unpostedDocs = (rep.rows || []).filter(r => r.kind === 'ใบกำกับภาษี').length;
+  eq('★★ ขายสดที่ลงบัญชีแล้ว ต้องไม่ถูกนับว่า "ยังไม่ได้ลงบัญชี" อีก',
+    rep.unposted.bills < unpostedDocs, true);
+  eq('  และใบที่ยังไม่ได้ลงจริง (142 ที่ไม่ได้เดินผ่าน GL) ยังถูกนับอยู่', rep.unposted.bills >= 1, true);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

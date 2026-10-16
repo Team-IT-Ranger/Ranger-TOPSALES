@@ -8435,9 +8435,25 @@ async function loadAcctSettings(){
       '<p class="form-hint">★ <b>ไม่ย้อนหลัง</b> บิลที่ลงวันที่ก่อนหน้านี้จะไม่ถูกตัดต้นทุน — ' +
         'งวดที่ปิดบัญชีหรือยื่นภาษีไปแล้วต้องไม่ขยับ</p>' +
     '</div>' +
+    '</div>' +
+    /* ★★ ลงบัญชีขายสด — แยกการ์ดจากต้นทุนขาย เพราะเป็นคนละคำถามกันคนละเรื่อง
+       (อันหนึ่งคือ "คิดต้นทุนยังไง" อีกอันคือ "จะให้ระบบลงรายได้ให้ไหม") */
+    '<div class="form-card"><h3>ลงบัญชีการขายสด</h3>' +
+    '<p class="form-hint">บิล<b>ขายสด</b>จะลง <b>เดบิต เงินสด/ธนาคาร / เครดิต รายได้ (4100) + ภาษีขาย (2200)</b> ' +
+      'ตอนออกใบกำกับภาษี · บิล<b>เครดิต</b>ลงผ่านใบแจ้งหนี้ลูกหนี้อยู่แล้ว ไม่เกี่ยวกับช่องนี้</p>' +
+    '<p class="form-hint" style="color:var(--orange)">★ ก่อนหน้านี้ระบบ<b>ไม่เคยลงบัญชีขายสดเลย</b> ' +
+      'งบกำไรขาดทุนจึงขาดรายได้ส่วนนั้น และภาษีขายต่ำกว่าความจริง — ดูส่วนต่างได้ที่เมนู 5.8.1</p>' +
+    '<label class="acct-opt'+(cur.cashSales === 'on' ? ' on' : '')+'">' +
+      '<input type="checkbox" id="acct-cash"'+(cur.cashSales === 'on' ? ' checked' : '')+(editable ? '' : ' disabled') +
+        ' onchange="acctToggleCash(this.checked)">' +
+      '<span><b>ให้ระบบลงบัญชีขายสดให้</b><span class="s">★ เปิดเฉพาะเมื่อผู้ทำบัญชี<b>ยังไม่ได้</b>บันทึกการขายสดด้วยมือนอกระบบ — ' +
+      'ถ้าบันทึกไว้แล้วจะกลายเป็นนับซ้ำ ซึ่งหาทีหลังยากกว่าขาดไปเสียอีก</span></span></label>' +
+    '<div id="acct-cashfrom-wrap" style="margin-top:12px'+(cur.cashSales === 'on' ? '' : ';display:none')+'">' +
+      plField('เริ่มลงบัญชีขายสดตั้งแต่บิลลงวันที่', '<input type="date" id="acct-cashfrom" value="'+esc(cur.cashFrom || today)+'"'+(editable ? '' : ' disabled')+'>') +
+      '<p class="form-hint">★ ไม่ย้อนหลัง บิลก่อนหน้านี้จะไม่ถูกลงบัญชีให้</p>' +
+    '</div></div>' +
     (editable ? '<div class="form-actions" style="justify-content:flex-start"><button class="btn btn-primary" onclick="plBusy(acctSave)">บันทึก</button></div>' : '') +
     (cur.updatedAt ? '<p class="form-hint">แก้ล่าสุด '+esc(cur.updatedAt)+'</p>' : '') +
-    '</div>' +
     /* ★ บอกขอบเขตให้ชัด — ไม่งั้นผู้ทำบัญชีจะคิดว่าต้นทุนครบแล้วทั้งที่ครอบคลุมแค่ส่วนเดียว */
     '<div class="form-card"><h3>ครอบคลุมแค่ไหน</h3>' +
       '<p class="form-hint">' +
@@ -8449,6 +8465,10 @@ async function loadAcctSettings(){
         'ไม่ใช่คิดต้นทุนใหม่ ขาไปกับขากลับจึงหักล้างกันสนิทเสมอ</p>' +
     '</div>';
 }
+function acctToggleCash(on){
+  document.getElementById('acct-cashfrom-wrap').style.display = on ? '' : 'none';
+  document.getElementById('acct-cash').closest('.acct-opt').classList.toggle('on', !!on);
+}
 function acctPickMethod(v){
   document.getElementById('acct-from-wrap').style.display = v === 'none' ? 'none' : '';
   document.querySelectorAll('.acct-opt').forEach(l => l.classList.toggle('on', l.querySelector('input').value === v));
@@ -8456,8 +8476,11 @@ function acctPickMethod(v){
 async function acctSave(){
   const m = document.querySelector('input[name=cogs-method]:checked');
   if (!m) { toast('เลือกวิธีคิดต้นทุนก่อน', true); return; }
+  const cash = document.getElementById('acct-cash');
   const r = await callApi('saveAccountingSettings', { costMethod: m.value,
-    cogsFrom: m.value === 'none' ? '' : document.getElementById('acct-from').value });
+    cogsFrom: m.value === 'none' ? '' : document.getElementById('acct-from').value,
+    cashSales: cash && cash.checked ? 'on' : 'off',
+    cashFrom: cash && cash.checked ? document.getElementById('acct-cashfrom').value : '' });
   if (!r.success) { toast(r.message, true); return; }
   toast(r.message);
   loadAcctSettings();

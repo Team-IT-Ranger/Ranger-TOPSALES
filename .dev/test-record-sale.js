@@ -74,6 +74,8 @@ const ctx = {
   isStockProduct: p => !(p && String(p.is_stock) === 'FALSE'),
   getNextDocNumber: () => 'SO-TEST-0001',
   tenantObjects: (tid, n) => sheets[n].map(r => Object.assign({}, r)),
+  // recordSale อ่านแถวบิลที่เพิ่งเขียนกลับมาเพื่อส่งให้ postCashSaleGl (52_cash_sales_gl.gs)
+  tenantRowById: (tid, n, id) => (sheets[n] || []).filter(r => String(r.record_id) === String(id)).pop() || null,
   tenantAppend: (tid, n, row) => sheets[n].push(Object.assign({}, row)),
   tenantUpdate: (tid, n, id, patch) => {
     const r = sheets[n].find(x => String(x.record_id) === String(id));
@@ -103,6 +105,9 @@ const ctx = {
   _mobileRoleLabel: r => r,
 };
 vm.createContext(ctx);
+// 50/52: recordSale ลงบัญชีขายสดแล้ว (16 ต.ค. 2026) — บน Apps Script ทุกไฟล์อยู่ scope เดียวกัน
+// กล่องทดสอบโหลดเป็นชุดย่อย จึงต้องใส่เอง ไม่งั้น ReferenceError ตอนเรียก postCashSaleGl
+['50_cogs.gs', '52_cash_sales_gl.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 vm.runInContext(B('07_sales.gs'), ctx, { filename: '07_sales.gs' });
 
 // override หลังโหลดไฟล์ — recordSale เรียก _priceSaleCart() แบบ global lookup ตอนรันจริง ไม่ใช่ closure

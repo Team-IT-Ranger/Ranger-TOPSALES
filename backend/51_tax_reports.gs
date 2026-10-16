@@ -77,10 +77,20 @@ function getVatSalesReport(session, payload) {
      ★ บิลที่แยกรอบจัดส่งออกใบกำกับ "รายรอบ" ยอดจึงอยู่ที่แถวรอบ ไม่ใช่แถวบิล
        อ่านทั้งสองที่แล้วข้ามแถวบิลที่มีรอบ ไม่งั้นนับซ้ำทั้งใบ (48_delivery_rounds.gs) */
   var orders = {}, uninvoiced = 0, uninvoicedVat = 0;
+  /* ★★ "ลงบัญชีแล้ว" มีสองทาง ไม่ใช่ทางเดียว — บิลเครดิตลงผ่านใบแจ้งหนี้ลูกหนี้ ·
+     บิลขายสดลงผ่านใบสำคัญ SALES_CASH (52_cash_sales_gl.gs)
+     ดูแค่ใบแจ้งหนี้จะนับขายสดที่ลงบัญชีแล้วว่า "ยังไม่ลง" ตลอดไป เพราะมันไม่มีวันมีใบแจ้งหนี้
+     (ผมเขียนผิดแบบนี้ตอนแรก เทสต์จับได้ 16 ต.ค. 2026) */
   var invoicedOrders = {};
   centralObjects('ar_invoices').forEach(function(iv) {
     if (String(iv.status) === 'void') return;
     invoicedOrders[String(iv.sales_order_id) + '#' + String(iv.delivery_round_id || '')] = true;
+  });
+  centralObjects('gl_journals').forEach(function(j) {
+    if (String(j.ref_type) !== 'SALES_CASH') return;
+    if (String(j.status) === 'voided') return;
+    if (!_inBook(j, book)) return;
+    invoicedOrders[String(j.ref_id) + '#'] = true;          // ขายสดลงทั้งใบ ไม่แยกรอบ
   });
 
   tenantObjectsIfExists(tenantId, 'sales_orders').forEach(function(o) {

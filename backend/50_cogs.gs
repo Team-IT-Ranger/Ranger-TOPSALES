@@ -44,6 +44,11 @@ function _acctSettings(book) {
     recordId: row ? row.record_id : '',
     costMethod: row && COGS_METHODS[String(row.cost_method)] ? String(row.cost_method) : 'none',
     cogsFrom: row ? _dOnly(row.cogs_from) : '',
+    /* ลงบัญชีขายสด (52_cash_sales_gl.gs) — ปิดไว้เป็นค่าเริ่มต้นเหมือนต้นทุนขาย
+       ★ ปิดไว้ไม่ใช่เพราะมันไม่ถูกต้อง แต่เพราะผู้ทำบัญชีอาจบันทึกขายสดด้วยมือไว้แล้วนอกระบบ
+         เปิดย้อนหลังทับของเดิม = นับซ้ำ ซึ่งหาทีหลังยากกว่าขาดไปเสียอีก */
+    cashSales: row && String(row.cash_sales) === 'on' ? 'on' : 'off',
+    cashFrom: row ? _dOnly(row.cash_from) : '',
     updatedAt: row ? safeDateStr(row.updated_at) : '',
     updatedBy: row ? (row.updated_by || '') : ''
   };
@@ -58,6 +63,8 @@ function getAccountingSettings(session, payload) {
       return { code: k, label: COGS_METHODS[k].label, desc: COGS_METHODS[k].desc };
     }),
     /* บอกไปด้วยว่าครอบคลุมแค่ไหน — หน้าจอเอาไปแสดงตรงๆ ไม่ต้องเขียนข้อความซ้ำสองที่ */
+    cashSalesNote: 'ลง Dr เงินสด/ธนาคาร / Cr รายได้ + Cr ภาษีขาย ตอนออกใบกำกับภาษีของบิลขายสด' +
+      ' — บิลเครดิตลงผ่านใบแจ้งหนี้ลูกหนี้อยู่แล้ว ไม่เกี่ยวกับช่องนี้',
     coverage: { warehouse: true, van: false,
       note: 'ตัดต้นทุนเฉพาะการขายที่ตัดของจากคลัง (สำนักงานจัดส่ง) · ขายจากรถยังไม่ตัด เพราะสต็อกบนรถ' +
             'ยังไม่ได้เชื่อมกับคลังกลาง จึงไม่มีฐานต้นทุนให้คิด' } };
@@ -76,15 +83,24 @@ function saveAccountingSettings(session, payload) {
     if (!_validDate(from)) return { success: false, message: 'วันที่เริ่มตัดต้นทุนต้องเป็น yyyy-MM-dd' };
   }
 
+  var cash = String(payload.cashSales || 'off') === 'on' ? 'on' : 'off';
+  var cashFrom = String(payload.cashFrom || '').trim();
+  if (cash === 'on') {
+    if (!cashFrom) return { success: false, message: 'ต้องระบุวันที่เริ่มลงบัญชีขายสด' };
+    if (!_validDate(cashFrom)) return { success: false, message: 'วันที่เริ่มลงบัญชีขายสดต้องเป็น yyyy-MM-dd' };
+  }
+
   var cur = _acctSettings(book);
   var row = { tenant_id: book || '', cost_method: method, cogs_from: method === 'none' ? '' : from,
+    cash_sales: cash, cash_from: cash === 'on' ? cashFrom : '',
     updated_at: nowStr(), updated_by: session.adminUserId };
   if (cur.recordId) centralUpdate('accounting_settings', cur.recordId, row);
   else { row.record_id = centralNextId('accounting_settings'); centralAppend('accounting_settings', row); }
 
-  return { success: true, settings: _acctSettings(book),
-    message: method === 'none' ? 'ปิดการตัดต้นทุนอัตโนมัติแล้ว'
-      : 'ตั้งวิธีคิดต้นทุนเป็น "' + COGS_METHODS[method].label + '" เริ่มตัดตั้งแต่ ' + from };
+  var msg = [method === 'none' ? 'ปิดการตัดต้นทุนอัตโนมัติ'
+      : 'ต้นทุน: ' + COGS_METHODS[method].label + ' เริ่ม ' + from,
+    cash === 'on' ? 'ลงบัญชีขายสด เริ่ม ' + cashFrom : 'ไม่ลงบัญชีขายสด'].join(' · ');
+  return { success: true, settings: _acctSettings(book), message: 'บันทึกแล้ว — ' + msg };
 }
 
 /* ═══════════ คิดต้นทุนต่อหน่วย ═══════════

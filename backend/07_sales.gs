@@ -244,6 +244,7 @@ function recordSale(user, payload) {
     ? issueSaleDocNos(user.tenantId, null, ['receipt', 'tax']).fields : {};
 
   var vatSplit = calc.vat;   // แยกภาษีจากรายการจริง รองรับของยกเว้นภาษีปนในบิล (18_pricing_engine.gs)
+  var postCashGl = !editing && fulfillmentType === 'immediate';   // ดูท้ายฟังก์ชัน (52_cash_sales_gl.gs)
   // แก้ไขใบร่าง = เขียนทับแถวเดิม (เลขที่เอกสารและวันที่เปิดบิลคงเดิม) · เปิดใบใหม่ = ต่อท้ายตามปกติ
   var writeOrder = editing
     ? function(row) { tenantUpdate(user.tenantId, 'sales_orders', orderId, row); }
@@ -309,6 +310,13 @@ function recordSale(user, payload) {
 
   if (fulfillmentType === 'immediate') {
     _cutVanStock(user.tenantId, user.lineUserId, need, orderId);
+  }
+  /* ★ ขายจากรถลงบัญชีตรงนี้ เพราะใบกำกับภาษีออกไปพร้อมบิลแล้ว (52_cash_sales_gl.gs)
+     บิลพวกนี้ปิดเป็น completed ทันที ไม่เคยเดินผ่าน "พร้อมจัดส่ง" ซึ่งเป็นจุดลงบัญชีของฝั่งสำนักงาน
+     ★★ ลงไม่สำเร็จห้ามล้มการบันทึกบิล — ของลงจากรถให้ลูกค้าและรับเงินไปแล้ว
+        ตัวฟังก์ชันจับ error เองและคืนเหตุผลมา · ปิดไว้เป็นค่าเริ่มต้น เปิดที่เมนู 5.9.1 */
+  if (postCashGl) {
+    postCashSaleGl(user.tenantId, tenantRowById(user.tenantId, 'sales_orders', orderId), user.lineUserId);
   }
   /* ★ 1 ต.ค. 2026 — ใบนัดส่งจากมือถือ **ไม่จองของตอนเปิดบิลอีกแล้ว**
      เจ้าของระบบสั่งให้จองตอน "ศูนย์รับงาน" (ดู DR_RESERVE_STATUSES ใน 48_delivery_rounds.gs)

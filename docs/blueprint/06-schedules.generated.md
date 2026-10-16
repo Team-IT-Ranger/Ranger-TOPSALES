@@ -12,8 +12,8 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 53 ไฟล์ `.gs` | 14,585 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 10,743 |
+| Backend (Apps Script) | 54 ไฟล์ `.gs` | 14,770 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 10,766 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,369 |
 | ตารางข้อมูล | 61 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 195 แอดมิน |  |
@@ -31,7 +31,7 @@
 | `04_auth.gs` | 226 | AUTH |
 | `05_router.gs` | 301 | ROUTER |
 | `06_bootstrap.gs` | 292 | BOOTSTRAP / DASHBOARD (Mobile App) |
-| `07_sales.gs` | 379 | SALES (Mobile App — Cash Van) |
+| `07_sales.gs` | 387 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 61 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
 | `10_master_data.gs` | 436 | MASTER DATA |
@@ -43,7 +43,7 @@
 | `16_admin_users.gs` | 149 | จัดการบัญชีแอดมิน (Admin App) |
 | `17_pricing.gs` | 553 | ชุดราคาและส่วนลด (ใบรายการขายตามกลุ่มลูกค้า × ช่วงเวลา) |
 | `18_pricing_engine.gs` | 423 | เครื่องยนต์คิดราคา (ใช้ทั้งตอนขายจริง recordSale และหน้า "ทดลองคิดราคา |
-| `19_sales_admin.gs` | 450 | SALES (Admin App) |
+| `19_sales_admin.gs` | 463 | SALES (Admin App) |
 | `20_purchasing_master.gs` | 312 | งานซื้อ: ข้อมูลตั้งต้น (ผู้ขาย / คลัง / สายอนุมัติ) |
 | `21_purchase_requisition.gs` | 252 | ใบขอซื้อ (Purchase Requisition) |
 | `22_purchase_order.gs` | 538 | ใบสั่งซื้อ (PO) และการรับของเข้าคลัง (GR) |
@@ -58,7 +58,7 @@
 | `31_sales_rollup.gs` | 82 | สรุปยอดขายรายวัน (rollup) |
 | `32_admin_bootstrap.gs` | 37 | เปิดแอปแอดมินด้วยคำขอเดียว |
 | `33_customers.gs` | 309 | ทะเบียนลูกค้า (customer master) |
-| `34_sales_status.gs` | 780 | สถานะบิลขาย |
+| `34_sales_status.gs` | 787 | สถานะบิลขาย |
 | `35_idempotency.gs` | 84 | กันบันทึกซ้ำ (idempotency) |
 | `36_price_rules.gs` | 451 | สิทธิ์เข้าถึงชุดราคา (price list eligibility) |
 | `37_customer_bulk.gs` | 129 | จัดกลุ่มลูกค้าเป็นชุด (bulk assign) |
@@ -74,8 +74,9 @@
 | `47_address_refs.gs` | 133 | ══════════════════════════════════════════════════════════════════════ |
 | `48_delivery_rounds.gs` | 649 | รอบจัดส่ง · ของค้างส่ง (แอดมินศูนย์ขอ 14 ต.ค. 2026) |
 | `49_credit_notes.gs` | 356 | ใบลดหนี้ (Credit Note) · ใบเพิ่มหนี้ (Debit Note) — 15 ต.ค. 2026 |
-| `50_cogs.gs` | 264 | ต้นทุนขาย (COGS) |
-| `51_tax_reports.gs` | 201 | รายงานภาษีขาย / ภาษีซื้อ (สำหรับยื่น ภ.พ.30) |
+| `50_cogs.gs` | 280 | ต้นทุนขาย (COGS) |
+| `51_tax_reports.gs` | 211 | รายงานภาษีขาย / ภาษีซื้อ (สำหรับยื่น ภ.พ.30) |
+| `52_cash_sales_gl.gs` | 131 | ลงบัญชีการขายสด |
 | `99_dev_tools.gs` | 282 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -323,7 +324,7 @@
 
 | ชีต | คอลัมน์ | แคช | รายชื่อคอลัมน์ |
 |---|---|---|---|
-| `accounting_settings` | 6 |  | `record_id` `tenant_id` `cost_method` `cogs_from` `updated_at` `updated_by` |
+| `accounting_settings` | 8 |  | `record_id` `tenant_id` `cost_method` `cogs_from` `cash_sales` `cash_from` `updated_at` `updated_by` |
 | `admin_users` | 10 |  | `record_id` `username` `password_hash` `salt` `display_name` `role_code` `tenant_id` `status` `created_at` `line_user_id` |
 | `ap_bills` | 18 |  | `record_id` `tenant_id` `bill_no` `vendor_invoice_no` `vendor_id` `po_id` `gr_id` `bill_date` `due_date` `subtotal_ex_vat` `vat_amount` `total` `paid_amount` `status` `journal_id` `note` `created_by` `created_at` |
 | `ap_payment_allocations` | 4 |  | `record_id` `payment_id` `bill_id` `amount` |
@@ -549,8 +550,8 @@
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,064 |
-| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 213 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,164 |
+| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 218 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
 | `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 778 |
