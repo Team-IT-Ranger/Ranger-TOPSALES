@@ -1815,6 +1815,20 @@
           </table></div>
         </section>
 
+        <!-- ═══ ใบรับคืนสินค้า (54_goods_returns.gs) ═══ -->
+        <section class="view" id="view-goodsreturns">
+          <div class="view-head">
+            <div><h1>ใบรับคืนสินค้า</h1>
+              <p>รับของคืนจากลูกค้า — <b>ของสภาพดีเข้าคลัง ของเสียไม่เข้า</b> · ออกใบลดหนี้ต่อจากใบนี้ได้</p></div>
+            <div><button class="btn btn-primary" onclick="openGoodsReturnForm()">+ รับคืนสินค้า</button></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่</th><th>วันที่</th><th>บิลขาย</th><th>ลูกค้า</th><th>เหตุผล</th>
+              <th>รายการ</th><th>มูลค่า</th><th>เข้าคลัง</th><th>ของเสีย</th><th>ใบลดหนี้</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="grn-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
         <!-- ═══ ใบวางบิล (53_billing_notes.gs) ═══ -->
         <section class="view" id="view-billingnotes">
           <div class="view-head">
@@ -1957,7 +1971,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
   'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings',
-  'createBillingNote','cancelBillingNote','organizeDatabaseFiles','syncTenantSheets',
+  'createBillingNote','cancelBillingNote','createGoodsReturn','cancelGoodsReturn','createCreditNoteFromReturn','organizeDatabaseFiles','syncTenantSheets',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -2436,8 +2450,9 @@ const NAV_GROUPS = [
          แต่ไม่มีสิทธิ์บัญชีจะเห็นเมนูกดได้ แล้วเจอ "ไม่มีสิทธิ์" ตอนกดเข้าไป ซึ่งหาสาเหตุยาก
          ★ อยู่ใต้กลุ่มงานขายเพราะคนออกใบคือแอดมินศูนย์ที่ทำงานอยู่ในกลุ่มนี้ ไม่ใช่ฝ่ายบัญชี */
       {n:'1.1.2', label:'ใบลดหนี้ / เพิ่มหนี้', view:'adjnotes', mod:'accounting', ready:true, scope:'both'},
-      {n:'1.1.3', label:'ใบเสนอราคา', view:'v-quote', mod:'sales', ready:false, scope:'both',
-        soon:'ใบเสนอราคา', desc:'เสนอราคาก่อนเปิดบิลจริง แปลงเป็นใบสั่งขายได้'}
+      /* ★ เจ้าของระบบสั่ง 16 ต.ค. 2026: ไม่ใช้ใบเสนอราคา — เอาออกจากเมนูเลย ไม่ปล่อยให้เป็น
+         "เร็วๆ นี้" ที่ไม่มีวันมา (ของที่ค้างแบบนั้นทำให้คนรอ แล้ววันหนึ่งก็ลืมว่ารออะไรอยู่) */
+      {n:'1.1.3', label:'ใบรับคืนสินค้า', view:'goodsreturns', mod:'sales', ready:true, scope:'both'}
     ]},
     { n:'1.2', label:'ราคาขาย / ส่วนลด', items:[
       {n:'1.2.1', label:'กำหนดชุดตารางราคาขาย', view:'pricelists', mod:'pricing', ready:true, scope:'both'},
@@ -3015,7 +3030,8 @@ const LOADERS = {
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
   apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes,
-  acctsettings: loadAcctSettings, vatreport: loadVatReport, billingnotes: loadBillingNotes, glbooks: loadGlBooks,
+  acctsettings: loadAcctSettings, vatreport: loadVatReport, billingnotes: loadBillingNotes,
+  goodsreturns: loadGoodsReturns, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
   helpcenter: loadHelpCenter
@@ -8332,6 +8348,159 @@ function renderArInvoices(){
       (iv.status !== 'void' ? '<button class="btn btn-sm" onclick="openDebitNoteForm('+iv.id+')">ใบเพิ่มหนี้</button>' : '') +
     '</td></tr>').join(''), 10, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
 }
+/* ══════════ ใบรับคืนสินค้า — 16 ต.ค. 2026 ══════════
+   ★★ ลำดับงานจริงคือ **รับของก่อน แล้วค่อยลดหนี้** — ของกลับถึงคลังและตรวจสภาพแล้ว
+     ถึงจะรู้ว่าจะลดหนี้เท่าไร (ของเสียหายบางส่วนอาจลดไม่เต็ม)
+   ★★★ ใบรับคืนเป็นตัวที่ขยับสต็อก · ใบลดหนี้ที่ออกจากใบนี้ไม่ขยับซ้ำ */
+let grnCache = [];
+async function loadGoodsReturns(){
+  const body = document.getElementById('grn-body');
+  if (!grnCache.length) grnCache = listSnapLoad('goodsreturns') || [];
+  if (grnCache.length) renderGoodsReturns(); else tblLoading(body, 12);
+  const r = await callApi('listGoodsReturns', {});
+  if (!r.success) { toast(r.message, true); return; }
+  grnCache = r.data || [];
+  listSnapSave('goodsreturns', grnCache);
+  renderGoodsReturns();
+}
+function renderGoodsReturns(){
+  document.getElementById('grn-body').innerHTML = rowsOrEmpty(grnCache.map(g =>
+    '<tr><td class="mono-data">'+esc(g.returnNo)+'</td><td class="mono-data">'+esc(g.returnDate)+'</td>' +
+    '<td class="mono-data">'+dash(g.orderCode)+'</td><td class="wrap">'+esc(g.customerName)+'</td>' +
+    '<td class="wrap">'+esc(g.reason)+'</td><td class="mono-data">'+g.itemCount+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
+    '<td class="mono-data">'+(g.restockQty ? '<span class="tag tag-ok">'+g.restockQty+'</span>' : '—')+'</td>' +
+    /* ของเสียต้องเห็นชัด — เป็นตัวที่ต้องตามไปทำลายและไม่ได้อยู่ในคลังขาย */
+    '<td class="mono-data">'+(g.scrapQty ? '<span class="tag tag-warn">'+g.scrapQty+'</span>' : '—')+'</td>' +
+    '<td class="mono-data">'+(g.creditNoteId ? '<span class="tag tag-ok">ออกแล้ว</span>' : '—')+'</td>' +
+    '<td>'+pill2({ received:['ok','รับของแล้ว'], cancelled:['off','ยกเลิก'] }, g.status)+'</td>' +
+    '<td style="white-space:nowrap"><button class="btn btn-sm" onclick="printGoodsReturn('+g.id+')">พิมพ์</button>' +
+      (g.status === 'received' && !g.creditNoteId
+        ? ' <button class="btn btn-sm" onclick="grnMakeCreditNote('+g.id+')">ออกใบลดหนี้</button>' +
+          ' <button class="btn btn-sm" onclick="grnCancel('+g.id+')">ยกเลิก</button>' : '') +
+    '</td></tr>').join(''), 12, 'ยังไม่มีใบรับคืนสินค้า');
+}
+
+let GRN_DRAFT = null;
+async function openGoodsReturnForm(orderId){
+  if (!orderId) {
+    orderId = prompt('รับคืนจากบิลขายเลขที่ใด? (ใส่เลขบิล เช่น BD-2610-0009)');
+    if (!orderId) return;
+    /* หาบิลจากรายการที่โหลดไว้ — ไม่ยิงคำขอเพิ่มถ้าหาเจอแล้ว */
+    const hit = (salesOrdersCache || []).find(o => String(o.code).toLowerCase() === String(orderId).trim().toLowerCase());
+    if (!hit) { toast('ไม่พบบิลขายเลขนี้ในรายการที่เปิดอยู่ — เปิดหน้าใบสั่งขายแล้วกดรับคืนจากในบิล', true); return; }
+    orderId = hit.id;
+  }
+  const d = await callApi('getGoodsReturnDraft', { orderId });
+  if (!d.success) { toast(d.message, true); return; }
+  if (!d.lines.length) { toast('บิลนี้ไม่มีของที่รับคืนได้แล้ว', true); return; }
+  GRN_DRAFT = d;
+  const today = new Date().toISOString().slice(0, 10);
+  plModal('<h3>รับคืนสินค้า — บิล ' + esc(d.order.orderCode) + '</h3>' +
+    '<p class="form-hint">ใส่จำนวนที่รับคืนจริงและ<b>สภาพของ</b> — ' +
+      '<b>ของสภาพดีเข้าคลังขายต่อได้ · ของเสีย/หมดอายุไม่เข้าคลัง</b> (จะได้ไม่ถูกหยิบไปขายอีกรอบ)</p>' +
+    '<div class="form-grid g2">' +
+      plField('เหตุผลที่รับคืน', '<select id="grn-reason">' +
+        Object.keys(d.reasons).map(k => '<option value="'+k+'">'+esc(d.reasons[k])+'</option>').join('') + '</select>') +
+      plField('วันที่รับคืน', '<input type="date" id="grn-date" value="'+today+'">') +
+    '</div>' +
+    '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
+      '<th>ส่งไป</th><th>คืนแล้ว</th><th>รับคืนครั้งนี้</th><th>สภาพ</th></tr></thead><tbody>' +
+      d.lines.map((l, i) =>
+        '<tr><td class="mono-data">'+esc(l.productCode || '-')+'</td><td class="wrap">'+esc(l.productName)+'</td>' +
+        '<td class="mono-data">'+esc(l.unitCode)+'</td><td class="mono-data">'+l.shipped+'</td>' +
+        '<td class="mono-data">'+(l.returned || '—')+'</td>' +
+        '<td><input type="number" class="grn-qty" data-i="'+i+'" min="0" max="'+l.returnable+'" step="1" value="0" ' +
+          'style="width:80px" oninput="grnRecalc()"></td>' +
+        '<td><select class="grn-cond" data-i="'+i+'" onchange="grnRecalc()">' +
+          d.conditions.map(c => '<option value="'+c.code+'">'+esc(c.label)+'</option>').join('') + '</select></td></tr>').join('') +
+      '</tbody></table></div>' +
+    plField('หมายเหตุ', '<input id="grn-note" placeholder="เช่น ลูกค้าแจ้งกล่องบุบตอนรับของ">') +
+    '<div id="grn-total" class="form-hint" style="margin-top:8px"></div>' +
+    plModalActions('plBusy(grnSave)', '✓ รับคืนสินค้า'));
+  grnRecalc();
+}
+function grnRecalc(){
+  if (!GRN_DRAFT) return;
+  let amount = 0, restock = 0, scrap = 0;
+  document.querySelectorAll('.grn-qty').forEach(inp => {
+    const i = Number(inp.dataset.i), l = GRN_DRAFT.lines[i];
+    const qty = Math.min(Math.max(0, parseFloat(inp.value) || 0), l.returnable);
+    const cond = document.querySelector('.grn-cond[data-i="'+i+'"]').value;
+    const c = GRN_DRAFT.conditions.find(x => x.code === cond) || {};
+    amount += qty * l.unitPrice;
+    if (c.restock) restock += qty * (l.unitFactor || 1); else scrap += qty * (l.unitFactor || 1);
+  });
+  const box = document.getElementById('grn-total');
+  if (box) box.innerHTML = 'มูลค่าที่รับคืน <b>฿' + bahtPlain(amount) + '</b>' +
+    ' · เข้าคลัง <b>' + restock + '</b> หน่วย' +
+    (scrap ? ' · <span style="color:var(--orange)">ของเสีย <b>' + scrap + '</b> หน่วย (ไม่เข้าคลัง)</span>' : '');
+}
+async function grnSave(){
+  if (!GRN_DRAFT) return;
+  const lines = [...document.querySelectorAll('.grn-qty')].map(inp => {
+    const i = Number(inp.dataset.i), l = GRN_DRAFT.lines[i];
+    return { itemId: l.itemId, qty: Math.min(Math.max(0, parseFloat(inp.value) || 0), l.returnable),
+      condition: document.querySelector('.grn-cond[data-i="'+i+'"]').value };
+  }).filter(l => l.qty > 0);
+  if (!lines.length) { plModalErr('ใส่จำนวนที่รับคืนอย่างน้อย 1 รายการ'); return; }
+  const r = await callApi('createGoodsReturn', { orderId: GRN_DRAFT.order.id,
+    reasonCode: document.getElementById('grn-reason').value,
+    returnDate: document.getElementById('grn-date').value,
+    note: document.getElementById('grn-note').value.trim(), lines: lines });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose();
+  toast(r.message);
+  printGoodsReturn(r.returnId);      // คนขับรถ/ลูกค้าต้องได้เอกสารทันที
+  listSnapDrop('goodsreturns'); grnCache = []; loadGoodsReturns();
+}
+async function grnMakeCreditNote(id){
+  if (!confirm('ออกใบลดหนี้จากใบรับคืนนี้?\n★ ของเข้าคลังไปแล้วตอนรับคืน ใบลดหนี้จะไม่ขยับสต็อกซ้ำ')) return;
+  const r = await callApi('createCreditNoteFromReturn', { returnId: id });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  printAdjustNoteById(r.creditNoteId, 'credit');
+  listSnapDrop('goodsreturns'); grnCache = []; loadGoodsReturns();
+}
+async function grnCancel(id){
+  const why = prompt('ยกเลิกใบรับคืนนี้เพราะอะไร? (ของที่รับเข้าคลังจะถูกหักออกคืน)');
+  if (why === null) return;
+  const r = await callApi('cancelGoodsReturn', { id, reason: why });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  listSnapDrop('goodsreturns'); grnCache = []; loadGoodsReturns();
+}
+async function printGoodsReturn(id){
+  const [r] = await Promise.all([callApi('getGoodsReturn', { id }), ensureDocPrint()]);
+  if (!r.success) { toast(r.message, true); return; }
+  const n = r.note, c = r.customer || {};
+  DocPrint.doc({
+    title: 'ใบรับคืนสินค้า (Goods Return Note)', docNo: n.returnNo, issuer: r.issuer || {},
+    subLabel: n.status === 'cancelled' ? 'ยกเลิกแล้ว' : n.reason,
+    metaRight: [['เลขที่', n.returnNo], ['วันที่รับคืน', n.returnDate]]
+      .concat(n.orderCode ? [['อ้างอิงบิลขาย', n.orderCode]] : []),
+    parties: [{ label: 'รับคืนจาก', name: c.name, code: c.code, address: c.address, taxId: c.taxId,
+      branchCode: c.branchCode, phone: c.phone }],
+    columns: [
+      { label: 'ลำดับ', align: 'c', width: '8%', value: (l, i) => i + 1 },
+      { label: 'รหัส', code: true, width: '14%', value: l => l.productCode || '-' },
+      { label: 'รายการ', value: l => l.productName || '-' },
+      { label: 'หน่วย', align: 'c', width: '10%', value: l => l.unitCode || '-' },
+      { label: 'จำนวน', align: 'r', width: '10%', value: l => String(l.qty) },
+      /* ★ สภาพของต้องอยู่บนเอกสาร — เป็นสิ่งที่ลูกค้าเซ็นรับรองว่าตรงกับของที่ส่งคืนจริง */
+      { label: 'สภาพ', width: '18%', value: l => l.conditionLabel + (l.restock ? '' : ' (ไม่เข้าคลัง)') }
+    ],
+    lines: r.items,
+    totals: [['มูลค่าสินค้าที่รับคืน', DocPrint.money(n.amount), 'grand']],
+    note: 'เหตุผล: ' + n.reason + (n.note ? ' · ' + n.note : '') +
+      (n.scrapQty ? ' · ของเสีย ' + n.scrapQty + ' หน่วยไม่นำเข้าคลัง' : '') +
+      '\n★ ใบนี้เป็นหลักฐานการรับคืนสินค้า ไม่ใช่เอกสารลดหนี้ — ใบลดหนี้ออกแยกต่างหาก',
+    signers: ['ผู้ส่งคืน', 'ผู้รับคืน', 'ผู้ตรวจสภาพ'], showBank: false, carry: true,
+    xlsx: { filename: n.returnNo, headers: ['รหัส', 'รายการ', 'หน่วย', 'จำนวน', 'สภาพ'],
+      rows: r.items.map(l => [l.productCode, l.productName, l.unitCode, String(l.qty), l.conditionLabel]) }
+  });
+}
+
 /* ══════════ ใบวางบิล — 16 ต.ค. 2026 ══════════
    ★★ ใบวางบิลไม่ใช่เอกสารภาษีและไม่ลงบัญชี เป็นแค่ "ซองรวมใบแจ้งหนี้" ที่พนักงานเก็บเงิน
      ถือไปวางที่ร้าน · **รับชำระยังทำที่ใบแจ้งหนี้เหมือนเดิม** เพราะลูกค้าจ่ายไม่ครบตามที่วางบิล

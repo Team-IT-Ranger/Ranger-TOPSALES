@@ -246,6 +246,15 @@ var CENTRAL_SHEETS = {
   /* ═══ ใบวางบิล (53_billing_notes.gs) — รวมใบแจ้งหนี้หลายใบของลูกค้ารายเดียวไปวางบิลครั้งเดียว
      ★ ไม่ใช่เอกสารภาษีและไม่ลงบัญชี เป็นแค่ "ซองรวมใบแจ้งหนี้" — ภาระหนี้เกิดที่ใบแจ้งหนี้ไปแล้ว
        เผลอลงบัญชีเมื่อไหร่ ลูกหนี้โตเป็นสองเท่าทันที · รับชำระยังทำที่ใบแจ้งหนี้เหมือนเดิม */
+  /* ═══ ใบรับคืนสินค้า (54_goods_returns.gs) — เอกสารตั้งต้นของการคืนของ ออกก่อนใบลดหนี้
+     ★★ ใบรับคืนเป็นตัวที่ขยับสต็อก ใบลดหนี้ที่ออกจากมันจะไม่ขยับซ้ำ (moveStock=false)
+       สองที่ขยับของชิ้นเดียวกันเมื่อไหร่ สต็อกงอกเป็นสองเท่าโดยไม่มีใครเห็น
+     ★ `condition` ตัดสินว่าของกลับเข้าคลังขายได้ไหม — ของเสียต้องไม่เข้าคลัง ไม่งั้นถูกขายอีกรอบ */
+  goods_returns: ['record_id','tenant_id','return_no','sales_order_id','order_code','customer_id',
+    'return_date','reason_code','reason','item_count','amount','restock_qty','scrap_qty',
+    'credit_note_id','status','note','received_by','created_at'],
+  goods_return_items: ['record_id','return_id','order_item_id','product_id','unit_code','unit_factor',
+    'qty','base_qty','condition','restock','unit_price','amount','tax_status'],
   billing_notes: ['record_id','tenant_id','note_no','customer_id','note_date','due_date',
     'invoice_count','total','status','note','created_by','created_at'],
   billing_note_items: ['record_id','note_id','invoice_id','invoice_no','invoice_date','due_date','amount'],

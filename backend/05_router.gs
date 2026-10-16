@@ -250,6 +250,13 @@ var ADMIN_ACTION_MAP = {
   payApBills:             payApBills,
   getApAging:             getApAging,
   listArInvoices:         listArInvoices,
+  // ใบรับคืนสินค้า (54_goods_returns.gs) — เอกสารตั้งต้นของใบลดหนี้ · เป็นตัวที่ขยับสต็อก
+  getGoodsReturnDraft:    getGoodsReturnDraft,
+  createGoodsReturn:      createGoodsReturn,
+  listGoodsReturns:       listGoodsReturns,
+  getGoodsReturn:         getGoodsReturn,
+  createCreditNoteFromReturn: createCreditNoteFromReturn,
+  cancelGoodsReturn:      cancelGoodsReturn,
   // ใบวางบิล (53_billing_notes.gs) — รวมใบแจ้งหนี้ไปวางบิลครั้งเดียว ไม่ลงบัญชี
   listBillableInvoices:   listBillableInvoices,
   createBillingNote:      createBillingNote,

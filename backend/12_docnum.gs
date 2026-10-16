@@ -56,6 +56,9 @@ var DOC_SERIES_TYPES = [
   /* ใบลดหนี้ใช้ตัวนับกลางเหมือนใบแจ้งหนี้ — ออกในนามเจ้าของสมุดที่ตั้งลูกหนี้ไว้ (15 ต.ค. 2026) */
   { code: 'CN',  label: 'ใบลดหนี้',           central: true },
   { code: 'DN',  label: 'ใบเพิ่มหนี้',         central: true },
+  { code: 'GRN', label: 'ใบรับคืนสินค้า',       central: true,
+    note: 'ออกตอนรับของคืนจากลูกค้า — เป็นเอกสารตั้งต้นของใบลดหนี้',
+    defaults: { prefix: 'GRN', date_format: 'yyyyMM', running_digits: 4, reset_cycle: 'monthly', separator: '-' } },
   { code: 'BN',  label: 'ใบวางบิล',           central: true,
     note: 'รวมใบแจ้งหนี้หลายใบของลูกค้ารายเดียวไปวางบิลครั้งเดียว — ไม่ใช่เอกสารภาษี',
     defaults: { prefix: 'BN', date_format: 'yyyyMM', running_digits: 4, reset_cycle: 'monthly', separator: '-' } },

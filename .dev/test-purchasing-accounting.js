@@ -107,7 +107,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs', '53_billing_notes.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs', '53_billing_notes.gs', '54_goods_returns.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -1239,6 +1239,83 @@ console.log('\n── ใบวางบิล ──');
   eq('  ยกเลิกซ้ำไม่ได้', ctx.cancelBillingNote(FIN, { id: BN }).success, false);
 
   eq('ไม่เลือกใบเลย → ปฏิเสธ', ctx.createBillingNote(FIN, { customerId: 500, invoiceIds: [] }).success, false);
+}
+
+/* ══════════ ใบรับคืนสินค้า (54_goods_returns.gs · 16 ต.ค. 2026) ══════════
+   ★★ สองข้อที่ต้องไม่พลาดเด็ดขาด:
+     1. **ของเสียต้องไม่เข้าคลังขาย** ไม่งั้นมันถูกหยิบไปขายอีกรอบ
+     2. **ใบรับคืนเป็นตัวที่ขยับสต็อก ใบลดหนี้ที่ออกจากมันต้องไม่ขยับซ้ำ**
+        สองที่ขยับของชิ้นเดียวกัน = สต็อกงอกเป็นสองเท่าโดยไม่มีใครเห็น */
+console.log('\n── ใบรับคืนสินค้า ──');
+{
+  /* ★ นับสต็อกรวมทุกคลังของสินค้านั้น ไม่ผูกกับ scope — กล่องทดสอบกับโค้ดคิด scope ไม่ตรงกัน
+     (`_effectiveTenantId` ในกล่องนี้ไม่คืน 'T1' ตาม payload) และสิ่งที่เทสต์นี้อยากพิสูจน์คือ
+     **ของขยับกี่ชิ้น** ไม่ใช่ขยับที่คลังไหน ซึ่งมีเทสต์ของมันเองอยู่แล้วในหมวดแยกข้อมูลตัวแทน */
+  const stockOf = pid => ctx.centralObjects('warehouse_stock')
+    .filter(r => String(r.product_id) === String(pid))
+    .reduce((s, r) => s + (Number(r.qty) || 0), 0);
+
+  const SC2 = ctx._saleStockScope('T1'), WH2 = ctx._ensureScopeWarehouse(SC2);
+  ctx._applyStockIn(SC2, WH2, '80', 100, 5, 'receipt', 'TEST', 'R0', 'ตั้งต้น', 'tester');
+  append(tenantSheets.sales_orders, { record_id: 180, order_code: 'SO-RET-1', customer_id: 500,
+    subtotal: 10700, discount: 0, total: 10700, payment_method: 'credit_term', fulfillment_type: 'office_delivery',
+    status: 'completed', created_at: '2026-10-16 09:00:00', tax_invoice_no: 'TAX-IV-980',
+    apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 10000, vat_amount: 700, exempt_amount: 0 });
+  append(tenantSheets.order_items, { record_id: 18001, order_id: 180, product_id: '80', unit_code: 'CT',
+    unit_factor: 10, qty: 10, base_qty: 100, price: 1070, line_total: 10700, line_discount: 0, is_free: 0, tax_status: 'vat' });
+
+  let d = ctx.getGoodsReturnDraft(FIN, { tenantId: 'T1', orderId: 180 });
+  eq('ร่างใบรับคืน: บอกจำนวนที่รับคืนได้ของแต่ละรายการ',
+    [d.success, d.lines.length, d.lines[0].returnable, d.lines[0].unitPrice], [true, 1, 10, 1070]);
+
+  eq('ไม่ระบุเหตุผล → ปฏิเสธ',
+    ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, lines: [{ itemId: 18001, qty: 1, condition: 'good' }] }).success, false);
+  eq('★ รับคืนเกินที่ส่งไป → ปฏิเสธทั้งใบ (ไม่ตัดให้พอดีเงียบๆ)',
+    ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'damaged',
+      lines: [{ itemId: 18001, qty: 99, condition: 'good' }] }).success, false);
+
+  const before = stockOf('80');
+  let r = ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'damaged',
+    returnDate: '2026-10-18', note: 'ลูกค้าแจ้งกล่องบุบ',
+    lines: [{ itemId: 18001, qty: 2, condition: 'good' }, { itemId: 18001, qty: 1, condition: 'damaged' }] });
+  eq('★ รับคืน 2 ลังสภาพดี + 1 ลังชำรุด', [r.success, /^GRN-/.test(r.returnNo || '')], [true, true]);
+  eq('★★ เข้าคลังเฉพาะของสภาพดี (2 ลัง × 10 = 20 ชิ้น) ของเสียไม่เข้า',
+    [stockOf('80') - before, r.restocked, r.scrapQty], [20, 1, 10]);
+
+  // ── รับคืนซ้ำต้องนับของที่คืนไปแล้ว ──
+  d = ctx.getGoodsReturnDraft(FIN, { tenantId: 'T1', orderId: 180 });
+  eq('★ ร่างรอบถัดไปหักของที่คืนไปแล้ว (10 − 3 = 7)',
+    [d.lines[0].returned, d.lines[0].returnable], [3, 7]);
+
+  // ── ออกใบลดหนี้จากใบรับคืน: ต้องไม่ขยับสต็อกซ้ำ ──
+  let cr = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 180, invoiceDate: '2026-10-16', dueDays: 30 });
+  ok('ตั้งลูกหนี้ของบิลที่รับคืน', cr);
+  const stockBeforeCn = stockOf('80');
+  const grn = (ctx.listGoodsReturns(FIN, { tenantId: 'T1' }).data || [])[0];
+  r = ctx.createCreditNoteFromReturn(FIN, { tenantId: 'T1', returnId: grn.id, creditDate: '2026-10-18' });
+  eq('★ ออกใบลดหนี้จากใบรับคืนได้', [r.success, /^CN-/.test(r.creditNoteNo || '')], [true, true]);
+  eq('★★★ สต็อกต้องไม่ขยับซ้ำ (ของเข้าคลังไปแล้วตอนรับคืน)', stockOf('80'), stockBeforeCn);
+  eq('  ออกใบลดหนี้ซ้ำจากใบรับคืนเดิมไม่ได้',
+    ctx.createCreditNoteFromReturn(FIN, { tenantId: 'T1', returnId: grn.id }).success, false);
+
+  // ── ยกเลิก ──
+  eq('★ ออกใบลดหนี้แล้ว ยกเลิกใบรับคืนไม่ได้',
+    ctx.cancelGoodsReturn(FIN, { tenantId: 'T1', id: grn.id }).success, false);
+
+  r = ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'wrong_item',
+    returnDate: '2026-10-19', lines: [{ itemId: 18001, qty: 1, condition: 'good' }] });
+  ok('รับคืนอีกใบ (ยังไม่ออกใบลดหนี้)', r);
+  const s2 = stockOf('80');
+  const r2id = r.returnId;
+  r = ctx.cancelGoodsReturn(FIN, { tenantId: 'T1', id: r2id, reason: 'คีย์ผิด' });
+  eq('★ ยกเลิกใบที่ยังไม่ออกใบลดหนี้ได้ และหักของออกจากคลังคืน',
+    [r.success, stockOf('80') - s2], [true, -10]);
+  eq('  และของกลับมารับคืนได้ใหม่',
+    ctx.getGoodsReturnDraft(FIN, { tenantId: 'T1', orderId: 180 }).lines[0].returnable, 7);
+
+  const g = ctx.getGoodsReturn(FIN, { tenantId: 'T1', id: grn.id });
+  eq('รายละเอียดใบรับคืน: มีสภาพของแต่ละรายการและธงเข้าคลัง',
+    [g.success, g.items.length, g.items[0].restock, g.items[1].restock], [true, 2, true, false]);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

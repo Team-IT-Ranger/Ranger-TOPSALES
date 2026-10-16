@@ -12,11 +12,11 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 55 ไฟล์ `.gs` | 14,983 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 10,909 |
+| Backend (Apps Script) | 56 ไฟล์ `.gs` | 15,305 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,078 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,369 |
-| ตารางข้อมูล | 63 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
-| Action | 18 มือถือ + 200 แอดมิน |  |
+| ตารางข้อมูล | 65 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
+| Action | 18 มือถือ + 206 แอดมิน |  |
 
 ## B. ไฟล์ backend — ผังพื้นแบบละเอียด
 
@@ -24,19 +24,19 @@
 
 | ไฟล์ | บรรทัด | หัวเรื่องในไฟล์ |
 |---|---|---|
-| `00_setup_sheets.gs` | 540 | SETUP: CENTRAL SHEET |
+| `00_setup_sheets.gs` | 549 | SETUP: CENTRAL SHEET |
 | `01_config.gs` | 23 | CONFIG |
 | `02_helpers.gs` | 446 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 226 | AUTH |
-| `05_router.gs` | 307 | ROUTER |
+| `05_router.gs` | 314 | ROUTER |
 | `06_bootstrap.gs` | 292 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 387 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 61 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
 | `10_master_data.gs` | 436 | MASTER DATA |
 | `11_promotions.gs` | 198 | PROMOTION ENGINE |
-| `12_docnum.gs` | 351 | DOCUMENT NUMBER CONTROL (ต่อตัวแทน) |
+| `12_docnum.gs` | 354 | DOCUMENT NUMBER CONTROL (ต่อตัวแทน) |
 | `13_tenants.gs` | 509 | TENANT ONBOARDING (บริษัทเจ้าของสินค้าเท่านั้น) |
 | `14_permissions.gs` | 164 | RBAC (Admin App) |
 | `15_import_export_express.gs` | 229 | เชื่อมโปรแกรม EXPRESS (Export/Import ไฟล์) |
@@ -78,6 +78,7 @@
 | `51_tax_reports.gs` | 211 | รายงานภาษีขาย / ภาษีซื้อ (สำหรับยื่น ภ.พ.30) |
 | `52_cash_sales_gl.gs` | 131 | ลงบัญชีการขายสด |
 | `53_billing_notes.gs` | 198 | ใบวางบิล (Billing Note) |
+| `54_goods_returns.gs` | 303 | ใบรับคืนสินค้า (Goods Return Note) |
 | `99_dev_tools.gs` | 282 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -130,6 +131,7 @@
 | `backfillUserAffiliations` | `13_tenants.gs` | — | กันกดซ้ำ |
 | `cancelBillingNote` | `53_billing_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `cancelGoodsReceipt` | `22_purchase_order.gs` | inventory:edit | กันกดซ้ำ |
+| `cancelGoodsReturn` | `54_goods_returns.gs` | sales:edit | กันกดซ้ำ |
 | `cancelPurchaseOrder` | `22_purchase_order.gs` | purchasing:edit | กันกดซ้ำ |
 | `cancelPurchaseRequisition` | `21_purchase_requisition.gs` | purchasing:edit | กันกดซ้ำ |
 | `cancelSalesOrderAdmin` | `19_sales_admin.gs` | sales:edit | กันกดซ้ำ |
@@ -143,6 +145,8 @@
 | `createArDebitNote` | `49_credit_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `createArInvoice` | `23_accounting.gs` | accounting:edit | กันกดซ้ำ · requestId |
 | `createBillingNote` | `53_billing_notes.gs` | accounting:edit | กันกดซ้ำ |
+| `createCreditNoteFromReturn` | `54_goods_returns.gs` | accounting:edit | กันกดซ้ำ |
+| `createGoodsReturn` | `54_goods_returns.gs` | sales:edit | กันกดซ้ำ |
 | `createPriceList` | `17_pricing.gs` | pricing:edit | กันกดซ้ำ |
 | `createTenant` | `13_tenants.gs` | tenants:edit | กันกดซ้ำ · requestId |
 | `deactivatePromotion` | `11_promotions.gs` | promotions:edit | กันกดซ้ำ |
@@ -176,6 +180,8 @@
 | `getExternalSalesAutoImportStatus` | `43_external_sales_import.gs` | purchasing:view |  |
 | `getFreeGoodsSet` | `39_free_goods.gs` | promotions:view |  |
 | `getGoodsReceipt` | `22_purchase_order.gs` | inventory:view |  |
+| `getGoodsReturn` | `54_goods_returns.gs` | sales:view |  |
+| `getGoodsReturnDraft` | `54_goods_returns.gs` | sales:view |  |
 | `getIncomeStatement` | `23_accounting.gs` | accounting:view |  |
 | `getJournal` | `23_accounting.gs` | accounting:view |  |
 | `getMyPermissions` | `26_roles.gs` | — |  |
@@ -217,6 +223,7 @@
 | `listFreeGoodsSets` | `39_free_goods.gs` | promotions:view |  |
 | `listGlAccounts` | `23_accounting.gs` | accounting:view |  |
 | `listGoodsReceipts` | `22_purchase_order.gs` | inventory:view |  |
+| `listGoodsReturns` | `54_goods_returns.gs` | sales:view |  |
 | `listHelpArticles` | `42_help_center.gs` | — |  |
 | `listJournals` | `23_accounting.gs` | accounting:view |  |
 | `listMyPackages` | `38_package_distribution.gs` | pricing:view |  |
@@ -362,6 +369,8 @@
 | `gl_journal_lines` | 9 |  | `record_id` `journal_id` `line_no` `account_code` `description` `debit` `credit` `party_type` `party_id` |
 | `gl_journals` | 14 |  | `record_id` `tenant_id` `journal_no` `journal_date` `source` `ref_type` `ref_id` `memo` `status` `total_debit` `total_credit` `created_by` `created_at` `voided_at` |
 | `goods_receipts` | 13 |  | `record_id` `tenant_id` `gr_no` `po_id` `vendor_id` `warehouse_id` `receive_date` `note` `status` `journal_id` `created_by` `created_at` `source_ref` |
+| `goods_return_items` | 13 |  | `record_id` `return_id` `order_item_id` `product_id` `unit_code` `unit_factor` `qty` `base_qty` `condition` `restock` `unit_price` `amount` `tax_status` |
+| `goods_returns` | 18 |  | `record_id` `tenant_id` `return_no` `sales_order_id` `order_code` `customer_id` `return_date` `reason_code` `reason` `item_count` `amount` `restock_qty` `scrap_qty` `credit_note_id` `status` `note` `received_by` `created_at` |
 | `gr_items` | 10 |  | `record_id` `gr_id` `po_item_id` `product_id` `qty` `unit_code` `unit_factor` `base_qty` `unit_cost` `amount` |
 | `help_articles` | 10 | ✓ | `record_id` `code` `category` `title` `summary` `body` `sort_order` `is_active` `updated_at` `updated_by` |
 | `liff_users` | 6 |  | `line_user_id` `display_name` `role` `tenant_id` `status` `last_login` |
@@ -462,6 +471,7 @@
 | `RV` | ใบสำคัญรับ | กลาง |  |  |
 | `CN` | ใบลดหนี้ | กลาง |  |  |
 | `DN` | ใบเพิ่มหนี้ | กลาง |  |  |
+| `GRN` | ใบรับคืนสินค้า | กลาง | GRN-yyyyMM-xxxx · รีเซ็ตรายเดือน | ออกตอนรับของคืนจากลูกค้า — เป็นเอกสารตั้งต้นของใบลดหนี้ |
 | `BN` | ใบวางบิล | กลาง | BN-yyyyMM-xxxx · รีเซ็ตรายเดือน | รวมใบแจ้งหนี้หลายใบของลูกค้ารายเดียวไปวางบิลครั้งเดียว — ไม่ใช่เอกสารภาษี |
 | `JV` | ใบสำคัญทั่วไป | กลาง |  |  |
 
@@ -491,7 +501,7 @@
 |---|---|---|---|---|---|
 | 1.1.1 | งานขาย › เอกสารการขาย › ใบสั่งขาย | `salesorders` | `sales` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.1.2 | งานขาย › เอกสารการขาย › ใบลดหนี้ / เพิ่มหนี้ | `adjnotes` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
-| 1.1.3 | งานขาย › เอกสารการขาย › ใบเสนอราคา | `v-quote` | `sales` | ทั้งสองฝั่ง | **ยังไม่ได้ทำ** |
+| 1.1.3 | งานขาย › เอกสารการขาย › ใบรับคืนสินค้า | `goodsreturns` | `sales` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.2.1 | งานขาย › ราคาขาย / ส่วนลด › กำหนดชุดตารางราคาขาย | `pricelists` | `pricing` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.2.2 | งานขาย › ราคาขาย / ส่วนลด › กำหนดชุดส่วนลดการขาย | `promotions` | `promotions` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.3.1 | งานขาย › ส่งเสริมการขาย › ชุดแถม (ของแถม) | `freegoods` | `promotions` | ทั้งสองฝั่ง | ใช้งานได้ |
@@ -532,7 +542,7 @@
 | 9.4.1 | ตั้งค่าระบบ › สิทธิ์การใช้งาน › ผู้ใช้งานและอนุมัติ | `adminusers` | `users_roles` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 9.4.2 | ตั้งค่าระบบ › สิทธิ์การใช้งาน › บทบาทและสิทธิ์ | `roles` | `users_roles` | ทั้งสองฝั่ง | ใช้งานได้ |
 
-**ยังไม่ได้ทำ 5 เมนู**: 1.1.3 ใบเสนอราคา · 1.5.1 เขตการขายของพนักงาน · 1.6.1 สถานะการจัดส่ง · 4.2.2 ใบเบิกจ่ายสินค้าออก · 4.8.1 รายงานเคลื่อนไหวสินค้า
+**ยังไม่ได้ทำ 4 เมนู**: 1.5.1 เขตการขายของพนักงาน · 1.6.1 สถานะการจัดส่ง · 4.2.2 ใบเบิกจ่ายสินค้าออก · 4.8.1 รายงานเคลื่อนไหวสินค้า
 
 ## I. เทสต์ที่คุมแบบนี้อยู่
 
@@ -560,7 +570,7 @@
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,246 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,323 |
 | `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 218 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
@@ -570,6 +580,7 @@
 | `.dev/test-unit-rescale.js` | หน่วย (ไม่ยิงเน็ต) | 56 |
 | `.dev/test-user-promotion.js` | หน่วย (ไม่ยิงเน็ต) | 136 |
 | `.dev/uat-ar-adjust-notes-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 165 |
+| `.dev/uat-cash-and-billing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 159 |
 | `.dev/uat-cogs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 161 |
 | `.dev/uat-delivery-rounds-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 144 |
 | `.dev/uat-pricelist-edit-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 85 |
