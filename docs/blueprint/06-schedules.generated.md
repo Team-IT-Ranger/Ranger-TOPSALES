@@ -12,11 +12,11 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 51 ไฟล์ `.gs` | 14,096 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 10,556 |
+| Backend (Apps Script) | 52 ไฟล์ `.gs` | 14,380 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 10,634 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,369 |
-| ตารางข้อมูล | 60 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
-| Action | 18 มือถือ + 190 แอดมิน |  |
+| ตารางข้อมูล | 61 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
+| Action | 18 มือถือ + 192 แอดมิน |  |
 
 ## B. ไฟล์ backend — ผังพื้นแบบละเอียด
 
@@ -24,12 +24,12 @@
 
 | ไฟล์ | บรรทัด | หัวเรื่องในไฟล์ |
 |---|---|---|
-| `00_setup_sheets.gs` | 531 | SETUP: CENTRAL SHEET |
+| `00_setup_sheets.gs` | 534 | SETUP: CENTRAL SHEET |
 | `01_config.gs` | 23 | CONFIG |
 | `02_helpers.gs` | 446 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 226 | AUTH |
-| `05_router.gs` | 294 | ROUTER |
+| `05_router.gs` | 297 | ROUTER |
 | `06_bootstrap.gs` | 292 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 379 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 61 | VAN STOCK (Mobile App) |
@@ -58,7 +58,7 @@
 | `31_sales_rollup.gs` | 82 | สรุปยอดขายรายวัน (rollup) |
 | `32_admin_bootstrap.gs` | 37 | เปิดแอปแอดมินด้วยคำขอเดียว |
 | `33_customers.gs` | 309 | ทะเบียนลูกค้า (customer master) |
-| `34_sales_status.gs` | 766 | สถานะบิลขาย |
+| `34_sales_status.gs` | 780 | สถานะบิลขาย |
 | `35_idempotency.gs` | 84 | กันบันทึกซ้ำ (idempotency) |
 | `36_price_rules.gs` | 451 | สิทธิ์เข้าถึงชุดราคา (price list eligibility) |
 | `37_customer_bulk.gs` | 129 | จัดกลุ่มลูกค้าเป็นชุด (bulk assign) |
@@ -74,6 +74,7 @@
 | `47_address_refs.gs` | 133 | ══════════════════════════════════════════════════════════════════════ |
 | `48_delivery_rounds.gs` | 649 | รอบจัดส่ง · ของค้างส่ง (แอดมินศูนย์ขอ 14 ต.ค. 2026) |
 | `49_credit_notes.gs` | 356 | ใบลดหนี้ (Credit Note) · ใบเพิ่มหนี้ (Debit Note) — 15 ต.ค. 2026 |
+| `50_cogs.gs` | 264 | ต้นทุนขาย (COGS) |
 | `99_dev_tools.gs` | 282 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -154,6 +155,7 @@
 | `ensureSaleDocNo` | `34_sales_status.gs` | sales:edit | กันกดซ้ำ |
 | `explainCustomerPricing` | `36_price_rules.gs` | pricing:view |  |
 | `exportExpressSales` | `15_import_export_express.gs` | sales_report:view |  |
+| `getAccountingSettings` | `50_cogs.gs` | accounting:view |  |
 | `getAdminBootstrap` | `32_admin_bootstrap.gs` | — |  |
 | `getAdminDashboard` | `06_bootstrap.gs` | sales_report:view |  |
 | `getApAging` | `23_accounting.gs` | accounting:view |  |
@@ -259,6 +261,7 @@
 | `salesReportByCustomer` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByProduct` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByStaff` | `41_sales_reports.gs` | sales_report:view |  |
+| `saveAccountingSettings` | `50_cogs.gs` | accounting:edit | กันกดซ้ำ |
 | `saveApprovalFlow` | `20_purchasing_master.gs` | purchasing:edit | กันกดซ้ำ |
 | `saveCompanyProfile` | `25_company.gs` | settings:edit | กันกดซ้ำ |
 | `saveCustomerList` | `40_customer_lists.gs` | customers:edit | กันกดซ้ำ |
@@ -316,6 +319,7 @@
 
 | ชีต | คอลัมน์ | แคช | รายชื่อคอลัมน์ |
 |---|---|---|---|
+| `accounting_settings` | 6 |  | `record_id` `tenant_id` `cost_method` `cogs_from` `updated_at` `updated_by` |
 | `admin_users` | 10 |  | `record_id` `username` `password_hash` `salt` `display_name` `role_code` `tenant_id` `status` `created_at` `line_user_id` |
 | `ap_bills` | 18 |  | `record_id` `tenant_id` `bill_no` `vendor_invoice_no` `vendor_id` `po_id` `gr_id` `bill_date` `due_date` `subtotal_ex_vat` `vat_amount` `total` `paid_amount` `status` `journal_id` `note` `created_by` `created_at` |
 | `ap_payment_allocations` | 4 |  | `record_id` `payment_id` `bill_id` `amount` |
@@ -504,6 +508,7 @@
 | 5.1.1 | งานบัญชีการเงิน › บัญชีทั่วไป › สมุดรายวัน / งบทดลอง | `glbooks` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.2.1 | งานบัญชีการเงิน › เจ้าหนี้ › ใบแจ้งหนี้และการจ่าย | `apbills` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.3.1 | งานบัญชีการเงิน › ลูกหนี้ › ใบแจ้งหนี้และการรับชำระ | `arinvoices` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 5.4.1 | งานบัญชีการเงิน › ตั้งค่าทางบัญชี › วิธีตัดต้นทุนขาย | `acctsettings` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 8.1.1 | คู่มือใช้งานระบบ › คู่มือใช้งานระบบ › คู่มือใช้งานระบบ | `helpcenter` | `` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 9.1.1 | ตั้งค่าระบบ › ข้อมูลบริษัท › ข้อมูลบริษัท | `companyinfo` | `settings` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 9.2.1 | ตั้งค่าระบบ › เลขที่เอกสาร › ตั้งค่ารูปแบบเลขที่เอกสาร | `docnum` | `docnum` | ทั้งสองฝั่ง | ใช้งานได้ |
@@ -523,7 +528,7 @@
 | `.dev/test-customer-lists.js` | หน่วย (ไม่ยิงเน็ต) | 137 |
 | `.dev/test-customer-requests.js` | หน่วย (ไม่ยิงเน็ต) | 263 |
 | `.dev/test-customers.js` | หน่วย (ไม่ยิงเน็ต) | 195 |
-| `.dev/test-docnum.js` | หน่วย (ไม่ยิงเน็ต) | 296 |
+| `.dev/test-docnum.js` | หน่วย (ไม่ยิงเน็ต) | 299 |
 | `.dev/test-drive-layout.js` | หน่วย (ไม่ยิงเน็ต) | 126 |
 | `.dev/test-external-sales-import.js` | หน่วย (ไม่ยิงเน็ต) | 321 |
 | `.dev/test-flags.js` | หน่วย (ไม่ยิงเน็ต) | 89 |
@@ -539,7 +544,7 @@
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 860 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 990 |
 | `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 213 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |

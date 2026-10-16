@@ -96,7 +96,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -853,6 +853,136 @@ console.log('\n── ใบเพิ่มหนี้ (Debit Note) ──');
   let p3 = ctx.receiveArPayment(FIN, { customerId: 500, receiptDate: '2026-10-25', method: 'transfer',
     allocations: [{ invoiceId: IV3, amount: 2640 }] });
   eq('จ่ายส่วนที่เพิ่มครบ → ใบปิดอีกครั้ง', [p3.success, iv3().status, iv3().outstanding], [true, 'paid', 0]);
+}
+
+/* ══════════ ต้นทุนขาย COGS (50_cogs.gs · 16 ต.ค. 2026) ══════════
+   ★ ก่อนมีตัวนี้ การตัดสต็อกไม่ลงบัญชีเลย งบกำไรขาดทุนจึงไม่มีต้นทุนขายสักบาท
+     และบัญชี 1300 สินค้าคงเหลือโตขึ้นเรื่อยๆ ไม่เคยลด
+   ★★ สิ่งที่ต้องคุมให้แน่น 3 ข้อ:
+     1. ปิดไว้เป็นค่าเริ่มต้น — deploy แล้วต้องไม่มีใบสำคัญงอกเองในสมุดที่ปิดงวดไปแล้ว
+     2. ขาไปกับขากลับต้องหักล้างกันสนิท แม้ต้นทุนเฉลี่ยจะขยับไปแล้วระหว่างนั้น
+     3. ไม่ย้อนหลังก่อนวันที่เริ่มตัด (งวดที่ยื่นภาษีไปแล้วห้ามขยับ) */
+console.log('\n── ต้นทุนขาย (COGS) ──');
+{
+  /* ★★ บิลทดสอบเป็นของตัวแทน T1 → ของต้องอยู่ใน **คลังของ T1** ไม่ใช่คลังกลาง
+     (`_saleStockScope` เป็นตัวตัดสิน) · เคยพลาดตรงนี้มาแล้วตอนเทสต์ใบลดหนี้ 15 ต.ค.
+     ใส่ของผิดคลังแล้วอาการคือ "ของในคลังไม่พอ" ซึ่งดูเหมือนโค้ดผลิตพัง ทั้งที่เทสต์ผิดเอง */
+  const SC = ctx._saleStockScope('T1');
+  const WH = ctx._ensureScopeWarehouse(SC);
+  const bal = code => {
+    let d = 0, c = 0;
+    ctx.centralObjects('gl_journal_lines').forEach(l => {
+      if (String(l.account_code) !== code) return;
+      d += Number(l.debit) || 0; c += Number(l.credit) || 0;
+    });
+    return { dr: Math.round(d * 100) / 100, cr: Math.round(c * 100) / 100 };
+  };
+  const cogs0 = bal('5100'), inv0 = bal('1300');
+
+  // รับของเข้าคลังสองล็อตคนละราคา เพื่อให้ average กับ FIFO ให้คำตอบต่างกันจริง
+  ctx._applyStockIn(SC, WH, '70', 100, 10, 'receipt', 'TEST', 'L1', 'ล็อต 1 @10', 'tester');
+  ctx._applyStockIn(SC, WH, '70', 100, 20, 'receipt', 'TEST', 'L2', 'ล็อต 2 @20', 'tester');
+  const avgNow = ctx._scoped('warehouse_stock', SC).filter(r => String(r.product_id) === '70')[0].avg_cost;
+  eq('ตั้งต้น: รับ 100@10 + 100@20 → ต้นทุนเฉลี่ย 15', avgNow, 15);
+
+  const mkOrder = (id, code) => {
+    append(tenantSheets.sales_orders, { record_id: id, order_code: code, customer_id: 500, subtotal: 5000,
+      discount: 0, total: 5000, payment_method: 'credit_term', fulfillment_type: 'office_delivery',
+      status: 'accepted', created_at: '2026-10-16 09:00:00' });
+    append(tenantSheets.order_items, { record_id: id * 100, order_id: id, product_id: '70', unit_code: 'CT',
+      unit_factor: 10, qty: 4, base_qty: 40, price: 1250, line_total: 5000, line_discount: 0, is_free: 0, tax_status: 'vat' });
+    return ctx.tenantRowById('T1', 'sales_orders', id);
+  };
+
+  // ── 1. ปิดอยู่เป็นค่าเริ่มต้น ──
+  eq('ค่าเริ่มต้น = ไม่ตัดต้นทุนอัตโนมัติ', ctx.getAccountingSettings(FIN, {}).settings.costMethod, 'none');
+  /* ★★ ค่าตั้งเป็นของ "สมุด" ไม่ใช่ของทั้งระบบ — บิลนี้เป็นของตัวแทน T1 ต้นทุนจึงลงสมุด T1
+     และต้องอ่านค่าตั้งของ T1 · ตัวแทนเป็นคนละนิติบุคคล จะใช้วิธีคิดต้นทุนคนละแบบกับบริษัทก็ได้ */
+  let o = mkOrder(95, 'SO-COGS-OFF');
+  let r = ctx.applySaleWarehouseStock('T1', o, -1, 'ตัดของ', 'tester');
+  eq('★ ปิดอยู่ → ตัดสต็อกได้ตามปกติ แต่ไม่ลงบัญชีต้นทุน',
+    [r.success, r.cogs.posted, bal('5100').dr], [true, false, cogs0.dr]);
+
+  // ── 2. เปิดแบบต้นทุนเฉลี่ย ──
+  ok('เปิดใช้ในสมุดของ T1: ต้นทุนเฉลี่ยถ่วงน้ำหนัก เริ่ม 16 ต.ค.',
+    ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'average', cogsFrom: '2026-10-16' }));
+  eq('  ต้องระบุวันที่เริ่มเสมอเมื่อเปิดใช้',
+    ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'average' }).success, false);
+  /* ★ T1 = "ตัวแทนบ้าน" ซึ่ง `_normBook` ยุบเข้าสมุดบริษัท — ตั้งของ T1 = ตั้งของบริษัท (ถูกแล้ว)
+     การแยกสมุดจริงต้องวัดกับตัวแทนจริง (T9) ซึ่งเป็นคนละนิติบุคคล */
+  eq('ตั้งของตัวแทนบ้าน = ตั้งของสมุดบริษัท (ยุบเป็นสมุดเดียวกันตามกติกาทั้งโมดูล)',
+    ctx.getAccountingSettings(FIN, {}).settings.costMethod, 'average');
+  /* ★ วัดที่ `_acctSettings` ตรงๆ ไม่ผ่าน session — การสวมสิทธิ์ข้ามสมุดเป็นคนละเรื่อง
+     ที่มีเทสต์ของตัวเองอยู่แล้ว (หมวดแยกข้อมูลตัวแทน) ที่ต้องการพิสูจน์ตรงนี้คือ
+     **แถวค่าตั้งของสมุดหนึ่งต้องไม่ถูกอ่านเป็นของอีกสมุด** ซึ่งเป็นเรื่องของตัวอ่านเอง */
+  eq('★★ สมุดของตัวแทนจริง (T9) ต้องยังปิดอยู่ — ค่าตั้งไม่รั่วข้ามนิติบุคคล',
+    ctx._acctSettings('T9').costMethod, 'none');
+  eq('  และสมุดบริษัทอ่านได้ค่าที่ตั้งไว้จริง', ctx._acctSettings('').costMethod, 'average');
+
+  o = mkOrder(96, 'SO-COGS-AVG');
+  r = ctx.applySaleWarehouseStock('T1', o, -1, 'ตัดของ', 'tester');
+  eq('★ ตัด 40 ชิ้น @เฉลี่ย 15 → ลงต้นทุน 600', [r.cogs.posted, r.cogs.amount], [true, 600]);
+  eq('  Dr 5100 ต้นทุนขาย 600 / Cr 1300 สินค้าคงเหลือ 600',
+    [bal('5100').dr - cogs0.dr, bal('1300').cr - inv0.cr], [600, 600]);
+
+  // ── 3. กลับรายการต้องหักล้างด้วยยอดเดิม แม้ต้นทุนเฉลี่ยขยับไปแล้ว ──
+  ctx._applyStockIn(SC, WH, '70', 200, 90, 'receipt', 'TEST', 'L3', 'ล็อตแพง', 'tester');
+  const avgAfter = ctx._scoped('warehouse_stock', SC).filter(r2 => String(r2.product_id) === '70')[0].avg_cost;
+  eq('  รับของแพงเข้ามาอีก ต้นทุนเฉลี่ยขยับขึ้นจริง', avgAfter > 15, true);
+  r = ctx.applySaleWarehouseStock('T1', o, 1, 'ยกเลิกบิล', 'tester');
+  eq('★★ กลับรายการใช้ "ยอดเดิมที่เคยลง" ไม่ใช่ต้นทุนใหม่ → 600 เท่าเดิม', r.cogs.amount, 600);
+  eq('★★ ขาไป-ขากลับหักล้างกันสนิท ทั้งสองบัญชี',
+    [bal('5100').dr - bal('5100').cr - (cogs0.dr - cogs0.cr),
+     bal('1300').cr - bal('1300').dr - (inv0.cr - inv0.dr)], [0, 0]);
+
+  // ── 4. ไม่ย้อนหลังก่อนวันที่เริ่มตัด ──
+  append(tenantSheets.sales_orders, { record_id: 97, order_code: 'SO-COGS-OLD', customer_id: 500, subtotal: 100,
+    discount: 0, total: 100, payment_method: 'credit_term', fulfillment_type: 'office_delivery',
+    status: 'accepted', created_at: '2026-09-30 09:00:00' });
+  append(tenantSheets.order_items, { record_id: 9700, order_id: 97, product_id: '70', unit_code: 'CT',
+    unit_factor: 10, qty: 1, base_qty: 10, price: 100, line_total: 100, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  r = ctx.applySaleWarehouseStock('T1', ctx.tenantRowById('T1', 'sales_orders', 97), -1, 'ตัดของ', 'tester');
+  eq('★ บิลลงวันที่ก่อนวันเริ่มตัด → ไม่ลงต้นทุน (งวดที่ยื่นภาษีไปแล้วห้ามขยับ)',
+    [r.success, r.cogs.posted], [true, false]);
+
+  // ── 5. FIFO ให้คำตอบต่างจากเฉลี่ย และตรงกับล็อตจริง ──
+  ok('สลับเป็น FIFO', ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'fifo', cogsFrom: '2026-10-16' }));
+  ctx._applyStockIn(SC, WH, '71', 10, 10, 'receipt', 'TEST', 'F1', 'ล็อต 10@10', 'tester');
+  ctx._applyStockIn(SC, WH, '71', 10, 30, 'receipt', 'TEST', 'F2', 'ล็อต 10@30', 'tester');
+  append(tenantSheets.sales_orders, { record_id: 98, order_code: 'SO-COGS-FIFO', customer_id: 500, subtotal: 900,
+    discount: 0, total: 900, payment_method: 'credit_term', fulfillment_type: 'office_delivery',
+    status: 'accepted', created_at: '2026-10-16 09:00:00' });
+  append(tenantSheets.order_items, { record_id: 9800, order_id: 98, product_id: '71', unit_code: 'CT',
+    unit_factor: 5, qty: 3, base_qty: 15, price: 300, line_total: 900, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  r = ctx.applySaleWarehouseStock('T1', ctx.tenantRowById('T1', 'sales_orders', 98), -1, 'ตัดของ', 'tester');
+  eq('★ FIFO: ขาย 15 ชิ้น = 10@10 + 5@30 = 250 (ถ้าใช้เฉลี่ย 20 จะได้ 300 ซึ่งคนละตัวเลข)',
+    r.cogs.amount, 250);
+
+  // ── 6. ต้นทุนมาตรฐานอ่านจากช่อง "ราคาทุน" ที่มีอยู่แล้ว ──
+  append(sheets.products, { record_id: '72', product_code: 'P72', name: 'สินค้าต้นทุนคงที่', cost_price: 7, is_active: 'TRUE' });
+  ctx._applyStockIn(SC, WH, '72', 50, 99, 'receipt', 'TEST', 'S1', 'รับแพงแต่ไม่ใช้', 'tester');
+  ok('สลับเป็นต้นทุนมาตรฐาน', ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'standard', cogsFrom: '2026-10-16' }));
+  append(tenantSheets.sales_orders, { record_id: 99, order_code: 'SO-COGS-STD', customer_id: 500, subtotal: 500,
+    discount: 0, total: 500, payment_method: 'credit_term', fulfillment_type: 'office_delivery',
+    status: 'accepted', created_at: '2026-10-16 09:00:00' });
+  append(tenantSheets.order_items, { record_id: 9900, order_id: 99, product_id: '72', unit_code: 'CT',
+    unit_factor: 10, qty: 2, base_qty: 20, price: 250, line_total: 500, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  r = ctx.applySaleWarehouseStock('T1', ctx.tenantRowById('T1', 'sales_orders', 99), -1, 'ตัดของ', 'tester');
+  eq('★ ต้นทุนมาตรฐาน: 20 ชิ้น × ราคาทุน 7 = 140 (ไม่สนราคาที่รับเข้าจริง 99)', r.cogs.amount, 140);
+
+  // ── 7. ลงซ้ำไม่ได้ ──
+  r = ctx.applySaleWarehouseStock('T1', ctx.tenantRowById('T1', 'sales_orders', 99), -1, 'ตัดซ้ำ', 'tester');
+  eq('★ ตัดรอบเดิมซ้ำ → ไม่ลงต้นทุนซ้ำ', r.cogs.posted, false);
+
+  // ── 8. งบกำไรขาดทุนเห็นต้นทุนขายแล้ว ──
+  const pl = ctx.getIncomeStatement(FIN, { tenantId: 'T1' });
+  const cogsRow = (pl.expense || []).find(a => String(a.code) === '5100');
+  /* ยอดคงเหลือ = เดบิต 990 (600 เฉลี่ย + 250 FIFO + 140 มาตรฐาน) − เครดิต 600 (ใบที่กลับรายการ) = 390
+     ★ ผูกตัวเลขไว้เลย ไม่ใช่แค่ "> 0" — ถ้าวันหนึ่งมีใครทำให้ลงซ้ำหรือกลับรายการไม่ครบ
+       เทสต์ที่เช็คแค่ "มากกว่าศูนย์" จะยังผ่านอยู่ทั้งที่งบเพี้ยนไปแล้ว */
+  eq('★★ งบกำไรขาดทุนมีบรรทัดต้นทุนขายแล้ว (ก่อนหน้านี้ไม่มีเลย) · ยอด 990 − 600 = 390',
+    [!!cogsRow, cogsRow && cogsRow.debit, cogsRow && cogsRow.credit, cogsRow && cogsRow.balance],
+    [true, 990, 600, 390]);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

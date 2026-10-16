@@ -250,6 +250,9 @@ var ADMIN_ACTION_MAP = {
   payApBills:             payApBills,
   getApAging:             getApAging,
   listArInvoices:         listArInvoices,
+  // ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย (50_cogs.gs)
+  getAccountingSettings:  getAccountingSettings,
+  saveAccountingSettings: saveAccountingSettings,
   createArCreditNote:     createArCreditNote,      // ออกใบลดหนี้ (49_credit_notes.gs)
   createArDebitNote:      createArDebitNote,       // ออกใบเพิ่มหนี้ (คู่แฝด ใช้โค้ดเดินทางเดียวกัน)
   listArDebitNotes:       listArDebitNotes,

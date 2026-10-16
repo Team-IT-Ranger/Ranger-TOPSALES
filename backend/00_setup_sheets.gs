@@ -176,6 +176,9 @@ var CENTRAL_SHEETS = {
   // 1 แถว = 1 (บิล, สินค้า) ไม่ใช่ตัวเลขรวม — จะได้รู้ว่าใบไหนจองอะไรไว้ และปลดทีละใบได้
   // status: 'active' (ยังกันของอยู่) | 'released' (ปลดแล้ว — เพราะตัดของจริงแล้ว หรือบิลถูกยกเลิก/ปลดก่อนถึงจุดตัด)
   stock_reservations: ['record_id','tenant_id','warehouse_id','product_id','qty','order_id','status','created_at','released_at'],
+  /* ค่าตั้งทางบัญชีต่อ "สมุด" (tenant_id ว่าง = สมุดบริษัท) — ตอนนี้มีเรื่องเดียวคือการตัดต้นทุนขาย
+     ★ ไม่มีแถว = ปิดอยู่ (cost_method 'none') เปิดใช้ต้องตั้งใจเลือกเอง ดู 50_cogs.gs */
+  accounting_settings: ['record_id','tenant_id','cost_method','cogs_from','updated_at','updated_by'],
 
   // ── สายอนุมัติ: ออกแบบขั้นตอน (steps) เงื่อนไข (ช่วงวงเงิน) และจำนวนผู้อนุมัติต่อขั้นได้ ──
   // approval_flows: 1 สาย = 1 ประเภทเอกสาร (PR) × ช่วงวงเงิน [min_amount, max_amount] (max ว่าง = ไม่จำกัด)

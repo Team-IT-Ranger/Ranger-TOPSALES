@@ -127,7 +127,9 @@ const ctx = {
   }
 };
 vm.createContext(ctx);
-['20_purchasing_master.gs', '34_sales_status.gs', '48_delivery_rounds.gs'].forEach(f => {
+// 50_cogs.gs: applySaleWarehouseStock เรียก prepareSaleCogs/postSaleCogs แล้ว (16 ต.ค. 2026)
+// บน Apps Script ทุกไฟล์อยู่ scope เดียวกันจึงเห็นกันเสมอ — กล่องทดสอบโหลดเป็นชุดย่อย ต้องใส่เอง
+['20_purchasing_master.gs', '34_sales_status.gs', '48_delivery_rounds.gs', '50_cogs.gs'].forEach(f => {
   const src = B(f);
   // 20_purchasing_master มี _withDocLock ที่เราต้องใช้ — โหลดเฉพาะฟังก์ชันนั้นพอ
   if (f === '20_purchasing_master.gs') {

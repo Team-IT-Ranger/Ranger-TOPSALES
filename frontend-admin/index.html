@@ -498,6 +498,14 @@
   /* tag เล็กในตาราง — ใช้กับคุณสมบัติสินค้า/สถานะภาษี (คนละตัวกับ .pill ที่ใช้กับสถานะเอกสาร) */
   .tag{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:11.5px; font-weight:600; line-height:1.6;
     background:var(--surface-2); color:var(--ink-soft); border:1px solid var(--border); white-space:nowrap; }
+  /* ตัวเลือกวิธีคิดต้นทุน — ทำเป็นการ์ดกดได้ทั้งแถบ ไม่ใช่ radio เล็กๆ เพราะแต่ละตัวต้องมี
+     คำอธิบายกำกับ คนเลือกจึงอ่านผลของมันได้ก่อนกด */
+  .acct-opt{ display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border:1px solid var(--border);
+    border-radius:10px; margin-top:8px; cursor:pointer; background:#fff; }
+  .acct-opt:hover{ border-color:#C9DAF7; }
+  .acct-opt.on{ border-color:var(--blue); background:#F7FAFF; }
+  .acct-opt input{ margin-top:3px; }
+  .acct-opt .s{ display:block; font-size:12px; color:var(--ink-faint); font-weight:400; margin-top:2px; }
   .tag-ok{ background:#EAF6EE; color:#1B7A43; border-color:#BFE3CC; }
   .tag-warn{ background:#FDF3E2; color:#8A5A12; border-color:#F0DCB4; }
   .tag-info{ background:#EAF1FD; color:#2B63D9; border-color:#C9DAF7; }
@@ -1807,6 +1815,15 @@
           </table></div>
         </section>
 
+        <!-- ═══ ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย (50_cogs.gs) ═══ -->
+        <section class="view" id="view-acctsettings">
+          <div class="view-head">
+            <div><h1>ตั้งค่าทางบัญชี</h1>
+              <p data-book-sub="วิธีที่ระบบใช้ลงบัญชีต้นทุนขาย · สมุดบัญชีของ">วิธีที่ระบบใช้ลงบัญชีต้นทุนขายเมื่อของออกจากคลังเพราะการขาย</p></div>
+          </div>
+          <div id="acct-settings-body"><p class="form-hint">กำลังโหลด...</p></div>
+        </section>
+
         <!-- ═══ บัญชี: แยกประเภท ═══ -->
         <section class="view" id="view-glbooks">
           <div class="view-head">
@@ -1912,7 +1929,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'updateStaffAdmin','saveDocSeries','setDocCounter','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
-  'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','organizeDatabaseFiles','syncTenantSheets',
+  'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings','organizeDatabaseFiles','syncTenantSheets',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -2470,7 +2487,11 @@ const NAV_GROUPS = [
     { n:'5.2', label:'เจ้าหนี้', items:[
       {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'both'} ]},
     { n:'5.3', label:'ลูกหนี้', items:[
-      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'both'} ]}
+      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'both'} ]},
+    /* ★ ตั้งค่าของ "สมุด" ที่เปิดอยู่ ไม่ใช่ของทั้งระบบ — ตัวแทนเป็นคนละนิติบุคคล
+       จะใช้วิธีคิดต้นทุนคนละแบบกับบริษัทก็ได้ จึงอยู่ในกลุ่มบัญชี ไม่ใช่กลุ่มตั้งค่าระบบ */
+    { n:'5.4', label:'ตั้งค่าทางบัญชี', items:[
+      {n:'5.4.1', label:'วิธีตัดต้นทุนขาย', view:'acctsettings', mod:'accounting', ready:true, scope:'both'} ]}
   ]},
   /* กลุ่ม 6/7 สำรองไว้ (เจ้าของระบบสั่ง 2026-09-29 — ย้ายตัวแทนจำหน่าย + ผู้ใช้งาน/สิทธิ์ เข้าไปรวมกับ
      "ตั้งค่าระบบ" หมดแล้ว เพื่อลดจำนวนโมดูลบนสุดที่ต้องไล่ดู) — อย่าเอาไปใช้โดยไม่ถาม
@@ -2959,7 +2980,8 @@ const LOADERS = {
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
-  apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes, glbooks: loadGlBooks,
+  apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes,
+  acctsettings: loadAcctSettings, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
   helpcenter: loadHelpCenter
@@ -8276,6 +8298,62 @@ function renderArInvoices(){
       (iv.status !== 'void' ? '<button class="btn btn-sm" onclick="openDebitNoteForm('+iv.id+')">ใบเพิ่มหนี้</button>' : '') +
     '</td></tr>').join(''), 10, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
 }
+/* ══════════ ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย — 16 ต.ค. 2026 ══════════
+   ★★ ก่อนมีตัวนี้ การตัดสต็อกไม่ลงบัญชีเลย → งบกำไรขาดทุนไม่มีต้นทุนขายสักบาท (กำไรที่โชว์
+     ≈ ยอดขายทั้งก้อน) และบัญชีสินค้าคงเหลือโตขึ้นเรื่อยๆ ไม่เคยลด — ผิดแบบที่ดูจากหน้าจอไม่ออก
+   ★ หน้านี้ไม่ใช่แค่ dropdown — ต้องอธิบายผลของแต่ละวิธีและขอบเขตที่ยังไม่ครอบคลุมให้ครบ
+     เพราะคนเลือกคือผู้ทำบัญชี ซึ่งเลือกผิดแล้วย้อนแก้ทีหลังแพงมาก */
+let ACCT_SET = null;
+async function loadAcctSettings(){
+  const box = document.getElementById('acct-settings-body');
+  const r = await callApi('getAccountingSettings', {});
+  if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
+  ACCT_SET = r;
+  const cur = r.settings, today = new Date().toISOString().slice(0, 10);
+  const editable = canEdit('accounting');
+  box.innerHTML =
+    '<div class="form-card"><h3>วิธีตัดต้นทุนขาย</h3>' +
+    '<p class="form-hint">เลือกแล้วระบบจะลงบัญชี <b>เดบิต ต้นทุนขาย (5100) / เครดิต สินค้าคงเหลือ (1300)</b> ' +
+      'ทุกครั้งที่ของออกจากคลังเพราะการขาย</p>' +
+    r.methods.map(m =>
+      '<label class="acct-opt'+(cur.costMethod === m.code ? ' on' : '')+'">' +
+        '<input type="radio" name="cogs-method" value="'+m.code+'"'+(cur.costMethod === m.code ? ' checked' : '') +
+          (editable ? '' : ' disabled')+' onchange="acctPickMethod(this.value)">' +
+        '<span><b>'+esc(m.label)+'</b><span class="s">'+esc(m.desc)+'</span></span>' +
+      '</label>').join('') +
+    '<div id="acct-from-wrap" style="margin-top:12px'+(cur.costMethod === 'none' ? ';display:none' : '')+'">' +
+      plField('เริ่มตัดต้นทุนตั้งแต่บิลลงวันที่', '<input type="date" id="acct-from" value="'+esc(cur.cogsFrom || today)+'"'+(editable ? '' : ' disabled')+'>') +
+      '<p class="form-hint">★ <b>ไม่ย้อนหลัง</b> บิลที่ลงวันที่ก่อนหน้านี้จะไม่ถูกตัดต้นทุน — ' +
+        'งวดที่ปิดบัญชีหรือยื่นภาษีไปแล้วต้องไม่ขยับ</p>' +
+    '</div>' +
+    (editable ? '<div class="form-actions" style="justify-content:flex-start"><button class="btn btn-primary" onclick="plBusy(acctSave)">บันทึก</button></div>' : '') +
+    (cur.updatedAt ? '<p class="form-hint">แก้ล่าสุด '+esc(cur.updatedAt)+'</p>' : '') +
+    '</div>' +
+    /* ★ บอกขอบเขตให้ชัด — ไม่งั้นผู้ทำบัญชีจะคิดว่าต้นทุนครบแล้วทั้งที่ครอบคลุมแค่ส่วนเดียว */
+    '<div class="form-card"><h3>ครอบคลุมแค่ไหน</h3>' +
+      '<p class="form-hint">' +
+        '<span class="tag tag-ok">ตัดต้นทุนให้</span> การขายที่ตัดของจากคลัง (สำนักงานจัดส่ง)<br>' +
+        '<span class="tag tag-warn">ยังไม่ตัด</span> การขายจากรถ (Cash Van) — สต็อกบนรถยังไม่ได้เชื่อมกับคลังกลาง ' +
+        'จึงไม่มีฐานต้นทุนให้คิด การเบิกของขึ้นรถต้องทำให้เป็นการย้ายคลังจริงก่อน ซึ่งเป็นงานคนละชิ้น' +
+      '</p>' +
+      '<p class="form-hint">ยกเลิกบิลหรือรับของกลับเข้าคลัง ระบบจะ<b>กลับรายการด้วยยอดเดิมที่เคยลงไว้</b> ' +
+        'ไม่ใช่คิดต้นทุนใหม่ ขาไปกับขากลับจึงหักล้างกันสนิทเสมอ</p>' +
+    '</div>';
+}
+function acctPickMethod(v){
+  document.getElementById('acct-from-wrap').style.display = v === 'none' ? 'none' : '';
+  document.querySelectorAll('.acct-opt').forEach(l => l.classList.toggle('on', l.querySelector('input').value === v));
+}
+async function acctSave(){
+  const m = document.querySelector('input[name=cogs-method]:checked');
+  if (!m) { toast('เลือกวิธีคิดต้นทุนก่อน', true); return; }
+  const r = await callApi('saveAccountingSettings', { costMethod: m.value,
+    cogsFrom: m.value === 'none' ? '' : document.getElementById('acct-from').value });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message);
+  loadAcctSettings();
+}
+
 /* ══════════ หน้ารายการใบลดหนี้ / ใบเพิ่มหนี้ — 16 ต.ค. 2026 ══════════
    เมนู 1.1.2 เคยเป็น "เร็วๆ นี้" ทั้งที่ของทำเสร็จและใช้บน prod แล้ว — ออกใบได้จากหน้าลูกหนี้
    และแท็บการจัดส่งของบิลขายเท่านั้น ซึ่งหาย้อนหลังไม่ได้ว่าเคยออกใบอะไรไว้บ้าง */

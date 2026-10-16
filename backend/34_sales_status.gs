@@ -122,11 +122,25 @@ function applySaleWarehouseStock(tenantId, order, dir, reason, userId) {
     if (short.length) return { success: false, message: 'ของในคลังไม่พอ: ' + short.join(' · ') };
   }
 
+  /* ★★ คิดต้นทุน **ก่อน** ของออกจากคลัง — FIFO ไล่ล็อตจาก stock_ledger ซึ่ง _applyStockIn
+     เพิ่งเขียนแถวของการขายรอบนี้ลงไป คิดทีหลังจะได้ล็อตถัดไปที่แพงกว่า (ดู prepareSaleCogs) */
+  var prepared = dir < 0 ? prepareSaleCogs(scope, warehouseId, order, need, cost) : null;
+
   pids.forEach(function(pid) {
     _applyStockIn(scope, warehouseId, pid, dir * need[pid], cost[pid] || 0,
       dir < 0 ? 'sale_out' : 'sale_return', 'SALES_ORDER', order.record_id, reason, userId);
   });
-  return { success: true, moved: pids.length };
+
+  /* ★ ต้นทุนขายลงที่นี่ที่เดียว เพราะนี่คือ "จุดที่ของออกจากคลังเพราะการขาย" จุดเดียวในระบบ
+       (50_cogs.gs) · ปิดไว้เป็นค่าเริ่มต้น เปิดที่เมนู 5.4 ตั้งค่าทางบัญชี
+     ★★ ต้องคิดต้นทุน **ก่อน** `_applyStockIn` ขยับยอดสำหรับวิธี FIFO ไหม? ไม่ต้อง —
+       `_fifoCost` ไล่จาก `stock_ledger` ซึ่ง `_applyStockIn` เพิ่งเขียนแถวของรอบนี้ลงไปแล้ว
+       ล็อตจึงถูกกินไปด้วยพอดี ถ้าเรียกก่อนจะได้ต้นทุนของล็อตที่ยังไม่ถูกตัด = นับซ้ำรอบหน้า
+     ★ ลงบัญชีล้มไม่ทำให้ของที่ตัดไปแล้วย้อนกลับ — postSaleCogs จับ error เองและคืนเหตุผลมา */
+  var cogs = dir < 0
+    ? postSaleCogs(scope, order, prepared, userId)
+    : reverseSaleCogs(scope, order, userId, reason);
+  return { success: true, moved: pids.length, cogs: cogs };
 }
 
 /* ═══════════ ยอดจอง (reserved) — guide ข้อ 1.3 ═══════════
