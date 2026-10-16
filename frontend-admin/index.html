@@ -213,26 +213,32 @@
      ★★ แถบแท็บต้องเป็นลูกระดับบนของ .view เหมือนแถบตัวกรอง **ห้ามห่อตัวกรอง+ตารางไว้ด้วยกัน**
        เพราะ `initViewFrames` ถือว่า "ของที่ข้างในมี .table-wrap" คือบล็อกข้อมูล แล้วจะเลิกตรึง
        ตัวกรองไว้ด้านบน — แผ่นจึงทำจากสองชิ้นที่แยกกัน (`.sheet-top` + `.sheet-bot`) ที่ต่อเส้นขอบกัน */
-  .filetabs{display:flex;gap:4px;padding:0 4px;margin:0 0 -1px;position:relative;z-index:2;flex-wrap:wrap}
+  .filetabs{display:flex;gap:5px;padding:0 4px;margin:2px 0 -1px;position:relative;z-index:2;flex-wrap:wrap}
   /* ★ แต่ละแท็บมีสีประจำตัว (เจ้าของระบบสั่ง 16 ต.ค. 2026) — สีสื่อความหมายของกลุ่ม
      ฟ้า = งานที่กำลังเดิน · เทา = ร่างที่ยังไม่เป็นเรื่อง · เหลือง = ปฏิเสธ · แดง = ยกเลิก
      ★★ สีต้องอ่านออกตอน **ยังไม่ได้เลือก** ด้วย ไม่ใช่โผล่เฉพาะตอนเลือก — ไม่งั้นมันก็เป็น
        แถบเทาเหมือนกันหมดอยู่ดี · แท็บที่ไม่ได้เลือกจึงใช้พื้นอ่อนของสีตัวเอง + ตัวอักษรสีเข้ม
      ค่าสีส่งมาทาง `--tt` (เข้ม) / `--ts` (อ่อน) ที่ตัว element — ไม่ต้องมีคลาสต่อแท็บ
      เพิ่มแท็บใหม่แค่ใส่ `tone` ใน SO_TABS */
-  .ftab{font:inherit;font-size:.84rem;font-weight:600;cursor:pointer;
+  /* ★ ใหญ่ขึ้นและสีแจ่มขึ้น (เจ้าของระบบสั่ง 16 ต.ค. 2026 — "เปิดมาต้องเตะตาก่อน")
+     ★★ ตัวที่ทำให้เตะตาจริงคือ **แถบสีบนหัวแท็บทุกใบ** ไม่ใช่แค่ใบที่เลือก — ของเดิมใบที่ไม่ได้
+       เลือกเป็นพื้นอ่อนเฉยๆ มองไกลๆ แล้วกลืนกันหมด · ตอนนี้ทุกใบมีแถบสีของตัวเอง
+       ใบที่เลือกแถบหนากว่า + พื้นขาว + ป้ายตัวเลขเป็นสีทึบตัวอักษรขาว */
+  .ftab{font:inherit;font-size:.92rem;font-weight:700;cursor:pointer;
     color:var(--tt,var(--ink-soft));background:var(--ts,var(--surface-2));
-    border:1px solid var(--border);border-radius:10px 10px 0 0;
-    padding:7px 14px 8px;display:inline-flex;align-items:center;gap:7px;
-    transition:background .12s,color .12s,box-shadow .12s,opacity .12s;opacity:.78}
+    border:1px solid var(--border);border-radius:11px 11px 0 0;
+    padding:10px 18px 11px;display:inline-flex;align-items:center;gap:9px;
+    box-shadow:inset 0 3px 0 var(--tt,var(--blue));
+    transition:background .12s,color .12s,box-shadow .12s,opacity .12s;opacity:.92}
   .ftab:hover{opacity:1}
-  .ftab.on{background:#fff;border-bottom-color:#fff;opacity:1;
-    box-shadow:inset 0 3px 0 var(--tt,var(--blue))}
+  .ftab.on{background:#fff;border-bottom-color:#fff;opacity:1;font-weight:800;
+    box-shadow:inset 0 4px 0 var(--tt,var(--blue))}
   .ftab:focus-visible{outline:2px solid var(--tt,var(--blue));outline-offset:2px}
-  .ftab .n{font-size:.74rem;font-weight:700;background:#fff;color:var(--tt,var(--ink-faint));
-    border:1px solid var(--border);border-radius:999px;padding:0 7px;min-width:20px;
-    text-align:center;line-height:1.7}
-  .ftab.on .n{background:var(--ts,var(--grey-soft));border-color:transparent}
+  .ftab .n{font-size:.8rem;font-weight:800;background:#fff;color:var(--tt,var(--ink-faint));
+    border:1px solid var(--border);border-radius:999px;padding:1px 9px;min-width:24px;
+    text-align:center;line-height:1.6}
+  /* ป้ายตัวเลขของใบที่เลือก = สีทึบตัวอักษรขาว — จุดที่สายตาไปตกเป็นอันดับแรก */
+  .ftab.on .n{background:var(--tt,var(--blue));color:#fff;border-color:transparent}
   /* ★ ต้องชนะกฎ .table-wrap ที่ตั้ง border-radius/box-shadow ไว้ทีหลังในไฟล์ (บรรทัด ~455)
      จึงเขียนแบบเจาะจงกว่า (.table-wrap.sheet-bot) แทนการย้ายบล็อกนี้ไปไว้ท้ายสุด
      — ย้ายแล้วใครมาเพิ่มกฎต่อท้ายทีหลังก็ทับได้อีก วนไม่จบ */
