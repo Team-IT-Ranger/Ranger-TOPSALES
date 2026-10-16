@@ -585,6 +585,8 @@
 | `.dev/uat-cash-and-billing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 159 |
 | `.dev/uat-cogs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 161 |
 | `.dev/uat-delivery-rounds-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 144 |
+| `.dev/uat-draft-code-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 121 |
+| `.dev/uat-draft-code-real-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 68 |
 | `.dev/uat-goods-returns-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 125 |
 | `.dev/uat-pricelist-edit-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 85 |
 | `.dev/uat-purchasing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 121 |
