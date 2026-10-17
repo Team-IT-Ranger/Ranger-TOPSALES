@@ -259,23 +259,15 @@
   .sheet-mid{background:#fff;border-left:1px solid var(--border);border-right:1px solid var(--border)}
   /* ป้ายใต้กระดานว่างบ่อย — ปล่อยไว้จะเห็นเป็นขีดสองเส้นลอยๆ คั่นระหว่างแผ่นบนกับแผ่นล่าง */
   .sheet-mid:empty{border:0}
-  /* ── การ์ดยอดขายเดือนนี้ (แถวที่สองของหน้าบิลขาย — เจ้าของระบบสั่ง 17 ต.ค. 2026) ──
-     ★ ทุกใบกดได้ และกดแล้วไปหน้ารายงานที่กรองตามเงื่อนไขของใบนั้น — ใบแรก = ทั้งเดือน
-       ใบถัดไป = รายพนักงาน · ต้องดูออกตั้งแต่แรกเห็นว่ากดได้ (เงา + ยกขึ้นตอน hover) */
-  .salerow{display:flex;gap:10px;overflow-x:auto;padding:10px 12px;align-items:stretch}
-  .salerow::after{content:"";flex:0 0 1px}          /* กันขอบขวาหายตอนเลื่อนสุด (เหมือนกระดาน) */
-  .salecard{flex:0 0 auto;min-width:150px;max-width:260px;text-align:left;cursor:pointer;font:inherit;
-    background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--blue);
-    border-radius:10px;padding:9px 13px;display:flex;flex-direction:column;gap:2px;
-    transition:transform .12s,box-shadow .12s,border-color .12s}
-  .salecard:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(15,27,45,.12);border-color:#C9DAF7}
-  .salecard:active{transform:translateY(0)}
-  .salecard .sc-lbl{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .salecard .sc-val{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-  .salecard .sc-sub{font-size:11px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
-  /* ★ ใบรวมของทั้งเดือนต่างจากใบรายคนให้ชัด — ไม่งั้นตาอ่านว่าเป็นพนักงานอีกคนหนึ่ง */
-  .salecard.is-total{background:#F4F8FF;border-left-color:#1F4FA8;min-width:190px}
-  .salecard.is-total .sc-val{font-size:19px;color:#1F4FA8}
+  /* ── การ์ดยอดขายเดือนนี้ (แถวที่สองของแดชบอร์ด — 17 ต.ค. 2026) ──
+     ★★ **ใช้ `.kpi` / `.kpi-link` / `.kpi-row` ชุดเดียวกับการ์ดแถวแรก ไม่มีคลาสของตัวเอง**
+       ครั้งแรกผมทำสไตล์ใหม่ (`.salecard` เตี้ยกว่า ฟอนต์เล็กกว่า ขอบอยู่ซ้ายแทนบน) วางซ้อนกันสองแถว
+       แล้วเหมือนของคนละแอป (เจ้าของระบบแจ้ง 17 ต.ค. 2026) · การ์ดที่อยู่หน้าเดียวกัน
+       ต้องมาจากคลาสเดียวกันเสมอ ไม่ใช่ไล่ปรับตัวเลขให้เท่ากันทีละค่า — ไม่งั้นวันที่แก้ `.kpi`
+       อีกชุดจะเพี้ยนตามไม่ได้
+     เหลือไว้แค่สีขอบบนของ "ใบยอดรวม" ให้ต่างจากใบรายคน (ล้อแบบ .kpi-alert/.kpi-quiet ที่มีอยู่แล้ว) */
+  .kpi.kpi-total, .kpi.kpi-total:nth-child(2), .kpi.kpi-total:nth-child(3), .kpi.kpi-total:nth-child(4){
+    border-top-color:#1F4FA8; background:#F7FAFF; }
   .table-wrap.sheet-bot{background:#fff;border:1px solid var(--border);border-top:0;
     border-radius:0 0 var(--r-card) var(--r-card);box-shadow:none}
   .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
@@ -885,7 +877,7 @@
           <div class="kpi-row" id="dash-kpis"><div class="kpi"><div class="lbl">กำลังโหลด...</div><div class="val">—</div></div></div>
           <!-- ★ แถวที่สอง: ยอดขายเดือนนี้ นับเฉพาะบิล "จัดส่งสำเร็จ" (เจ้าของระบบสั่ง 17 ต.ค. 2026)
                ใบแรกเป็นยอดรวมทั้งเดือน ใบถัดไปแยกตามพนักงานขาย · กดใบไหนก็ไปหน้ารายงานที่กรองไว้ให้แล้ว -->
-          <div class="salerow" id="so-month-cards" style="padding:0 0 4px;margin-bottom:16px"></div>
+          <div class="kpi-row" id="so-month-cards"></div>
           <div class="two-col">
             <div class="panel"><h3 id="dash-panel1-title">รายการล่าสุด</h3><div id="dash-panel1"></div></div>
             <div class="panel"><h3 id="dash-panel2-title">สรุป</h3><div id="dash-panel2"></div></div>
@@ -1077,7 +1069,7 @@
               <option value="">ทุกสถานะ (ไม่รวมบิลที่ยกเลิก)</option>
             </select>
           </div>
-          <div class="salerow sheet-mid" id="srp-sum"></div>
+          <div class="kpi-row" id="srp-sum" style="margin:12px 0"></div>
           <div class="table-wrap sheet-bot"><table>
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th></tr></thead>
             <tbody id="srp-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
@@ -4234,14 +4226,16 @@ async function loadSoMonthCards(){
     return;
   }
   SO_MONTH = { month: m, data: r };
+  // ใช้โครงเดียวกับ kpiLink() ทุกประการ ต่างแค่ onclick ที่ส่งเงื่อนไขของการ์ดใบนั้นไปด้วย
   const card = (cls, lbl, val, sub, onclick) =>
-    '<button type="button" class="salecard ' + cls + '" onclick="' + onclick + '">' +
-      '<span class="sc-lbl">' + esc(lbl) + '</span>' +
-      '<span class="sc-val">฿' + baht(val) + '</span>' +
-      '<span class="sc-sub">' + esc(sub) + '</span></button>';
+    '<button type="button" class="kpi kpi-link ' + cls + '" style="text-align:left;font:inherit" ' +
+      'onclick="' + onclick + '" title="กดเพื่อดูรายงานยอดขายตามเงื่อนไขนี้">' +
+      '<div class="lbl">' + esc(lbl) + '</div>' +
+      '<div class="val">฿' + baht(val) + '</div>' +
+      '<div class="go">' + esc(sub) + '</div></button>';
   const mLabel = new Date(m + '-01T00:00:00').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   box.innerHTML =
-    card('is-total', 'ยอดขาย ' + mLabel, r.totalRevenue, r.totalBills + ' ใบ · จัดส่งสำเร็จ',
+    card('kpi-total', 'ยอดขาย ' + mLabel, r.totalRevenue, r.totalBills + ' ใบ · จัดส่งสำเร็จ',
       "openSalesReport('')") +
     (r.data || []).map(x => card('', x.label, x.revenue, x.bills + ' ใบ',
       "openSalesReport('" + plVal(x.saleBy).replace(/'/g, "\\'") + "')")).join('') +
@@ -4297,12 +4291,11 @@ async function loadSalesReport(){
     ' · ' + r.dateFrom + ' ถึง ' + r.dateTo + (who ? ' · ' + who.label : '');
 
   document.getElementById('srp-sum').innerHTML =
-    '<div class="salecard is-total" style="cursor:default"><span class="sc-lbl">ยอดขายรวม</span>' +
-      '<span class="sc-val">฿' + baht(r.totalRevenue) + '</span>' +
-      '<span class="sc-sub">' + r.totalBills + ' ใบ</span></div>' +
-    '<div class="salecard" style="cursor:default"><span class="sc-lbl">เฉลี่ยต่อใบ</span>' +
-      '<span class="sc-val">฿' + baht(r.totalBills ? r.totalRevenue / r.totalBills : 0) + '</span>' +
-      '<span class="sc-sub">' + (r.customerOptions || []).length + ' ร้าน · ' + (r.staffOptions || []).length + ' พนักงาน</span></div>';
+    '<div class="kpi kpi-total"><div class="lbl">ยอดขายรวม</div>' +
+      '<div class="val">฿' + baht(r.totalRevenue) + '</div><div class="sub">' + r.totalBills + ' ใบ</div></div>' +
+    '<div class="kpi"><div class="lbl">เฉลี่ยต่อใบ</div>' +
+      '<div class="val">฿' + baht(r.totalBills ? r.totalRevenue / r.totalBills : 0) + '</div>' +
+      '<div class="sub">' + (r.customerOptions || []).length + ' ร้าน · ' + (r.staffOptions || []).length + ' พนักงาน</div></div>';
 
   body.innerHTML = r.data.length ? r.data.map(o =>
     '<tr>' +
