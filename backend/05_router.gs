@@ -231,6 +231,7 @@ var ADMIN_ACTION_MAP = {
 
   // ── รายงานการขาย (41): 1.8.1 แยกพนักงาน / 1.8.2 แยกลูกค้า / 1.8.3 แยกสินค้า ──
   salesReportByStaff:     salesReportByStaff,
+  salesReportBills:       salesReportBills,      // รายงานยอดขายรายใบ (หน้าต่างที่เปิดจากการ์ดยอดขายเดือนนี้)
   salesReportByCustomer:  salesReportByCustomer,
   salesReportByProduct:   salesReportByProduct,
 

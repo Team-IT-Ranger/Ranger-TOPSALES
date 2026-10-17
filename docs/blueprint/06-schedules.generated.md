@@ -2,7 +2,7 @@
      เพิ่ม action / ตาราง / โมดูล / เอกสารใหม่แล้ว รันตัวนี้ซ้ำ แบบจะตามเอง -->
 # แผ่น 06 — รายการประกอบแบบ (สร้างจากโค้ด)
 
-> สร้างเมื่อ 2026-10-16 จากโค้ดใน repo นี้ · `node .dev/gen-blueprint.js` เพื่อสร้างใหม่
+> สร้างเมื่อ 2026-10-17 จากโค้ดใน repo นี้ · `node .dev/gen-blueprint.js` เพื่อสร้างใหม่
 > · `node .dev/gen-blueprint.js --check` เพื่อเช็คว่าแบบยังตรงกับโค้ดอยู่
 
 แผ่นนี้ตอบคำถาม **"มีอะไรอยู่บ้าง"** · ส่วน **"ทำไมและห้ามแตะอะไร"** อยู่ในแผ่น
@@ -12,11 +12,11 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,020 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,439 |
+| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,121 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,718 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,406 |
 | ตารางข้อมูล | 66 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
-| Action | 18 มือถือ + 212 แอดมิน |  |
+| Action | 18 มือถือ + 213 แอดมิน |  |
 
 ## B. ไฟล์ backend — ผังพื้นแบบละเอียด
 
@@ -29,7 +29,7 @@
 | `02_helpers.gs` | 446 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 226 | AUTH |
-| `05_router.gs` | 322 | ROUTER |
+| `05_router.gs` | 323 | ROUTER |
 | `06_bootstrap.gs` | 304 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 402 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 73 | VAN STOCK (Mobile App) |
@@ -65,7 +65,7 @@
 | `38_package_distribution.gs` | 220 | การจ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (package distribution) |
 | `39_free_goods.gs` | 274 | ชุดแถม (free goods) |
 | `40_customer_lists.gs` | 170 | รายชื่อร้านค้า (customer lists) |
-| `41_sales_reports.gs` | 226 | รายงานการขาย (เมนู 1.8.1 / 1.8.2 / 1.8.3) |
+| `41_sales_reports.gs` | 326 | รายงานการขาย (เมนู 1.8.1 / 1.8.2 / 1.8.3) |
 | `42_help_center.gs` | 88 | คู่มือใช้งานระบบ (Help Center) — module 8 |
 | `43_external_sales_import.gs` | 543 | นำเข้ารายการขายออกจากบริษัท → ใบสั่งซื้อ+ใบรับของของศูนย์ (2026-10-02) |
 | `44_product_categories.gs` | 97 | hit.category && curSub |
@@ -282,6 +282,7 @@
 | `removeCustomerListMember` | `40_customer_lists.gs` | customers:edit | กันกดซ้ำ |
 | `repairDraftOrderCodes` | `34_sales_status.gs` | — | กันกดซ้ำ |
 | `resetAdminUserPasswordByAdmin` | `16_admin_users.gs` | users_roles:edit | กันกดซ้ำ |
+| `salesReportBills` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByCustomer` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByProduct` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByStaff` | `41_sales_reports.gs` | sales_report:view |  |
@@ -581,8 +582,8 @@
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,466 |
-| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 218 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,518 |
+| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 256 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
 | `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 838 |
@@ -593,6 +594,7 @@
 | `.dev/uat-ar-adjust-notes-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 165 |
 | `.dev/uat-cash-and-billing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 159 |
 | `.dev/uat-cogs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 161 |
+| `.dev/uat-credit-limit-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 190 |
 | `.dev/uat-delivery-rounds-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 144 |
 | `.dev/uat-draft-code-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 121 |
 | `.dev/uat-draft-code-real-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 68 |

@@ -1461,5 +1461,57 @@ console.log('\n── สต็อกรถเชื่อมคลัง ──
   eq('  แถวบนรถเก็บต้นทุนไว้จริง', Number(row.avg_cost), 20);
 }
 
+
+/* ══════════ รายงานยอดขายรายใบ + ตัวกรองสถานะ (17 ต.ค. 2026) ══════════
+   ★ เจ้าของระบบนับ "ยอดขาย" เฉพาะใบที่ **จัดส่งสำเร็จ** — ใบที่ยังเดินอยู่ไม่ใช่ยอดขายที่เกิดจริง
+   ★ การ์ดบนหน้าบิลขายกับหน้าต่างรายงานต้องใช้ตัวกรองตัวเดียวกัน ไม่งั้นเลขสองที่ไม่ตรงแล้วไม่รู้ว่าอันไหนถูก */
+console.log('\n  -- รายงานยอดขายรายใบ + ตัวกรอง --');
+// เพิ่มใบที่ "ยังไม่ถึงปลายทาง" สองใบ: ใบใหม่สถานะ accepted และใบเก่าที่ยังเป็น pending_delivery
+append(tenantSheets.sales_orders, { record_id: 9006, order_code: 'SO-9006', customer_id: 501, total: 777,
+  status: 'accepted', sale_by: 'U_STAFF1', created_at: '2026-09-12 10:00:00' });
+append(tenantSheets.sales_orders, { record_id: 9007, order_code: 'SO-9007', customer_id: 500, total: 123,
+  status: 'pending_delivery', sale_by: 'U_STAFF1', created_at: '2026-09-13 10:00:00' });
+/* ★ ร้านของหมวดนี้โดยเฉพาะ (id ที่ยังไม่มีใครใช้) — ลูกค้า 500/501 ในฮาร์เนสนี้ถูก append ซ้ำ id
+   จากหมวดอื่น (บรรทัด ~1203 ใส่ 501 ซ้ำชื่อ 'ร้านอีกราย') เอามาตรวจชื่อ/รหัสจะได้ผลตามลำดับการ append
+   ซึ่งไม่ใช่สิ่งที่เรากำลังทดสอบ */
+append(sheets.customers, { record_id: 587, customer_code: 'C-587', name: 'ร้านรายงานทดสอบ',
+  tenant_id: 'T1', is_active: true, status: 'active' });
+append(tenantSheets.sales_orders, { record_id: 9008, order_code: 'SO-9008', customer_id: 587, total: 100,
+  status: 'completed', sale_by: 'admin:u1', created_at: '2026-09-14 10:00:00' });
+
+const RNG = { dateFrom: '2026-09-01', dateTo: '2026-09-16' };
+r = ctx.salesReportByStaff(MGR, RNG);
+eq('ไม่ส่ง statuses = เหมือนเดิมทุกประการ (ทุกใบที่ไม่ถูกยกเลิก)', [r.totalBills, r.totalRevenue], [6, 4500]);
+r = ctx.salesReportByStaff(MGR, Object.assign({ statuses: ['completed'] }, RNG));
+eq('★★ นับเฉพาะใบจัดส่งสำเร็จ → 4 ใบ 3,600 (ตัด accepted 777 + pending 123 ออก)', [r.totalBills, r.totalRevenue], [4, 3600]);
+eq('   แยกรายคนก็ตัดด้วย (U_STAFF1 เหลือ 2 ใบ 1,500)',
+  r.data.find(x => x.saleBy === 'U_STAFF1'), { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500,
+    compareBills: null, compareRevenue: null, revenueChangePct: null });
+r = ctx.salesReportByStaff(MGR, Object.assign({ statuses: ['confirmed'] }, RNG));
+eq('★ บิลเก่าสถานะ pending_delivery ต้องถูกนับเป็น "รออนุมัติ" (confirmed) ด้วย', [r.totalBills, r.totalRevenue], [1, 123]);
+r = ctx.salesReportByStaff(MGR, Object.assign({ statuses: ['cancelled'] }, RNG));
+eq('★ ขอ statuses=[cancelled] ก็ต้องไม่ได้ยอดขายปลอม (ยกเลิกไม่นับเสมอ)', [r.totalBills, r.totalRevenue], [0, 0]);
+
+r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['completed'] }, RNG));
+eq('รายใบ: 4 ใบ ยอดตรงกับรายงานแยกพนักงาน', [r.data.length, r.totalBills, r.totalRevenue], [4, 4, 3600]);
+eq('★ เรียงใบใหม่สุดขึ้นก่อน', r.data.map(x => x.code), ['SO-9002', 'SO-9008', 'SO-9003', 'SO-9001']);
+const row9008 = r.data.find(x => x.code === 'SO-9008');
+eq('  แต่ละบรรทัดมีชื่อร้าน/รหัสร้าน/ชื่อคนขายให้อ่านได้เลย ไม่ต้องไปเปิดใบ',
+  [row9008.customer, row9008.customerCode, row9008.saleByName],
+  ['ร้านรายงานทดสอบ', 'C-587', '[แอดมิน] ผู้จัดการฝ่ายจัดซื้อ']);
+r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['completed'], saleBy: 'U_STAFF1' }, RNG));
+eq('กรองตามพนักงาน', [r.data.length, r.totalRevenue], [2, 1500]);
+r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['completed'], customerId: 501 }, RNG));
+eq('กรองตามร้าน', [r.data.length, r.totalRevenue], [1, 2000]);
+r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['completed'], saleBy: 'U_STAFF1', customerId: 501 }, RNG));
+eq('กรองสองชั้นพร้อมกัน (พนักงานคนนี้ไม่มีบิลของร้านนี้)', [r.data.length, r.totalRevenue], [0, 0]);
+
+/* ★★ ตัวเลือกในกล่องกรองต้องคิดจาก "ช่วงวันที่" ไม่ใช่จากผลที่กรองแล้ว
+   ไม่งั้นพอเลือกพนักงานคนหนึ่ง รายชื่อจะเหลือคนเดียว แล้วเปลี่ยนไปคนอื่นไม่ได้อีกเลย (ทางตัน) */
+eq('★★ เลือกพนักงานคนหนึ่งแล้ว ตัวเลือกพนักงานยังครบทุกคน',
+  r.staffOptions.map(x => x.saleBy).sort(), ['U_STAFF1', 'admin:u1']);
+eq('   ตัวเลือกร้านก็ยังครบ', r.customerOptions.length, 3);
+fails('รายใบ: ไม่ระบุช่วงวันที่ → ปฏิเสธ', ctx.salesReportBills(MGR, {}), /ระบุช่วงวันที่/);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
