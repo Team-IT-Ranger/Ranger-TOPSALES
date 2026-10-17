@@ -4236,7 +4236,14 @@ async function loadSoMonthCards(){
   if (!box.children.length) box.innerHTML = '<div class="form-hint" style="padding:4px 2px">กำลังรวมยอดขายเดือนนี้...</div>';
   const r = await callApi('salesReportByStaff',
     Object.assign({ statuses: SO_MONTH_STATUSES }, monthRange(m)), { quiet: true });
-  if (!r || !r.success) { box.innerHTML = ''; return; }   // ไม่มีสิทธิ์ดูรายงาน/ยิงไม่ผ่าน = ไม่ต้องรก
+  /* ★★ ล้มเหลวแล้วต้อง **บอกออกมา** ห้ามล้างแถวทิ้งเงียบๆ — ของเดิมเขียนว่า "ไม่ต้องรก"
+     ผลคือพอมันใช้ไม่ได้จริงบน UAT หน้าจอไม่มีอะไรเลยสักตัวอักษร ไล่หาสาเหตุไม่ได้เลย
+     ต้องมาไล่จากฝั่งเซิร์ฟเวอร์แทน (17 ต.ค. 2026) · ฟีเจอร์ที่ซ่อนตัวเองตอนพังคือฟีเจอร์ที่ซ่อมไม่ได้ */
+  if (!r || !r.success) {
+    box.innerHTML = '<div class="form-hint" style="padding:6px 2px">ยังดูยอดขายเดือนนี้ไม่ได้: ' +
+      esc((r && r.message) || 'ไม่ได้รับคำตอบจากเซิร์ฟเวอร์') + '</div>';
+    return;
+  }
   SO_MONTH = { month: m, data: r };
   const card = (cls, lbl, val, sub, onclick) =>
     '<button type="button" class="salecard ' + cls + '" onclick="' + onclick + '">' +
