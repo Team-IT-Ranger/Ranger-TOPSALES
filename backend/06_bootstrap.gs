@@ -154,8 +154,11 @@ function getAdminDashboard(session, payload) {
 
   if (effTenantId) {
     // ฝั่งตัวแทนเปิดไฟล์ของตัวเองไฟล์เดียวอยู่แล้ว (ต้องใช้รายการบิลล่าสุดด้วย) จึงไม่ต้องพึ่ง rollup
+    /* ★ ใช้ saleCountsInDaily() ตัวเดียวกับยอดสรุปรายวัน (34_sales_status.gs) — ฝั่งตัวแทนอ่านบิลตรง
+       ส่วนฝั่งบริษัทอ่าน sales_daily สองทางนี้ต้องนิยาม "ยอดขาย" เหมือนกัน ไม่งั้นเลขไม่ตรงกันเอง
+       (ของเดิมกรองแค่ cancelled → ใบที่ศูนย์ปฏิเสธยังโผล่ในยอดขายวันนี้) */
     var orders = tenantObjects(effTenantId, 'sales_orders')
-      .filter(function(o) { return _dOnly(o.created_at) === today && String(o.status) !== 'cancelled'; });
+      .filter(function(o) { return _dOnly(o.created_at) === today && saleCountsInDaily(o.status); });
     var pendingSO = orders.filter(function(o) { return o.status === 'pending_delivery'; });
 
     var staff = centralObjects('liff_users').filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
@@ -167,7 +170,12 @@ function getAdminDashboard(session, payload) {
       .slice(0, 6)
       .map(function(o) { return {
         code: o.order_code, customer: custName[String(o.customer_id)] || 'ลูกค้าทั่วไป',
-        total: parseFloat(o.total) || 0, time: safeDateStr(o.created_at).substring(11, 16)
+        total: parseFloat(o.total) || 0, time: safeDateStr(o.created_at).substring(11, 16),
+        /* สถานะ + คนขาย (เจ้าของระบบขอ 17 ต.ค. 2026) — เห็นรายการล่าสุดแล้วต้องรู้ทันทีว่าใบอยู่ขั้นไหน
+           และใครขาย โดยไม่ต้องเปิดหน้าบิลขาย · ชื่อคนขายใช้ `_saleByLabel` ตัวเดียวกับรายงาน
+           (41_sales_reports.gs) จะได้ไม่มีชุดแปลงชื่อที่สอง */
+        status: String(o.status || '').toLowerCase(),
+        saleByName: _saleByLabel(o.sale_by)
       }; });
 
     return {

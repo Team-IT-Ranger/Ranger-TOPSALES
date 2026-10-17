@@ -833,5 +833,51 @@ console.log('\n── เลขที่เอกสารตอนพ้นร�
     ctx.repairDraftOrderCodes(S, { tenantId: 'T1' }).success, false);
 }
 
+
+/* ══════════ ยอดขายรายวันกับใบที่ถูกปฏิเสธ (เจ้าของระบบแจ้ง 17 ต.ค. 2026) ══════════
+   ★ การ์ด "ยอดขายวันนี้" เคยนับใบที่ศูนย์ตีกลับด้วย เพราะทุกจุดกรองแค่ `cancelled`
+     ตอนนี้ทุกจุดถามผ่าน saleCountsInDaily() ตัวเดียว
+   ★★ ใช้ record_id ที่ยังไม่มีใครใช้ (71xx) — ฮาร์เนสนี้มีใบ id 40/41/60 อยู่แล้ว
+     ใส่ซ้ำจะได้สองแถวที่ id เดียวกัน แล้ว "ตัวที่อ่าน" กับ "ตัวที่เขียน" คนละแถวกัน
+     (เสียเวลาไล่หามาแล้วตอนเขียนเทสต์นี้ครั้งแรก — ของจริงไม่มีทางเกิดเพราะ id ออกจากตัวนับ) */
+console.log('\n── ยอดขายรายวัน: ใบที่ถูกปฏิเสธ ──');
+eq('นิยาม: ร่าง/ยกเลิก/ปฏิเสธ ไม่นับ · ที่เหลือนับ',
+  ['draft', 'cancelled', 'rejected', 'confirmed', 'accepted', 'completed'].map(ctx.saleCountsInDaily),
+  [false, false, false, true, true, true]);
+
+t.sales_orders.push({ record_id: 7101, order_code: 'SO-RJ-1', customer_id: 1, total: 500, payment_method: 'credit_term',
+  fulfillment_type: 'office_delivery', status: 'confirmed', payment_status: 'unpaid', paid_amount: 0,
+  sale_by: 'U-SALES-1', created_at: '2026-10-02 09:00:00' });
+
+DAILY.length = 0;
+r = ctx.updateSalesOrderStatus(S, { id: 7101, status: 'rejected', note: 'ของไม่พอ' });
+eq('★★ ปฏิเสธการขาย → หักยอดขายรายวันออก 1 ใบ 500', [r.success, DAILY], [true, [['2026-10-02', -1, -500]]]);
+
+DAILY.length = 0;
+r = ctx.updateSalesOrderStatus(S, { id: 7101, status: 'draft', note: 'ให้พนักงานแก้แล้วยืนยันใหม่' });
+eq('ตีกลับเป็นร่าง (ไม่นับอยู่แล้วทั้งคู่) → ไม่ขยับยอดอีก', [r.success, DAILY.length], [true, 0]);
+
+DAILY.length = 0;
+r = ctx.updateSalesOrderStatus(S, { id: 7101, status: 'confirmed', note: 'ยืนยันใหม่' });
+eq('★★ กลับมายืนยันใหม่ → บวกคืน 1 ใบ 500 (ยอดไม่หายไปเฉยๆ)', [r.success, DAILY], [true, [['2026-10-02', 1, 500]]]);
+
+/* ★★★ ยกเลิกใบที่ "เคยถูกหักไปแล้ว" ต้องไม่หักซ้ำ ไม่งั้นยอดรายวันติดลบสะสม
+   ทั้ง cancelSalesOrderAdmin (19_sales_admin.gs) และ cancelMySalesOrder ใช้ saleCountsInDaily()
+   ตัวเดียวกันเป็นตัวกั้น — ที่นี่ทดสอบผ่านทางมือถือ (ไฟล์นี้โหลด 34 ตัวเดียว ไม่ได้โหลด 19) */
+t.sales_orders.push({ record_id: 7102, order_code: 'DRAFT-7102', customer_id: 1, total: 700, payment_method: 'credit_term',
+  fulfillment_type: 'office_delivery', status: 'draft', payment_status: 'unpaid', paid_amount: 0,
+  sale_by: 'U-SALES-1', created_at: '2026-10-02 10:00:00' });
+const MOB = { tenantId: 'T1', lineUserId: 'U-SALES-1', displayName: 'พนักงาน', role: 'credit_sales' };
+DAILY.length = 0;
+ctx.confirmSalesOrder(MOB, { orderCode: 'DRAFT-7102' });
+eq('พนักงานกดยืนยันใบร่าง → เริ่มนับเป็นยอดขาย', DAILY, [['2026-10-02', 1, 700]]);
+const code7102 = t.sales_orders.filter(o => String(o.record_id) === '7102').pop().order_code;
+DAILY.length = 0;
+r = ctx.cancelMySalesOrder(MOB, { orderCode: code7102, reason: 'ลูกค้าไม่เอาแล้ว' });
+eq('ยกเลิกใบที่นับแล้ว → หักคืนหนึ่งครั้ง', [r.success, DAILY], [true, [['2026-10-02', -1, -700]]]);
+DAILY.length = 0;
+r = ctx.cancelMySalesOrder(MOB, { orderCode: code7102, reason: 'กดซ้ำ' });
+eq('★★ กดยกเลิกซ้ำใบเดิม → ต้องไม่หักอีก', [!!(r.alreadyDone || r.success), DAILY.length], [true, 0]);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

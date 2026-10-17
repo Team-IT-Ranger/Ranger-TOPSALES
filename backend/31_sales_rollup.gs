@@ -63,8 +63,9 @@ function rebuildSalesDaily(dateStr) {
   var rows = [];
   centralObjects('tenants').forEach(function(t) {
     try {
+      // นิยาม "นับเป็นยอดขาย" ต้องตรงกับ bumpSalesDaily ทุกจุด ไม่งั้นซ่อมแล้วได้เลขคนละชุด
       var orders = tenantObjects(t.tenant_id, 'sales_orders').filter(function(o) {
-        return _dOnly(o.created_at) === date && String(o.status) !== 'cancelled';
+        return _dOnly(o.created_at) === date && saleCountsInDaily(o.status);
       });
       if (!orders.length) return;
       rows.push({ tenant_id: t.tenant_id, sale_date: date, bills: orders.length,

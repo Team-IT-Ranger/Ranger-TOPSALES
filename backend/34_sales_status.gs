@@ -51,6 +51,20 @@ var SO_TRANSITIONS = {
   rejected:         [SO_DRAFT, SO_CANCELLED],      // ตีกลับให้แก้แล้วยืนยันใหม่ได้ ไม่ต้องเปิดใบใหม่
   cancelled:        []
 };
+/**
+ * ★★ ใบนี้ถูกนับใน "ยอดขายวันนี้" (sales_daily) หรือเปล่า — **นิยามเดียวของทั้งระบบ**
+ * ร่าง = ยังไม่ใช่การขาย · ยกเลิก = ไม่ใช่แล้ว · **ปฏิเสธการขาย = ศูนย์ตีกลับ ไม่ได้ขาย**
+ *
+ * ★ ของเดิมกรองแค่ `cancelled` ใบที่ถูกปฏิเสธจึงยังค้างอยู่ในยอดขายวันนี้ทั้งที่ไม่ได้ขาย
+ *   (เจ้าของระบบเห็นจากการ์ดบนแดชบอร์ด 17 ต.ค. 2026)
+ * ★ ทุกจุดที่ขยับ sales_daily ต้องถามผ่านฟังก์ชันนี้ ห้ามไล่เทียบสถานะเอง — ไม่งั้นวันหนึ่ง
+ *   จะมีจุดที่หักออกแต่ไม่มีจุดที่บวกคืน แล้วยอดรายวันเพี้ยนสะสมโดยไม่มีใครรู้
+ */
+function saleCountsInDaily(status) {
+  var s = String(status || '').toLowerCase();
+  return s !== SO_DRAFT && s !== SO_CANCELLED && s !== SO_REJECTED;
+}
+
 /* สถานะที่ "มือถือยังเป็นเจ้าของใบอยู่" — แก้/ยกเลิกเองได้ตามกติกาข้อ 3 ของเจ้าของระบบ
    ร่าง = แก้ได้+ยกเลิกได้ · ยืนยันแล้วแต่ศูนย์ยังไม่รับงาน = ยกเลิกได้ แต่แก้ไม่ได้ · รับงานแล้ว = ทำอะไรไม่ได้ */
 var SO_MOBILE_EDITABLE = [SO_DRAFT];
@@ -341,6 +355,15 @@ function updateSalesOrderStatus(session, payload) {
           }
         }
         fields.status = toStatus;
+        /* ★★ ยอดขายรายวันต้องขยับตามเมื่อใบ "เข้า/ออก" จากการเป็นยอดขาย — ที่สำคัญคือ
+           **ปฏิเสธการขาย** (ตีกลับ) ต้องหักออก และถ้าตีกลับแล้วเอากลับมาเดินต่อ ต้องบวกคืน
+           เทียบด้วย saleCountsInDaily() ทั้งสองฝั่ง จึงไม่มีทางหักซ้ำหรือบวกซ้ำ */
+        var wasCounted = saleCountsInDaily(fromStatus), nowCounted = saleCountsInDaily(toStatus);
+        if (wasCounted !== nowCounted) {
+          var dAmt = parseFloat(order.total) || 0;
+          bumpSalesDaily(tenantId, _dOnly(order.created_at), nowCounted ? 1 : -1, nowCounted ? dAmt : -dAmt);
+          changes.push(nowCounted ? 'นับกลับเข้ายอดขายรายวัน' : 'หักออกจากยอดขายรายวัน');
+        }
         /* ★ ออกเลขจริงตรงนี้ด้วย — ศูนย์เลื่อนสถานะเองโดยที่พนักงานไม่เคยกดยืนยันในแอปเป็นเรื่องปกติ
            (ศูนย์เปิดบิลแทน / พนักงานลืมกด) ใบพวกนั้นเคยค้างเลข DRAFT- ตลอดไป
            ★★ ต้องออกก่อนบล็อกออกเลขเอกสารอื่นข้างล่าง เพราะใบส่งของ/ใบกำกับภาษีอ้างเลขบิลใบนี้ */
@@ -675,9 +698,9 @@ function cancelMySalesOrder(user, payload) {
     logOrderStatus(user.tenantId, order.record_id, from, SO_CANCELLED, '', '',
       'พนักงานยกเลิกเองจากแอปมือถือ' + ((payload || {}).reason ? ' — ' + payload.reason : ''),
       user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
-    /* หักคืนยอดขาย **เฉพาะใบที่เคยถูกนับแล้ว** — ใบร่างไม่เคยนับ (ไปนับตอนกดยืนยัน)
-       หักคืนใบร่างด้วยจะทำให้ยอดรายวันติดลบสะสมไปเรื่อยๆ ทุกครั้งที่มีคนทิ้งร่าง */
-    if (from !== SO_DRAFT) {
+    /* หักคืนยอดขาย **เฉพาะใบที่เคยถูกนับแล้ว** — ใบร่าง/ใบที่ถูกตีกลับไม่เคยนับ (หรือหักไปแล้ว)
+       หักซ้ำจะทำให้ยอดรายวันติดลบสะสมไปเรื่อยๆ · ใช้ saleCountsInDaily() ตัวเดียวกับจุดอื่น */
+    if (saleCountsInDaily(from)) {
       bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), -1, -(parseFloat(order.total) || 0));
     }
     return { success: true, status: SO_CANCELLED, statusLabel: SO_STATUS_LABELS[SO_CANCELLED], message: 'ยกเลิกใบสั่งขายแล้ว' };

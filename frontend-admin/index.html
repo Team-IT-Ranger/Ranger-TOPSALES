@@ -377,6 +377,12 @@
   .activity-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--border); font-size:12.5px; }
   .activity-row:first-of-type{ border-top:none; }
   .activity-row .amt{ font-family:'IBM Plex Mono'; font-weight:600; }
+  /* แถวรายการขายล่าสุด: ชื่อบิล/ร้านยืดได้ตัวเดียว ที่เหลือกว้างตามเนื้อ เงินชิดขวาเสมอ
+     ★ ชื่อร้านกับชื่อพนักงานตัดด้วย ellipsis ไม่ดันคอลัมน์เงินตกบรรทัด (ชื่อร้านไทยยาวมาก) */
+  .activity-row.act-sale{ gap:10px; }
+  .act-sale .act-main{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .act-sale .act-staff{ color:var(--ink-soft); white-space:nowrap; max-width:30%; overflow:hidden; text-overflow:ellipsis; }
+  .act-sale .pill{ flex:0 0 auto; }
 
   /* ★ หัว/ท้ายตารางตรึงขอบ แถวข้อมูลเลื่อนอยู่ข้างใน (ผู้ใช้สั่ง 27 ก.ย. 2026)
      ตารางยาว ๆ อย่างรายชื่อลูกค้า 2,000 ร้าน พอเลื่อนลงไปก็ไม่รู้แล้วว่าคอลัมน์ไหนคืออะไร
@@ -3295,7 +3301,7 @@ function renderDashboard(r, fromSnapshot){
       kpi('SO รอจัดส่ง', r.pendingDeliveryCount, 'มูลค่า ฿' + baht(r.pendingDeliveryValue), 'k-doc');
     document.getElementById('dash-panel1-title').textContent = 'รายการขายล่าสุด';
     document.getElementById('dash-panel1').innerHTML = r.recentOrders.length
-      ? r.recentOrders.map(o => activityRow(o.code + ' · ' + esc(o.customer), '฿' + baht(o.total))).join('')
+      ? r.recentOrders.map(saleActivityRow).join('')
       : '<p style="color:var(--ink-soft);font-size:12.5px">ยังไม่มียอดขายวันนี้</p>';
     document.getElementById('dash-panel2-title').textContent = 'สถานะพนักงาน';
     document.getElementById('dash-panel2').innerHTML =
@@ -3351,6 +3357,16 @@ function kpiPendingGr(p){
     (items ? docs + ' ใบ · รายการรอรับเข้าสต็อก — กดเพื่อตรวจรับ' : 'ไม่มีใบค้าง') + '</div></button>';
 }
 function activityRow(left, right){ return '<div class="activity-row"><span>'+left+'</span><span class="amt mono-data">'+right+'</span></div>'; }
+/* แถว "รายการขายล่าสุด" — บิล/ร้าน · สถานะ · พนักงาน · ยอดเงิน (เจ้าของระบบขอ 17 ต.ค. 2026)
+   ★ ใช้ป้ายสถานะชุดเดียวกับหน้าบิลขาย (SO_LABELS/SO_PILL) ไม่ตั้งคำแปลที่สอง */
+function saleActivityRow(o){
+  const st = soStatusKey(o.status || '');
+  return '<div class="activity-row act-sale">' +
+    '<span class="act-main">' + esc(o.code || '') + ' · ' + esc(o.customer || '') + '</span>' +
+    '<span class="pill ' + (SO_PILL[st] || 'off') + '">' + esc(SO_LABELS[st] || st || '-') + '</span>' +
+    '<span class="act-staff">' + esc(o.saleByName || '-') + '</span>' +
+    '<span class="amt mono-data">฿' + baht(o.total) + '</span></div>';
+}
 
 /* ══════════════ STAFF ══════════════ */
 // staffCache เหลือไว้ให้ ensureStaffCache() ใช้เท่านั้น (เติม dropdown "พนักงานที่จะตัดสต็อกให้" ตอนเปิดบิลขาย)

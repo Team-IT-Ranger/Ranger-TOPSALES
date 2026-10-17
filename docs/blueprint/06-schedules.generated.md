@@ -12,8 +12,8 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,181 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,767 |
+| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,213 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,788 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,406 |
 | ตารางข้อมูล | 66 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 213 แอดมิน |  |
@@ -30,7 +30,7 @@
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 226 | AUTH |
 | `05_router.gs` | 323 | ROUTER |
-| `06_bootstrap.gs` | 304 | BOOTSTRAP / DASHBOARD (Mobile App) |
+| `06_bootstrap.gs` | 312 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 402 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 73 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
@@ -55,10 +55,10 @@
 | `28_units.gs` | 125 | หน่วยนับมาตรฐานของระบบ |
 | `29_admin_signup.gs` | 289 | ลงทะเบียนผู้ใช้ใหม่ + รออนุมัติ (Admin App) |
 | `30_admin_line_login.gs` | 110 | เข้าสู่ระบบแอปแอดมินด้วย LINE |
-| `31_sales_rollup.gs` | 82 | สรุปยอดขายรายวัน (rollup) |
+| `31_sales_rollup.gs` | 83 | สรุปยอดขายรายวัน (rollup) |
 | `32_admin_bootstrap.gs` | 37 | เปิดแอปแอดมินด้วยคำขอเดียว |
 | `33_customers.gs` | 309 | ทะเบียนลูกค้า (customer master) |
-| `34_sales_status.gs` | 856 | สถานะบิลขาย |
+| `34_sales_status.gs` | 879 | สถานะบิลขาย |
 | `35_idempotency.gs` | 84 | กันบันทึกซ้ำ (idempotency) |
 | `36_price_rules.gs` | 451 | สิทธิ์เข้าถึงชุดราคา (price list eligibility) |
 | `37_customer_bulk.gs` | 129 | จัดกลุ่มลูกค้าเป็นชุด (bulk assign) |
@@ -586,7 +586,7 @@
 | `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 256 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
-| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 838 |
+| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 884 |
 | `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 197 |
 | `.dev/test-sheet-cache.js` | หน่วย (ไม่ยิงเน็ต) | 114 |
 | `.dev/test-unit-rescale.js` | หน่วย (ไม่ยิงเน็ต) | 56 |
