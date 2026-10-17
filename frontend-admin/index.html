@@ -883,6 +883,9 @@
         <section class="view active" id="view-dashboard">
           <div class="view-head"><div><h1>ภาพรวม</h1><p id="dash-date">กำลังโหลด...</p></div></div>
           <div class="kpi-row" id="dash-kpis"><div class="kpi"><div class="lbl">กำลังโหลด...</div><div class="val">—</div></div></div>
+          <!-- ★ แถวที่สอง: ยอดขายเดือนนี้ นับเฉพาะบิล "จัดส่งสำเร็จ" (เจ้าของระบบสั่ง 17 ต.ค. 2026)
+               ใบแรกเป็นยอดรวมทั้งเดือน ใบถัดไปแยกตามพนักงานขาย · กดใบไหนก็ไปหน้ารายงานที่กรองไว้ให้แล้ว -->
+          <div class="salerow" id="so-month-cards" style="padding:0 0 4px;margin-bottom:16px"></div>
           <div class="two-col">
             <div class="panel"><h3 id="dash-panel1-title">รายการล่าสุด</h3><div id="dash-panel1"></div></div>
             <div class="panel"><h3 id="dash-panel2-title">สรุป</h3><div id="dash-panel2"></div></div>
@@ -1044,9 +1047,6 @@
           <!-- กระดานลากการ์ด — มุมมองที่สองของหน้าเดียวกัน ใช้ข้อมูล/ตัวกรอง/snapshot ชุดเดียวกับตาราง -->
           <div id="so-board" class="dgb sheet-mid" data-view-scroll></div>
           <p class="form-hint sheet-mid" id="so-board-note" style="margin:0;padding:0 10px"></p>
-          <!-- ★ แถวที่สอง: ยอดขายเดือนนี้ นับเฉพาะใบ "จัดส่งสำเร็จ" (เจ้าของระบบสั่ง 17 ต.ค. 2026)
-               ใบแรกเป็นยอดรวมทั้งเดือน ใบถัดไปแยกตามพนักงานขาย · กดใบไหนก็ไปหน้ารายงานที่กรองไว้ให้แล้ว -->
-          <div class="salerow sheet-mid" id="so-month-cards"></div>
           <div class="table-wrap sheet-bot"><table class="tbl-sticky-end">
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th title="ของในคลังพอส่งใบนี้ไหม — เขียว=ครบ · ส้ม=ได้บางส่วน · แดง=ไม่มีของเลย">ของ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
             <tbody id="salesorders-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
@@ -3228,6 +3228,11 @@ function gotoView(view){
 
 /* ══════════════ DASHBOARD ══════════════ */
 async function loadDashboard(){
+  /* ★ การ์ดยอดขายเดือนนี้ยิงคำขอของตัวเองเสมอ และยิง**นอก** if ด้านล่าง — แดชบอร์ดตัวหลักมากับ
+     getAdminBootstrap อยู่แล้วจึงมีทางลัด "เพิ่งโหลดไปไม่ถึง 30 วิ ไม่ต้องยิงซ้ำ" แต่การ์ดชุดนี้
+     ไม่ได้มากับ bootstrap ถ้าวางไว้หลัง return มันจะไม่ถูกโหลดเลยตอนเปิดแอปครั้งแรก
+     ★ ไม่ await — ปล่อยให้วิ่งขนานไปกับแดชบอร์ด (คำขอขนานราคาเท่าคำขอเดียว · CLAUDE.md ข้อ 7) */
+  loadSoMonthCards();
   if (BOOT_IN_FLIGHT || Date.now() - DASH_FRESH_TS < 30000) return;   // มากับ getAdminBootstrap อยู่แล้ว   // เพิ่งได้มากับ getAdminBootstrap ไม่ต้องยิงซ้ำ
   const snap = snapLoad();
   if (snap && snap.data && snap.data.dashboard) renderDashboard(snap.data.dashboard, true);
@@ -3996,19 +4001,6 @@ function renderSalesOrders(){
   if (board) {
     board.classList.toggle('dgb-heads', soViewMode !== 'board');
     board.toggleAttribute('data-view-scroll', soViewMode === 'board');
-    /* ★★ แถวการ์ดยอดขายต้องย้ายที่ตามโหมด — ไม่ใช่วางตายตัวใน markup
-       · โหมดตาราง: กระดานเหลือแค่แถบหัวคอลัมน์ (แถวที่หนึ่ง) การ์ดยอดขายจึงเป็น**แถวที่สอง**
-         ตามที่เจ้าของระบบสั่ง (17 ต.ค. 2026)
-       · โหมดกระดาน: กระดานเป็น "บล็อกข้อมูล" ที่กินพื้นที่ทั้งผืนและเลื่อนของตัวเอง
-         (`data-view-scroll` — ดู initViewFrames) ของที่อยู่ "หลัง" มันจะถูกดันไปอยู่ใต้กระดาน
-         ซึ่งต้องเลื่อนผ่านการ์ดทั้งกระดานกว่าจะเห็น · จึงย้ายขึ้นไปไว้เหนือกระดานแทน */
-    const cards = document.getElementById('so-month-cards');
-    const note = document.getElementById('so-board-note');
-    if (cards) {
-      if (soViewMode === 'board') board.parentNode.insertBefore(cards, board);
-      else if (note && note.parentNode === board.parentNode) note.parentNode.insertBefore(cards, note.nextSibling);
-      else board.parentNode.insertBefore(cards, board.nextSibling);
-    }
   }
   renderSalesOrderBoard();
   if (soViewMode !== 'board') renderSalesOrdersTable();
@@ -4195,13 +4187,10 @@ async function loadSalesOrders(){
   else tblLoading(body, 12);
   /* ★ ยิงสามอย่างพร้อมกัน — ไฟเขียว/ส้มจึงไม่ทำให้หน้ารายการช้าลงเลย (CLAUDE.md ข้อ 7)
      ตัวเช็กของในคลังล้มเหลวก็ไม่กระทบรายการ (แค่ไม่มีจุดสี) */
-  /* ★ การ์ดยอดขายเดือนนี้ยิงไปพร้อมกัน ไม่ต่อคิว — คำขอขนานกันราคาเท่าคำขอเดียว (CLAUDE.md ข้อ 7)
-     และล้มเหลวก็ไม่กระทบรายการบิล (ตัวมันเองจัดการข้อความของตัวเอง) */
   const [, r, sf] = await Promise.all([
     ensurePaymentTypesCache(),
     callApi('listSalesOrdersAdmin', {}),
-    callApi('getSalesOrderStockFlags', {}, { quiet: true }),
-    loadSoMonthCards()
+    callApi('getSalesOrderStockFlags', {}, { quiet: true })
   ]);
   if (!r.success) { if (!salesOrdersCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="12">'+esc(r.message)+'</td></tr>'; return; }
   SO_STOCK = (sf && sf.success && sf.flags) ? sf.flags : {};
@@ -4261,7 +4250,13 @@ async function loadSoMonthCards(){
 
 /* ══════════ หน้าต่างรายงานยอดขาย ══════════ */
 let SRP_DATA = null;
+let SRP_BACK = 'dashboard';
 function openSalesReport(saleBy, customerId){
+  /* ★ จำไว้ว่ามาจากหน้าไหน — การ์ดอยู่บนแดชบอร์ด แต่วันหนึ่งอาจมีปุ่มเข้าจากหน้าอื่นด้วย
+     ปุ่ม "← กลับ" ที่พากลับผิดหน้าคือวิธีทำให้คนหลงทางแบบที่หาสาเหตุไม่ได้ */
+  const cur = document.querySelector('.view.active');
+  SRP_BACK = cur ? cur.id.replace(/^view-/, '') : 'dashboard';
+  if (SRP_BACK === 'salesreport') SRP_BACK = 'dashboard';
   _switchProductView('view-salesreport', 'รายงานยอดขาย');
   document.getElementById('srp-month').value = (SO_MONTH && SO_MONTH.month) || thisMonth();
   document.getElementById('srp-status').value = 'completed';
@@ -4271,10 +4266,7 @@ function openSalesReport(saleBy, customerId){
   loadSalesReport();
 }
 let SRP_PENDING = null;
-function closeSalesReport(){
-  _switchProductView('view-salesorders', 'บิลขาย');
-  document.querySelectorAll('.sb-action, .sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === 'salesorders'));
-}
+function closeSalesReport(){ gotoView(SRP_BACK); }
 
 async function loadSalesReport(){
   const body = document.getElementById('srp-body');
@@ -9919,12 +9911,7 @@ async function deleteRoleUI(code){
      และแถบตัวกรอง ต้องอยู่กับที่ ไม่เลื่อนหายไปพร้อมแถวข้อมูล (ผู้ใช้แจ้ง 28 ก.ย. 2026)
      ★ จำกัดความสูงไว้ ถ้าของเหนือตารางสูงเกิน MAX ก็ปล่อยให้เลื่อนตามปกติ — ไม่งั้นวันหนึ่งมีใคร
        วางการ์ดใหญ่ๆ ไว้เหนือตาราง แล้วมันกินจอจนเหลือที่ให้ข้อมูลไม่กี่แถวโดยไม่มีใครตั้งใจ */
-  /* ★ 17 ต.ค. 2026 ขยาย 240 → 340: หน้าบิลขายมีของเหนือตาราง **สี่แถวโดยตั้งใจ** แล้ว
-     (แท็บแฟ้ม ~44 + แถบตัวกรอง ~52 + แถวสถานะของกระดาน ~110 + แถวการ์ดยอดขายเดือนนี้ ~98 = ~304)
-     ถ้ายังเป็น 240 ทั้งก้อนจะถูกปล่อยให้เลื่อนไปกับข้อมูล แล้วการ์ดยอดขายที่เพิ่งเพิ่มจะหายไปจากจอ
-     ทันทีที่เลื่อนดูบิล ซึ่งค้านกับเหตุผลที่เพิ่มมันเข้ามา · เพดานยังมีอยู่เพื่อกันคนวางการ์ดใหญ่ๆ
-     โดยไม่ตั้งใจจนเหลือที่ให้ข้อมูลไม่กี่แถว — จอ 900px ตรึง 340 ยังเหลือที่ข้อมูล ~500px */
-  const PIN_MAX = 340;
+  const PIN_MAX = 240;
   /* "บล็อกข้อมูล" = ของที่ต้องอยู่ในกรอบที่เลื่อนและจัดการการเลื่อนของตัวเอง
      ★ ไม่ใช่แค่ตาราง — กระดานลากการ์ดก็เป็นข้อมูล ติดป้าย data-view-scroll ไว้
        ถ้าไม่นับมันเป็นบล็อกข้อมูล มันจะถูกตรึงออกไปนอกกรอบตอนยังว่าง (สูง 0 = ไม่เกินเพดาน)
