@@ -12,8 +12,8 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,121 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,718 |
+| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,181 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,767 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 1,406 |
 | ตารางข้อมูล | 66 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 213 แอดมิน |  |
@@ -65,7 +65,7 @@
 | `38_package_distribution.gs` | 220 | การจ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (package distribution) |
 | `39_free_goods.gs` | 274 | ชุดแถม (free goods) |
 | `40_customer_lists.gs` | 170 | รายชื่อร้านค้า (customer lists) |
-| `41_sales_reports.gs` | 326 | รายงานการขาย (เมนู 1.8.1 / 1.8.2 / 1.8.3) |
+| `41_sales_reports.gs` | 386 | รายงานการขาย (เมนู 1.8.1 / 1.8.2 / 1.8.3) |
 | `42_help_center.gs` | 88 | คู่มือใช้งานระบบ (Help Center) — module 8 |
 | `43_external_sales_import.gs` | 543 | นำเข้ารายการขายออกจากบริษัท → ใบสั่งซื้อ+ใบรับของของศูนย์ (2026-10-02) |
 | `44_product_categories.gs` | 97 | hit.category && curSub |
@@ -582,7 +582,7 @@
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,518 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,568 |
 | `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 256 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |

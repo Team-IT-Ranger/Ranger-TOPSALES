@@ -1513,5 +1513,55 @@ eq('★★ เลือกพนักงานคนหนึ่งแล้ว
 eq('   ตัวเลือกร้านก็ยังครบ', r.customerOptions.length, 3);
 fails('รายใบ: ไม่ระบุช่วงวันที่ → ปฏิเสธ', ctx.salesReportBills(MGR, {}), /ระบุช่วงวันที่/);
 
+
+/* ══════════ ยอดขาย = ใบที่ "ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว" (เจ้าของระบบเปลี่ยนนิยาม 17 ต.ค. 2026) ══════════
+   ของเดิมนับจากสถานะ "จัดส่งสำเร็จ" ซึ่งใช้ไม่ได้จริง — ศูนย์ไม่ได้กดสถานะไปถึงขั้นนั้นทุกใบ
+   ยอดขายจึงขึ้นศูนย์ทั้งที่ขายไปแล้ว */
+console.log('\n  -- ยอดขายนับจากเอกสารที่ออกแล้ว --');
+// ใบ A: ขายสดจากรถ มีเลขใบกำกับภาษีบนตัวบิลเอง · สถานะยัง accepted (ไม่เคยถึง completed)
+append(tenantSheets.sales_orders, { record_id: 9101, order_code: 'SO-9101', customer_id: 587, total: 1000,
+  status: 'accepted', sale_by: 'U_STAFF1', created_at: '2026-09-05 10:00:00', tax_invoice_no: 'TAX-9101' });
+// ใบ B: บิลเครดิต ตั้งลูกหนี้แล้ว (มีแถวใน ar_invoices) · สถานะ ready_to_ship
+append(tenantSheets.sales_orders, { record_id: 9102, order_code: 'SO-9102', customer_id: 587, total: 2000,
+  status: 'ready_to_ship', sale_by: 'U_STAFF1', created_at: '2026-09-06 10:00:00' });
+ctx.centralAppend('ar_invoices', { record_id: 9902, invoice_no: 'INV-9102', customer_id: 587, tenant_id: 'T1',
+  sales_order_id: 9102, invoice_date: '2026-09-06', due_date: '2026-10-06', total: 2000, received_amount: 0, status: 'open' });
+// ใบ C: แยกส่งเป็นรอบ ออกใบตามรอบ ตัวบิลแม่ไม่มีเลขของตัวเอง
+append(tenantSheets.sales_orders, { record_id: 9103, order_code: 'SO-9103', customer_id: 587, total: 3000,
+  status: 'accepted', sale_by: 'U_STAFF1', created_at: '2026-09-07 10:00:00' });
+append(tenantSheets.delivery_rounds, { record_id: 7001, order_id: 9103, round_no: 1, status: 'shipped',
+  tax_invoice_no: 'TAX-9103-1', total: 3000 });
+// ใบ D: ยังไม่ออกเอกสารใดๆ
+append(tenantSheets.sales_orders, { record_id: 9104, order_code: 'SO-9104', customer_id: 587, total: 4000,
+  status: 'accepted', sale_by: 'U_STAFF1', created_at: '2026-09-08 10:00:00' });
+// ใบ E: เคยตั้งลูกหนี้แล้วแต่ใบแจ้งหนี้ถูกยกเลิก → ต้องไม่นับ
+append(tenantSheets.sales_orders, { record_id: 9105, order_code: 'SO-9105', customer_id: 587, total: 5000,
+  status: 'accepted', sale_by: 'U_STAFF1', created_at: '2026-09-09 10:00:00' });
+ctx.centralAppend('ar_invoices', { record_id: 9905, invoice_no: 'INV-9105', customer_id: 587, tenant_id: 'T1',
+  sales_order_id: 9105, invoice_date: '2026-09-09', due_date: '2026-10-09', total: 5000, received_amount: 0, status: 'void' });
+
+const INV = { dateFrom: '2026-09-05', dateTo: '2026-09-09', invoiced: 'yes' };
+r = ctx.salesReportBills(MGR, INV);
+eq('★★ นับใบที่มีเลขใบกำกับภาษีบนบิล · มีใบแจ้งหนี้ · ออกใบตามรอบจัดส่ง — ไม่สนสถานะการส่ง',
+  r.data.map(x => x.code).sort(), ['SO-9101', 'SO-9102', 'SO-9103']);
+eq('   ยอดรวม 1,000+2,000+3,000', [r.totalBills, r.totalRevenue], [3, 6000]);
+eq('★ ใบที่ยังไม่ออกเอกสาร ไม่ถูกนับ', r.data.some(x => x.code === 'SO-9104'), false);
+eq('★★ ใบแจ้งหนี้ที่ถูกยกเลิกแล้ว ไม่ทำให้บิลถูกนับ', r.data.some(x => x.code === 'SO-9105'), false);
+eq('★ แต่ละบรรทัดบอกเลขเอกสารที่ทำให้ถูกนับ',
+  r.data.filter(x => x.code === 'SO-9103').map(x => x.invoiceNo || x.taxInvoiceNo), ['TAX-9103-1']);
+eq('   ใบขายสดโชว์เลขใบกำกับภาษีของตัวเอง',
+  r.data.filter(x => x.code === 'SO-9101').map(x => x.taxInvoiceNo), ['TAX-9101']);
+
+r = ctx.salesReportBills(MGR, { dateFrom: '2026-09-05', dateTo: '2026-09-09', invoiced: 'no' });
+eq('★ ด้านกลับ: เฉพาะใบที่ยังไม่ออกเอกสาร (ไว้ไล่ตามงานค้างออกใบ)',
+  r.data.map(x => x.code).sort(), ['SO-9104', 'SO-9105']);
+
+r = ctx.salesReportByStaff(MGR, INV);
+eq('การ์ดแยกพนักงานใช้เกณฑ์เดียวกัน', [r.totalBills, r.totalRevenue], [3, 6000]);
+
+/* ★ เกณฑ์ "ออกใบแล้ว" กับ "จัดส่งสำเร็จ" เป็นคนละมิติ — ส่งพร้อมกันต้องได้ส่วนร่วม ไม่ใช่ทับกัน */
+r = ctx.salesReportBills(MGR, { dateFrom: '2026-09-05', dateTo: '2026-09-09', invoiced: 'yes', statuses: ['completed'] });
+eq('ส่งทั้งสองเกณฑ์พร้อมกัน = ต้องเข้าทั้งคู่ (ชุดนี้ไม่มีใบไหนเข้า)', r.totalBills, 0);
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

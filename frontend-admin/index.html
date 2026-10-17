@@ -1107,15 +1107,18 @@
             <input type="month" id="srp-month" onchange="loadSalesReport()">
             <select id="srp-staff" onchange="loadSalesReport()"><option value="">พนักงานขายทุกคน</option></select>
             <select id="srp-cust" onchange="loadSalesReport()"><option value="">ร้านค้าทุกร้าน</option></select>
+            <!-- ★ เกณฑ์การนับยอดขาย — ค่าเริ่มต้นตรงกับการ์ดบนแดชบอร์ดเสมอ (ออกใบแล้ว) -->
             <select id="srp-status" onchange="loadSalesReport()">
-              <option value="completed">เฉพาะจัดส่งสำเร็จ (ยอดขายจริง)</option>
-              <option value="">ทุกสถานะ (ไม่รวมบิลที่ยกเลิก)</option>
+              <option value="invoiced">เฉพาะที่ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว (ยอดขายจริง)</option>
+              <option value="noinvoice">เฉพาะที่ยังไม่ออกใบ (ค้างออกเอกสาร)</option>
+              <option value="completed">เฉพาะจัดส่งสำเร็จ</option>
+              <option value="">ทุกใบ (ไม่รวมบิลที่ยกเลิก)</option>
             </select>
           </div>
           <div class="kpi-row" id="srp-sum" style="margin:12px 0"></div>
           <div class="table-wrap sheet-bot"><table>
-            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th></tr></thead>
-            <tbody id="srp-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ใบแจ้งหนี้/ใบกำกับภาษี</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th></tr></thead>
+            <tbody id="srp-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -4236,12 +4239,14 @@ async function loadSalesOrders(){
 }
 
 /* ══════════ การ์ด "ยอดขายเดือนนี้" (แถวที่สองของหน้าบิลขาย) — 17 ต.ค. 2026 ══════════
-   ★ เจ้าของระบบนิยาม "ยอดขาย" = **เฉพาะบิลที่จัดส่งสำเร็จ** ใบที่ยังเดินอยู่ยังไม่ใช่ยอดขายที่เกิดจริง
-     ตัวกรองนี้อยู่ฝั่ง backend (`_salesReportOrders`) ไม่ได้กรองในหน้าเว็บ — การ์ดกับหน้ารายงาน
-     จึงนับจากที่เดียวกันเสมอ ถึงจะเพิ่มสถานะใหม่ในอนาคตก็ไม่มีทางหลุดกันเอง
+   ★★ เจ้าของระบบนิยาม "ยอดขาย" = **ใบที่ออกใบแจ้งหนี้หรือใบกำกับภาษีแล้ว** (17 ต.ค. 2026)
+     — ของเดิมนับจากสถานะ "จัดส่งสำเร็จ" ซึ่งใช้ไม่ได้จริง เพราะศูนย์ไม่ได้กดสถานะไปถึงขั้นนั้นทุกใบ
+     ยอดขายเลยขึ้นศูนย์ทั้งที่ขายไปแล้ว · **เอกสารที่ออกไปแล้วเป็นหลักฐานที่ตรงกว่าและตรงกับที่ใช้ยื่นภาษี**
+     ★ เกณฑ์อยู่ฝั่ง backend (`_salesReportOrders` + `_invoicedOrderSet`) ไม่ได้กรองในหน้าเว็บ —
+     การ์ดกับหน้ารายงานจึงนับจากที่เดียวกันเสมอ
    ★ การ์ดอ่านจากคำขอของตัวเอง ไม่ใช่จาก salesOrdersCache — รายการบิลมีเพดานจำนวนใบและ
      ไม่ได้ครอบทั้งเดือนเสมอ ถ้านับจากของที่โหลดมาจะได้ยอดน้อยกว่าจริงโดยไม่มีอะไรฟ้อง */
-const SO_MONTH_STATUSES = ['completed'];
+const SO_MONTH_BASIS = { invoiced: 'yes' };   // เกณฑ์ยอดขาย: ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว
 let SO_MONTH = null;
 /* ★★ ห้ามใช้ toISOString() หาวันสุดท้ายของเดือน — มันแปลงเป็น UTC ก่อน เขตเวลาไทย (+7)
    เที่ยงคืนวันที่ 31 จึงกลายเป็นวันที่ 30 ของ UTC **รายงานจะตกวันสุดท้ายของทุกเดือนไปเงียบๆ**
@@ -4260,7 +4265,7 @@ async function loadSoMonthCards(){
   const m = thisMonth();
   if (!box.children.length) box.innerHTML = '<div class="form-hint" style="padding:4px 2px">กำลังรวมยอดขายเดือนนี้...</div>';
   const r = await callApi('salesReportByStaff',
-    Object.assign({ statuses: SO_MONTH_STATUSES }, monthRange(m)), { quiet: true });
+    Object.assign({}, SO_MONTH_BASIS, monthRange(m)), { quiet: true });
   /* ★★ ล้มเหลวแล้วต้อง **บอกออกมา** ห้ามล้างแถวทิ้งเงียบๆ — ของเดิมเขียนว่า "ไม่ต้องรก"
      ผลคือพอมันใช้ไม่ได้จริงบน UAT หน้าจอไม่มีอะไรเลยสักตัวอักษร ไล่หาสาเหตุไม่ได้เลย
      ต้องมาไล่จากฝั่งเซิร์ฟเวอร์แทน (17 ต.ค. 2026) · ฟีเจอร์ที่ซ่อนตัวเองตอนพังคือฟีเจอร์ที่ซ่อมไม่ได้ */
@@ -4279,13 +4284,13 @@ async function loadSoMonthCards(){
       '<div class="go">' + esc(sub) + '</div></button>';
   const mLabel = new Date(m + '-01T00:00:00').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   box.innerHTML =
-    card('k-sales kpi-total', 'ยอดขาย ' + mLabel, r.totalRevenue, r.totalBills + ' ใบ · จัดส่งสำเร็จ',
+    card('k-sales kpi-total', 'ยอดขาย ' + mLabel, r.totalRevenue, r.totalBills + ' ใบ · ออกใบแล้ว',
       "openSalesReport('')") +
     /* ★ ใบรายคนใช้ชุดสีลำดับ (k-s1..k-s6) — สีตรงนี้มีหน้าที่ "แยกคน" ไม่ได้บอกประเภทข้อมูล
        วนซ้ำเมื่อเกิน 6 คน · เรียงตามยอดขายเสมอ คนเดิมจึงมักได้สีเดิมตราบที่อันดับไม่สลับ */
     (r.data || []).map((x, i) => card('k-s' + (i % 6 + 1), x.label, x.revenue, x.bills + ' ใบ',
       "openSalesReport('" + plVal(x.saleBy).replace(/'/g, "\\'") + "')")).join('') +
-    (!(r.data || []).length ? '<div class="form-hint" style="padding:6px 2px">เดือนนี้ยังไม่มีบิลที่จัดส่งสำเร็จ</div>' : '');
+    (!(r.data || []).length ? '<div class="form-hint" style="padding:6px 2px">เดือนนี้ยังไม่มีบิลที่ออกใบแจ้งหนี้/ใบกำกับภาษี</div>' : '');
 }
 
 /* ══════════ หน้าต่างรายงานยอดขาย ══════════ */
@@ -4311,13 +4316,18 @@ function closeSalesReport(){ gotoView(SRP_BACK); }
 async function loadSalesReport(){
   const body = document.getElementById('srp-body');
   const month = document.getElementById('srp-month').value || thisMonth();
-  const st = document.getElementById('srp-status').value;
+  /* แปลงตัวเลือกเดียวบนหน้าจอเป็นตัวกรองของ backend — เกณฑ์ "ออกใบแล้ว/ยังไม่ออกใบ" กับ
+     "สถานะการส่ง" เป็นคนละมิติกัน จึงต้องแยกส่งคนละช่อง ไม่ใช่ยัดรวมเป็น statuses */
+  const stSel = document.getElementById('srp-status').value;
+  const basis = stSel === 'invoiced' ? { invoiced: 'yes' }
+    : stSel === 'noinvoice' ? { invoiced: 'no' }
+    : stSel === 'completed' ? { statuses: ['completed'] } : {};
   const saleBy = SRP_PENDING ? SRP_PENDING.saleBy : document.getElementById('srp-staff').value;
   const custId = SRP_PENDING ? SRP_PENDING.customerId : document.getElementById('srp-cust').value;
-  tblLoading(body, 9);
-  const r = await callApi('salesReportBills', Object.assign({
-    statuses: st ? [st] : null, saleBy: saleBy, customerId: custId }, monthRange(month)));
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  tblLoading(body, 10);
+  const r = await callApi('salesReportBills', Object.assign({ saleBy: saleBy, customerId: custId },
+    basis, monthRange(month)));
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
   SRP_DATA = Object.assign({ month: month }, r);
   SRP_PENDING = null;
 
@@ -4332,9 +4342,11 @@ async function loadSalesReport(){
     (r.customerOptions || []).map(x => ({ v: x.id, t: x.label })), r.customerId, 'ร้านค้าทุกร้าน');
 
   const who = (r.staffOptions || []).find(x => String(x.saleBy) === String(r.saleBy));
+  const basisText = stSel === 'invoiced' ? 'นับเฉพาะใบที่ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว'
+    : stSel === 'noinvoice' ? 'เฉพาะใบที่ยังไม่ออกเอกสาร (ยังไม่นับเป็นยอดขาย)'
+    : stSel === 'completed' ? 'นับเฉพาะบิลที่จัดส่งสำเร็จ' : 'ทุกใบ ยกเว้นบิลที่ยกเลิก';
   document.getElementById('srp-sub').textContent =
-    (st === 'completed' ? 'นับเฉพาะบิลที่จัดส่งสำเร็จ' : 'ทุกสถานะ ยกเว้นบิลที่ยกเลิก') +
-    ' · ' + r.dateFrom + ' ถึง ' + r.dateTo + (who ? ' · ' + who.label : '');
+    basisText + ' · ' + r.dateFrom + ' ถึง ' + r.dateTo + (who ? ' · ' + who.label : '');
 
   document.getElementById('srp-sum').innerHTML =
     '<div class="kpi k-sales kpi-total"><div class="lbl">ยอดขายรวม</div>' +
@@ -4347,6 +4359,8 @@ async function loadSalesReport(){
     '<tr>' +
       '<td class="mono-data">'+esc(o.date)+'</td>' +
       '<td class="mono-data"><a href="#" onclick="openSaleOrderDetail(\''+plVal(o.id)+'\');return false">'+esc(o.code)+'</a></td>' +
+      /* ★ โชว์เลขเอกสารที่ทำให้ใบนี้ถูกนับเป็นยอดขาย — ไม่งั้นคนอ่านตรวจไม่ได้ว่าทำไมใบนี้เข้า/ไม่เข้า */
+      '<td class="mono-data">'+esc(o.taxInvoiceNo || o.invoiceNo || '-')+'</td>' +
       '<td>'+esc(o.customer)+'</td>' +
       '<td class="mono-data">'+esc(o.customerCode || '-')+'</td>' +
       '<td class="num">฿'+baht(o.total)+'</td>' +
@@ -4354,21 +4368,22 @@ async function loadSalesReport(){
       '<td><span class="pill '+(SO_PILL[o.status]||'off')+'">'+esc(SO_LABELS[o.status]||o.status)+'</span></td>' +
       '<td><span class="pill '+(PAY_PILL[o.paymentStatus]||'off')+'">'+esc(PAY_LABELS[o.paymentStatus]||'-')+'</span></td>' +
       '<td>'+esc(o.saleByName || '-')+'</td>' +
-    '</tr>').join('') : '<tr class="empty-row"><td colspan="9">ไม่มีบิลตามเงื่อนไขนี้</td></tr>';
+    '</tr>').join('') : '<tr class="empty-row"><td colspan="10">ไม่มีบิลตามเงื่อนไขนี้</td></tr>';
 }
 
-const srpRows = () => (SRP_DATA ? SRP_DATA.data : []).map(o => [o.date, o.code, o.customer, o.customerCode || '-',
+const srpRows = () => (SRP_DATA ? SRP_DATA.data : []).map(o => [o.date, o.code,
+  o.taxInvoiceNo || o.invoiceNo || '-', o.customer, o.customerCode || '-',
   baht(o.total), payLabel(o.paymentMethod), SO_LABELS[o.status] || o.status,
   PAY_LABELS[o.paymentStatus] || '-', o.saleByName || '-']);
-const SRP_HEADERS = ['วันที่','เลขที่บิล','ลูกค้า','รหัสลูกค้า','ยอดสุทธิ','ชำระเงิน','สถานะ','การเงิน','พนักงานขาย'];
+const SRP_HEADERS = ['วันที่','เลขที่บิล','ใบแจ้งหนี้/ใบกำกับภาษี','ลูกค้า','รหัสลูกค้า','ยอดสุทธิ','ชำระเงิน','สถานะ','การเงิน','พนักงานขาย'];
 
 function printSalesReport(){
   if (!SRP_DATA || !SRP_DATA.data.length) { toast('ไม่มีรายการให้พิมพ์', true); return; }
   ensureDocPrint().then(() => DocPrint.table({
     title: 'รายงานยอดขาย', subtitle: scopeLabelForPrint() + ' · ' + document.getElementById('srp-sub').textContent,
     issuerName: (SESSION && SESSION.displayName) || '',
-    headers: SRP_HEADERS, weights: [1.1,1.5,2.6,1.1,1.2,1.1,1.4,1.2,1.8],
-    align: ['c','','','c','r','c','c','c',''],
+    headers: SRP_HEADERS, weights: [1.1,1.5,1.6,2.4,1.1,1.2,1.1,1.4,1.2,1.8],
+    align: ['c','','','','c','r','c','c','c',''],
     rows: srpRows(),
     note: 'ยอดขายรวม ฿' + baht(SRP_DATA.totalRevenue) + ' บาท · ' + SRP_DATA.totalBills + ' ใบ',
     filename: 'รายงานยอดขาย-' + SRP_DATA.month
