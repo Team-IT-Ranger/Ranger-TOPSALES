@@ -4284,7 +4284,8 @@ async function loadSoMonthCards(){
       '<div class="go">' + esc(sub) + '</div></button>';
   const mLabel = new Date(m + '-01T00:00:00').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   box.innerHTML =
-    card('k-sales kpi-total', 'ยอดขาย ' + mLabel, r.totalRevenue, r.totalBills + ' ใบ · ออกใบแล้ว',
+    card('k-sales kpi-total', 'ยอดขาย ' + mLabel, r.totalRevenue,
+      r.totalBills + ' ใบ · ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว',
       "openSalesReport('')") +
     /* ★ ใบรายคนใช้ชุดสีลำดับ (k-s1..k-s6) — สีตรงนี้มีหน้าที่ "แยกคน" ไม่ได้บอกประเภทข้อมูล
        วนซ้ำเมื่อเกิน 6 คน · เรียงตามยอดขายเสมอ คนเดิมจึงมักได้สีเดิมตราบที่อันดับไม่สลับ */
