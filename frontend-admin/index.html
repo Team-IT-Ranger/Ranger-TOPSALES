@@ -4304,7 +4304,9 @@ function openSalesReport(saleBy, customerId){
   if (SRP_BACK === 'salesreport') SRP_BACK = 'dashboard';
   _switchProductView('view-salesreport', 'รายงานยอดขาย');
   document.getElementById('srp-month').value = (SO_MONTH && SO_MONTH.month) || thisMonth();
-  document.getElementById('srp-status').value = 'completed';
+  /* ★ ต้องเป็นเกณฑ์เดียวกับการ์ดที่กดเข้ามา ไม่งั้นกดการ์ด ฿13,997 แล้วหน้ารายงานโชว์ ฿10,932
+     คนอ่านจะไม่เชื่อตัวเลขไหนอีกเลย (ค้างไว้เป็น 'completed' จากนิยามเดิม — เจอตอนเทสต์หน้าจอ) */
+  document.getElementById('srp-status').value = 'invoiced';
   /* ★ ตัวเลือกพนักงาน/ร้านมาจาก backend พร้อมผลรายงาน (คนที่มีบิลจริงในเดือนนั้นเท่านั้น)
      แต่ค่าที่การ์ดส่งมาต้องถูกตั้งไว้ก่อนโหลด ไม่งั้นรอบแรกจะกรองไม่ตรงกับการ์ดที่กด */
   SRP_PENDING = { saleBy: saleBy || '', customerId: customerId || '' };
