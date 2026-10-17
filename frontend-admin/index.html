@@ -537,6 +537,13 @@
   .sod-print-list .grp .done{ color:var(--green); font-weight:800; margin-left:2px; }
   .sod-print-list .grp:first-child{ padding-top:3px; }
   /* tag เล็กในตาราง — ใช้กับคุณสมบัติสินค้า/สถานะภาษี (คนละตัวกับ .pill ที่ใช้กับสถานะเอกสาร) */
+  /* แถบหนี้ค้างของร้าน (ใช้ทั้งหน้าเปิดบิลขายและที่อื่นที่ต้องเตือนเรื่องเครดิต)
+     — ชื่อคลาสและสีชุดเดียวกับแอปมือถือโดยตั้งใจ คนที่เห็นทั้งสองจอจะได้อ่านแบบเดียวกัน */
+  .cust-debt{ padding:9px 12px; border-radius:10px; font-size:13px; line-height:1.7;
+    background:var(--surface-2); border:1px solid var(--border); color:var(--ink-soft); }
+  .cust-debt b{ color:var(--ink); }
+  .cust-debt.hot{ background:#FDF2F2; border-color:#F0C9C9; color:#8C2F2F; }
+  .cust-debt.hot b{ color:#8C2F2F; }
   .tag{ display:inline-block; padding:2px 8px; border-radius:6px; font-size:11.5px; font-weight:600; line-height:1.6;
     background:var(--surface-2); color:var(--ink-soft); border:1px solid var(--border); white-space:nowrap; }
   /* ตัวเลือกวิธีคิดต้นทุน — ทำเป็นการ์ดกดได้ทั้งแถบ ไม่ใช่ radio เล็กๆ เพราะแต่ละตัวต้องมี
@@ -1073,7 +1080,7 @@
           </div>
           <div class="form-card">
             <div class="form-grid g2">
-              <div class="field"><label>ลูกค้า</label><select id="son-customer"><option value="">— เลือกลูกค้า —</option></select></div>
+              <div class="field"><label>ลูกค้า</label><select id="son-customer" onchange="sonCustomerChanged()"><option value="">— เลือกลูกค้า —</option></select></div>
               <div class="field"><label>ชำระเงิน</label><select id="son-pay"></select></div>
               <div class="field"><label>การจัดส่ง</label><select id="son-fulfill" onchange="sonFulfillChanged()">
                 <option value="office_delivery">รอสำนักงานจัดส่ง (ไม่ตัดสต็อกรถ)</option>
@@ -1085,6 +1092,9 @@
           </div>
           <div class="form-card">
             <h3>รายการสินค้า</h3>
+            <!-- ★ หนี้ค้างของร้าน — ฝั่งศูนย์ก็ต้องเห็นก่อนกดเปิดบิลเชื่อ ไม่ใช่เห็นแต่ในหน้ารายงาน
+                 ต่างจากแอปมือถือตรงที่ยิงคำขอตอนเลือกร้าน (ตัวเลขสดกว่า และหน้านี้ไม่ได้เปิดบ่อยเท่า) -->
+            <div id="son-credit" class="cust-debt" style="display:none;margin:-4px 0 12px"></div>
             <div id="son-rows"></div>
             <div style="margin:10px 0"><button class="btn btn-sm" onclick="sonAddRow()">+ เพิ่มรายการ</button></div>
             <div class="form-actions"><button class="btn btn-primary" onclick="sonPreview()">คำนวณราคา</button></div>
@@ -5054,6 +5064,36 @@ async function openSaleOrderNew(){
 
   sonAddRow();
 }
+/* หนี้ค้างของร้านที่เลือกในหน้าเปิดบิลขาย (56_customer_credit.gs)
+   ★ ยิงคำขอตอนเปลี่ยนร้านเท่านั้น ไม่ใช่ตอนแก้รายการสินค้า — ตัวเลขไม่ขึ้นกับตะกร้า
+   ★ กันผลเก่ามาทับผลใหม่ด้วยตัวนับลำดับ (เลือกร้านรัวๆ แล้วคำขอกลับมาสลับลำดับได้) */
+let sonCreditSeq = 0;
+async function sonCustomerChanged(){
+  const box = document.getElementById('son-credit');
+  const id = document.getElementById('son-customer').value;
+  if (!id) { box.style.display = 'none'; return; }
+  const seq = ++sonCreditSeq;
+  box.className = 'cust-debt';
+  box.style.display = '';
+  box.textContent = 'กำลังดูยอดค้างของร้านนี้...';
+  const r = await callApi('getCustomerCredit', { customerId: id });
+  if (seq !== sonCreditSeq) return;
+  if (!r.success) { box.style.display = 'none'; return; }
+  const c = r.credit;
+  if (!c.outstanding && !c.limit) { box.style.display = 'none'; return; }
+  const parts = [];
+  parts.push(c.outstanding ? 'ค้างชำระ <b>฿' + baht(c.outstanding) + '</b>' + (c.docs ? ' (' + c.docs + ' ใบ)' : '') : 'ไม่มียอดค้าง');
+  if (c.overdue) parts.push('เลยกำหนด <b>฿' + baht(c.overdue) + '</b>' +
+    (c.oldestDueDate ? ' (ตั้งแต่ ' + esc(c.oldestDueDate) + ')' : ''));
+  if (c.unbilled) parts.push('ยังไม่ออกใบแจ้งหนี้ ฿' + baht(c.unbilled));
+  if (c.limit) parts.push('วงเงิน ฿' + baht(c.limit) +
+    (c.available < 0 ? ' · <b>เกินวงเงิน ฿' + baht(-c.available) + '</b>' : ' · เหลือ <b>฿' + baht(c.available) + '</b>'));
+  if (r.settings && r.settings.mode === 'block' && (c.over > 0 || c.overdue > 0))
+    parts.push('<b>การคุมวงเงินเปิดอยู่ — บิลเชื่อของร้านนี้อาจถูกปฏิเสธ</b>');
+  box.innerHTML = parts.join(' · ');
+  box.className = 'cust-debt' + (c.overdue > 0 || c.over > 0 ? ' hot' : '');
+}
+
 function closeSaleOrderNew(){
   _switchProductView('view-salesorders', 'บิลขาย');
   document.querySelectorAll('.sb-action, .sb-item-standalone').forEach(b => b.classList.toggle('active', b.dataset.view === 'salesorders'));
