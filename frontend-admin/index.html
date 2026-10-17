@@ -20,6 +20,9 @@
     --red:#C4443C; --red-soft:#FDE7E5;
     --amber:#B4741A; --amber-soft:#FCEEDA;
     --grey-soft:#EEF1F6;
+    /* สองสีนี้เพิ่มมาเพื่อระบบสีของการ์ดตัวเลข (17 ต.ค. 2026) — ดูตาราง "สีของการ์ดตัวเลข" ด้านล่าง */
+    --violet:#6245C9; --violet-soft:#EAE5FB;
+    --teal:#0E7C86; --teal-soft:#DDF0F2;
     --shadow-sm:0 1px 2px rgba(15,27,45,.05); --shadow-md:0 18px 40px -22px rgba(15,27,45,.35);
     --r-card:14px; --r-ctl:10px;
     /* ยืดหด sidebar/กลุ่มเมนู — เดิมจงใจทำช้า "อ้อยอิ่ง" 3 วินาที ผู้ใช้สั่งเปลี่ยนเป็น 0.25 วิ (2026-09-23)
@@ -260,14 +263,17 @@
   /* ป้ายใต้กระดานว่างบ่อย — ปล่อยไว้จะเห็นเป็นขีดสองเส้นลอยๆ คั่นระหว่างแผ่นบนกับแผ่นล่าง */
   .sheet-mid:empty{border:0}
   /* ── การ์ดยอดขายเดือนนี้ (แถวที่สองของแดชบอร์ด — 17 ต.ค. 2026) ──
+     สีมาจากตาราง "สีของการ์ดตัวเลข" ด้านบน: ใบรวม = k-sales · ใบรายคน = ชุดสีลำดับ k-s1..k-s6
      ★★ **ใช้ `.kpi` / `.kpi-link` / `.kpi-row` ชุดเดียวกับการ์ดแถวแรก ไม่มีคลาสของตัวเอง**
        ครั้งแรกผมทำสไตล์ใหม่ (`.salecard` เตี้ยกว่า ฟอนต์เล็กกว่า ขอบอยู่ซ้ายแทนบน) วางซ้อนกันสองแถว
        แล้วเหมือนของคนละแอป (เจ้าของระบบแจ้ง 17 ต.ค. 2026) · การ์ดที่อยู่หน้าเดียวกัน
        ต้องมาจากคลาสเดียวกันเสมอ ไม่ใช่ไล่ปรับตัวเลขให้เท่ากันทีละค่า — ไม่งั้นวันที่แก้ `.kpi`
        อีกชุดจะเพี้ยนตามไม่ได้
      เหลือไว้แค่สีขอบบนของ "ใบยอดรวม" ให้ต่างจากใบรายคน (ล้อแบบ .kpi-alert/.kpi-quiet ที่มีอยู่แล้ว) */
-  .kpi.kpi-total, .kpi.kpi-total:nth-child(2), .kpi.kpi-total:nth-child(3), .kpi.kpi-total:nth-child(4){
-    border-top-color:#1F4FA8; background:#F7FAFF; }
+  /* ใบยอดรวมของแถว: เส้นขอบบนหนาขึ้นหนึ่งระดับ ให้แยกออกจากใบรายคนโดยไม่ต้องใช้สีนอกตาราง */
+  /* ★ ต้องมีน้ำหนักมากกว่า `.kpi.k-xxx` (ซึ่งเขียน border-top เต็มรูป) ไม่งั้นความหนาถูกเขียนทับ
+     — เติม `.kpi-row` นำหน้าเพื่อให้ชนะโดยไม่ต้องพึ่งลำดับบรรทัดในไฟล์ */
+  .kpi-row .kpi.kpi-total{ border-top-width:5px; }
   .table-wrap.sheet-bot{background:#fff;border:1px solid var(--border);border-top:0;
     border-radius:0 0 var(--r-card) var(--r-card);box-shadow:none}
   .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
@@ -316,10 +322,42 @@
   .btn-sm{ padding:5px 11px; font-size:12px; }
 
   .kpi-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:20px; }
-  .kpi{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; border-top:3px solid var(--blue); }
-  .kpi:nth-child(2){ border-top-color:var(--green); }
-  .kpi:nth-child(3){ border-top-color:var(--red); }
-  .kpi:nth-child(4){ border-top-color:var(--ink-faint); }
+  .kpi{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; border-top:3px solid var(--ink-faint); }
+
+  /* ═══ สีของการ์ดตัวเลข — ตารางเดียวของทั้งแอป (เจ้าของระบบสั่ง 17 ต.ค. 2026) ═══
+     ★★ **สีบอก "ประเภทของข้อมูล" ไม่ใช่ลำดับของการ์ด** · ของเดิมใช้ `.kpi:nth-child(2..4)`
+       ระบายเขียว/แดง/เทาตามตำแหน่ง — ย้ายการ์ดทีสีเปลี่ยนความหมายทันที และการ์ดชนิดเดียวกัน
+       คนละหน้าได้คนละสี · ตอนนี้ต้องติดคลาสเองเสมอ ไม่ติด = เทากลาง (ไม่เดาสีให้)
+
+       | ประเภทข้อมูล                        | คลาส        | สี          |
+       |------------------------------------|-------------|-------------|
+       | เงินที่ขายได้ / รายได้                 | `k-sales`   | เขียว        |
+       | เงินที่ต้องตามเก็บ / หนี้ / เกินวงเงิน     | `k-debt`    | แดง         |
+       | งานค้าง / รออนุมัติ / รอดำเนินการ      | `k-pending` | เหลืองอำพัน   |
+       | เอกสาร / จำนวนใบ / งานที่นับเป็นใบ     | `k-doc`     | น้ำเงิน       |
+       | คน (พนักงาน · ลูกค้า · ตัวแทน)        | `k-people`  | ม่วง         |
+       | ของ / สต็อก / สินค้า                  | `k-stock`   | ฟ้าอมเขียว    |
+       | ราคา / โปรโมชั่น / ของแถม             | `k-promo`   | ชมพูอมแดง    |
+       | ทั่วไป ไม่สื่อความหมายเฉพาะ            | (ไม่ต้องใส่) | เทา         |
+
+     ★ แถวที่เป็น "ตัวเลขชนิดเดียวกันแยกตามคน/หน่วย" (เช่น ยอดขายแยกพนักงาน) ใช้ชุดสีลำดับ
+       `k-s1..k-s6` แทน — สีตรงนั้นมีหน้าที่ **แยกคน** ไม่ได้บอกประเภท ใบรวมของแถวยังใช้สีตามประเภทตามปกติ
+     ★ เพิ่มประเภทใหม่ = เพิ่มแถวในตารางนี้ + คลาสข้างล่าง **ที่เดียว** ห้ามใส่สีเป็น inline style
+       ที่หน้าใดหน้าหนึ่ง (ของเดิมหน้าวงเงินเครดิตเคยใส่ `style="border-color:#E9B4B4"` ไว้ แก้แล้ว) */
+  .kpi.k-sales{ border-top:3px solid var(--green); background:var(--green-soft); }
+  .kpi.k-debt{ border-top:3px solid var(--red); background:var(--red-soft); }
+  .kpi.k-pending{ border-top:3px solid var(--amber); background:var(--amber-soft); }
+  .kpi.k-doc{ border-top:3px solid var(--blue); background:var(--blue-pale); }
+  .kpi.k-people{ border-top:3px solid var(--violet); background:var(--violet-soft); }
+  .kpi.k-stock{ border-top:3px solid var(--teal); background:var(--teal-soft); }
+  .kpi.k-promo{ border-top:3px solid #B4457E; background:#FBE7F1; }
+  /* ชุดสีลำดับสำหรับ "ตัวเลขเดียวกันแยกตามคน" — ไล่ให้ห่างกันพอมองแวบเดียวแยกออก */
+  .kpi.k-s1{ border-top:3px solid var(--blue); background:var(--blue-pale); }
+  .kpi.k-s2{ border-top:3px solid var(--violet); background:var(--violet-soft); }
+  .kpi.k-s3{ border-top:3px solid var(--teal); background:var(--teal-soft); }
+  .kpi.k-s4{ border-top:3px solid var(--amber); background:var(--amber-soft); }
+  .kpi.k-s5{ border-top:3px solid #B4457E; background:#FBE7F1; }
+  .kpi.k-s6{ border-top:3px solid var(--green); background:var(--green-soft); }
   .kpi .lbl{ font-size:11.5px; color:var(--ink-soft); margin-bottom:6px; }
   .kpi .val{ font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; }
   .kpi .sub{ font-size:11px; color:var(--ink-faint); margin-top:3px; }
@@ -330,8 +368,9 @@
   .kpi-link:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
   .kpi-link .go{ font-size:11px; color:var(--blue); margin-top:3px; }
   /* มีของค้าง = ขอบบนเป็นสีเตือน · ไม่มี = ปล่อยเทาเหมือนการ์ดเฉยๆ ไม่ต้องเรียกร้องความสนใจ */
-  .kpi.kpi-alert, .kpi.kpi-alert:nth-child(2), .kpi.kpi-alert:nth-child(3), .kpi.kpi-alert:nth-child(4){ border-top-color:var(--amber); }
-  .kpi.kpi-quiet, .kpi.kpi-quiet:nth-child(2), .kpi.kpi-quiet:nth-child(3), .kpi.kpi-quiet:nth-child(4){ border-top-color:var(--ink-faint); }
+  /* มีของค้าง = สีของ "งานค้าง" · ไม่มี = เทากลาง ไม่ต้องเรียกร้องความสนใจ (ใช้ตารางสีเดียวกัน) */
+  .kpi.kpi-alert{ border-top:3px solid var(--amber); background:var(--amber-soft); }
+  .kpi.kpi-quiet{ border-top:1px solid var(--border); background:var(--surface); }
   .two-col{ display:grid; grid-template-columns:1.3fr 1fr; gap:14px; }
   .panel{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
   .panel h3{ font-size:13.5px; margin:0 0 12px; }
@@ -514,8 +553,12 @@
   .form-card{ padding:20px 22px; margin-top:16px; }
   .form-card h3,.panel h3{ font-size:14.5px; }
   .form-card .form-hint{ font-size:12.5px; }
-  /* KPI: เลิกใช้แถบสีบนหัวการ์ด (แดง/เขียวสลับกันโดยไม่มีความหมาย) เหลือการ์ดขาวเรียบ ๆ เน้นที่ตัวเลข */
-  .kpi,.kpi:nth-child(2),.kpi:nth-child(3),.kpi:nth-child(4){ border-top:1px solid var(--border); }
+  /* ★ ปรับโฉม 23 ก.ย. 2026 ถอดแถบสีหัวการ์ดออก เพราะตอนนั้นมันเป็นสี "ตามลำดับการ์ด" ซึ่งไม่มีความหมาย
+     17 ต.ค. 2026 เอาแถบสีกลับมา แต่คราวนี้ **สีมาจากประเภทของข้อมูล** (ดูตาราง "สีของการ์ดตัวเลข")
+     ★★ บรรทัดนี้เคยไล่ `:nth-child(2..4)` ด้วย ซึ่งมีน้ำหนักเท่ากับ `.kpi.k-xxx` และอยู่ทีหลังในไฟล์
+       → การ์ดใบที่ 2-4 ของทุกแถวจะไม่ได้สีของตัวเองเลย (เจอตอนเทสต์) · ไม่มีสีตามตำแหน่งแล้ว
+       จึงไม่ต้องไล่ลบอีก เหลือค่าตั้งต้นของการ์ดที่ไม่ได้ติดคลาสสีเท่านั้น */
+  .kpi{ border-top:1px solid var(--border); }
   .kpi{ border-radius:var(--r-card); padding:16px 18px; box-shadow:var(--shadow-sm); }
   .kpi .val{ font-size:24px; letter-spacing:-.02em; }
   .kpi .lbl{ font-size:12px; }
@@ -3241,12 +3284,12 @@ function renderDashboard(r, fromSnapshot){
 
   if (r.scope === 'tenant'){
     document.getElementById('dash-kpis').innerHTML =
-      kpiLink('ยอดขายวันนี้', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย') +
+      kpiLink('ยอดขายวันนี้', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
       kpiPendingGr(r.pendingGoodsReceipts) +
       kpiCustReq(r.pendingCustomerRequests) +
-      kpi('พนักงานอนุมัติแล้ว', r.activeStaff, '') +
-      kpi('รออนุมัติ', r.pendingStaff, 'พนักงานลงทะเบียนใหม่') +
-      kpi('SO รอจัดส่ง', r.pendingDeliveryCount, 'มูลค่า ฿' + baht(r.pendingDeliveryValue));
+      kpi('พนักงานอนุมัติแล้ว', r.activeStaff, '', 'k-people') +
+      kpi('รออนุมัติ', r.pendingStaff, 'พนักงานลงทะเบียนใหม่', r.pendingStaff ? 'k-pending' : '') +
+      kpi('SO รอจัดส่ง', r.pendingDeliveryCount, 'มูลค่า ฿' + baht(r.pendingDeliveryValue), 'k-doc');
     document.getElementById('dash-panel1-title').textContent = 'รายการขายล่าสุด';
     document.getElementById('dash-panel1').innerHTML = r.recentOrders.length
       ? r.recentOrders.map(o => activityRow(o.code + ' · ' + esc(o.customer), '฿' + baht(o.total))).join('')
@@ -3256,12 +3299,12 @@ function renderDashboard(r, fromSnapshot){
       activityRow('อนุมัติแล้ว', r.activeStaff) + activityRow('รออนุมัติ', r.pendingStaff);
   } else {
     document.getElementById('dash-kpis').innerHTML =
-      kpiLink('ยอดขายวันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย') +
+      kpiLink('ยอดขายวันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
       kpiPendingGr(r.pendingGoodsReceipts) +
       kpiCustReq(r.pendingCustomerRequests) +
-      kpi('ตัวแทนที่ใช้งาน', r.tenantCount, '') +
-      kpi('สินค้าทั้งหมด', r.productCount, '') +
-      kpi('โปรโมชั่นที่ใช้งาน', r.activePromoCount, '');
+      kpi('ตัวแทนที่ใช้งาน', r.tenantCount, '', 'k-people') +
+      kpi('สินค้าทั้งหมด', r.productCount, '', 'k-stock') +
+      kpi('โปรโมชั่นที่ใช้งาน', r.activePromoCount, '', 'k-promo');
     document.getElementById('dash-panel1-title').textContent = 'ยอดขายวันนี้ต่อตัวแทน';
     document.getElementById('dash-panel1').innerHTML = r.perTenant.length
       ? r.perTenant.map(t => activityRow(t.tenantId + ' · ' + esc(t.name), '฿' + baht(t.revenue) + ' (' + t.bills + ')')).join('')
@@ -3271,12 +3314,13 @@ function renderDashboard(r, fromSnapshot){
       '<p style="font-size:12.5px;color:var(--ink-soft)">ไปที่เมนู "สินค้าและโปรโมชั่น" หรือ "เครือข่ายตัวแทน" ทางซ้ายเพื่อจัดการ</p>';
   }
 }
-function kpi(lbl, val, sub){ return '<div class="kpi"><div class="lbl">'+esc(lbl)+'</div><div class="val">'+esc(val)+'</div><div class="sub">'+esc(sub||'')+'</div></div>'; }
+/* cls = คลาสสีตามประเภทข้อมูล (ดูตาราง "สีของการ์ดตัวเลข" ใน <style>) — ไม่ใส่ = เทากลาง */
+function kpi(lbl, val, sub, cls){ return '<div class="kpi '+(cls||'')+'"><div class="lbl">'+esc(lbl)+'</div><div class="val">'+esc(val)+'</div><div class="sub">'+esc(sub||'')+'</div></div>'; }
 /* การ์ดตัวเลขที่กดแล้วไปหน้าที่เกี่ยวข้อง — ตัวเลขบนแดชบอร์ดทุกตัวมาจากหน้าใดหน้าหนึ่งเสมอ
    เห็นแล้วอยากดูต่อเป็นเรื่องปกติ · เป็น <button> ไม่ใช่ <div onclick> เพื่อให้ Tab ถึงและ Enter ทำงานเอง
    (แพทเทิร์นเดียวกับ kpiCustReq ที่ทำไว้ตอนการ์ดคำขอเปิดร้าน 6 ต.ค. 2026) */
-function kpiLink(lbl, val, sub, view, hint){
-  return '<button type="button" class="kpi kpi-link" style="text-align:left;font:inherit" ' +
+function kpiLink(lbl, val, sub, view, hint, cls){
+  return '<button type="button" class="kpi kpi-link ' + (cls || '') + '" style="text-align:left;font:inherit" ' +
     'onclick="gotoView(\'' + view + '\')" title="' + esc(hint || '') + '">' +
     '<div class="lbl">' + esc(lbl) + '</div><div class="val">' + esc(val) + '</div>' +
     '<div class="go">' + esc(sub || '') + '</div></button>';
@@ -4235,9 +4279,11 @@ async function loadSoMonthCards(){
       '<div class="go">' + esc(sub) + '</div></button>';
   const mLabel = new Date(m + '-01T00:00:00').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   box.innerHTML =
-    card('kpi-total', 'ยอดขาย ' + mLabel, r.totalRevenue, r.totalBills + ' ใบ · จัดส่งสำเร็จ',
+    card('k-sales kpi-total', 'ยอดขาย ' + mLabel, r.totalRevenue, r.totalBills + ' ใบ · จัดส่งสำเร็จ',
       "openSalesReport('')") +
-    (r.data || []).map(x => card('', x.label, x.revenue, x.bills + ' ใบ',
+    /* ★ ใบรายคนใช้ชุดสีลำดับ (k-s1..k-s6) — สีตรงนี้มีหน้าที่ "แยกคน" ไม่ได้บอกประเภทข้อมูล
+       วนซ้ำเมื่อเกิน 6 คน · เรียงตามยอดขายเสมอ คนเดิมจึงมักได้สีเดิมตราบที่อันดับไม่สลับ */
+    (r.data || []).map((x, i) => card('k-s' + (i % 6 + 1), x.label, x.revenue, x.bills + ' ใบ',
       "openSalesReport('" + plVal(x.saleBy).replace(/'/g, "\\'") + "')")).join('') +
     (!(r.data || []).length ? '<div class="form-hint" style="padding:6px 2px">เดือนนี้ยังไม่มีบิลที่จัดส่งสำเร็จ</div>' : '');
 }
@@ -4291,9 +4337,9 @@ async function loadSalesReport(){
     ' · ' + r.dateFrom + ' ถึง ' + r.dateTo + (who ? ' · ' + who.label : '');
 
   document.getElementById('srp-sum').innerHTML =
-    '<div class="kpi kpi-total"><div class="lbl">ยอดขายรวม</div>' +
+    '<div class="kpi k-sales kpi-total"><div class="lbl">ยอดขายรวม</div>' +
       '<div class="val">฿' + baht(r.totalRevenue) + '</div><div class="sub">' + r.totalBills + ' ใบ</div></div>' +
-    '<div class="kpi"><div class="lbl">เฉลี่ยต่อใบ</div>' +
+    '<div class="kpi k-doc"><div class="lbl">เฉลี่ยต่อใบ</div>' +
       '<div class="val">฿' + baht(r.totalBills ? r.totalRevenue / r.totalBills : 0) + '</div>' +
       '<div class="sub">' + (r.customerOptions || []).length + ' ร้าน · ' + (r.staffOptions || []).length + ' พนักงาน</div></div>';
 
@@ -9200,15 +9246,16 @@ async function saveCreditSettingsUi(){
 
 function renderCreditSummary(r){
   const t = r.totals || { outstanding: 0, overdue: 0, over: 0 };
-  const kpi = (label, value, tone) =>
-    '<div class="kpi"'+(tone ? ' style="border-color:'+tone+'"' : '')+'><div class="lbl">'+label+'</div>' +
-    '<div class="val">'+value+'</div></div>';
+  /* สีมาจากตาราง "สีของการ์ดตัวเลข" ใน <style> — ห้ามกำหนดสีเป็น inline style ที่หน้านี้เอง
+     (ของเดิมใส่ `style="border-color:#E9B4B4"` ไว้ ซึ่งเป็นสีที่ไม่มีอยู่ในระบบสีของแอปเลย) */
+  const card = (label, value, cls) =>
+    '<div class="kpi '+(cls||'')+'"><div class="lbl">'+label+'</div><div class="val">'+value+'</div></div>';
   document.getElementById('cc-summary').innerHTML =
     '<div class="kpi-row">' +
-      kpi('ค้างชำระรวม', '฿'+baht(t.outstanding)) +
-      kpi('เลยกำหนด', '฿'+baht(t.overdue), t.overdue > 0 ? '#E9B4B4' : '') +
-      kpi('ร้านที่เกินวงเงิน', (r.overLimitCount||0) + ' ร้าน', r.overLimitCount ? '#E9B4B4' : '') +
-      kpi('ร้านที่มีหนี้/มีวงเงิน', (r.rows||[]).length + ' ร้าน') +
+      card('ค้างชำระรวม', '฿'+baht(t.outstanding), t.outstanding ? 'k-debt' : '') +
+      card('เลยกำหนด', '฿'+baht(t.overdue), t.overdue > 0 ? 'k-debt' : '') +
+      card('ร้านที่เกินวงเงิน', (r.overLimitCount||0) + ' ร้าน', r.overLimitCount ? 'k-pending' : '') +
+      card('ร้านที่มีหนี้/มีวงเงิน', (r.rows||[]).length + ' ร้าน', 'k-people') +
     '</div>';
 }
 
