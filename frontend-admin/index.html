@@ -75,7 +75,10 @@
   #app-screen{display:none}
   /* ★ กรอบแอปสูงเท่าจอพอดี ไม่ให้เอกสารทั้งหน้าเลื่อน (ผู้ใช้สั่ง 28 ก.ย. 2026)
      หัวแอปกับหัวหน้างานจึงอยู่กับที่ เลื่อนได้เฉพาะเนื้อข้อมูลข้างใน */
-  .app-shell{display:flex;height:100vh;overflow:hidden}
+  /* ★ ต้อง width:100% — `#app-screen` เป็น flex container กรอบนี้จึงเป็น flex item ที่ default
+     กว้างเท่าเนื้อใน (วัดได้ 1,370px บนจอ 1600) พอเลิกตั้งเพดานความกว้างเนื้อหาแล้วอาการนี้
+     จะโผล่ทันที: เนื้อหาเต็มเท่าที่กรอบให้ แต่กรอบเองไม่เต็มจอ (17 ต.ค. 2026) */
+  .app-shell{display:flex;height:100vh;overflow:hidden;width:100%}
   .sidebar{
     width:var(--sb-w); flex-shrink:0;
     background:linear-gradient(175deg,#1B2C33 0%,#16242A 55%,#121B20 100%);
@@ -84,18 +87,24 @@
     transition:width var(--sb-dur) var(--sb-ease);
     box-shadow:2px 0 20px rgba(18,27,32,.25);
   }
-  /* ── ฟรีโซน: สำรองพื้นที่ที่เมนูจะยืดออกไว้ถาวร ──
-     เดิม margin-left ของหน้างานวิ่งตามความกว้างเมนูจริง (76px ↔ 264px) พอเมาส์กวาดโดนเมนู
-     ทั้งหน้าจึงเลื่อนไป-มา 188px ตาลายมาก โดยเฉพาะตอนกำลังกรอกฟอร์ม
-     ตอนนี้จองที่ไว้เท่าเมนูตอนกางเสมอ เมนูหุบก็แค่เหลือแถบว่าง — **หน้างานไม่ขยับเลยสักพิกเซล**
-     (เมนูเป็น position:fixed อยู่แล้ว การยืด/หุบจึงไม่ดันอะไรทั้งนั้น มีแต่ margin ตัวนี้ที่เคยดัน) */
-  .main-area{ margin-left:var(--sb-w); flex:1; min-width:0;
+  /* ── ฟรีโซน: ที่จองของหน้างานต้องคงที่ แต่ต้องไม่กินที่ฟรีๆ ด้วย ──
+     กติกาเดิม (28 ก.ย. 2026) คือ **หน้างานห้ามขยับตอนเมนูยืด/หุบ** เพราะเมาส์กวาดโดนเมนูแล้ว
+     ทั้งหน้าเลื่อน 188px ตาลายมากตอนกรอกฟอร์ม · ของเดิมแก้ด้วยการจองที่ไว้เท่าเมนู "ตอนกาง" (264px)
+     ซึ่งแก้อาการขยับได้จริง แต่จ่ายด้วยแถบว่าง 188px ที่ไม่ได้ใช้ตลอดเวลา
+     ★ ตอนนี้จองเท่าเมนู "ตอนหุบ" (76px) แล้วให้เมนูที่กาง **ลอยทับ** หน้างานแทน
+       (เมนูเป็น position:fixed อยู่แล้ว การกางจึงไม่ดันอะไรเลย) — ได้ทั้งสองอย่าง:
+       หน้างานยังไม่ขยับสักพิกเซลเวลาเมาส์กวาด และได้ความกว้างคืนมาเต็มจอ
+       (เจ้าของระบบสั่ง 17 ต.ค. 2026 ให้ทำแบบแอป PAOPAO Club Admin)
+     ★★ ที่จองเปลี่ยนได้ทางเดียวคือ **ผู้ใช้กดปักหมุดเอง** (body.sb-pinned) ซึ่งเป็นการตั้งใจกด
+       ไม่ใช่เมาส์กวาดโดน — **ห้ามเอา margin-left กลับไปผูกกับ .sb-collapsed เด็ดขาด** */
+  .main-area{ margin-left:var(--sb-cw); flex:1; min-width:0;
     display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  /* ปักหมุด = ตั้งใจให้เมนูอยู่กางถาวร หน้างานจึงมาอยู่ข้างๆ ไม่ให้เมนูทับ */
+  body.sb-pinned .main-area{ margin-left:var(--sb-w); }
   body.sb-collapsed .sidebar{ width:var(--sb-cw); overflow:visible; }
-  /* จอแคบ จองที่ 264px ไม่ไหว — ย่อที่จองเหลือเท่าเมนูหุบ แล้วให้เมนูกางทับหน้างานไปเลย
-     (ยังไม่ขยับเหมือนกัน เพราะที่จองคงที่ ไม่ได้วิ่งตามเมนู) */
+  /* จอแคบ: ปักหมุดก็ยังให้เมนูทับ — เหลือที่หน้างานไม่พอถ้าหัก 264px ออกไป */
   @media (max-width:1180px){
-    .main-area, body.sb-collapsed .main-area{ margin-left:var(--sb-cw); }
+    .main-area, body.sb-pinned .main-area{ margin-left:var(--sb-cw); }
   }
   body.sb-collapsed .sb-nav{ overflow:hidden; }
   body.sb-collapsed .sb-header{ overflow:hidden; }
@@ -188,7 +197,7 @@
   .top-right{ display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--ink-soft); }
   .avatar{ width:28px; height:28px; border-radius:50%; background:var(--green); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:700; }
 
-  main.content{ padding:24px 28px 60px; max-width:1080px;
+  main.content{ padding:24px 28px 60px; max-width:none;
     flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
 
   .view{ display:none; }
@@ -460,14 +469,12 @@
   /* จอแคบ: ซ่อนชื่อ/บทบาทผู้ใช้ (ดูได้จากรูปโปรไฟล์อยู่แล้ว) เหลือปุ่มที่ต้องกดจริง */
   @media (max-width:1180px){ .top-right #who-name,.top-right #who-role,.top-right #who-tenant{ display:none; } }
   .avatar{ width:30px; height:30px; background:var(--blue); font-size:12px; }
-  main.content{ padding:26px 32px 24px; max-width:1280px; margin:0 auto; width:100%; }
-  /* ★ หน้าที่มีตารางได้เพดานกว้างกว่า 1,680 (เจ้าของระบบแจ้ง 8 ต.ค. 2026: ปุ่มพิมพ์ในตารางบิลขายหลุดจอ)
-     ตารางบิลขายกว้างตามเนื้อจริง 1,341px — เพดาน 1,280 หักขอบใน 64 เหลือที่ว่างแค่ 1,216 จึงไม่พอ
-     ทั้งที่จอ 1920 ยังมีที่ว่างอีกเกือบ 400px ที่ไม่ได้ใช้เลย
-     ★ ขยายเฉพาะหน้าที่มีตารางจริงด้วย :has() ไม่ขยายทั้งแอป — หน้าฟอร์มกว้าง 1,656px
-       ช่องกรอกจะยาวจนตากวาดจากป้ายไปถึงช่องไม่ไหว ซึ่งเป็นเหตุผลเดิมที่ตั้งเพดานไว้แต่แรก
-     ★ เบราว์เซอร์ที่ไม่รู้จัก :has() จะข้ามกฎนี้ไปเฉยๆ แล้วได้ 1,280 เหมือนเดิม ไม่พัง */
-  main.content:has(.view.active .table-wrap){ max-width:1680px; }
+  /* ★ ไม่มีเพดานความกว้างแล้ว — ใช้เต็มจอ (เจ้าของระบบสั่ง 17 ต.ค. 2026 ให้เหมือนแอป PAOPAO Club Admin)
+     ของเดิมตั้งเพดาน 1,280 (ตารางได้ 1,680 ผ่าน :has) ด้วยเหตุผลว่าฟอร์มที่กว้างเกินไป
+     ตากวาดจากป้ายไปถึงช่องไม่ไหว · แต่บนจอ 1920 ที่ใช้งานจริง ผลคือแถบว่างสองข้างตลอดเวลา
+     ★ ถ้าวันหนึ่งฟอร์มรู้สึกยืดเกินไป **อย่าเอาเพดานกลับมาทั้งแอป** — จำกัดที่ `.form-card`
+       ของหน้าที่มีปัญหาแทน จะได้ไม่ดึงตาราง/แดชบอร์ดกลับไปแคบด้วย */
+  main.content{ padding:26px 32px 24px; max-width:none; margin:0; width:100%; }
   .view-head{ margin-bottom:20px; }
   .view-head h1{ font-size:20px; letter-spacing:-.01em; }
   .view-head p{ font-size:13px; }
@@ -2672,17 +2679,34 @@ function collapseSidebar(){
     sbCollapsed = true; document.body.classList.add('sb-collapsed');
   }, SB_HOVER_DELAY);
 }
-function togglePin(){
-  sbPinned = !sbPinned;
+/* ★ ปักหมุด = ที่จองของหน้างานเปลี่ยนจาก 76px เป็น 264px (ดูกฎ .main-area)
+   เป็นการเปลี่ยนที่ผู้ใช้ตั้งใจกดเอง จึงไม่ขัดกับกติกา "หน้างานห้ามขยับตอนเมาส์กวาดโดนเมนู"
+   ★ จำค่าไว้ต่อเครื่อง — คนที่ชอบให้เมนูกางค้างจะได้ไม่ต้องกดใหม่ทุกครั้งที่เปิดแอป */
+const LS_PIN = 'topshop_sidebar_pin';   // ค่าความชอบของเครื่อง ไม่ผูกกับบัญชี/ตัวแทน (เหมือน LS_DENSITY)
+function _applyPin(on){
+  sbPinned = on;
   const btn = document.getElementById('pinBtn');
-  if (sbPinned){ sbCollapsed = false; document.body.classList.remove('sb-collapsed'); btn.classList.add('is-pinned'); btn.textContent = '📌'; btn.title = 'คลายปักหมุด'; }
-  else { btn.classList.remove('is-pinned'); btn.textContent = '📍'; btn.title = 'ปักหมุดเมนูไว้'; collapseSidebar(); }
+  document.body.classList.toggle('sb-pinned', on);
+  if (on){ sbCollapsed = false; document.body.classList.remove('sb-collapsed');
+    if (btn){ btn.classList.add('is-pinned'); btn.textContent = '📌'; btn.title = 'คลายปักหมุด'; } }
+  else if (btn){ btn.classList.remove('is-pinned'); btn.textContent = '📍'; btn.title = 'ปักหมุดเมนูไว้'; }
+}
+function togglePin(){
+  _applyPin(!sbPinned);
+  try { localStorage.setItem(LS_PIN, sbPinned ? '1' : '0'); } catch (e) {}
+  if (!sbPinned) collapseSidebar();
+}
+function restorePin(){
+  let on = false;
+  try { on = localStorage.getItem(LS_PIN) === '1'; } catch (e) {}
+  if (on) _applyPin(true);
 }
 (function bindHover(){
   document.addEventListener('DOMContentLoaded', function(){
     const sb = document.getElementById('sidebar');
     sb.addEventListener('mouseenter', expandSidebar);
     sb.addEventListener('mouseleave', collapseSidebar);
+    restorePin();
   });
 })();
 
