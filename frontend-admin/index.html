@@ -361,6 +361,31 @@
   body.theme-premium .btn:not(.btn-ghost)::before{
     content:''; position:absolute; inset:2px; border-radius:calc(var(--r-ctl) - 2px); pointer-events:none;
     border:1px dashed currentColor; opacity:.4; }
+
+  /* ═══ ธีม "อินไซต์" (Insight) — เจ้าของระบบส่งภาพหน้า salesinsight มาเป็นตัวอย่าง 18 ต.ค. 2026 ═══
+     แนวคิดคนละทางกับพรีเมียม: **เงียบ อ่านง่าย เหมือนรายงานที่พิมพ์ออกมา**
+     พื้นขาวล้วน · ไม่มีเงา · เส้นขอบบางเส้นเดียว · ตัวเลขใหญ่และเป็นสีตามประเภทข้อมูล ·
+     จุดสีเล็กๆ นำหน้าชื่อการ์ดแทนแถบสีด้านบน · และ **เนื้อหาไม่เต็มจอ** อยู่เป็นคอลัมน์กลางจอ
+     ★ สีของจุดและตัวเลขยังมาจาก `--k-hue` ชุดเดิม — ระบบสีตามประเภทข้อมูลใช้ร่วมกันทุกธีม */
+  body.theme-insight{ --ground:#FFFFFF; }
+  /* ★ คอลัมน์เนื้อหาอยู่กลาง ไม่เต็มจอ (เจ้าของระบบสั่งมาพร้อมธีม) — ธีมอื่นยังเต็มจอเหมือนเดิม
+     1180px คือความกว้างที่ตารางส่วนใหญ่ยังพอดีโดยไม่ต้องเลื่อนแนวนอน */
+  body.theme-insight main.content{ max-width:1180px; margin:0 auto; }
+  body.theme-insight .kpi-row{ gap:16px; }
+  body.theme-insight .kpi-row .kpi{
+    background:#fff; border:1px solid #E6E9EF; border-top:1px solid #E6E9EF;
+    border-radius:12px; padding:15px 17px; box-shadow:none; }
+  /* ชื่อการ์ดมีจุดสีนำหน้า — แทนแถบสีด้านบนของธีมคลาสสิก */
+  body.theme-insight .kpi .lbl{ display:flex; align-items:center; gap:7px; color:var(--ink-soft); margin-bottom:8px; }
+  body.theme-insight .kpi .lbl::before{
+    content:''; width:7px; height:7px; border-radius:50%; flex:0 0 auto;
+    background:var(--k-hue, var(--ink-faint)); }
+  body.theme-insight .kpi .val{ color:var(--k-hue, var(--ink)); font-size:27px; letter-spacing:-.02em; }
+  body.theme-insight .kpi .sub, body.theme-insight .kpi .go{ color:var(--ink-soft); }
+  /* แผ่น/ฟอร์ม/ตาราง: เส้นบางเส้นเดียว ไม่มีเงา ให้ทั้งหน้าดูเป็นกระดาษแผ่นเดียว */
+  body.theme-insight .panel, body.theme-insight .form-card,
+  body.theme-insight .table-wrap.sheet-bot, body.theme-insight .sheet-top{
+    box-shadow:none; border-color:#E6E9EF; }
   .table-wrap.sheet-bot{background:#fff;border:1px solid var(--border);border-top:0;
     border-radius:0 0 var(--r-card) var(--r-card);box-shadow:none}
   .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
@@ -1024,6 +1049,7 @@
           <div class="segtog" id="theme-seg" role="group" aria-label="ธีมการ์ด">
             <button type="button" class="seg" data-v="classic" onclick="setTheme('classic')">คลาสสิก</button>
             <button type="button" class="seg" data-v="premium" onclick="setTheme('premium')">พรีเมียม</button>
+            <button type="button" class="seg" data-v="insight" onclick="setTheme('insight')" title="หน้าขาวสะอาด เนื้อหาอยู่กลางจอ (Insight)">อินไซต์</button>
           </div>
           <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
@@ -10632,22 +10658,27 @@ function setDensity(mode){
      ธีมใหม่เป็นของที่ "เลือกเอง" ไม่ใช่ของที่จู่ๆ ก็เปลี่ยนให้
    ★ เก็บไว้ต่อเครื่อง (ไม่ผูกบัญชี) เหมือน LS_DENSITY/LS_PIN — คนละเครื่องชอบคนละแบบได้ */
 const LS_THEME = 'topshop_theme';
-const THEMES = { classic: 'คลาสสิก', premium: 'พรีเมียม' };
+/* ★ เพิ่มธีมใหม่ = เพิ่มบรรทัดเดียวที่นี่ + เขียน CSS ใต้ `body.theme-<ชื่อ>` + เพิ่มปุ่มในแถบเลือก
+   ชื่อคลาสผูกกับคีย์ตรงๆ จึงไม่มีตารางแปลงชื่อซ้อนอีกชั้นให้หลุดกัน */
+const THEMES = { classic: 'คลาสสิก', premium: 'พรีเมียม', insight: 'อินไซต์' };
+function currentTheme(){
+  for (const k in THEMES) if (k !== 'classic' && document.body.classList.contains('theme-' + k)) return k;
+  return 'classic';
+}
 function applyTheme(name){
-  const premium = name === 'premium';
-  document.body.classList.toggle('theme-premium', premium);
-  segSync('theme-seg', premium ? 'premium' : 'classic');
+  if (!THEMES[name]) name = 'classic';
+  Object.keys(THEMES).forEach(k => document.body.classList.toggle('theme-' + k, k !== 'classic' && k === name));
+  segSync('theme-seg', name);
 }
 function setTheme(name){
-  const premium = name === 'premium';
-  if (premium === document.body.classList.contains('theme-premium')) return;
+  if (!THEMES[name] || name === currentTheme()) return;
   try { localStorage.setItem(LS_THEME, name); } catch (e) {}
   applyTheme(name);
-  toast('ธีมการ์ด: ' + THEMES[name]);
+  toast('ธีม: ' + THEMES[name]);
 }
 (function initTheme(){
   let saved = 'classic';
-  try { saved = localStorage.getItem(LS_THEME) === 'premium' ? 'premium' : 'classic'; } catch (e) {}
+  try { const v = localStorage.getItem(LS_THEME); if (THEMES[v]) saved = v; } catch (e) {}
   applyTheme(saved);
 })();
 
