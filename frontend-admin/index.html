@@ -917,7 +917,11 @@
 .cat-filter{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:0 0 10px}.cat-filter select{margin-left:4px}
 </style>
 </head>
-<body>
+<!-- ★★ ต้องมี `sb-collapsed` ตั้งแต่ตอนโหลด — ฝั่ง JS ตั้ง `sbCollapsed = true` ไว้ แต่เดิมไม่มีใคร
+     ใส่คลาสนี้ให้ body เลย เมนูจึง **กางค้างตั้งแต่เปิดแอป** จนกว่าผู้ใช้จะเอาเมาส์ไปโดนเมนูแล้วเลื่อนออก
+     (collapseSidebar เป็นที่เดียวที่เคยใส่คลาสนี้) · ตัวแปรกับ DOM ต้องตรงกันตั้งแต่พิกเซลแรก
+     ผู้ใช้แจ้ง 18 ต.ค. 2026 -->
+<body class="sb-collapsed">
 <script src="config.js?v=20260924"></script>   <!-- ใส่ ?v= ทุกครั้งที่แก้ config.js: เบราว์เซอร์แคชไฟล์นี้ไว้ ถ้าไม่บัมป์ ผู้ใช้เดิมจะยังคุยกับ backend ตัวเก่า -->
 <!-- pricelist-parser.js โหลดแบบ lazy ตอนเข้าหน้านำเข้าไฟล์ (ดู ensurePricelistParser) — ไม่ถ่วงการเปิดแอป -->
 <div id="env-banner" style="display:none"></div>
@@ -2904,13 +2908,17 @@ function _applyPin(on){
 function togglePin(){
   _applyPin(!sbPinned);
   try { localStorage.setItem(LS_PIN, sbPinned ? '1' : '0'); } catch (e) {}
-  if (!sbPinned) collapseSidebar();
+  if (!sbPinned) collapseSidebar();   // หน่วงตามปกติ เผื่อเมาส์ยังค้างอยู่บนเมนู
 }
 function restorePin(){
   let on = false;
   try { on = localStorage.getItem(LS_PIN) === '1'; } catch (e) {}
   if (on) _applyPin(true);
 }
+/* ★ ถอดคลาส `sb-collapsed` ให้คนที่ปักหมุดไว้ **ทันทีที่สคริปต์ถูกอ่าน** ไม่รอ DOMContentLoaded —
+   ไม่งั้นเมนูจะหุบแวบหนึ่งแล้วค่อยกาง (และหน้างานขยับตาม) ทุกครั้งที่เปิดแอป
+   ตัวแปร/ปุ่มค่อยซิงก์ทีหลังใน restorePin() ซึ่งต้องรอให้ปุ่มถูกสร้างก่อน */
+try { if (localStorage.getItem(LS_PIN) === '1') document.body.classList.remove('sb-collapsed'); } catch (e) {}
 (function bindHover(){
   document.addEventListener('DOMContentLoaded', function(){
     const sb = document.getElementById('sidebar');
