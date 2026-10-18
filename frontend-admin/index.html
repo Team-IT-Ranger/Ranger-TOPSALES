@@ -273,14 +273,18 @@
   /* ใบยอดรวมของแถว: เส้นขอบบนหนาขึ้นหนึ่งระดับ ให้แยกออกจากใบรายคนโดยไม่ต้องใช้สีนอกตาราง */
   .kpi-row .kpi.kpi-total{ border-top-width:5px; }
 
-  /* ═══ สไตล์การ์ดของหน้าแดชบอร์ด (เจ้าของระบบส่งภาพตัวอย่างมา 18 ต.ค. 2026) ═══
+  /* ═══ ธีมการ์ด "พรีเมียม" ของหน้าแดชบอร์ด (เจ้าของระบบส่งภาพตัวอย่างมา 18 ต.ค. 2026) ═══
+     ★★ ทุกกฎในบล็อกนี้ขึ้นต้นด้วย `body.theme-premium` — **ธีมเป็นตัวเลือกของผู้ใช้**
+       ค่าเริ่มต้นคือ Classic (แบบเดิม) ปุ่มสลับอยู่บนแถบบนต่อจากปุ่มกระชับ/ปกติ
+       ไม่มีคลาสนี้ = การ์ดสองแถวกลับไปเป็นการ์ดปกติทันที โดยไม่ต้องแก้ markup หรือ JS ที่วาดการ์ด
+     ★ `.kpi-face` เป็น display:contents อยู่แล้วในธีม Classic — โครง HTML เดียวกันจึงใช้ได้ทั้งสองธีม
      แถวแรก `.kpi-badges` = กรอบเข้ม + แผ่นสีด้านใน + **ชื่ออยู่ด้านล่าง** (แบบการ์ดขวาในภาพ)
      แถวสอง `.kpi-chips`  = ชิปสีทึบ ขอบเข้ม เงาแข็งแบบสติกเกอร์ ชื่ออยู่ในชิป (แบบป้ายซ้ายในภาพ)
      ★ ทั้งสองแบบกินสีจากตัวแปร `--k-hue`/`--k-tint` ของคลาสสีเดิม — ระบบสีตามประเภทข้อมูล
        ยังเป็นตัวเดียวกันทั้งแอป เปลี่ยนแค่รูปทรง ไม่ได้แยกชุดสีใหม่
      ★ ใส่ที่ "แถว" ไม่ใช่ที่การ์ดแต่ละใบ — ตัวสร้างการ์ด (kpi/kpiLink/kpiCustReq/kpiPendingGr)
        จึงไม่ต้องรู้ว่าตัวเองอยู่หน้าไหน และหน้าอื่นที่ใช้ .kpi-row เหมือนกันไม่เปลี่ยนตาม */
-  .kpi-row.kpi-badges .kpi{
+  body.theme-premium .kpi-row.kpi-badges .kpi{
     background:#131E31; border:0; border-radius:17px; padding:11px 11px 8px;
     display:flex; flex-direction:column; gap:7px; box-shadow:0 8px 18px -8px rgba(15,27,45,.5);
     text-align:left; position:relative; }
@@ -288,7 +292,7 @@
      เส้นประใช้ `--k-tint` สีเดียวกับแผ่นด้านใน การ์ดจึงดูเหมือนแผ่นสีถูกเย็บติดกับกรอบ
      ★ วางเป็น ::after ลอยทับ ไม่ใช่ border ของตัวการ์ด — border จะกินพื้นที่แล้วดันแผ่นด้านในเล็กลง
        และต้อง pointer-events:none ไม่งั้นมันบังการคลิกการ์ด (การ์ดแถวนี้กดได้) */
-  .kpi-row.kpi-badges .kpi::after{
+  body.theme-premium .kpi-row.kpi-badges .kpi::after{
     /* ★ ชิดขอบนอกแบบ "หมิ่นๆ" (เจ้าของระบบสั่ง 18 ต.ค. 2026) — inset 5px → 2.5px
        ★ รัศมีต้องลดตามระยะที่ขยับเข้ามาเสมอ (กรอบ 17px − inset 2.5 ≈ 14.5px) ไม่งั้นมุมของเส้นด้าย
          จะโค้งคนละองศากับมุมกรอบ แล้วเห็นเป็นเส้นเบี้ยวที่มุมทั้งสี่ */
@@ -297,32 +301,32 @@
   /* ★ ด้าย 1px (เจ้าของระบบขอให้บางลงครึ่งหนึ่ง 18 ต.ค. 2026) — เส้นบางบนพื้นเข้มจะจางกว่าที่คิด
      จึงเพิ่มความทึบจาก .72 เป็น .85 ให้ยังอ่านเป็น "รอยเย็บ" ไม่ใช่ขอบเบลอ */
   /* แผ่นสีด้านใน — `.kpi-face` ปกติเป็น display:contents (ไม่มีตัวตนในหน้าอื่น) ที่นี่กลายเป็นแผ่นจริง */
-  .kpi-badges .kpi .kpi-face{
+  body.theme-premium .kpi-badges .kpi .kpi-face{
     display:flex; flex-direction:column; justify-content:center; gap:3px; order:1;
     background:var(--k-tint, var(--surface-2)); border-radius:12px; padding:11px 13px; min-height:66px; }
-  .kpi-badges .kpi .val{ font-size:21px; color:var(--ink); }
-  .kpi-badges .kpi .sub{ color:var(--ink-soft); }
-  .kpi-badges .kpi .go{ color:var(--blue); }
+  body.theme-premium .kpi-badges .kpi .val{ font-size:21px; color:var(--ink); }
+  body.theme-premium .kpi-badges .kpi .sub{ color:var(--ink-soft); }
+  body.theme-premium .kpi-badges .kpi .go{ color:var(--blue); }
   /* ชื่อการ์ดอยู่ล่างสุดบนกรอบเข้ม — ตัวอักษรขาว จัดกลาง เหมือนในภาพตัวอย่าง */
-  .kpi-badges .kpi .lbl{ order:2; margin:0; color:#DCE4F2; text-align:center; font-weight:600;
+  body.theme-premium .kpi-badges .kpi .lbl{ order:2; margin:0; color:#DCE4F2; text-align:center; font-weight:600;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .kpi-badges .kpi.kpi-link:hover{ border:0; transform:translateY(-2px); box-shadow:0 12px 22px -8px rgba(15,27,45,.55); }
-  .kpi-badges .kpi.kpi-link:active{ transform:translateY(0); }
+  body.theme-premium .kpi-badges .kpi.kpi-link:hover{ border:0; transform:translateY(-2px); box-shadow:0 12px 22px -8px rgba(15,27,45,.55); }
+  body.theme-premium .kpi-badges .kpi.kpi-link:active{ transform:translateY(0); }
   /* เส้นสีด้านบนไม่มีแล้วในแบบนี้ — ความหมายของสีย้ายไปอยู่ที่แผ่นด้านใน */
-  .kpi-badges .kpi, .kpi-row.kpi-badges .kpi.kpi-total{ border-top:0; }
+  body.theme-premium .kpi-badges .kpi, body.theme-premium .kpi-row.kpi-badges .kpi.kpi-total{ border-top:0; }
 
-  .kpi-row.kpi-chips .kpi{
+  body.theme-premium .kpi-row.kpi-chips .kpi{
     background:var(--k-tint, var(--grey-soft)); border:2px solid #131E31; border-radius:14px;
     padding:10px 13px; box-shadow:3px 4px 0 rgba(19,30,49,.9); text-align:left;
     transition:transform .1s, box-shadow .1s; }
-  .kpi-chips .kpi .lbl{ color:#2A3950; font-weight:700; margin-bottom:4px; }
-  .kpi-chips .kpi .val{ color:var(--ink); }
-  .kpi-chips .kpi .go, .kpi-chips .kpi .sub{ color:#44536C; }
+  body.theme-premium .kpi-chips .kpi .lbl{ color:#2A3950; font-weight:700; margin-bottom:4px; }
+  body.theme-premium .kpi-chips .kpi .val{ color:var(--ink); }
+  body.theme-premium .kpi-chips .kpi .go, body.theme-premium .kpi-chips .kpi .sub{ color:#44536C; }
   /* ชิปกดได้ = ขยับแบบสติกเกอร์ ไม่ใช่เงาฟุ้งแบบการ์ดปกติ */
-  .kpi-chips .kpi.kpi-link:hover{ transform:translate(-1px,-2px); box-shadow:4px 6px 0 rgba(19,30,49,.9); border-color:#131E31; }
-  .kpi-chips .kpi.kpi-link:active{ transform:translate(1px,2px); box-shadow:1px 2px 0 rgba(19,30,49,.9); }
+  body.theme-premium .kpi-chips .kpi.kpi-link:hover{ transform:translate(-1px,-2px); box-shadow:4px 6px 0 rgba(19,30,49,.9); border-color:#131E31; }
+  body.theme-premium .kpi-chips .kpi.kpi-link:active{ transform:translate(1px,2px); box-shadow:1px 2px 0 rgba(19,30,49,.9); }
   /* ใบยอดรวมของแถว: ขอบหนากว่าเพื่อนแทนการใช้สีนอกระบบ */
-  .kpi-row.kpi-chips .kpi.kpi-total{ border-top:2px solid #131E31; border-width:3px; }
+  body.theme-premium .kpi-row.kpi-chips .kpi.kpi-total{ border-top:2px solid #131E31; border-width:3px; }
   .table-wrap.sheet-bot{background:#fff;border:1px solid var(--border);border-top:0;
     border-radius:0 0 var(--r-card) var(--r-card);box-shadow:none}
   .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
@@ -973,6 +977,7 @@
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
           <button class="btn btn-sm" id="switch-company-btn" style="display:none" onclick="backToPicker()">↔ เปลี่ยนบริษัท</button>
           <button class="btn btn-sm" id="density-btn" onclick="toggleDensity()" title="สลับความแน่นของหน้าจอ (ปกติ / กระชับ)">ปกติ</button>
+          <button class="btn btn-sm" id="theme-btn" onclick="toggleTheme()" title="สลับธีมการ์ด (คลาสสิก / พรีเมียม)">คลาสสิก</button>
           <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
           <div class="avatar" id="who-avatar">-</div>
@@ -10571,6 +10576,38 @@ function toggleDensity(){
   applyDensity(next);
   toast('มุมมอง' + (next === 'compact' ? 'กระชับ' : 'ปกติ'));
 }
+/* ── ธีมการ์ด: Classic (ค่าเริ่มต้น) / Premium ──
+   ★ ค่าเริ่มต้นเป็น **Classic** ตามที่เจ้าของระบบสั่ง — เครื่องใหม่/ล้างแคชต้องได้หน้าตาเดิมเสมอ
+     ธีมใหม่เป็นของที่ "เลือกเอง" ไม่ใช่ของที่จู่ๆ ก็เปลี่ยนให้
+   ★ เก็บไว้ต่อเครื่อง (ไม่ผูกบัญชี) เหมือน LS_DENSITY/LS_PIN — คนละเครื่องชอบคนละแบบได้ */
+const LS_THEME = 'topshop_theme';
+const THEMES = { classic: 'คลาสสิก', premium: 'พรีเมียม' };
+function applyTheme(name){
+  const premium = name === 'premium';
+  document.body.classList.toggle('theme-premium', premium);
+  const btn = document.getElementById('theme-btn');
+  if (btn) {
+    btn.innerHTML = '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" ' +
+      'stroke-linecap="round" stroke-linejoin="round">' +
+      (premium
+        ? '<rect x="2.2" y="2.8" width="11.6" height="10.4" rx="2.4"/><rect x="4" y="4.6" width="8" height="5" rx="1.4" stroke-dasharray="1.6 1.4"/>'
+        : '<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.8"/><path d="M2.2 6.2h11.6"/>') +
+      '</svg>' + THEMES[premium ? 'premium' : 'classic'];
+    btn.title = 'ธีมการ์ดตอนนี้: ' + THEMES[premium ? 'premium' : 'classic'] + ' — กดเพื่อสลับ';
+  }
+}
+function toggleTheme(){
+  const next = document.body.classList.contains('theme-premium') ? 'classic' : 'premium';
+  try { localStorage.setItem(LS_THEME, next); } catch (e) {}
+  applyTheme(next);
+  toast('ธีมการ์ด: ' + THEMES[next]);
+}
+(function initTheme(){
+  let saved = 'classic';
+  try { saved = localStorage.getItem(LS_THEME) === 'premium' ? 'premium' : 'classic'; } catch (e) {}
+  applyTheme(saved);
+})();
+
 (function initDensity(){
   let saved = 'compact';
   // ค่าเริ่มต้นของผู้ใช้รายนี้คือ 'กระชับ' เสมอ (เครื่องใหม่/ล้างแคชก็ยังได้กระชับ) เปลี่ยนเองได้ที่ปุ่มบนแถบบน
