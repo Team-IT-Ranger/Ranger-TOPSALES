@@ -290,9 +290,9 @@
        และต้อง pointer-events:none ไม่งั้นมันบังการคลิกการ์ด (การ์ดแถวนี้กดได้) */
   .kpi-row.kpi-badges .kpi::after{
     content:''; position:absolute; inset:5px; border-radius:13px; pointer-events:none;
-    border:2px dashed var(--k-tint, #FFFFFF); opacity:.72; }
-  /* ★ เส้นประ 2px = ขีดยาว ~4px เว้น ~4px ในเบราว์เซอร์ส่วนใหญ่ ซึ่งอ่านเป็น "รอยเย็บ" พอดี
-     บางกว่านี้ (1px) บนพื้นเข้มจะจางจนมองไม่ออกว่าตั้งใจ */
+    border:1px dashed var(--k-tint, #FFFFFF); opacity:.85; }
+  /* ★ ด้าย 1px (เจ้าของระบบขอให้บางลงครึ่งหนึ่ง 18 ต.ค. 2026) — เส้นบางบนพื้นเข้มจะจางกว่าที่คิด
+     จึงเพิ่มความทึบจาก .72 เป็น .85 ให้ยังอ่านเป็น "รอยเย็บ" ไม่ใช่ขอบเบลอ */
   /* แผ่นสีด้านใน — `.kpi-face` ปกติเป็น display:contents (ไม่มีตัวตนในหน้าอื่น) ที่นี่กลายเป็นแผ่นจริง */
   .kpi-badges .kpi .kpi-face{
     display:flex; flex-direction:column; justify-content:center; gap:3px; order:1;
