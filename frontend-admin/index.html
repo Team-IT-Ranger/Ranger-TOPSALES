@@ -1230,7 +1230,9 @@
               <option value="">ทุกใบ (ไม่รวมบิลที่ยกเลิก)</option>
             </select>
           </div>
-          <div class="kpi-row" id="srp-sum" style="margin:12px 0"></div>
+          <!-- ★ ใช้ชิปแบบเดียวกับการ์ดแถวสองของแดชบอร์ด (เจ้าของระบบสั่ง 18 ต.ค. 2026)
+               ติดแค่คลาส `kpi-chips` — ธีมคลาสสิกยังเป็นการ์ดปกติเพราะกฎชิปอยู่ใต้ body.theme-premium -->
+          <div class="kpi-row kpi-chips" id="srp-sum" style="margin:12px 0"></div>
           <div class="table-wrap sheet-bot"><table>
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ใบแจ้งหนี้/ใบกำกับภาษี</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th></tr></thead>
             <tbody id="srp-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
