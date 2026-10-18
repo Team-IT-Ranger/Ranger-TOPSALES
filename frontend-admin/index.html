@@ -281,9 +281,18 @@
      ★ ใส่ที่ "แถว" ไม่ใช่ที่การ์ดแต่ละใบ — ตัวสร้างการ์ด (kpi/kpiLink/kpiCustReq/kpiPendingGr)
        จึงไม่ต้องรู้ว่าตัวเองอยู่หน้าไหน และหน้าอื่นที่ใช้ .kpi-row เหมือนกันไม่เปลี่ยนตาม */
   .kpi-row.kpi-badges .kpi{
-    background:#131E31; border:0; border-radius:17px; padding:9px 9px 7px;
+    background:#131E31; border:0; border-radius:17px; padding:11px 11px 8px;
     display:flex; flex-direction:column; gap:7px; box-shadow:0 8px 18px -8px rgba(15,27,45,.5);
-    text-align:left; }
+    text-align:left; position:relative; }
+  /* ★ รอยเดินด้ายรอบขอบใน (เจ้าของระบบสั่ง 18 ต.ค. 2026 — "ให้ดูพรีเมี่ยม")
+     เส้นประใช้ `--k-tint` สีเดียวกับแผ่นด้านใน การ์ดจึงดูเหมือนแผ่นสีถูกเย็บติดกับกรอบ
+     ★ วางเป็น ::after ลอยทับ ไม่ใช่ border ของตัวการ์ด — border จะกินพื้นที่แล้วดันแผ่นด้านในเล็กลง
+       และต้อง pointer-events:none ไม่งั้นมันบังการคลิกการ์ด (การ์ดแถวนี้กดได้) */
+  .kpi-row.kpi-badges .kpi::after{
+    content:''; position:absolute; inset:5px; border-radius:13px; pointer-events:none;
+    border:2px dashed var(--k-tint, #FFFFFF); opacity:.72; }
+  /* ★ เส้นประ 2px = ขีดยาว ~4px เว้น ~4px ในเบราว์เซอร์ส่วนใหญ่ ซึ่งอ่านเป็น "รอยเย็บ" พอดี
+     บางกว่านี้ (1px) บนพื้นเข้มจะจางจนมองไม่ออกว่าตั้งใจ */
   /* แผ่นสีด้านใน — `.kpi-face` ปกติเป็น display:contents (ไม่มีตัวตนในหน้าอื่น) ที่นี่กลายเป็นแผ่นจริง */
   .kpi-badges .kpi .kpi-face{
     display:flex; flex-direction:column; justify-content:center; gap:3px; order:1;
