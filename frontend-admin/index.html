@@ -332,8 +332,10 @@
      ★ เย็บ "รอบนอก" (inset ติดลบ) ไม่ใช่ด้านใน — ข้างในแถบมีปุ่มสองใบเต็มพื้นที่อยู่แล้ว
        เส้นด้ายด้านในจะไปพาดทับปุ่มที่กำลังเลือกอยู่ · ช่องไฟบนแถบบนห่าง 10px วงนอก 3px จึงไม่ชนใคร
      ★ ด้ายบนพื้นอ่อนต้องใช้สีเข้มกว่าพื้น (กลับกันกับบนการ์ดกรอบเข้มที่ใช้ด้ายสีอ่อน) */
-  body.theme-premium .top-right .segtog{ position:relative; }
-  body.theme-premium .top-right .segtog::after{
+  /* ★ ครอบ **ทุกแถบเลือกในแอป** ไม่ใช่เฉพาะบนแถบบน (เจ้าของระบบสั่งเพิ่ม 18 ต.ค. 2026)
+     — กระดาน/ตาราง และแถบหัวข้อในหน้ารายละเอียดบิล ก็เป็นตัวเลือกชนิดเดียวกัน ควรหน้าตาเหมือนกันทั้งแอป */
+  body.theme-premium .segtog{ position:relative; }
+  body.theme-premium .segtog::after{
     content:''; position:absolute; inset:-3px; border-radius:999px; pointer-events:none;
     border:1px dashed var(--ink-faint); opacity:.8; }
 
