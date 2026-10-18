@@ -976,8 +976,17 @@
         <div class="top-right">
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
           <button class="btn btn-sm" id="switch-company-btn" style="display:none" onclick="backToPicker()">↔ เปลี่ยนบริษัท</button>
-          <button class="btn btn-sm" id="density-btn" onclick="toggleDensity()" title="สลับความแน่นของหน้าจอ (ปกติ / กระชับ)">ปกติ</button>
-          <button class="btn btn-sm" id="theme-btn" onclick="toggleTheme()" title="สลับธีมการ์ด (คลาสสิก / พรีเมียม)">คลาสสิก</button>
+          <!-- ★ สองแถบนี้เป็น "ตัวเลือก" ไม่ใช่ปุ่มสั่งงาน — ใช้แถบเลือกแบบเดียวกับปุ่มกระดาน/ตาราง
+               (เจ้าของระบบสั่ง 18 ต.ค. 2026) ของเดิมเป็นปุ่มเดียวที่โชว์ค่าปัจจุบัน ซึ่งคนไม่รู้ว่ากดได้
+               และไม่รู้ว่ามีอีกตัวเลือกหนึ่งอยู่จนกว่าจะเผลอกด -->
+          <div class="segtog" id="density-seg" role="group" aria-label="ความแน่นของหน้าจอ">
+            <button type="button" class="seg" data-v="normal" onclick="setDensity('normal')">ปกติ</button>
+            <button type="button" class="seg" data-v="compact" onclick="setDensity('compact')">กระชับ</button>
+          </div>
+          <div class="segtog" id="theme-seg" role="group" aria-label="ธีมการ์ด">
+            <button type="button" class="seg" data-v="classic" onclick="setTheme('classic')">คลาสสิก</button>
+            <button type="button" class="seg" data-v="premium" onclick="setTheme('premium')">พรีเมียม</button>
+          </div>
           <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
           <div class="avatar" id="who-avatar">-</div>
@@ -10558,23 +10567,21 @@ function tblLoading(body, cols){
 /* ── มุมมอง ปกติ / กระชับ ──
    จำค่าไว้ในเครื่อง (ไม่ผูกกับบัญชี) และใส่คลาสตั้งแต่ก่อนวาดหน้าแรก ไม่ให้หน้ากระพริบเปลี่ยนขนาด */
 const LS_DENSITY = 'topshop_density';
+/* ไฮไลต์ตัวเลือกที่ใช้อยู่ในแถบเลือก — ใช้ร่วมกันทั้งแถบความแน่นและแถบธีม */
+function segSync(id, value){
+  const box = document.getElementById(id);
+  if (box) box.querySelectorAll('.seg').forEach(b => b.classList.toggle('on', b.dataset.v === value));
+}
 function applyDensity(mode){
   const compact = mode === 'compact';
   document.body.classList.toggle('density-compact', compact);
-  const btn = document.getElementById('density-btn');
-  if (btn) {
-    // ไอคอนบอก "โหมดที่กำลังใช้อยู่": 3 เส้นห่าง = ปกติ, 4 เส้นชิด = กระชับ
-    btn.innerHTML = '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">' +
-      (compact ? '<path d="M3 4h10M3 6.7h10M3 9.3h10M3 12h10"/>' : '<path d="M3 4.5h10M3 8h10M3 11.5h10"/>') + '</svg>' +
-      (compact ? 'กระชับ' : 'ปกติ');
-    btn.title = 'มุมมองตอนนี้: ' + (compact ? 'กระชับ' : 'ปกติ') + ' — กดเพื่อสลับ';
-  }
+  segSync('density-seg', compact ? 'compact' : 'normal');
 }
-function toggleDensity(){
-  const next = document.body.classList.contains('density-compact') ? 'normal' : 'compact';
-  try { localStorage.setItem(LS_DENSITY, next); } catch (e) {}
-  applyDensity(next);
-  toast('มุมมอง' + (next === 'compact' ? 'กระชับ' : 'ปกติ'));
+function setDensity(mode){
+  if ((mode === 'compact') === document.body.classList.contains('density-compact')) return;   // กดตัวที่ใช้อยู่ = ไม่ต้องทำอะไร
+  try { localStorage.setItem(LS_DENSITY, mode); } catch (e) {}
+  applyDensity(mode);
+  toast('มุมมอง' + (mode === 'compact' ? 'กระชับ' : 'ปกติ'));
 }
 /* ── ธีมการ์ด: Classic (ค่าเริ่มต้น) / Premium ──
    ★ ค่าเริ่มต้นเป็น **Classic** ตามที่เจ้าของระบบสั่ง — เครื่องใหม่/ล้างแคชต้องได้หน้าตาเดิมเสมอ
@@ -10585,22 +10592,14 @@ const THEMES = { classic: 'คลาสสิก', premium: 'พรีเมี�
 function applyTheme(name){
   const premium = name === 'premium';
   document.body.classList.toggle('theme-premium', premium);
-  const btn = document.getElementById('theme-btn');
-  if (btn) {
-    btn.innerHTML = '<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" ' +
-      'stroke-linecap="round" stroke-linejoin="round">' +
-      (premium
-        ? '<rect x="2.2" y="2.8" width="11.6" height="10.4" rx="2.4"/><rect x="4" y="4.6" width="8" height="5" rx="1.4" stroke-dasharray="1.6 1.4"/>'
-        : '<rect x="2.2" y="3.4" width="11.6" height="9.2" rx="1.8"/><path d="M2.2 6.2h11.6"/>') +
-      '</svg>' + THEMES[premium ? 'premium' : 'classic'];
-    btn.title = 'ธีมการ์ดตอนนี้: ' + THEMES[premium ? 'premium' : 'classic'] + ' — กดเพื่อสลับ';
-  }
+  segSync('theme-seg', premium ? 'premium' : 'classic');
 }
-function toggleTheme(){
-  const next = document.body.classList.contains('theme-premium') ? 'classic' : 'premium';
-  try { localStorage.setItem(LS_THEME, next); } catch (e) {}
-  applyTheme(next);
-  toast('ธีมการ์ด: ' + THEMES[next]);
+function setTheme(name){
+  const premium = name === 'premium';
+  if (premium === document.body.classList.contains('theme-premium')) return;
+  try { localStorage.setItem(LS_THEME, name); } catch (e) {}
+  applyTheme(name);
+  toast('ธีมการ์ด: ' + THEMES[name]);
 }
 (function initTheme(){
   let saved = 'classic';
