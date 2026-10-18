@@ -336,6 +336,23 @@
   body.theme-premium .top-right .segtog::after{
     content:''; position:absolute; inset:-3px; border-radius:999px; pointer-events:none;
     border:1px dashed var(--ink-faint); opacity:.8; }
+
+  /* ★ ปุ่มทั่วทั้งแอปก็เย็บด้วย (เจ้าของระบบสั่ง 18 ต.ค. 2026) — เฉพาะธีมพรีเมียม
+     ★★ ต้องใช้ `::before` ไม่ใช่ `::after` — `.btn.is-busy::after` เป็นวงหมุนตอนรอเซิร์ฟเวอร์อยู่แล้ว
+       ทับเมื่อไหร่ปุ่มที่กำลังโหลดจะไม่มีวงหมุนให้เห็น (กันกดซ้ำพังทั้งระบบ)
+     ★ ด้ายใช้ `currentColor` — ปุ่มขาวได้ด้ายสีเข้ม ปุ่มน้ำเงินได้ด้ายสีขาว โดยไม่ต้องเขียนกฎแยกต่อสีปุ่ม
+     ★ เว้น `.btn-ghost` (ปุ่มไม่มีขอบไม่มีพื้น) — เย็บแล้วจะกลายเป็นปุ่มมีกรอบ ผิดความตั้งใจของมัน */
+  /* ★ หัวคอลัมน์สถานะบนกระดาน (รออนุมัติ · เตรียมการจัดส่ง · …) เย็บด้วย — เจ้าของระบบสั่งเพิ่ม 18 ต.ค. 2026
+     กฎอยู่ที่นี่ ไม่ใช่ใน dragboard.js เพราะ "ธีม" เป็นเรื่องของแอป ไม่ใช่ของตัวกระดาน
+     (และจะได้ไม่ต้องบัมป์ `dragboard.js?v=` ทุกครั้งที่แต่งธีม) */
+  body.theme-premium .dgb-col{ position:relative; }
+  body.theme-premium .dgb-col::after{
+    content:''; position:absolute; inset:3px; border-radius:7px; pointer-events:none;
+    border:1px dashed var(--ink-faint); opacity:.65; }
+  body.theme-premium .btn{ position:relative; }
+  body.theme-premium .btn:not(.btn-ghost)::before{
+    content:''; position:absolute; inset:2px; border-radius:calc(var(--r-ctl) - 2px); pointer-events:none;
+    border:1px dashed currentColor; opacity:.4; }
   .table-wrap.sheet-bot{background:#fff;border:1px solid var(--border);border-top:0;
     border-radius:0 0 var(--r-card) var(--r-card);box-shadow:none}
   .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
@@ -9353,7 +9370,7 @@ function renderCreditSettings(set){
       '</div>' +
       '<p class="form-hint">วงเงิน 0 = ไม่กำหนดวงเงิน (ร้านนั้นไม่ถูกกั้น) · ตั้งวงเงินรายร้านที่ทะเบียนลูกค้า ' +
         '· <b>การขายเงินสดไม่ถูกกั้นไม่ว่าตั้งค่าแบบไหน</b> · ร้านที่ถูกระงับเครดิตเป็นคนละด่าน</p>' +
-      '<div class="form-actions"><button class="btn primary" onclick="saveCreditSettingsUi()">บันทึกการตั้งค่า</button>' +
+      '<div class="form-actions"><button class="btn btn-primary" onclick="saveCreditSettingsUi()">บันทึกการตั้งค่า</button>' +
         (set.updatedAt ? '<span class="form-hint">แก้ล่าสุด '+esc(set.updatedAt)+'</span>' : '') + '</div>' +
     '</div>';
 }
