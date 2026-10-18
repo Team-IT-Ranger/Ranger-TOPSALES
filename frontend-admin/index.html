@@ -271,9 +271,46 @@
        อีกชุดจะเพี้ยนตามไม่ได้
      เหลือไว้แค่สีขอบบนของ "ใบยอดรวม" ให้ต่างจากใบรายคน (ล้อแบบ .kpi-alert/.kpi-quiet ที่มีอยู่แล้ว) */
   /* ใบยอดรวมของแถว: เส้นขอบบนหนาขึ้นหนึ่งระดับ ให้แยกออกจากใบรายคนโดยไม่ต้องใช้สีนอกตาราง */
-  /* ★ ต้องมีน้ำหนักมากกว่า `.kpi.k-xxx` (ซึ่งเขียน border-top เต็มรูป) ไม่งั้นความหนาถูกเขียนทับ
-     — เติม `.kpi-row` นำหน้าเพื่อให้ชนะโดยไม่ต้องพึ่งลำดับบรรทัดในไฟล์ */
   .kpi-row .kpi.kpi-total{ border-top-width:5px; }
+
+  /* ═══ สไตล์การ์ดของหน้าแดชบอร์ด (เจ้าของระบบส่งภาพตัวอย่างมา 18 ต.ค. 2026) ═══
+     แถวแรก `.kpi-badges` = กรอบเข้ม + แผ่นสีด้านใน + **ชื่ออยู่ด้านล่าง** (แบบการ์ดขวาในภาพ)
+     แถวสอง `.kpi-chips`  = ชิปสีทึบ ขอบเข้ม เงาแข็งแบบสติกเกอร์ ชื่ออยู่ในชิป (แบบป้ายซ้ายในภาพ)
+     ★ ทั้งสองแบบกินสีจากตัวแปร `--k-hue`/`--k-tint` ของคลาสสีเดิม — ระบบสีตามประเภทข้อมูล
+       ยังเป็นตัวเดียวกันทั้งแอป เปลี่ยนแค่รูปทรง ไม่ได้แยกชุดสีใหม่
+     ★ ใส่ที่ "แถว" ไม่ใช่ที่การ์ดแต่ละใบ — ตัวสร้างการ์ด (kpi/kpiLink/kpiCustReq/kpiPendingGr)
+       จึงไม่ต้องรู้ว่าตัวเองอยู่หน้าไหน และหน้าอื่นที่ใช้ .kpi-row เหมือนกันไม่เปลี่ยนตาม */
+  .kpi-row.kpi-badges .kpi{
+    background:#131E31; border:0; border-radius:17px; padding:9px 9px 7px;
+    display:flex; flex-direction:column; gap:7px; box-shadow:0 8px 18px -8px rgba(15,27,45,.5);
+    text-align:left; }
+  /* แผ่นสีด้านใน — `.kpi-face` ปกติเป็น display:contents (ไม่มีตัวตนในหน้าอื่น) ที่นี่กลายเป็นแผ่นจริง */
+  .kpi-badges .kpi .kpi-face{
+    display:flex; flex-direction:column; justify-content:center; gap:3px; order:1;
+    background:var(--k-tint, var(--surface-2)); border-radius:12px; padding:11px 13px; min-height:66px; }
+  .kpi-badges .kpi .val{ font-size:21px; color:var(--ink); }
+  .kpi-badges .kpi .sub{ color:var(--ink-soft); }
+  .kpi-badges .kpi .go{ color:var(--blue); }
+  /* ชื่อการ์ดอยู่ล่างสุดบนกรอบเข้ม — ตัวอักษรขาว จัดกลาง เหมือนในภาพตัวอย่าง */
+  .kpi-badges .kpi .lbl{ order:2; margin:0; color:#DCE4F2; text-align:center; font-weight:600;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi-badges .kpi.kpi-link:hover{ border:0; transform:translateY(-2px); box-shadow:0 12px 22px -8px rgba(15,27,45,.55); }
+  .kpi-badges .kpi.kpi-link:active{ transform:translateY(0); }
+  /* เส้นสีด้านบนไม่มีแล้วในแบบนี้ — ความหมายของสีย้ายไปอยู่ที่แผ่นด้านใน */
+  .kpi-badges .kpi, .kpi-row.kpi-badges .kpi.kpi-total{ border-top:0; }
+
+  .kpi-row.kpi-chips .kpi{
+    background:var(--k-tint, var(--grey-soft)); border:2px solid #131E31; border-radius:14px;
+    padding:10px 13px; box-shadow:3px 4px 0 rgba(19,30,49,.9); text-align:left;
+    transition:transform .1s, box-shadow .1s; }
+  .kpi-chips .kpi .lbl{ color:#2A3950; font-weight:700; margin-bottom:4px; }
+  .kpi-chips .kpi .val{ color:var(--ink); }
+  .kpi-chips .kpi .go, .kpi-chips .kpi .sub{ color:#44536C; }
+  /* ชิปกดได้ = ขยับแบบสติกเกอร์ ไม่ใช่เงาฟุ้งแบบการ์ดปกติ */
+  .kpi-chips .kpi.kpi-link:hover{ transform:translate(-1px,-2px); box-shadow:4px 6px 0 rgba(19,30,49,.9); border-color:#131E31; }
+  .kpi-chips .kpi.kpi-link:active{ transform:translate(1px,2px); box-shadow:1px 2px 0 rgba(19,30,49,.9); }
+  /* ใบยอดรวมของแถว: ขอบหนากว่าเพื่อนแทนการใช้สีนอกระบบ */
+  .kpi-row.kpi-chips .kpi.kpi-total{ border-top:2px solid #131E31; border-width:3px; }
   .table-wrap.sheet-bot{background:#fff;border:1px solid var(--border);border-top:0;
     border-radius:0 0 var(--r-card) var(--r-card);box-shadow:none}
   .segtog{display:inline-flex;background:var(--grey-soft);border:1px solid var(--border);
@@ -344,20 +381,31 @@
        `k-s1..k-s6` แทน — สีตรงนั้นมีหน้าที่ **แยกคน** ไม่ได้บอกประเภท ใบรวมของแถวยังใช้สีตามประเภทตามปกติ
      ★ เพิ่มประเภทใหม่ = เพิ่มแถวในตารางนี้ + คลาสข้างล่าง **ที่เดียว** ห้ามใส่สีเป็น inline style
        ที่หน้าใดหน้าหนึ่ง (ของเดิมหน้าวงเงินเครดิตเคยใส่ `style="border-color:#E9B4B4"` ไว้ แก้แล้ว) */
-  .kpi.k-sales{ border-top:3px solid var(--green); background:var(--green-soft); }
-  .kpi.k-debt{ border-top:3px solid var(--red); background:var(--red-soft); }
-  .kpi.k-pending{ border-top:3px solid var(--amber); background:var(--amber-soft); }
-  .kpi.k-doc{ border-top:3px solid var(--blue); background:var(--blue-pale); }
-  .kpi.k-people{ border-top:3px solid var(--violet); background:var(--violet-soft); }
-  .kpi.k-stock{ border-top:3px solid var(--teal); background:var(--teal-soft); }
-  .kpi.k-promo{ border-top:3px solid #B4457E; background:#FBE7F1; }
+  /* ★★ คลาสสี **ประกาศแค่ตัวแปร** (`--k-hue` เส้น/ตัวเลข · `--k-tint` พื้น) ไม่ลงสีเอง
+     เพราะการ์ดมีหลายสไตล์แล้ว (การ์ดธรรมดา · การ์ดกรอบเข้มของแดชบอร์ด · ชิป) แต่ละสไตล์
+     เอาตัวแปรไปใช้คนละที่ — ถ้าคลาสสีลงสีตายตัว จะต้องเขียนคลาสสีซ้ำหนึ่งชุดต่อหนึ่งสไตล์ */
+  .kpi.k-sales  { --k-hue:var(--green);  --k-tint:var(--green-soft); }
+  .kpi.k-debt   { --k-hue:var(--red);    --k-tint:var(--red-soft); }
+  .kpi.k-pending{ --k-hue:var(--amber);  --k-tint:var(--amber-soft); }
+  .kpi.k-doc    { --k-hue:var(--blue);   --k-tint:var(--blue-pale); }
+  .kpi.k-people { --k-hue:var(--violet); --k-tint:var(--violet-soft); }
+  .kpi.k-stock  { --k-hue:var(--teal);   --k-tint:var(--teal-soft); }
+  .kpi.k-promo  { --k-hue:#B4457E;       --k-tint:#FBE7F1; }
   /* ชุดสีลำดับสำหรับ "ตัวเลขเดียวกันแยกตามคน" — ไล่ให้ห่างกันพอมองแวบเดียวแยกออก */
-  .kpi.k-s1{ border-top:3px solid var(--blue); background:var(--blue-pale); }
-  .kpi.k-s2{ border-top:3px solid var(--violet); background:var(--violet-soft); }
-  .kpi.k-s3{ border-top:3px solid var(--teal); background:var(--teal-soft); }
-  .kpi.k-s4{ border-top:3px solid var(--amber); background:var(--amber-soft); }
-  .kpi.k-s5{ border-top:3px solid #B4457E; background:#FBE7F1; }
-  .kpi.k-s6{ border-top:3px solid var(--green); background:var(--green-soft); }
+  .kpi.k-s1{ --k-hue:var(--blue);   --k-tint:var(--blue-pale); }
+  .kpi.k-s2{ --k-hue:var(--violet); --k-tint:var(--violet-soft); }
+  .kpi.k-s3{ --k-hue:var(--teal);   --k-tint:var(--teal-soft); }
+  .kpi.k-s4{ --k-hue:var(--amber);  --k-tint:var(--amber-soft); }
+  .kpi.k-s5{ --k-hue:#B4457E;       --k-tint:#FBE7F1; }
+  .kpi.k-s6{ --k-hue:var(--green);  --k-tint:var(--green-soft); }
+  /* การ์ดธรรมดา (หน้าอื่นๆ ที่ไม่ใช่แดชบอร์ด): แถบสีด้านบน + พื้นอ่อน จากตัวแปรข้างบน
+     ★★ ต้องเขียนเป็น `.kpi-row .kpi` (น้ำหนัก 0,2,0) ไม่ใช่ `.kpi` เฉยๆ — กฎธีม light ท้ายไฟล์มี
+       `.kpi{ border-top:1px solid var(--border) }` ซึ่งน้ำหนักเท่ากันแต่อยู่ทีหลัง จะลบแถบสีทิ้งทั้งแอป
+       (เจอทันทีที่เปลี่ยนคลาสสีมาเป็นตัวแปร 18 ต.ค. 2026 — หน้าที่ไม่ใช่แดชบอร์ดสีหายหมด) */
+  .kpi-row .kpi{ border-top:3px solid var(--k-hue, var(--border)); background:var(--k-tint, var(--surface)); }
+  /* ★ ตัวห่อ val+sub — ปกติ `display:contents` คือไม่มีตัวตนในการจัดวาง (หน้าอื่นจึงเหมือนเดิมเป๊ะ)
+     มีไว้ให้สไตล์การ์ดของแดชบอร์ดยกขึ้นมาเป็น "แผ่นสีด้านใน" ได้โดยไม่ต้องแก้ตัวสร้างการ์ดอีกรอบ */
+  .kpi .kpi-face{ display:contents; }
   .kpi .lbl{ font-size:11.5px; color:var(--ink-soft); margin-bottom:6px; }
   .kpi .val{ font-family:'IBM Plex Mono'; font-size:22px; font-weight:600; }
   .kpi .sub{ font-size:11px; color:var(--ink-faint); margin-top:3px; }
@@ -368,9 +416,10 @@
   .kpi-link:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
   .kpi-link .go{ font-size:11px; color:var(--blue); margin-top:3px; }
   /* มีของค้าง = ขอบบนเป็นสีเตือน · ไม่มี = ปล่อยเทาเหมือนการ์ดเฉยๆ ไม่ต้องเรียกร้องความสนใจ */
-  /* มีของค้าง = สีของ "งานค้าง" · ไม่มี = เทากลาง ไม่ต้องเรียกร้องความสนใจ (ใช้ตารางสีเดียวกัน) */
-  .kpi.kpi-alert{ border-top:3px solid var(--amber); background:var(--amber-soft); }
-  .kpi.kpi-quiet{ border-top:1px solid var(--border); background:var(--surface); }
+  /* มีของค้าง = สีของ "งานค้าง" · ไม่มี = เทากลาง ไม่ต้องเรียกร้องความสนใจ (ใช้ตารางสีเดียวกัน)
+     ★ ประกาศเป็นตัวแปรเท่านั้น เหมือนคลาสสีอื่น — ไม่งั้นมันจะไปทับพื้นกรอบเข้มของการ์ดแดชบอร์ด */
+  .kpi.kpi-alert{ --k-hue:var(--amber); --k-tint:var(--amber-soft); }
+  .kpi.kpi-quiet{ --k-hue:var(--border); --k-tint:var(--surface); }
   .two-col{ display:grid; grid-template-columns:1.3fr 1fr; gap:14px; }
   .panel{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
   .panel h3{ font-size:13.5px; margin:0 0 12px; }
@@ -923,10 +972,10 @@
         <!-- ═══ DASHBOARD ═══ -->
         <section class="view active" id="view-dashboard">
           <div class="view-head"><div><h1>ภาพรวม</h1><p id="dash-date">กำลังโหลด...</p></div></div>
-          <div class="kpi-row" id="dash-kpis"><div class="kpi"><div class="lbl">กำลังโหลด...</div><div class="val">—</div></div></div>
+          <div class="kpi-row kpi-badges" id="dash-kpis"><div class="kpi"><div class="lbl">กำลังโหลด...</div><div class="val">—</div></div></div>
           <!-- ★ แถวที่สอง: ยอดขายเดือนนี้ นับเฉพาะบิล "จัดส่งสำเร็จ" (เจ้าของระบบสั่ง 17 ต.ค. 2026)
                ใบแรกเป็นยอดรวมทั้งเดือน ใบถัดไปแยกตามพนักงานขาย · กดใบไหนก็ไปหน้ารายงานที่กรองไว้ให้แล้ว -->
-          <div class="kpi-row" id="so-month-cards"></div>
+          <div class="kpi-row kpi-chips" id="so-month-cards"></div>
           <div class="two-col">
             <div class="panel"><h3 id="dash-panel1-title">รายการล่าสุด</h3><div id="dash-panel1"></div></div>
             <div class="panel"><h3 id="dash-panel2-title">สรุป</h3><div id="dash-panel2"></div></div>
@@ -3324,15 +3373,17 @@ function renderDashboard(r, fromSnapshot){
   }
 }
 /* cls = คลาสสีตามประเภทข้อมูล (ดูตาราง "สีของการ์ดตัวเลข" ใน <style>) — ไม่ใส่ = เทากลาง */
-function kpi(lbl, val, sub, cls){ return '<div class="kpi '+(cls||'')+'"><div class="lbl">'+esc(lbl)+'</div><div class="val">'+esc(val)+'</div><div class="sub">'+esc(sub||'')+'</div></div>'; }
+function kpi(lbl, val, sub, cls){ return '<div class="kpi '+(cls||'')+'"><div class="lbl">'+esc(lbl)+'</div>' +
+  '<div class="kpi-face"><div class="val">'+esc(val)+'</div><div class="sub">'+esc(sub||'')+'</div></div></div>'; }
 /* การ์ดตัวเลขที่กดแล้วไปหน้าที่เกี่ยวข้อง — ตัวเลขบนแดชบอร์ดทุกตัวมาจากหน้าใดหน้าหนึ่งเสมอ
    เห็นแล้วอยากดูต่อเป็นเรื่องปกติ · เป็น <button> ไม่ใช่ <div onclick> เพื่อให้ Tab ถึงและ Enter ทำงานเอง
    (แพทเทิร์นเดียวกับ kpiCustReq ที่ทำไว้ตอนการ์ดคำขอเปิดร้าน 6 ต.ค. 2026) */
 function kpiLink(lbl, val, sub, view, hint, cls){
   return '<button type="button" class="kpi kpi-link ' + (cls || '') + '" style="text-align:left;font:inherit" ' +
     'onclick="gotoView(\'' + view + '\')" title="' + esc(hint || '') + '">' +
-    '<div class="lbl">' + esc(lbl) + '</div><div class="val">' + esc(val) + '</div>' +
-    '<div class="go">' + esc(sub || '') + '</div></button>';
+    '<div class="lbl">' + esc(lbl) + '</div>' +
+    '<div class="kpi-face"><div class="val">' + esc(val) + '</div>' +
+    '<div class="go">' + esc(sub || '') + '</div></div></button>';
 }
 /* การ์ดคำขอเปิดร้านใหม่ — กดแล้วไปหน้า 1.4.6 (เมนูอยู่ลึกสามชั้น คนไม่รู้ว่ามีจะไม่เคยเจอ)
    เป็น <button> ไม่ใช่ <div onclick> เพื่อให้ Tab ถึงและ Enter ทำงานได้เอง */
@@ -3341,8 +3392,9 @@ function kpiCustReq(count){
   return '<button type="button" class="kpi kpi-link ' + (n ? 'kpi-alert' : 'kpi-quiet') + '" ' +
     'style="text-align:left;font:inherit" onclick="gotoView(\'custrequests\')" ' +
     'title="ไปที่ 1.4.6 คำขอเปิดร้านใหม่">' +
-    '<div class="lbl">คำขอเปิดร้านใหม่</div><div class="val">' + n + '</div>' +
-    '<div class="' + (n ? 'go' : 'sub') + '">' + (n ? 'รออนุมัติ — กดเพื่อตรวจ' : 'ไม่มีคำขอค้าง') + '</div></button>';
+    '<div class="lbl">คำขอเปิดร้านใหม่</div>' +
+    '<div class="kpi-face"><div class="val">' + n + '</div>' +
+    '<div class="' + (n ? 'go' : 'sub') + '">' + (n ? 'รออนุมัติ — กดเพื่อตรวจ' : 'ไม่มีคำขอค้าง') + '</div></div></button>';
 }
 /* ใบรับของรอตรวจรับ — ตัวเลขหลักคือ "จำนวนรายการสินค้า" ไม่ใช่จำนวนใบ (เจ้าของระบบสั่ง 8 ต.ค. 2026)
    ใบเดียวอาจมี 40 รายการ สองใบอาจมี 3 รายการ — จำนวนใบไม่ได้บอกว่างานเยอะแค่ไหน
@@ -3352,9 +3404,10 @@ function kpiPendingGr(p){
   return '<button type="button" class="kpi kpi-link ' + (items ? 'kpi-alert' : 'kpi-quiet') + '" ' +
     'style="text-align:left;font:inherit" onclick="gotoView(\'pendinggoodsreceipts\')" ' +
     'title="ไปที่ 4.3.2 ใบรับของรอตรวจรับ">' +
-    '<div class="lbl">ใบรับของรอตรวจรับ</div><div class="val">' + items + '</div>' +
+    '<div class="lbl">ใบรับของรอตรวจรับ</div>' +
+    '<div class="kpi-face"><div class="val">' + items + '</div>' +
     '<div class="' + (items ? 'go' : 'sub') + '">' +
-    (items ? docs + ' ใบ · รายการรอรับเข้าสต็อก — กดเพื่อตรวจรับ' : 'ไม่มีใบค้าง') + '</div></button>';
+    (items ? docs + ' ใบ · รายการรอรับเข้าสต็อก — กดเพื่อตรวจรับ' : 'ไม่มีใบค้าง') + '</div></div></button>';
 }
 function activityRow(left, right){ return '<div class="activity-row"><span>'+left+'</span><span class="amt mono-data">'+right+'</span></div>'; }
 /* แถว "รายการขายล่าสุด" — บิล/ร้าน · สถานะ · พนักงาน · ยอดเงิน (เจ้าของระบบขอ 17 ต.ค. 2026)
@@ -4296,8 +4349,8 @@ async function loadSoMonthCards(){
     '<button type="button" class="kpi kpi-link ' + cls + '" style="text-align:left;font:inherit" ' +
       'onclick="' + onclick + '" title="กดเพื่อดูรายงานยอดขายตามเงื่อนไขนี้">' +
       '<div class="lbl">' + esc(lbl) + '</div>' +
-      '<div class="val">฿' + baht(val) + '</div>' +
-      '<div class="go">' + esc(sub) + '</div></button>';
+      '<div class="kpi-face"><div class="val">฿' + baht(val) + '</div>' +
+      '<div class="go">' + esc(sub) + '</div></div></button>';
   const mLabel = new Date(m + '-01T00:00:00').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
   box.innerHTML =
     /* ★ เกณฑ์อยู่บนหัวการ์ดในวงเล็บ ไม่ใช่บรรทัดล่าง (เจ้าของระบบสั่ง 17 ต.ค. 2026)
