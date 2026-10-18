@@ -1056,8 +1056,9 @@
           </div>
           <div class="segtog" id="theme-seg" role="group" aria-label="ธีมการ์ด">
             <button type="button" class="seg" data-v="classic" onclick="setTheme('classic')">คลาสสิก</button>
-            <button type="button" class="seg" data-v="premium" onclick="setTheme('premium')">พรีเมียม</button>
+            <!-- ลำดับ: คลาสสิก → อินไซต์ → พรีเมียม (เจ้าของระบบสั่ง 18 ต.ค. 2026) เรียงจากเรียบสุดไปแต่งสุด -->
             <button type="button" class="seg" data-v="insight" onclick="setTheme('insight')" title="หน้าขาวสะอาด เนื้อหาอยู่กลางจอ (Insight)">อินไซต์</button>
+            <button type="button" class="seg" data-v="premium" onclick="setTheme('premium')" title="การ์ดกรอบเข้มเย็บขอบ (Premium)">พรีเมียม</button>
           </div>
           <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
