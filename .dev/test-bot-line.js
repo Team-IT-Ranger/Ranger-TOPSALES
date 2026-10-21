@@ -323,6 +323,12 @@ ok('กดเลือกตัวแทนแล้วถามเดือน�
 
 post([msg('U3', 'ยอดขาย 2026-10')]);
 sl = lastMsgs()[0];
+eq('★ เลือกเดือนแล้วถามต่อว่าจะดูแบบไหน', sl.type, 'text');
+eq('มีสองมุมมอง', sl.quickReply.items.map(i => i.action.label), ['ตามพนักงานขาย', 'ตามลูกค้า']);
+ok('ปุ่มพกทั้งตัวแทน เดือน และมุมมอง', /cmd=sal&t=BDC&m=2026-10&v=staff/.test(sl.quickReply.items[0].action.data), sl.quickReply.items[0].action.data);
+
+post([pb('U3', 'cmd=sal&t=BDC&m=2026-10&v=staff')]);
+sl = lastMsgs()[0];
 eq('ได้การ์ดรายงาน', sl.type, 'flex');
 const srows = sl.contents.body.contents.filter(c => c.type === 'box').map(rowOf);
 eq('★ แยกพนักงานขาย เรียงยอดมากสุดก่อน (U7 3,500 · U10 500)',
@@ -338,8 +344,26 @@ ok('★ มีบรรทัดเทียบยอดทั้งเดือ
 ok('บิลที่ยกเลิกไม่ถูกนับทั้งสองยอด', !/9,999/.test(JSON.stringify(sl.contents)), 'cancelled counted');
 ok('บิลเดือนก่อนไม่ปนมา', !/7,777/.test(JSON.stringify(sl.contents)), 'other month');
 ok('หัวการ์ดบอกว่านับเฉพาะพร้อมส่ง', /พร้อมส่ง/.test(JSON.stringify(sl.contents.header)), sl.contents.header);
+ok('หัวการ์ดบอกมุมมองที่กำลังดูอยู่', /ตามพนักงานขาย/.test(JSON.stringify(sl.contents.header)), sl.contents.header);
+ok('★ การ์ดติดปุ่มสลับไปดูอีกมุมหนึ่งมาด้วย (ไม่ต้องพิมพ์คำสั่งใหม่)',
+  sl.quickReply && /v=cust/.test(sl.quickReply.items[0].action.data), sl.quickReply);
+eq('ป้ายปุ่มบอกชัดว่าจะไปดูอะไร', sl.quickReply.items[0].action.label, 'ดูตามลูกค้า');
 
-post([msg('U3', 'ยอดขาย 2026-08')]);
+console.log('\n-- ★★ ยอดขายตามลูกค้า --');
+post([msg('U3', 'ยอดขาย 2026-10 ลูกค้า')]);
+sl = lastMsgs()[0];
+eq('พิมพ์คำว่าลูกค้าต่อท้ายได้เลย ไม่ต้องกดเมนู', sl.type, 'flex');
+const crows = sl.contents.body.contents.filter(c => c.type === 'box').map(rowOf);
+eq('★ หัวตารางเปลี่ยนเป็นลูกค้า', crows[0][0], 'ลูกค้า');
+eq('★ รวมยอดต่อร้าน เรียงมากสุดก่อน (C1001 ซื้อครบสามใบ)', crows[1], ['C1001 ร้านตัวอย่าง', '3 ใบ · 4,000']);
+ok('ยังมีรายวันเหมือนเดิม (คนละคำถามกับ "ขายให้ใคร")',
+  JSON.stringify(sl.contents.body).includes('รายวัน'), 'no day section');
+eq('ยอดรวมเท่ากับมุมมองพนักงาน', rowOf(sl.contents.footer.contents[1]), ['รวมที่พร้อมส่ง', '3 ใบ · 4,000']);
+ok('ปุ่มสลับกลับไปดูตามพนักงาน', /v=staff/.test(sl.quickReply.items[0].action.data), sl.quickReply);
+post([msg('U3', 'sales 2026-10 customer')]);
+ok('คำอังกฤษก็ได้', lastMsgs()[0].type === 'flex', lastText());
+
+post([msg('U3', 'ยอดขาย 2026-08 พนักงาน')]);
 ok('เดือนที่ไม่มีบิล → บอกตรงๆ ไม่ใช่การ์ดว่าง',
   /ไม่มีบิลสถานะ/.test(JSON.stringify(lastMsgs()[0].contents)), lastText());
 post([msg('U4', 'ยอดขาย')]);
@@ -347,7 +371,7 @@ ok('★ บทบาทที่ไม่มีสิทธิ์รายงา
 post([msg('U7', 'ยอดขาย')]);
 ok('พนักงานขายที่ยังไม่ถูกแต่งตั้ง → บอกให้ไปขอแต่งตั้ง', /ยังไม่ได้รับแต่งตั้ง/.test(lastText()), lastText());
 files[PROD].admin_user_tenants.__rows.push({ record_id: 60, admin_user_id: '', line_user_id: 'U7', tenant_id: 'BDC' });
-post([msg('U7', 'sales 2026-10')]);
+post([msg('U7', 'sales 2026-10 staff')]);
 ok('★ แต่งตั้งแล้ว + พิมพ์ sales ก็ได้', lastMsgs()[0].type === 'flex', lastText());
 files[PROD].admin_user_tenants.__rows.length = 0;
 
