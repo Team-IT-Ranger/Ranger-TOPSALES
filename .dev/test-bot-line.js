@@ -356,8 +356,12 @@ eq('พิมพ์คำว่าลูกค้าต่อท้ายได�
 const crows = sl.contents.body.contents.filter(c => c.type === 'box').map(rowOf);
 eq('★ หัวตารางเปลี่ยนเป็นลูกค้า', crows[0][0], 'ลูกค้า');
 eq('★ รวมยอดต่อร้าน เรียงมากสุดก่อน (C1001 ซื้อครบสามใบ)', crows[1], ['C1001 ร้านตัวอย่าง', '3 ใบ · 4,000']);
-ok('ยังมีรายวันเหมือนเดิม (คนละคำถามกับ "ขายให้ใคร")',
-  JSON.stringify(sl.contents.body).includes('รายวัน'), 'no day section');
+ok('★ มุมมองลูกค้าไม่มีส่วนรายวัน — เอาพื้นที่ไปให้รายชื่อร้านจนครบ (เจ้าของระบบสั่งหลังทดสอบจริง)',
+  !JSON.stringify(sl.contents.body).includes('รายวัน'), 'day section still there');
+ok('ส่วนมุมมองพนักงานขายยังมีรายวันเหมือนเดิม',
+  (post([msg('U3', 'ยอดขาย 2026-10 พนักงาน')]), JSON.stringify(lastMsgs()[0].contents.body).includes('รายวัน')), 'staff lost days');
+post([msg('U3', 'ยอดขาย 2026-10 ลูกค้า')]);
+sl = lastMsgs()[0];
 eq('ยอดรวมเท่ากับมุมมองพนักงาน', rowOf(sl.contents.footer.contents[1]), ['รวมที่พร้อมส่ง', '3 ใบ · 4,000']);
 ok('ปุ่มสลับกลับไปดูตามพนักงาน', /v=staff/.test(sl.quickReply.items[0].action.data), sl.quickReply);
 post([msg('U3', 'sales 2026-10 customer')]);

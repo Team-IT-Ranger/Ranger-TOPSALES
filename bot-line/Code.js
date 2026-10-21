@@ -841,6 +841,9 @@ function botCut_(s, n) {
 
 var BOT_SALES_STATUS = 'ready_to_ship';      // "พร้อมส่ง" — ตรงกับ SO_READY ใน backend/34_sales_status.gs
 var BOT_SALES_STAFF_MAX = 10, BOT_SALES_DAY_MAX = 16;
+/* ★ มุมมองลูกค้าแสดงได้มากกว่า เพราะไม่มีส่วน "รายวัน" มาแย่งพื้นที่ (เจ้าของระบบสั่ง 21 ต.ค. 2026
+   หลังทดสอบจริง: ร้านมีเยอะกว่าพนักงานมาก เห็นสิบร้านแรกแล้วยังไม่พอใช้งาน) */
+var BOT_SALES_CUST_MAX = 24;
 /* ★ มุมมองของรายงาน (เจ้าของระบบสั่งเพิ่ม 21 ต.ค. 2026) — "แยกตามวัน" อยู่ในทั้งสองมุมมองเสมอ
    เพราะเป็นคนละคำถามกับ "ใครขาย/ขายให้ใคร" ไม่ใช่ตัวเลือกที่สาม */
 var BOT_SALES_VIEWS = {
@@ -1016,6 +1019,7 @@ function botMonthPicker_(tenant) {
 function botFlexSales_(snap, view) {
   var v = BOT_SALES_VIEWS[view] || BOT_SALES_VIEWS.staff;
   var rows = v.key === 'cust' ? snap.cust : snap.staff;
+  var rowMax = v.key === 'cust' ? BOT_SALES_CUST_MAX : BOT_SALES_STAFF_MAX;
   var body = [];
   var push = function(label, bills, amount, opts) {
     body.push(botFlexRow_(label, [
@@ -1028,13 +1032,15 @@ function botFlexSales_(snap, view) {
   if (!rows.length) {
     body.push(botFlexText_('ไม่มีบิลสถานะ "พร้อมส่ง" ในเดือนนี้', { size: 'sm', color: BOT_INK_SOFT, margin: 'md', wrap: true }));
   } else {
-    rows.slice(0, BOT_SALES_STAFF_MAX).forEach(function(r) { push(botCut_(r.name, 20), r.bills, r.amount); });
-    if (rows.length > BOT_SALES_STAFF_MAX) {
-      body.push(botFlexText_('… และอีก ' + (rows.length - BOT_SALES_STAFF_MAX) + (v.key === 'cust' ? ' ร้าน' : ' คน'),
+    rows.slice(0, rowMax).forEach(function(r) { push(botCut_(r.name, 20), r.bills, r.amount); });
+    if (rows.length > rowMax) {
+      body.push(botFlexText_('… และอีก ' + (rows.length - rowMax) + (v.key === 'cust' ? ' ร้าน' : ' คน'),
         { size: 'xxs', color: BOT_INK_SOFT, align: 'end' }));
     }
   }
-  if (snap.days.length) {
+  /* ★ มุมมองลูกค้าไม่แสดงรายวัน (เจ้าของระบบสั่ง 21 ต.ค. 2026) — เอาพื้นที่ไปให้รายชื่อร้านจนครบ
+     ยอดรายวันยังดูได้จากมุมมองพนักงานขายซึ่งเป็นตัวเลขชุดเดียวกัน */
+  if (v.key !== 'cust' && snap.days.length) {
     body.push({ type: 'separator', margin: 'lg', color: BOT_LINE_CLR });
     body.push(botFlexRow_('รายวัน', 'บิล · ยอด (บาท)', { size: 'xs', color: BOT_INK_SOFT, bold: true, margin: 'md' }));
     snap.days.slice(0, BOT_SALES_DAY_MAX).forEach(function(r) {
