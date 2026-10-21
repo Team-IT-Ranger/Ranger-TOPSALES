@@ -220,6 +220,12 @@ var ADMIN_ACTION_MAP = {
   cancelGoodsReceipt:     cancelGoodsReceipt,
   listWarehouseStock:     listWarehouseStock,
   listStockLedger:        listStockLedger,
+  // ของคงเหลือ คลัง+บนรถ+รวม หน่วยลัง (58_inventory_report.gs) — ตัวเดียวกับที่บอท LINE /inventory ตอบ
+  getInventorySnapshot:   getInventorySnapshot,
+
+  // ── ผู้รับผิดชอบตัวแทน (57_user_tenants.gs) — "บัญชีนี้ดูแลตัวแทนรายไหน" ──
+  listTenantResponsibilities: listTenantResponsibilities,
+  saveTenantResponsibilities: saveTenantResponsibilities,
 
   // ── นำเข้ารายการขายออกของบริษัท → PO+GR ของศูนย์ (43) ──
   previewExternalSalesImport:    previewExternalSalesImport,

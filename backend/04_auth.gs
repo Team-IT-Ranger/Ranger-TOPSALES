@@ -175,6 +175,12 @@ function doGet(e) {
 // preflighted CORS request (custom header/application-json) เชื่อถือได้ ส่ง text/plain
 // แล้ว parse JSON เองใน e.postData.contents จะเลี่ยง preflight ได้
 function doPost(e) {
+  /* ★★ บอท LINE ใช้ URL เดียวกับ API นี้ (Apps Script มี doPost ได้ตัวเดียว) — ต้องดักก่อนทุกอย่าง
+     คำขอของ LINE ไม่มี `action` มีแต่ `events` ถ้าปล่อยให้ตกลงไปข้างล่างจะได้ "รูปแบบคำขอไม่ถูกต้อง"
+     แล้ว LINE จะ retry ก้อนเดิมซ้ำๆ · คืน null = ไม่ใช่ของ LINE ไปต่อตามปกติ (59_line_bot.gs) */
+  var hook = lineBotHandleWebhook(e);
+  if (hook) return hook;
+
   var body = {};
   try { body = JSON.parse(e.postData.contents || '{}'); } catch (err) {
     return _jsonOutput({ success: false, message: 'รูปแบบคำขอไม่ถูกต้อง (invalid JSON)' });

@@ -28,6 +28,12 @@ var CENTRAL_SHEETS = {
   liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],
   // line_user_id = ตัวตน LINE ที่ผูกกับบัญชีนี้ (กติกา 2026-09-24: ทุกบัญชีของทุกแอปผูกกับ LINE user id เสมอ)
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at','line_user_id'],
+  /* ★ ผู้รับผิดชอบตัวแทน (57_user_tenants.gs) — "บัญชีฝั่งบริษัทคนนี้ดูแลตัวแทนรายไหนอยู่"
+     เป็นความสัมพันธ์หลายต่อหลาย ซึ่ง `admin_users.tenant_id` (ช่องเดียว) เก็บไม่ได้
+     · ใช้เลือกรายการให้บอท LINE (/inventory) และหน้าจอที่ต้องถามว่า "ของตัวแทนไหน"
+     · **ไม่ใช่ตัวให้สิทธิ์** สิทธิ์รายโมดูลยังตรวจที่ role_permissions เหมือนเดิมทุก action
+       และบัญชีที่สังกัดตัวแทนอยู่แล้วข้ามไปตัวแทนอื่นไม่ได้ ไม่ว่าตารางนี้จะเขียนอะไรไว้ */
+  admin_user_tenants: ['record_id','admin_user_id','tenant_id','created_at','created_by'],
   tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at',
     'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name',
     'is_house',   // TRUE บนแถวเดียว = "ตัวแทนบ้าน" ของบริษัทเจ้าของสินค้าเอง ใช้เก็บยอดขายตรงที่ไม่ผ่านตัวแทนจำหน่าย (ดู _ensureHouseTenant ใน 13_tenants.gs)
