@@ -292,21 +292,12 @@
      เส้นประใช้ `--k-tint` สีเดียวกับแผ่นด้านใน การ์ดจึงดูเหมือนแผ่นสีถูกเย็บติดกับกรอบ
      ★ วางเป็น ::after ลอยทับ ไม่ใช่ border ของตัวการ์ด — border จะกินพื้นที่แล้วดันแผ่นด้านในเล็กลง
        และต้อง pointer-events:none ไม่งั้นมันบังการคลิกการ์ด (การ์ดแถวนี้กดได้) */
-  /* ★★ รอยเย็บ "คู่" (เจ้าของระบบสั่ง 21 ต.ค. 2026) — เส้นที่สองทำด้วย `outline` ของ pseudo ตัวเดิม
-       ไม่ใช่สร้าง pseudo ตัวที่สอง: `.kpi` มี ::before/::after จำกัด และปุ่มใช้ ::after เป็นวงหมุนอยู่แล้ว
-     · `outline-offset:-3px` = วาดเข้าข้างใน 3px จากขอบกล่อง ด้ายหนา 1px → **เห็นช่องว่างระหว่างสองเส้น 2px**
-       (ชิดพอให้อ่านเป็นตะเข็บคู่ ไม่ใช่กรอบสองชั้น)
-     · ★ เข้าข้างในเสมอ ไม่ใช่ออกข้างนอก — ขอบนอกสุดของรอยเย็บจึงอยู่ที่เดิมทุกตัว ไม่ต้องไล่แก้ระยะ
-       ของสิ่งที่อยู่ข้างเคียงใหม่ทั้งแอป (ยกเว้นแถบเลือกที่เย็บวงนอกอยู่แล้ว — ดูหมายเหตุตรงนั้น)
-     · ★ รัศมีของ outline เบราว์เซอร์คิดให้เองจาก border-radius ลบระยะ offset (Chrome 94+/Firefox 88+/
-       Safari 16.4+) เบราว์เซอร์เก่ากว่านั้นได้เส้นที่สองเป็นมุมฉาก — เสียแค่ความสวย ไม่กระทบการใช้งาน */
   body.theme-premium .kpi-row.kpi-badges .kpi::after{
     /* ★ ชิดขอบนอกแบบ "หมิ่นๆ" (เจ้าของระบบสั่ง 18 ต.ค. 2026) — inset 5px → 2.5px
        ★ รัศมีต้องลดตามระยะที่ขยับเข้ามาเสมอ (กรอบ 17px − inset 2.5 ≈ 14.5px) ไม่งั้นมุมของเส้นด้าย
          จะโค้งคนละองศากับมุมกรอบ แล้วเห็นเป็นเส้นเบี้ยวที่มุมทั้งสี่ */
     content:''; position:absolute; inset:2.5px; border-radius:14.5px; pointer-events:none;
-    border:1px dashed var(--k-tint, #FFFFFF); opacity:.85;
-    outline:1px dashed var(--k-tint, #FFFFFF); outline-offset:-3px; }
+    border:1px dashed var(--k-tint, #FFFFFF); opacity:.85; }
   /* ★ ด้าย 1px (เจ้าของระบบขอให้บางลงครึ่งหนึ่ง 18 ต.ค. 2026) — เส้นบางบนพื้นเข้มจะจางกว่าที่คิด
      จึงเพิ่มความทึบจาก .72 เป็น .85 ให้ยังอ่านเป็น "รอยเย็บ" ไม่ใช่ขอบเบลอ */
   /* แผ่นสีด้านใน — `.kpi-face` ปกติเป็น display:contents (ไม่มีตัวตนในหน้าอื่น) ที่นี่กลายเป็นแผ่นจริง */
@@ -347,17 +338,12 @@
      — เจ้าของระบบเจอกับคำอธิบายใต้ปุ่มกระดาน/ตาราง (18 ต.ค. 2026)
      ★ ใส่ margin ที่ตัวแถบ ไม่ใช่ไปไล่เพิ่มระยะให้ของข้างเคียงทีละจุด (มีแถบเลือกอยู่หลายที่
        และวันหน้าจะมีเพิ่มอีก) */
-  /* 8px = วงด้ายคู่ล้นออก 5px + เว้นหายใจอีก 3px · ใส่เท่ากันทุกด้านเพื่อให้แถบบนยังอยู่กึ่งกลางเหมือนเดิม
-     (ใส่เฉพาะด้านล่างจะทำให้แถบบนเยื้องขึ้น 2-3px)
-     ★ ตัวนี้เย็บ "วงนอก" เส้นที่สองจึงต้องออกนอกอีกชั้น (`outline-offset:2px` เป็นบวก) ไม่ใช่เข้าข้างใน
-       เพราะข้างในมีปุ่มเต็มพื้นที่อยู่แล้ว — ด้ายเส้นที่สองจะไปพาดทับปุ่มที่กำลังเลือกอยู่
-     ★ ขอบนอกขยับจาก 3px เป็น 5px จึงต้องขยาย margin จาก 6px เป็น 8px พร้อมกัน ไม่งั้นวงด้าย
-       ไปทับคำอธิบายใต้ปุ่มกระดาน/ตาราง (เคยเจอมาแล้ว 18 ต.ค. 2026) */
-  body.theme-premium .segtog{ position:relative; margin:8px; }
+  /* 6px = วงด้ายล้นออก 3px + เว้นหายใจอีก 3px · ใส่เท่ากันทุกด้านเพื่อให้แถบบนยังอยู่กึ่งกลางเหมือนเดิม
+     (ใส่เฉพาะด้านล่างจะทำให้แถบบนเยื้องขึ้น 2-3px) */
+  body.theme-premium .segtog{ position:relative; margin:6px; }
   body.theme-premium .segtog::after{
     content:''; position:absolute; inset:-3px; border-radius:999px; pointer-events:none;
-    border:1px dashed var(--ink-faint); opacity:.8;
-    outline:1px dashed var(--ink-faint); outline-offset:2px; }
+    border:1px dashed var(--ink-faint); opacity:.8; }
 
   /* ★ ปุ่มทั่วทั้งแอปก็เย็บด้วย (เจ้าของระบบสั่ง 18 ต.ค. 2026) — เฉพาะธีมพรีเมียม
      ★★ ต้องใช้ `::before` ไม่ใช่ `::after` — `.btn.is-busy::after` เป็นวงหมุนตอนรอเซิร์ฟเวอร์อยู่แล้ว
@@ -370,14 +356,11 @@
   body.theme-premium .dgb-col{ position:relative; }
   body.theme-premium .dgb-col::after{
     content:''; position:absolute; inset:3px; border-radius:7px; pointer-events:none;
-    border:1px dashed var(--ink-faint); opacity:.65;
-    outline:1px dashed var(--ink-faint); outline-offset:-3px; }
+    border:1px dashed var(--ink-faint); opacity:.65; }
   body.theme-premium .btn{ position:relative; }
   body.theme-premium .btn:not(.btn-ghost)::before{
     content:''; position:absolute; inset:2px; border-radius:calc(var(--r-ctl) - 2px); pointer-events:none;
-    border:1px dashed currentColor; opacity:.4;
-    /* ★ ปุ่มเล็กกว่าการ์ดมาก ช่องว่างจึงแคบลงเป็น 1px (offset -2px) ไม่งั้นเส้นในไปเบียดตัวหนังสือ */
-    outline:1px dashed currentColor; outline-offset:-2px; }
+    border:1px dashed currentColor; opacity:.4; }
 
   /* ═══ ธีม "อินไซต์" (Insight) — เจ้าของระบบส่งภาพหน้า salesinsight มาเป็นตัวอย่าง 18 ต.ค. 2026 ═══
      แนวคิดคนละทางกับพรีเมียม: **เงียบ อ่านง่าย เหมือนรายงานที่พิมพ์ออกมา**
