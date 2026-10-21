@@ -82,8 +82,11 @@ const resetData = () => {
         { record_id: 8, tenant_id: 'TNKI', warehouse_id: 1, product_id: 2, qty: 999999 },
         { record_id: 9, tenant_id: 'BDC', warehouse_id: 9, product_id: 6, qty: 12 }
       ]),
-      stock_reservations: sheet(['record_id', 'tenant_id', 'product_id', 'qty', 'status'], [
-        { record_id: 1, tenant_id: '', product_id: 1, qty: 12, status: 'active' }
+      stock_reservations: sheet(['record_id', 'tenant_id', 'warehouse_id', 'product_id', 'qty', 'status'], [
+        { record_id: 1, tenant_id: '', warehouse_id: 1, product_id: 1, qty: 12, status: 'active' },
+        { record_id: 2, tenant_id: 'BDC', warehouse_id: 9, product_id: 1, qty: 12, status: 'active' },
+        { record_id: 3, tenant_id: 'BDC', warehouse_id: 9, product_id: 2, qty: 60, status: 'active' },
+        { record_id: 4, tenant_id: 'BDC', warehouse_id: 9, product_id: 3, qty: 100, status: 'released' }
       ]),
       sales_daily: sheet(['record_id', 'tenant_id', 'sale_date', 'bills', 'revenue'], [
         { record_id: 1, tenant_id: 'BDC', sale_date: '2026-10-21', bills: 3, revenue: 12000 },
@@ -264,7 +267,30 @@ ok('★ ยอดรวมในช่องเดียวกันเป็น
   m.contents.body.contents[2].contents[1].contents[1].color === '#2B63D9' &&
   m.contents.body.contents[2].contents[1].contents[1].weight === 'bold',
   m.contents.body.contents[2].contents[1]);
-ok('ของบริษัทไม่ปนมา (รหัส 10185 ต้องไม่อยู่ในการ์ด)', !JSON.stringify(m.contents).includes('10185'), 'leak');
+ok('ของบริษัทไม่ปนมา (สินค้า 10999 ของบริษัทต้องไม่อยู่ในการ์ดของ BDC)',
+  !JSON.stringify(m.contents).includes('10999'), 'leak');
+
+console.log('\n-- ★★ ยอดจอง: ของคงเหลือ vs ขายได้จริง --');
+const bdcRows = m.contents.body.contents.filter(c => c.type === 'box').slice(1).map(rowOf);
+eq('ตัวเลขหลักยังเป็นของคงเหลือจริง (on-hand) ไม่ถูกหักจอง',
+  bdcRows.find(r => r[0] === '10143'), ['10143', '2 + 1 = 3']);
+const subLine = m.contents.body.contents.filter(c => c.type === 'text' && /กันไว้/.test(c.text || ''))[0];
+ok('★ แถวที่มีคนจองไว้มีบรรทัดเล็กบอก "กันไว้ · ขายได้" ใต้แถว',
+  subLine && /กันไว้ 1 · ขายได้ 2/.test(subLine.text), subLine);
+eq('บรรทัดนี้เป็นตัวเล็กสีอ่อน ชิดขวา', [subLine.size, subLine.align], ['xxs', 'end']);
+eq('★ สินค้าที่ไม่มีของแต่มีคนจอง ต้องโผล่ และขายได้ติดลบ (สัญญาณให้รีบสั่งของ)',
+  bdcRows.find(r => r[0] === '10185'), ['10185', '0 + 0 = 0']);
+ok('และบรรทัดใต้มันบอกว่าขายได้ -1',
+  m.contents.body.contents.some(c => /ขายได้ -1/.test(c.text || '')), 'no negative line');
+const foot = m.contents.footer.contents.filter(c => c.type === 'box').map(rowOf);
+eq('ท้ายการ์ด: ยอดคงเหลือจริง → กันไว้ → ขายได้จริง',
+  foot, [['รวมทั้งหมด (ลัง)', '6.5 + 1 = 7.5'], ['กันไว้ให้บิลที่รอส่ง', '−2'], ['ขายได้จริง (ลัง)', '5.5']]);
+ok('มีเชิงอรรถอธิบายคำว่า "กันไว้"',
+  JSON.stringify(m.contents.footer).includes('ยังไม่ถูกตัดออกจากคลัง'), m.contents.footer);
+ok('★ ยอดจองที่ปลดแล้ว (released) ไม่ถูกนับ — 10505 ไม่มีบรรทัดกันไว้',
+  !m.contents.body.contents.some(c => /กันไว้/.test(c.text || '') && /2\.5/.test(c.text || '')), 'released counted');
+post([msg('U3', 'ของคงเหลือ')]);
+m = lastMsgs()[0];
 ok('altText มีตัวเลขรวม', /รวม 7\.5 ลัง/.test(m.altText), m.altText);
 
 console.log('\n-- ★ พิมพ์คำสั่งได้หลายแบบ --');
@@ -443,10 +469,16 @@ if (process.env.DUMP_REPORT) {
 const spec = ctx.botReportSpec_(ctx.botInventorySnapshot_('TNKI', 0));
 eq('★ รายงานเอาทุกแถว ไม่ใช่ 15 แถวแบบในการ์ด', spec.rows.length, ctx.botInventorySnapshot_('TNKI', 0).products);
 eq('หกคอลัมน์ → พิมพ์แนวตั้ง (ตัวพิมพ์กลางสลับแนวนอนเองที่ 9 คอลัมน์)', spec.landscape, false);
-eq('ยอดรวมสามบรรทัด คลัง/รถ/ทั้งหมด', spec.totals.map(t => t[0]),
-  ['รวมในคลัง (ลัง)', 'รวมบนรถ (ลัง)', 'รวมทั้งหมด (ลัง)']);
-eq('บรรทัดสุดท้ายเป็นยอดรวมใหญ่', spec.totals[2][2], 'grand');
-eq('ยอดรวมตรงกับที่การ์ดบอก', spec.totals[2][1], '15.5');
+eq('★ รายงานแยกคอลัมน์ จอง/ขายได้ ออกมาทุกแถว (ชุดเดียวกับหน้าคลังสินค้าในแอป)',
+  spec.columns.map(c => c.label), ['รหัสสินค้า', 'ชื่อสินค้า', 'คลัง', 'กันไว้', 'ขายได้', 'บนรถ', 'รวม', 'หน่วย']);
+eq('แถวที่ไม่มีใครจองเขียนขีด ไม่ใช่ 0 (ตาไม่ต้องแยกว่าจอง 0 กับไม่มีจอง)',
+  spec.rows.filter(r => r.res === '-').length > 0, true);
+eq('ยอดรวมห้าบรรทัด', spec.totals.map(t => t[0]),
+  ['รวมในคลัง (ลัง)', 'กันไว้ให้บิลที่รอจัดส่ง (ลัง)', 'รวมบนรถ (ลัง)',
+   'รวมทั้งหมด — ของคงเหลือจริง (ลัง)', 'ขายได้จริง หลังหักที่จองไว้ (ลัง)']);
+eq('★ บรรทัดใหญ่สุดท้ายคือ "ขายได้จริง" ไม่ใช่ของคงเหลือ', spec.totals[4][2], 'grand');
+eq('ของคงเหลือจริงตรงกับที่การ์ดบอก', spec.totals[3][1], '15.5');
+eq('★ ขายได้จริง = คงเหลือ − จอง (15.5 − 1 = 14.5)', spec.totals[4][1], '14.5');
 ok('ดอกจันนำหน้ารหัสของแถวที่ยังไม่ยืนยันขนาดบรรจุ และหน่วยเป็นชิ้น',
   spec.rows.some(r => r.code === '*10999' && r.unit === 'ชิ้น'), spec.rows);
 ok('เชิงอรรถอธิบายคอลัมน์คลัง/บนรถ', /คลัง = ของในคลัง/.test(spec.note), spec.note);

@@ -517,12 +517,23 @@ function botInventorySnapshot_(tenantId, limit) {
   var acc = {};
   function bucket(pid) {
     var k = String(pid);
-    if (!acc[k]) acc[k] = { wh: 0, van: 0 };
+    if (!acc[k]) acc[k] = { wh: 0, van: 0, res: 0 };
     return acc[k];
   }
   sheetObjects_(prodSheet_('warehouse_stock')).forEach(function(r) {
     if (String(r.tenant_id || '') !== whScope) return;
     bucket(r.product_id).wh += Number(r.qty) || 0;
+  });
+
+  /* ★★ ยอดจอง — บิล "สำนักงานจัดส่ง" ที่ยังไม่ถึงจุดตัดสต็อกกันของไว้ก่อน (backend/34_sales_status.gs)
+     กติกาของระบบเขียนไว้ชัด: **`ขายได้จริง = คงเหลือ − จอง` คือตัวที่ใช้ตัดสินว่าขายได้ไหม ไม่ใช่ของคงเหลือตรงๆ**
+     · คำสั่ง `สต็อก` ของบอทแสดงสามค่านี้มาตั้งแต่ต้น การ์ดนี้จึงต้องพูดภาษาเดียวกัน ไม่งั้นบอทตัวเดียว
+       ตอบคำว่า "ของมีเท่าไร" คนละความหมายในสองคำสั่ง (เจ้าของระบบถามเรื่องนี้ก่อน merge 21 ต.ค. 2026)
+     · ของบนรถไม่มียอดจอง — ขายจากรถตัดสต็อกทันทีตอนบันทึกบิล */
+  sheetObjects_(prodSheet_('stock_reservations')).forEach(function(r) {
+    if (String(r.tenant_id || '') !== whScope) return;
+    if (String(r.status) !== 'active') return;
+    bucket(r.product_id).res += Number(r.qty) || 0;
   });
 
   var vanRows = botVanRows_(tid), vanStaff = 0, seenStaff = {};
@@ -537,14 +548,17 @@ function botInventorySnapshot_(tenantId, limit) {
   var rows = [];
   Object.keys(acc).forEach(function(pid) {
     var p = products[pid], u = units[pid];
-    var wh = acc[pid].wh, van = acc[pid].van;
-    if (wh + van === 0) return;            // ของที่หมดทั้งคลังและรถ ไม่ต้องรายงาน
+    var wh = acc[pid].wh, van = acc[pid].van, res = acc[pid].res;
+    // ของที่หมดทั้งคลังและรถ ไม่ต้องรายงาน — **ยกเว้นมีคนจองไว้** (ขายได้ติดลบ = สัญญาณให้รีบสั่งของเพิ่ม)
+    if (wh + van === 0 && res === 0) return;
     rows.push({
       productCode: p ? String(p.product_code || '') : pid,
       productName: p ? String(p.name || '') : '(สินค้าถูกลบ)',
       confirmed: !!(u && u.confirmed),
-      warehouseBase: wh, vanBase: van, totalBase: wh + van,
-      warehouse: botCases_(wh, u), van: botCases_(van, u), total: botCases_(wh + van, u)
+      warehouseBase: wh, vanBase: van, totalBase: wh + van, reservedBase: res,
+      availableBase: (wh - res) + van,
+      warehouse: botCases_(wh, u), van: botCases_(van, u), total: botCases_(wh + van, u),
+      reserved: botCases_(res, u), available: botCases_((wh - res) + van, u)
     });
   });
   // ★ เรียงด้วยหน่วยฐาน ไม่ใช่ลัง — แถวที่ยังไม่ยืนยันขนาดบรรจุมีหน่วยคนละอย่าง เอามาเรียงปนกันจะได้ลำดับที่อธิบายไม่ได้
@@ -553,12 +567,14 @@ function botInventorySnapshot_(tenantId, limit) {
     return String(a.productCode).localeCompare(String(b.productCode));
   });
 
-  var totals = { warehouse: 0, van: 0, total: 0 }, unconfirmed = 0;
+  var totals = { warehouse: 0, van: 0, total: 0, reserved: 0, available: 0 }, unconfirmed = 0;
   rows.forEach(function(r) {
-    if (r.confirmed) { totals.warehouse += r.warehouse; totals.van += r.van; totals.total += r.total; }
-    else unconfirmed++;
+    if (r.confirmed) {
+      totals.warehouse += r.warehouse; totals.van += r.van; totals.total += r.total;
+      totals.reserved += r.reserved; totals.available += r.available;
+    } else unconfirmed++;
   });
-  ['warehouse', 'van', 'total'].forEach(function(k) { totals[k] = Math.round(totals[k] * 100) / 100; });
+  ['warehouse', 'van', 'total', 'reserved', 'available'].forEach(function(k) { totals[k] = Math.round(totals[k] * 100) / 100; });
 
   var all = rows.length;
   var cap = (limit === undefined) ? BOT_INV_ROW_LIMIT : (parseInt(limit, 10) || 0);
@@ -608,7 +624,8 @@ function botMatchTenant_(list, want) {
 function botInventoryFlex_(tenantId, lineUserId) {
   var snap = botInventorySnapshot_(tenantId);
   var alt = 'ของคงเหลือ ' + snap.tenantName + ' — รวม ' + botNum_(snap.totals.total) + ' ลัง (คลัง ' +
-    botNum_(snap.totals.warehouse) + ' · รถ ' + botNum_(snap.totals.van) + ')';
+    botNum_(snap.totals.warehouse) + ' · รถ ' + botNum_(snap.totals.van) + ')' +
+    (snap.totals.reserved ? (' · ขายได้จริง ' + botNum_(snap.totals.available)) : '');
   return { type: 'flex', altText: alt.substring(0, 400),
     contents: botFlexInventory_(snap, botReportLink_(tenantId, lineUserId)) };
 }
@@ -645,7 +662,8 @@ function botFlexText_(text, opts) {
 function botFlexRow_(code, nums, opts) {
   opts = opts || {};
   var size = opts.size || 'sm', color = opts.color || BOT_INK, weight = opts.bold ? 'bold' : 'regular';
-  var right = { type: 'text', flex: 6, align: 'end', size: size, wrap: !!opts.wrap, color: color, weight: weight };
+  var right = { type: 'text', flex: 6, align: 'end', size: size, wrap: !!opts.wrap,
+    color: opts.rightColor || color, weight: weight };
   if (!opts.wrap) right.maxLines = 1;
   if (typeof nums === 'string') right.text = nums;
   else right.contents = nums;          // span: [แยก, รวม]
@@ -676,6 +694,12 @@ function botFlexInventory_(snap, reportUrl) {
       // ★ ดอกจันนำหน้ารหัส = ยังไม่ยืนยันขนาดบรรจุ ตัวเลขแถวนั้นเป็น "ชิ้น" ไม่ใช่ "ลัง" (เชิงอรรถท้ายการ์ด)
       body.push(botFlexRow_((r.confirmed ? '' : '*') + r.productCode,
         botFlexNums_(r.warehouse, r.van, r.total)));
+      /* ★ บรรทัดเล็กใต้แถว **เฉพาะสินค้าที่มีคนจองไว้** — ตัวเลขหลักยังเป็นของคงเหลือจริง (on-hand)
+         แต่คนอ่านต้องเห็นว่าขายได้เท่าไรก่อนจะไปรับปากลูกค้า · ไม่มีจอง = ไม่มีบรรทัดนี้ ไม่รกเปล่าๆ */
+      if (r.reservedBase > 0) {
+        body.push(botFlexText_('กันไว้ ' + botNum_(r.reserved) + ' · ขายได้ ' + botNum_(r.available),
+          { size: 'xxs', color: BOT_INK_SOFT, align: 'end' }));
+      }
     });
   }
 
@@ -685,7 +709,15 @@ function botFlexInventory_(snap, reportUrl) {
     botFlexRow_('รวมทั้งหมด (ลัง)', botFlexNums_(snap.totals.warehouse, snap.totals.van, snap.totals.total),
       { bold: true, wrap: true })
   ];
+  /* ★ สองบรรทัดนี้ขึ้นเฉพาะตอนมีของถูกจองไว้จริง — ไม่มีจอง "ขายได้จริง" ก็เท่ากับยอดรวม เขียนไปก็รก */
+  if (snap.totals.reserved) {
+    footer.push(botFlexRow_('กันไว้ให้บิลที่รอส่ง', '−' + botNum_(snap.totals.reserved),
+      { size: 'xs', color: BOT_INK_SOFT }));
+    footer.push(botFlexRow_('ขายได้จริง (ลัง)', botNum_(snap.totals.available),
+      { bold: true, rightColor: BOT_BLUE }));
+  }
   var notes = [];
+  if (snap.totals.reserved) notes.push('กันไว้ = ของที่บิลรอจัดส่งจองไว้แล้ว ยังไม่ถูกตัดออกจากคลัง');
   if (snap.products > snap.shown) notes.push('แสดง ' + snap.shown + ' จาก ' + snap.products + ' รายการ (เรียงตามของรวมมากสุด)');
   if (snap.unconfirmed) notes.push('* ' + snap.unconfirmed + ' รายการยังไม่ยืนยันขนาดบรรจุ — ตัวเลขเป็นชิ้น ไม่ได้รวมในยอดลัง');
   if (!snap.vanAvailable) notes.push('อ่านของบนรถไม่ได้ (ยังไม่มีไฟล์ของตัวแทนรายนี้) — ช่องรถจึงเป็น 0');
@@ -840,34 +872,44 @@ function botReportSpec_(snap) {
   if (snap.unconfirmed) notes.push('* ' + snap.unconfirmed + ' รายการยังไม่ยืนยันขนาดบรรจุ — ตัวเลขเป็นชิ้น ไม่ได้รวมในยอดลัง');
   if (!snap.vanAvailable) notes.push('อ่านของบนรถไม่ได้ (ยังไม่มีไฟล์ของตัวแทนรายนี้) — ช่องบนรถจึงเป็น 0');
   else if (snap.vanStaff) notes.push('ของบนรถรวมจากพนักงาน ' + snap.vanStaff + ' คน');
-  notes.push('คลัง = ของในคลังของตัวแทนรายนี้ · บนรถ = รวมของบนรถพนักงานทุกคน');
+  notes.push('คลัง = ของในคลังของตัวแทนรายนี้ · บนรถ = รวมของบนรถพนักงานทุกคน · ' +
+    'กันไว้ = บิลที่รอจัดส่งจองไว้แล้ว ยังไม่ถูกตัดออกจากคลัง (ของบนรถไม่มียอดจอง เพราะขายจากรถตัดทันที) · ' +
+    'ขายได้ = คลัง − กันไว้ + บนรถ');
 
   return {
     title: 'รายงานของคงเหลือ',
     subtitle: snap.tenantName + ' · ณ ' + snap.asOf,
     issuerName: botTenantLabel_(BOT_OWNER_TENANT, ''),
     printedAt: snap.asOf,
+    /* ★ รายงานที่พิมพ์มีที่พอ จึงแยกคอลัมน์ จอง/ขายได้จริง ออกมาให้เห็นทุกแถว (การ์ดในแชตบอกเฉพาะ
+       แถวที่มีคนจอง) — ชุดคอลัมน์เดียวกับหน้าคลังสินค้าในแอปแอดมิน (qty / reserved / available)
+       8 คอลัมน์ยังพิมพ์แนวตั้งได้ (ตัวพิมพ์กลางสลับเป็นแนวนอนเองที่ 9 คอลัมน์) */
     columns: [
-      { label: 'รหัสสินค้า', key: 'code', width: 1.2 },
-      { label: 'ชื่อสินค้า', key: 'name', width: 3.4 },
-      { label: 'คลัง', key: 'wh', align: 'r', width: 1 },
-      { label: 'บนรถ', key: 'van', align: 'r', width: 1 },
-      { label: 'รวม', key: 'total', align: 'r', width: 1 },
-      { label: 'หน่วย', key: 'unit', width: 0.8 }
+      { label: 'รหัสสินค้า', key: 'code', width: 1.1 },
+      { label: 'ชื่อสินค้า', key: 'name', width: 2.8 },
+      { label: 'คลัง', key: 'wh', align: 'r', width: 0.9 },
+      { label: 'กันไว้', key: 'res', align: 'r', width: 0.9 },
+      { label: 'ขายได้', key: 'avail', align: 'r', width: 0.9 },
+      { label: 'บนรถ', key: 'van', align: 'r', width: 0.9 },
+      { label: 'รวม', key: 'total', align: 'r', width: 0.9 },
+      { label: 'หน่วย', key: 'unit', width: 0.7 }
     ],
     rows: snap.rows.map(function(r) {
       return {
         code: (r.confirmed ? '' : '*') + r.productCode,
         name: r.productName,
-        wh: botNum_(r.warehouse), van: botNum_(r.van), total: botNum_(r.total),
+        wh: botNum_(r.warehouse), res: r.reservedBase ? botNum_(r.reserved) : '-',
+        avail: botNum_(r.available), van: botNum_(r.van), total: botNum_(r.total),
         unit: r.confirmed ? 'ลัง' : 'ชิ้น'
       };
     }),
     // ยอดรวมนับเฉพาะแถวที่ยืนยันขนาดบรรจุแล้ว (บวกชิ้นเข้าไปในลังคือตัวเลขที่ไม่มีความหมาย)
     totals: [
       ['รวมในคลัง (ลัง)', botNum_(snap.totals.warehouse)],
+      ['กันไว้ให้บิลที่รอจัดส่ง (ลัง)', botNum_(snap.totals.reserved)],
       ['รวมบนรถ (ลัง)', botNum_(snap.totals.van)],
-      ['รวมทั้งหมด (ลัง)', botNum_(snap.totals.total), 'grand']
+      ['รวมทั้งหมด — ของคงเหลือจริง (ลัง)', botNum_(snap.totals.total)],
+      ['ขายได้จริง หลังหักที่จองไว้ (ลัง)', botNum_(snap.totals.available), 'grand']
     ],
     note: notes.join(' · '),
     landscape: false,
