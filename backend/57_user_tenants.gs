@@ -104,6 +104,10 @@ function managesTenant(adminUser, tenantId) {
  */
 function listTenantResponsibilities(session, payload) {
   var err = _requirePermission(session, 'users_roles', 'view'); if (err) return err;
+  /* ★ ฝั่งบริษัทเท่านั้น — ตารางนี้พูดถึงบัญชีฝั่งบริษัททั้งหมด (ใครดูแลตัวแทนรายไหน) ซึ่งไม่ใช่เรื่องที่
+     แอดมินของตัวแทนต้องรู้ · เขาตั้งค่าไม่ได้อยู่แล้ว (saveTenantResponsibilities ปฏิเสธ) การให้อ่านได้
+     จึงมีแต่เปิดรายชื่อคนของบริษัทให้เปล่าๆ */
+  if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะฝั่งบริษัทเจ้าของสินค้าดูผู้รับผิดชอบตัวแทนได้' };
   payload = payload || {};
   var active = _autActiveTenantMap();
   var tenants = Object.keys(active).map(function(t) {

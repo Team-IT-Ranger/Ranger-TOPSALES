@@ -135,6 +135,8 @@ eq('★ บอกค่าที่มีผลจริงมาด้วย �
   view.users.find(u => u.username === 'malee').effectiveTenantIds.length, 4);
 eq('super_admin ติดธงว่าเห็นทุกรายตลอด', view.users.find(u => u.username === 'ultra').alwaysAll, true);
 eq('ส่ง adminUserId มา = เฉพาะคนนั้น', ctx.listTenantResponsibilities(ULTRA, { adminUserId: '2' }).users.length, 1);
+fails('★ แอดมินตัวแทนเปิดดูไม่ได้ (ตั้งค่าไม่ได้อยู่แล้ว ให้อ่านได้ = เปิดรายชื่อคนของบริษัทให้เปล่าๆ)',
+  ctx.listTenantResponsibilities(BDCADM, {}), /ฝั่งบริษัท/);
 
 console.log(failed ? '\n' + failed + ' เทสต์ไม่ผ่าน' : '\nผ่านทั้งหมด');
 process.exit(failed ? 1 : 0);

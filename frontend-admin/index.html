@@ -598,6 +598,11 @@
   .field .unit{ font-size:10.5px; color:var(--ink-faint); margin-left:6px; }
   .form-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
   .toggle-row{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:500!important; }
+  /* รายการติ๊ก "ตัวแทนที่ดูแล" ในโมดัลจัดการผู้ใช้ — แถวละตัวแทน กดได้ทั้งแถว (ป้ายผูกกับช่องติ๊กอยู่แล้ว) */
+  .tr-pick{ display:flex; align-items:center; gap:8px; padding:3px 0; font-size:13px; cursor:pointer; }
+  /* ★ ต้องตั้ง width เอง — กฎฟอร์มรวมของแอปคือ `.field input{width:100%}` ช่องติ๊กจึงถูกยืดเต็มบรรทัด
+     แล้วกล่องติ๊กไปอยู่ชิดขวาสุด ห่างจากชื่อตัวแทนไปคนละฝั่งจอ (เจอตอนตรวจหน้าจอจริง) */
+  .tr-pick input{ margin:0; width:auto; flex:0 0 auto; }
   .fieldset{ border:1px dashed var(--border); border-radius:8px; padding:12px 14px; margin-top:4px; }
   .fieldset legend{ font-size:11px; font-weight:700; color:var(--blue); padding:0 6px; letter-spacing:.02em; }
 
@@ -2306,6 +2311,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
   'createTenant','updateTenantStatus','deleteTestTenants','migrateOwnerTenantCode','saveCompanyProfile','updateTenantProfile','saveRole','deleteRole',
   'createAdminUser','updateAdminUser','approveAdminUser','rejectAdminUser','promoteToAdmin','linkAdminLineId','changeMyPassword',
+  'saveTenantResponsibilities',
   'updateStaffAdmin','saveDocSeries','setDocCounter','savePurchaseRequisition','submitPurchaseRequisition','decidePurchaseRequisition',
   'savePurchaseOrder','issuePurchaseOrder','cancelPurchaseOrder','receiveGoods','saveVendor','saveWarehouse',
   'saveApprovalFlow','deleteApprovalFlow','createApBillFromGr','createApBillManual','payApBills',
@@ -7852,6 +7858,11 @@ function renderUserDirTable(){
     '<td style="text-align:right"><button class="btn btn-sm" onclick="openUserManageModal(\''+u.kind+'\',\''+esc(String(u.id))+'\')">จัดการ</button></td></tr>'
   ).join('');
 }
+/* ── ผู้รับผิดชอบตัวแทน (backend/57_user_tenants.gs) ──
+   `tenantRespCache[adminUserId] = ['BDC','NKN']` · ว่าง = ยังไม่ได้ตั้ง = **เห็นทุกตัวแทน** (ไม่ใช่ไม่เห็นอะไรเลย)
+   ★ โหลดเฉพาะฝั่งบริษัท — ตารางนี้พูดถึงบัญชีฝั่งบริษัททั้งหมด ฝั่งตัวแทนไม่ต้องรู้ว่ามีใครบ้าง
+     (backend ก็ปฏิเสธให้อีกชั้นแล้ว ที่นี่แค่ไม่ยิงคำขอที่รู้อยู่แล้วว่าจะถูกปฏิเสธ) */
+let tenantRespCache = null, tenantRespAll = [];
 let udManageTarget = null;
 function openUserManageModal(kind, id){
   const u = userDirCache.find(x => x.kind === kind && String(x.id) === String(id));
@@ -7885,6 +7896,7 @@ function openUserManageModal(kind, id){
     '<div class="field"><label>ประเภท</label><div>'+udTag(kind)+'</div></div>' +
     orgField +
     roleField +
+    tenantRespField(u, kind, isSuperAdmin) +
     '<div class="field"><label>สถานะ</label><div><span class="pill '+u.statusPill+'">'+esc(u.statusLabel)+'</span>' +
       (u.adminRaw && u.staffRaw ? ' <span class="form-hint" style="display:inline">· เป็นทั้งแอดมินและพนักงานขาย แก้สังกัดแล้วจะปรับให้ตรงกันทั้งสองที่</span>' : '') +
       '</div></div>' +
@@ -7895,6 +7907,39 @@ function openUserManageModal(kind, id){
     plModalActions('saveUserManage()', 'บันทึก')
   );
 }
+/* ตัวแทนที่บัญชีนี้ดูแล — โชว์เฉพาะบัญชีแอดมิน**ฝั่งบริษัท** และเฉพาะตอนผู้ใช้เองอยู่ฝั่งบริษัท
+   ★ บัญชีที่สังกัดตัวแทนไม่มีช่องนี้เลย (ไม่ใช่มีแล้วกดไม่ได้) — เขาดูแลตัวแทนของตัวเองรายเดียวเสมอ
+     ตามกติกาเดิมของระบบ ตารางผู้รับผิดชอบไม่มีผลกับเขา · backend ปฏิเสธถ้าดันส่งมา
+   ★ super_admin เห็นทุกรายตลอด ตั้งแล้วไม่มีผล จึงบอกไปตรงๆ แทนที่จะให้ติ๊กแล้วงงว่าทำไมไม่เปลี่ยน */
+function tenantRespField(u, kind, isSuperAdmin){
+  if (kind !== 'admin' || EFFECTIVE_TENANT_ID() || !tenantRespCache) return '';
+  const own = String(u.raw.tenantId || '');
+  if (own && own !== ownerTenantCode()) return '';
+  if (isSuperAdmin) {
+    return '<div class="field"><label>ตัวแทนที่ดูแล</label>' +
+      '<div>ทุกตัวแทน <span class="form-hint" style="display:inline">· Ultra Admin เห็นทุกรายเสมอ ตั้งเฉพาะรายไม่ได้</span></div></div>';
+  }
+  const picked = tenantRespCache[String(u.adminRaw ? u.adminRaw.id : u.id)] || [];
+  const boxes = tenantRespAll.map(t =>
+    '<label class="tr-pick"><input type="checkbox" class="tr-box" value="'+esc(t.tenantId)+'"' +
+      (picked.indexOf(t.tenantId) !== -1 ? ' checked' : '') + '> ' + esc(t.name) +
+      (t.isOwner ? '' : ' <span class="mono-data">'+esc(t.tenantId)+'</span>') + '</label>').join('');
+  return '<div class="field"><label>ตัวแทนที่ดูแล</label>' +
+    '<div id="tr-list" style="max-height:168px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px">' +
+      (boxes || '<span class="form-hint">ยังไม่มีตัวแทนที่เปิดใช้งาน</span>') + '</div>' +
+    '<div class="form-hint" style="margin-top:6px">' +
+      '<a href="javascript:void(0)" onclick="trPickAll(true)">เลือกทั้งหมด</a> · ' +
+      '<a href="javascript:void(0)" onclick="trPickAll(false)">ล้างทั้งหมด</a> · ' +
+      '<b>ไม่ติ๊กเลย = เห็นทุกตัวแทน</b> (ค่าตั้งต้น) — ติ๊กเมื่อต้องการให้เห็นเฉพาะรายที่เลือก' +
+      '<br>ใช้กับเมนูที่ต้องถามว่า "ของตัวแทนไหน" เช่นคำสั่ง <b>ของคงเหลือ</b> ในบอท LINE</div></div>';
+}
+function trPickAll(on){ document.querySelectorAll('#tr-list .tr-box').forEach(b => { b.checked = on; }); }
+/** รายการที่ติ๊กอยู่ตอนนี้ · null = ไม่มีช่องนี้ในโมดัล (ไม่ต้องบันทึกอะไร) */
+function trPicked(){
+  const box = document.getElementById('tr-list'); if (!box) return null;
+  return [...box.querySelectorAll('.tr-box')].filter(b => b.checked).map(b => b.value);
+}
+
 async function saveUserManage(){
   const u = udManageTarget; if (!u) return;
   await plBusy(async () => {
@@ -7920,6 +7965,18 @@ async function saveUserManage(){
       if (roleSel && u.kind === 'staff') payload.role = roleSel.value;
       if (orgChanged) payload.newTenantId = tenantSel.value;
       r = await callApi('updateStaffAdmin', payload);
+    }
+    /* ★ บันทึกเฉพาะตอนค่าเปลี่ยนจริง — เปิดโมดัลแล้วกดบันทึกเฉยๆ ไม่ควรเขียนทับตารางผู้รับผิดชอบ
+       (เขียนทับทั้งชุดทุกครั้ง ถ้าอีกคนเพิ่งแก้อยู่จะถูกลบทิ้งโดยไม่มีใครตั้งใจ) */
+    const trNow = trPicked();
+    if (r.success && trNow && u.adminRaw) {
+      const before = tenantRespCache[String(u.adminRaw.id)] || [];
+      const same = before.length === trNow.length && before.every(t => trNow.indexOf(t) !== -1);
+      if (!same) {
+        const rr = await callApi('saveTenantResponsibilities', { adminUserId: u.adminRaw.id, tenantIds: trNow });
+        if (!rr.success) { plModalErr(rr.message); return; }
+        tenantRespCache[String(u.adminRaw.id)] = trNow;
+      }
     }
     if (!r.success) { plModalErr(r.message); return; }
     plModalClose();
@@ -8037,12 +8094,18 @@ async function loadUserDirectory(){
   if (roleWrap) roleWrap.style.display = '';
   // ★ ยิง listAdminUsers + listStaffAdmin + listTenants ขนานกัน (คนละตารางข้างหลัง) — Promise.all ราคาเท่าคำขอเดียว
   // (กติกา CLAUDE.md ข้อ 7) — ต้องมี tenantsCache ให้พร้อมก่อนเรนเดอร์การ์ดรออนุมัติ (โชว์ชื่อตัวแทนแทนรหัส)
-  const [, adminR, staffR] = await Promise.all([
+  const [, adminR, staffR, , respR] = await Promise.all([
     ensureRolesForDropdown().then(() => onAdminRoleChange()),
     callApi('listAdminUsers', {}),
     callApi('listStaffAdmin', {}),
-    tenantsCache.length ? Promise.resolve() : loadTenantsQuiet()
+    tenantsCache.length ? Promise.resolve() : loadTenantsQuiet(),
+    EFFECTIVE_TENANT_ID() ? Promise.resolve(null) : callApi('listTenantResponsibilities', {})
   ]);
+  if (respR && respR.success) {
+    tenantRespAll = respR.tenants || [];
+    tenantRespCache = {};
+    (respR.users || []).forEach(x => { tenantRespCache[String(x.adminUserId)] = x.tenantIds || []; });
+  }
   if (!adminR.success && !staffR.success) {
     if (!userDirCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(adminR.message || staffR.message)+'</td></tr>';
     return;
