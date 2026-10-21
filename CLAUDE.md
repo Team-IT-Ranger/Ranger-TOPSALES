@@ -2567,6 +2567,14 @@ seed view=TRUE edit=FALSE ให้ `tenant_admin` ตอนล็อกอิ�
 - **★★ น้ำหนักของกฎ**: กฎธีม light ท้ายไฟล์มี `.kpi{ border-top:1px solid var(--border) }` (0,1,0)
   ถ้าเขียนกฎสีเป็น `.kpi{...}` เฉยๆ มันจะถูกทับทั้งแอป (แถบสีหายทุกหน้า) → ใช้ `.kpi-row .kpi` (0,2,0)
   และสไตล์แดชบอร์ดใช้ `.kpi-row.kpi-badges .kpi` (0,3,0) เพื่อให้ชนะโดยไม่ต้องพึ่งลำดับบรรทัด
+- **★★ ชื่อกิ่งในเครื่องกลายเป็น `uat` ตัวเล็กได้ (Windows)** — เจอ 21 ต.ค. 2026 หลัง `git checkout`
+  แล้วไฟล์ ref กลายเป็น `refs/heads/uat` ทั้งที่ remote เป็น `UAT` · อาการ: `git push origin UAT`
+  ตอบ `fatal: UAT cannot be resolved to branch` ทั้งที่ commit ไปแล้ว
+  · **แก้**: `git push origin uat:UAT` ให้งานขึ้นก่อน แล้วเปลี่ยนชื่อกลับแบบสองจังหวะ
+    (`git branch -m uat tmp-uat` แล้ว `git branch -m tmp-uat UAT`) เพราะเปลี่ยนเฉพาะตัวพิมพ์ตรงๆ ไม่ได้
+    · ปิดท้ายด้วย `git branch -u origin/UAT UAT`
+  · เป็นปัญหาเดียวกับที่ห้ามตั้งกิ่ง `uat/<ชื่อ>` ไว้ข้างบน — ระบบไฟล์ไม่แยกตัวพิมพ์
+
 - **★ กฎธีม light เคยมี `.kpi:nth-child(2..4){border-top:...}`** ซึ่งน้ำหนักเท่ากับ `.kpi.k-xxx`
   และอยู่ทีหลังในไฟล์ → การ์ดใบที่ 2-4 ของทุกแถวไม่ได้สีของตัวเอง (เจอตอนเทสต์ 17 ต.ค. 2026)
   · ตอนนี้เหลือ `.kpi{border-top:1px solid var(--border)}` เป็นค่าตั้งต้นเฉยๆ
