@@ -82,12 +82,17 @@ function handlePostback_(event) {
     var i = pair.indexOf('=');
     if (i !== -1) parsed[pair.substring(0, i)] = decodeURIComponent(pair.substring(i + 1).replace(/\+/g, ' '));
   });
-  if (parsed.cmd !== 'inv') return;
+  if (parsed.cmd !== 'inv' && parsed.cmd !== 'sal') return;
   try {
-    replyAndLog_(replyToken, lineUserId, '', '[ปุ่ม] ของคงเหลือ ' + (parsed.t || ''), botInventoryMessages_(lineUserId, parsed.t || ''));
+    if (parsed.cmd === 'inv') {
+      replyAndLog_(replyToken, lineUserId, '', '[ปุ่ม] ของคงเหลือ ' + (parsed.t || ''), botInventoryMessages_(lineUserId, parsed.t || ''));
+    } else {
+      var arg = (parsed.t || '') + (parsed.m ? (' ' + parsed.m) : '');
+      replyAndLog_(replyToken, lineUserId, '', '[ปุ่ม] ยอดขาย ' + arg, answerSalesReport_(lineUserId, arg.trim()));
+    }
   } catch (err) {
     console.error('handlePostback_ error: ' + (err && err.stack || err));
-    replyAndLog_(replyToken, lineUserId, '', data, 'ขอโทษครับ ระบบขัดข้องตอนดึงของคงเหลือ ลองใหม่อีกครั้ง');
+    replyAndLog_(replyToken, lineUserId, '', data, 'ขอโทษครับ ระบบขัดข้องตอนดึงข้อมูล ลองใหม่อีกครั้ง');
   }
 }
 
@@ -169,7 +174,13 @@ function replyAndLog_(replyToken, lineUserId, displayName, userMessage, response
 // คืนสตริง = ข้อความล้วน · คืน array = message object ของ LINE (ใช้กับ Flex/ปุ่มเลือก)
 function answerQuestion_(text, lineUserId) {
   if (!text || /^(ช่วยเหลือ|help|เมนู|คำสั่ง)$/i.test(text)) return helpText_();
-  if (/^ยอดขาย/i.test(text)) return answerTodaySales_();
+  /* ★ "ยอดขายวันนี้" ยังเป็นของเดิมเป๊ะ (ยอดรวมทุกตัวแทนจาก sales_daily ตอบทันทีไม่ต้องเลือกอะไร)
+     — คนใช้ทุกวันอยู่แล้ว เปลี่ยนให้ต้องกดเลือกตัวแทนทีละขั้นคือทำของที่ใช้ได้ให้ช้าลง
+     ส่วน "ยอดขาย" เปล่าๆ / "sales" = รายงานรายเดือนแบบใหม่ (เลือกตัวแทน → เลือกเดือน) */
+  if (/^ยอดขาย\s*วันนี้/i.test(text)) return answerTodaySales_();
+  if (/^(ยอดขาย|sales)(\s|$)/i.test(text)) {
+    return answerSalesReport_(lineUserId, text.replace(/^(ยอดขาย|sales)\s*/i, '').trim());
+  }
   // ★ ต้องอยู่ก่อน "สต็อก" เพราะคนละคำถาม: สต็อก = สินค้าตัวเดียวในคลังกลาง หน่วยฐาน + ยอดจอง
   //   ของคงเหลือ/inventory = ทุกสินค้าของตัวแทนรายหนึ่ง แยกคลัง/รถ หน่วยลัง
   if (/^(ของคงเหลือ|inventory|inv)(\s|$)/i.test(text)) {
@@ -185,6 +196,7 @@ function helpText_() {
   return 'คำสั่งที่ใช้ได้ตอนนี้ครับ:\n' +
     '• ยอดขายวันนี้ — ยอดขายรวมวันนี้ (ทุกตัวแทน+บริษัท)\n' +
     '• ของคงเหลือ (หรือ inventory) — ของในคลังและบนรถ หน่วยลัง (เลือกตัวแทนได้ถ้าดูแลหลายราย)\n' +
+    '• ยอดขาย (หรือ sales) — ยอดขายรายเดือนของบิลที่พร้อมส่ง แยกพนักงานขายและแยกตามวัน\n' +
     '• สต็อก <รหัส/ชื่อสินค้า> — สินค้าตัวเดียวในคลังกลางบริษัท หน่วยฐาน + ยอดจอง\n' +
     '• ยอดค้างชำระ <รหัส/ชื่อลูกค้า> — ใบแจ้งหนี้ที่ยังค้างของลูกค้ารายนั้น\n' +
     '• สถานะบิล <รหัส/ชื่อลูกค้า> — บิลขายล่าสุดของลูกค้ารายนั้น (สถานะส่งของ+การชำระเงิน)\n' +
@@ -787,12 +799,13 @@ function botFlexInventory_(snap, reportUrl) {
 }
 
 /** เมนูเลือกตัวแทน — quick reply ถ้าไม่เกิน 13 ราย ไม่งั้นใช้ปุ่มในการ์ด */
-function botTenantPicker_(tenants) {
-  var head = 'เลือกตัวแทนที่ต้องการดูของคงเหลือ';
+function botTenantPicker_(tenants, prompt, cmd) {
+  var head = prompt || 'เลือกตัวแทนที่ต้องการดูของคงเหลือ';
+  var c = cmd || 'inv';
   if (tenants.length <= BOT_QUICK_MAX) {
     return { type: 'text', text: head, quickReply: { items: tenants.map(function(t) {
       return { type: 'action', action: { type: 'postback', label: botCut_(t.name, 20),
-        data: 'cmd=inv&t=' + encodeURIComponent(t.tenantId), displayText: 'ของคงเหลือ: ' + t.name } };
+        data: 'cmd=' + c + '&t=' + encodeURIComponent(t.tenantId), displayText: head.replace('เลือก', '') + ': ' + t.name } };
     }) } };
   }
   var shown = tenants.slice(0, BOT_BUTTON_MAX);
@@ -800,7 +813,7 @@ function botTenantPicker_(tenants) {
   shown.forEach(function(t) {
     contents.push({ type: 'button', style: 'secondary', height: 'sm', margin: 'sm',
       action: { type: 'postback', label: botCut_(t.name, 20),
-        data: 'cmd=inv&t=' + encodeURIComponent(t.tenantId), displayText: 'ของคงเหลือ: ' + t.name } });
+        data: 'cmd=' + c + '&t=' + encodeURIComponent(t.tenantId), displayText: head.replace('เลือก', '') + ': ' + t.name } });
   });
   contents.push(botFlexText_('อีก ' + (tenants.length - shown.length) + ' ราย — พิมพ์ "ของคงเหลือ <รหัสตัวแทน>"',
     { size: 'xxs', color: BOT_INK_SOFT, wrap: true, margin: 'md' }));
@@ -812,6 +825,203 @@ function botTenantPicker_(tenants) {
 function botCut_(s, n) {
   var t = String(s || '');
   return t.length <= n ? t : (t.substring(0, n - 1) + '…');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * ยอดขายรายเดือน — คำสั่ง "ยอดขาย" / "sales"  (เจ้าของระบบสั่ง 21 ต.ค. 2026)
+ * เลือกตัวแทน (ถ้าดูแลหลายราย) → เลือกเดือน → ยอดขายของบิล **สถานะ "พร้อมส่ง"** แยกพนักงานขาย + แยกวัน
+ *
+ * ★★ นับเฉพาะสถานะ `ready_to_ship` ตามที่สั่ง — **และนี่คือจุดที่เคยพลาดมาแล้วที่อื่น** (รายงานยอดขาย
+ *   ในแอปเคยนับเฉพาะ `completed` แล้วได้ศูนย์ เพราะศูนย์ไม่ได้กดสถานะไปจนสุดทุกใบ) จึงพิมพ์ยอด
+ *   **"ทั้งเดือนที่ไม่ถูกยกเลิก"** กำกับไว้ท้ายการ์ดเสมอ ถ้าตัวเลขสองบรรทัดนี้ห่างกันมาก แปลว่า
+ *   บิลกองอยู่ที่สถานะอื่น ไม่ใช่ยอดขายหายไป — คนอ่านเห็นเองจากในการ์ด ไม่ต้องรอให้ใครมาบอก
+ * ★ อ่านจากไฟล์ `sales_orders` ของตัวแทนรายนั้น (ไม่ใช่ `sales_daily` ซึ่งเป็นยอดรวมรายวัน
+ *   ไม่มีสถานะและไม่มีคนขาย) · เดือนตัดจาก `created_at` = วันที่เปิดบิล
+ * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+var BOT_SALES_STATUS = 'ready_to_ship';      // "พร้อมส่ง" — ตรงกับ SO_READY ใน backend/34_sales_status.gs
+var BOT_SALES_STAFF_MAX = 10, BOT_SALES_DAY_MAX = 16;
+var BOT_MONTH_TH = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+/** 'yyyy-MM' ของเวลาไทยตอนนี้ ย้อนหลัง n เดือน */
+function botMonthKey_(back) {
+  var now = new Date(Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy/MM/dd') + ' 00:00:00');
+  var y = now.getFullYear(), m = now.getMonth() - (back || 0);
+  while (m < 0) { m += 12; y -= 1; }
+  return y + '-' + (m + 1 < 10 ? '0' : '') + (m + 1);
+}
+function botMonthLabel_(key) {
+  var p = String(key || '').split('-');
+  var m = parseInt(p[1], 10);
+  return (BOT_MONTH_TH[m - 1] || p[1]) + ' ' + p[0];
+}
+
+/** ชื่อคนขายจาก line_user_id — พนักงานขายก่อน แล้วค่อยบัญชีแอดมิน (คนเดียวอาจมีทั้งสองแถว) */
+function botSellerNames_() {
+  var out = {};
+  sheetObjects_(prodSheet_('admin_users')).forEach(function(u) {
+    if (String(u.line_user_id || '')) out[String(u.line_user_id)] = String(u.display_name || u.username || '');
+  });
+  sheetObjects_(prodSheet_('liff_users')).forEach(function(u) {
+    if (String(u.line_user_id || '')) out[String(u.line_user_id)] = String(u.display_name || out[String(u.line_user_id)] || '');
+  });
+  return out;
+}
+
+function botSalesSnapshot_(tenantId, month) {
+  var tid = String(tenantId || '') || BOT_OWNER_TENANT;
+  var active = botActiveTenants_();
+  var orders = [];
+  try { orders = sheetObjects_(tenantSheet_(tid, 'sales_orders')); }
+  catch (err) {
+    // ตัวแทนบ้านของข้อมูลเก่ายังเป็น HOUSE ได้ (ดู answerSalesOrders_)
+    if (tid === BOT_OWNER_TENANT) { try { orders = sheetObjects_(tenantSheet_('HOUSE', 'sales_orders')); } catch (e2) { throw err; } }
+    else throw err;
+  }
+  var names = botSellerNames_();
+  var inMonth = orders.filter(function(o) { return fmtDate_(o.created_at).substring(0, 7) === String(month); });
+
+  var byStaff = {}, byDay = {}, bills = 0, amount = 0, allBills = 0, allAmount = 0;
+  inMonth.forEach(function(o) {
+    var st = String(o.status || '').toLowerCase();
+    var total = Number(o.total) || 0;
+    if (st !== 'cancelled' && st !== 'rejected') { allBills++; allAmount += total; }
+    if (st !== BOT_SALES_STATUS) return;
+    bills++; amount += total;
+    var who = String(o.sale_by || '');
+    var key = names[who] || who || '(ไม่ระบุคนขาย)';
+    if (!byStaff[key]) byStaff[key] = { name: key, bills: 0, amount: 0 };
+    byStaff[key].bills++; byStaff[key].amount += total;
+    var d = fmtDate_(o.created_at);
+    if (!byDay[d]) byDay[d] = { date: d, bills: 0, amount: 0 };
+    byDay[d].bills++; byDay[d].amount += total;
+  });
+
+  var staffRows = Object.keys(byStaff).map(function(k) { return byStaff[k]; })
+    .sort(function(a, b) { return b.amount - a.amount; });                 // คนขายได้มากสุดขึ้นก่อน
+  var dayRows = Object.keys(byDay).map(function(k) { return byDay[k]; })
+    .sort(function(a, b) { return a.date < b.date ? -1 : 1; });            // วันเรียงตามปฏิทิน
+
+  return { tenantId: tid, tenantName: botTenantLabel_(tid, active[tid] || tid), month: month,
+    monthLabel: botMonthLabel_(month), bills: bills, amount: amount,
+    allBills: allBills, allAmount: allAmount,
+    staff: staffRows, staffShown: Math.min(staffRows.length, BOT_SALES_STAFF_MAX),
+    days: dayRows, daysShown: Math.min(dayRows.length, BOT_SALES_DAY_MAX) };
+}
+
+/** คำสั่ง "ยอดขาย" — arg รับได้ทั้ง "" / "<ตัวแทน>" / "<ตัวแทน> yyyy-MM" / "yyyy-MM" */
+function answerSalesReport_(lineUserId, arg) {
+  var who = null, isStaff = false;
+  var admin = botAdminUser_(lineUserId);
+  if (admin) who = admin;
+  else {
+    var st = botStaffUser_(lineUserId);
+    if (st) { who = { isStaff: true, line_user_id: String(lineUserId), tenant_id: st.tenant_id }; isStaff = true; }
+  }
+  if (!who) {
+    return [{ type: 'text', text: 'รายงานยอดขายรายเดือนต้องใช้บัญชีแอดมินที่ผูก LINE ไว้ หรือเป็นพนักงานขายที่ถูกแต่งตั้งให้ดูแลตัวแทนครับ\n' +
+      '(อยากได้ยอดรวมวันนี้เฉยๆ พิมพ์ "ยอดขายวันนี้" ได้เลย)' }];
+  }
+  if (!isStaff && !botHasPermission_(who, 'sales_report', 'view')) {
+    return [{ type: 'text', text: 'บัญชีนี้ยังไม่มีสิทธิ์ดูรายงานการขายครับ — ให้ผู้ดูแลเปิดสิทธิ์ "รายงานการขาย" ให้บทบาทของคุณก่อน' }];
+  }
+
+  var list = botManagedTenants_(who);
+  if (!list.length) {
+    return [{ type: 'text', text: isStaff
+      ? 'คุณยังไม่ได้รับแต่งตั้งให้ดูแลตัวแทนรายใดครับ — ให้ผู้ดูแลระบบแต่งตั้งที่เมนู "บัญชีผู้ใช้งาน" ก่อน'
+      : 'ยังไม่มีตัวแทนที่คุณดูแลอยู่ครับ — ให้ผู้ดูแลระบบตั้งผู้รับผิดชอบให้ก่อน' }];
+  }
+
+  // แยกเดือนออกจากชื่อตัวแทน (เดือนเป็น yyyy-MM เสมอ)
+  var parts = String(arg || '').split(/\s+/).filter(function(x) { return x; });
+  var month = '', want = [];
+  parts.forEach(function(p) { if (/^\d{4}-\d{2}$/.test(p)) month = p; else want.push(p); });
+  var wantTenant = want.join(' ');
+
+  var hit = null;
+  if (wantTenant) {
+    hit = botMatchTenant_(list, wantTenant);
+    if (!hit) {
+      return [{ type: 'text', text: 'ไม่พบตัวแทน "' + wantTenant + '" ในรายการที่คุณดูแลครับ\n\nรายที่ดูแลอยู่:\n' +
+        list.map(function(t) { return '• ' + t.tenantId + ' — ' + t.name; }).join('\n') }];
+    }
+  } else if (list.length === 1) {
+    hit = list[0];
+  }
+  if (!hit) return [botTenantPicker_(list, 'เลือกตัวแทน/ศูนย์ที่ต้องการดูยอดขาย', 'sal')];
+  if (!month) return [botMonthPicker_(hit)];
+
+  var snap = botSalesSnapshot_(hit.tenantId, month);
+  var alt = 'ยอดขาย ' + snap.tenantName + ' ' + snap.monthLabel + ' — พร้อมส่ง ' + snap.bills + ' ใบ ' + botNum_(snap.amount) + ' บาท';
+  return [{ type: 'flex', altText: alt.substring(0, 400), contents: botFlexSales_(snap) }];
+}
+
+/** เลือกเดือน — 6 เดือนล่าสุดพอสำหรับการใช้งานจริง และไม่ชนเพดาน quick reply (13) */
+function botMonthPicker_(tenant) {
+  var items = [];
+  for (var i = 0; i < 6; i++) {
+    var key = botMonthKey_(i);
+    items.push({ type: 'action', action: { type: 'postback', label: botCut_(botMonthLabel_(key), 20),
+      data: 'cmd=sal&t=' + encodeURIComponent(tenant.tenantId) + '&m=' + key,
+      displayText: 'ยอดขาย ' + tenant.name + ' ' + botMonthLabel_(key) } });
+  }
+  return { type: 'text', text: 'เลือกเดือนของ ' + tenant.name, quickReply: { items: items } };
+}
+
+function botFlexSales_(snap) {
+  var body = [];
+  var push = function(label, bills, amount, opts) {
+    body.push(botFlexRow_(label, [
+      { type: 'span', text: bills + ' ใบ · ', size: 'xs', color: BOT_INK_SOFT },
+      { type: 'span', text: botNum_(amount), size: 'xs', color: (opts && opts.color) || BOT_BLUE, weight: 'bold' }
+    ], opts || {}));
+  };
+  body.push(botFlexRow_('พนักงานขาย', 'บิล · ยอด (บาท)', { size: 'xs', color: BOT_INK_SOFT, bold: true }));
+  body.push({ type: 'separator', margin: 'sm', color: BOT_LINE_CLR });
+  if (!snap.staff.length) {
+    body.push(botFlexText_('ไม่มีบิลสถานะ "พร้อมส่ง" ในเดือนนี้', { size: 'sm', color: BOT_INK_SOFT, margin: 'md', wrap: true }));
+  } else {
+    snap.staff.slice(0, BOT_SALES_STAFF_MAX).forEach(function(r) { push(botCut_(r.name, 20), r.bills, r.amount); });
+    if (snap.staff.length > BOT_SALES_STAFF_MAX) {
+      body.push(botFlexText_('… และอีก ' + (snap.staff.length - BOT_SALES_STAFF_MAX) + ' คน',
+        { size: 'xxs', color: BOT_INK_SOFT, align: 'end' }));
+    }
+  }
+  if (snap.days.length) {
+    body.push({ type: 'separator', margin: 'lg', color: BOT_LINE_CLR });
+    body.push(botFlexRow_('รายวัน', 'บิล · ยอด (บาท)', { size: 'xs', color: BOT_INK_SOFT, bold: true, margin: 'md' }));
+    snap.days.slice(0, BOT_SALES_DAY_MAX).forEach(function(r) {
+      push(botMonthLabel_(r.date.substring(0, 7)).split(' ')[0] + ' ' + parseInt(r.date.substring(8, 10), 10), r.bills, r.amount);
+    });
+    if (snap.days.length > BOT_SALES_DAY_MAX) {
+      body.push(botFlexText_('… และอีก ' + (snap.days.length - BOT_SALES_DAY_MAX) + ' วัน',
+        { size: 'xxs', color: BOT_INK_SOFT, align: 'end' }));
+    }
+  }
+
+  var footer = [
+    { type: 'separator', color: BOT_LINE_CLR },
+    botFlexRow_('รวมที่พร้อมส่ง', [
+      { type: 'span', text: snap.bills + ' ใบ · ', size: 'sm', color: BOT_INK_SOFT },
+      { type: 'span', text: botNum_(snap.amount), size: 'sm', color: BOT_BLUE, weight: 'bold' }
+    ], { bold: true, wrap: true }),
+    /* ★ บรรทัดเทียบ — ถ้ายอด "พร้อมส่ง" ต่ำกว่ายอดทั้งเดือนมาก แปลว่าบิลกองอยู่ที่สถานะอื่น
+       ไม่ใช่ยอดขายหายไป · เคยมีบทเรียนจากรายงานในแอปที่นับเฉพาะ "จัดส่งสำเร็จ" แล้วได้ศูนย์ */
+    botFlexText_('ทั้งเดือน (ไม่นับใบที่ยกเลิก/ปฏิเสธ) ' + snap.allBills + ' ใบ · ' + botNum_(snap.allAmount) + ' บาท',
+      { size: 'xxs', color: BOT_INK_SOFT, wrap: true, margin: 'sm' })
+  ];
+
+  return {
+    type: 'bubble', size: 'mega',
+    header: { type: 'box', layout: 'vertical', backgroundColor: BOT_BLUE, paddingAll: '14px', spacing: 'xs', contents: [
+      botFlexText_('ยอดขาย · เฉพาะบิลสถานะ "พร้อมส่ง"', { size: 'xs', color: '#C9DAFB' }),
+      botFlexText_(snap.tenantName, { size: 'lg', weight: 'bold', color: '#FFFFFF', wrap: true }),
+      botFlexText_(snap.monthLabel, { size: 'xs', color: '#C9DAFB' })
+    ] },
+    body: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px', contents: body },
+    footer: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px', contents: footer }
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════

@@ -45,6 +45,8 @@ const resetData = () => {
       role_permissions: sheet(['role_code', 'module_code', 'can_view', 'can_edit'], [
         { role_code: 'owner_admin', module_code: 'inventory', can_view: 'TRUE', can_edit: 'TRUE' },
         { role_code: 'tenant_admin', module_code: 'inventory', can_view: true, can_edit: 'FALSE' },
+        { role_code: 'tenant_admin', module_code: 'sales_report', can_view: 'TRUE', can_edit: 'FALSE' },
+        { role_code: 'owner_admin', module_code: 'sales_report', can_view: 'TRUE', can_edit: 'FALSE' },
         { role_code: 'viewer', module_code: 'sales', can_view: 'TRUE', can_edit: 'FALSE' }
       ]),
       admin_user_tenants: sheet(['record_id', 'admin_user_id', 'tenant_id', 'created_at', 'created_by', 'line_user_id'], []),
@@ -122,9 +124,15 @@ const resetData = () => {
     },
     [F_BDC]: {
       van_stock: sheet(['line_user_id', 'product_id', 'qty'], [{ line_user_id: 'B1', product_id: 1, qty: 12 }]),
-      sales_orders: sheet(['record_id', 'order_code', 'customer_id', 'total', 'status', 'payment_status', 'created_at'], [
-        { record_id: 1, order_code: 'SO-BDC-1', customer_id: 11, total: 1070, status: 'pending_delivery', payment_status: 'unpaid', created_at: '2026-10-21 09:00:00' },
-        { record_id: 2, order_code: 'SO-BDC-2', customer_id: 11, total: 2140, status: 'delivering', payment_status: 'partial', created_at: '2026-10-21 11:00:00' }
+      sales_orders: sheet(['record_id', 'order_code', 'customer_id', 'total', 'status', 'sale_by', 'payment_status', 'created_at'], [
+        { record_id: 1, order_code: 'SO-BDC-1', customer_id: 11, total: 1070, status: 'pending_delivery', sale_by: 'U7', payment_status: 'unpaid', created_at: '2026-10-21 09:00:00' },
+        { record_id: 2, order_code: 'SO-BDC-2', customer_id: 11, total: 2140, status: 'delivering', sale_by: 'U7', payment_status: 'partial', created_at: '2026-10-21 11:00:00' },
+        // ── สำหรับรายงานยอดขาย: สถานะ "พร้อมส่ง" สามใบ สองคนขาย สองวัน ──
+        { record_id: 3, order_code: 'SO-BDC-3', customer_id: 11, total: 1000, status: 'ready_to_ship', sale_by: 'U7', payment_status: 'unpaid', created_at: '2026-10-02 09:00:00' },
+        { record_id: 4, order_code: 'SO-BDC-4', customer_id: 11, total: 2500, status: 'ready_to_ship', sale_by: 'U7', payment_status: 'unpaid', created_at: '2026-10-05 09:00:00' },
+        { record_id: 5, order_code: 'SO-BDC-5', customer_id: 11, total: 500, status: 'ready_to_ship', sale_by: 'U10', payment_status: 'unpaid', created_at: '2026-10-05 15:00:00' },
+        { record_id: 6, order_code: 'SO-BDC-6', customer_id: 11, total: 9999, status: 'cancelled', sale_by: 'U7', payment_status: 'unpaid', created_at: '2026-10-05 16:00:00' },
+        { record_id: 7, order_code: 'SO-BDC-7', customer_id: 11, total: 7777, status: 'ready_to_ship', sale_by: 'U7', payment_status: 'unpaid', created_at: '2026-09-30 09:00:00' }
       ])
     }
   };
@@ -295,6 +303,53 @@ ok('★ ยอดรวมในช่องเดียวกันเป็น
   m.contents.body.contents[2].contents[1]);
 ok('ของบริษัทไม่ปนมา (สินค้า 10999 ของบริษัทต้องไม่อยู่ในการ์ดของ BDC)',
   !JSON.stringify(m.contents).includes('10999'), 'leak');
+
+console.log('\n-- ★★ ยอดขายรายเดือน (21 ต.ค. 2026) --');
+post([msg('U7', 'ยอดขายวันนี้')]);
+ok('★ "ยอดขายวันนี้" ของเดิมต้องตอบทันทีเหมือนเดิม ไม่ถูกเปลี่ยนเป็นเมนูเลือก',
+  /จำนวนบิล: 4 ใบ/.test(lastText()), lastText());
+post([msg('U3', 'ยอดขาย')]);
+let sl = lastMsgs()[0];
+eq('ดูแลรายเดียว → ถามเดือนเลย', sl.type, 'text');
+eq('ให้เลือก 6 เดือนล่าสุด', sl.quickReply.items.length, 6);
+ok('ปุ่มเดือนพก tenant + เดือนไปด้วย', /cmd=sal&t=BDC&m=\d{4}-\d{2}/.test(sl.quickReply.items[0].action.data), sl.quickReply.items[0].action.data);
+post([msg('U1', 'ยอดขาย')]);
+sl = lastMsgs()[0];
+ok('★ ดูแลหลายราย → ถามตัวแทนก่อน และปุ่มเป็นคำสั่งยอดขาย ไม่ใช่ของคงเหลือ',
+  /cmd=sal&t=/.test(JSON.stringify(sl.quickReply.items)), sl.quickReply.items[0].action.data);
+ok('ข้อความถามใช้คำว่าตัวแทน/ศูนย์', /ตัวแทน\/ศูนย์/.test(sl.text), sl.text);
+post([pb('U1', 'cmd=sal&t=BDC')]);
+ok('กดเลือกตัวแทนแล้วถามเดือนต่อ', /เลือกเดือน/.test(lastText()), lastText());
+
+post([msg('U3', 'ยอดขาย 2026-10')]);
+sl = lastMsgs()[0];
+eq('ได้การ์ดรายงาน', sl.type, 'flex');
+const srows = sl.contents.body.contents.filter(c => c.type === 'box').map(rowOf);
+eq('★ แยกพนักงานขาย เรียงยอดมากสุดก่อน (U7 3,500 · U10 500)',
+  srows.slice(1, 3).map(r => r[0]), ['พนักงานที่อนุมัติแล…', 'พนักงานของ BDC']);   // ชื่อยาวถูกตัดที่ 20 ตัวเหมือนชื่อสินค้า
+ok('ยอดของคนแรกถูก (1,000 + 2,500)', /3,500/.test(JSON.stringify(srows)), srows);
+ok('★ แยกตามวัน มีสองวัน (2 ต.ค. และ 5 ต.ค.)',
+  JSON.stringify(sl.contents.body.contents).includes('ต.ค. 2') && JSON.stringify(sl.contents.body.contents).includes('ต.ค. 5'),
+  srows);
+const sfoot = rowOf(sl.contents.footer.contents[1]);
+eq('★ รวมเฉพาะบิลสถานะพร้อมส่ง (3 ใบ 4,000)', sfoot, ['รวมที่พร้อมส่ง', '3 ใบ · 4,000']);
+ok('★ มีบรรทัดเทียบยอดทั้งเดือนไว้กันเข้าใจผิดว่ายอดหาย (5 ใบ ไม่นับที่ยกเลิก)',
+  /ทั้งเดือน \(ไม่นับใบที่ยกเลิก\/ปฏิเสธ\) 5 ใบ/.test(JSON.stringify(sl.contents.footer)), sl.contents.footer);
+ok('บิลที่ยกเลิกไม่ถูกนับทั้งสองยอด', !/9,999/.test(JSON.stringify(sl.contents)), 'cancelled counted');
+ok('บิลเดือนก่อนไม่ปนมา', !/7,777/.test(JSON.stringify(sl.contents)), 'other month');
+ok('หัวการ์ดบอกว่านับเฉพาะพร้อมส่ง', /พร้อมส่ง/.test(JSON.stringify(sl.contents.header)), sl.contents.header);
+
+post([msg('U3', 'ยอดขาย 2026-08')]);
+ok('เดือนที่ไม่มีบิล → บอกตรงๆ ไม่ใช่การ์ดว่าง',
+  /ไม่มีบิลสถานะ/.test(JSON.stringify(lastMsgs()[0].contents)), lastText());
+post([msg('U4', 'ยอดขาย')]);
+ok('★ บทบาทที่ไม่มีสิทธิ์รายงานการขาย → ปฏิเสธ', /ไม่มีสิทธิ์ดูรายงานการขาย/.test(lastText()), lastText());
+post([msg('U7', 'ยอดขาย')]);
+ok('พนักงานขายที่ยังไม่ถูกแต่งตั้ง → บอกให้ไปขอแต่งตั้ง', /ยังไม่ได้รับแต่งตั้ง/.test(lastText()), lastText());
+files[PROD].admin_user_tenants.__rows.push({ record_id: 60, admin_user_id: '', line_user_id: 'U7', tenant_id: 'BDC' });
+post([msg('U7', 'sales 2026-10')]);
+ok('★ แต่งตั้งแล้ว + พิมพ์ sales ก็ได้', lastMsgs()[0].type === 'flex', lastText());
+files[PROD].admin_user_tenants.__rows.length = 0;
 
 console.log('\n-- ★★ ยอดจอง: ของคงเหลือ vs ขายได้จริง --');
 const bdcRows = m.contents.body.contents.filter(c => c.type === 'box').slice(1).map(rowOf);
