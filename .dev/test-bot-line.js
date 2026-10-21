@@ -379,6 +379,40 @@ post([msg('U7', 'sales 2026-10 staff')]);
 ok('★ แต่งตั้งแล้ว + พิมพ์ sales ก็ได้', lastMsgs()[0].type === 'flex', lastText());
 files[PROD].admin_user_tenants.__rows.length = 0;
 
+console.log('\n-- ★★ พิมพ์รายงานยอดขาย (21 ต.ค. 2026) --');
+post([msg('U3', 'ยอดขาย 2026-10 ลูกค้า')]);
+sl = lastMsgs()[0];
+const sbtn = sl.contents.footer.contents.filter(c => c.type === 'button')[0];
+ok('★ การ์ดยอดขายมีปุ่มพิมพ์เหมือนการ์ดของคงเหลือ', !!sbtn, sl.contents.footer.contents.map(c => c.type));
+eq('ป้ายปุ่มไม่เกิน 20 ตัวอักษร', sbtn.action.label.length <= 20, true);
+const stoken = sbtn.action.uri.match(/r=([0-9a-f]+)/)[1];
+const sref = JSON.parse(CACHE['botrpt_' + stoken]);
+eq('★ token จำว่าขอรายงานอะไร ตัวแทนไหน เดือนไหน มุมไหน', [sref.k, sref.t, sref.m, sref.v], ['sal', 'BDC', '2026-10', 'cust']);
+
+let spage = ctx.doGet({ parameter: { r: stoken } }).__html;
+ok('หัวรายงานบอกมุมมอง', /รายงานยอดขาย ตามลูกค้า/.test(spage), spage.substring(0, 300));
+ok('บอกเดือนและว่านับเฉพาะพร้อมส่ง', /ต\.ค\. 2026/.test(spage) && /พร้อมส่ง/.test(spage), 'header');
+ok('มีชื่อร้านในตาราง', /C1001 ร้านตัวอย่าง/.test(spage), 'no shop');
+ok('★ ใบพิมพ์ของมุมลูกค้าไม่มีส่วนรายวัน (เหมือนการ์ด)', !/ยอดขายรายวัน/.test(spage), 'day rows leaked');
+ok('มีเชิงอรรถเทียบยอดทั้งเดือน', /ทั้งเดือนที่ไม่นับใบยกเลิก/.test(spage), 'no note');
+ok('โหลดตัวพิมพ์กลางตัวเดียวกับรายงานของคงเหลือ', /doc-print\.js\?v=/.test(spage), 'no printer');
+
+if (process.env.DUMP_SALES) {
+  require('fs').writeFileSync(process.env.DUMP_SALES,
+    ctx.botPrintPage_(ctx.botSalesReportSpec_(ctx.botSalesSnapshot_('BDC', '2026-10'), 'staff')), 'utf8');
+  console.log('      เขียนใบพิมพ์ยอดขาย (มุมพนักงาน) ไว้ที่ ' + process.env.DUMP_SALES);
+}
+const sspec = ctx.botSalesReportSpec_(ctx.botSalesSnapshot_('BDC', '2026-10'), 'staff');
+eq('หัวคอลัมน์ของมุมพนักงาน', sspec.columns.map(c => c.label), ['พนักงานขาย', 'จำนวนบิล', 'ยอดขาย (บาท)']);
+ok('★ ใบพิมพ์ของมุมพนักงานมียอดรายวันต่อท้ายในตารางเดียวกัน',
+  sspec.rows.some(r => r.name === 'ยอดขายรายวัน') && sspec.rows.some(r => r.name === '2026-10-05'), sspec.rows);
+eq('แถวหัวข้อรายวันเป็นตัวหนา', sspec.boldRows.length, 1);
+eq('ยอดรวมเป็นบรรทัดใหญ่', sspec.totals[0][2], 'grand');
+eq('ชื่อไฟล์บอกตัวแทน เดือน และมุมมอง', sspec.filename, 'sales-BDC-2026-10-staff');
+eq('★ ใบพิมพ์เอารายการครบ ไม่ตัดเหมือนการ์ด',
+  ctx.botSalesReportSpec_(ctx.botSalesSnapshot_('BDC', '2026-10'), 'cust').rows.length,
+  ctx.botSalesSnapshot_('BDC', '2026-10').cust.length);
+
 console.log('\n-- ★★ ยอดจอง: ของคงเหลือ vs ขายได้จริง --');
 const bdcRows = m.contents.body.contents.filter(c => c.type === 'box').slice(1).map(rowOf);
 eq('ตัวเลขหลักยังเป็นของคงเหลือจริง (on-hand) ไม่ถูกหักจอง',

@@ -674,7 +674,7 @@ function botInventoryFlex_(tenantId, lineUserId) {
     botNum_(snap.totals.warehouse) + ' · รถ ' + botNum_(snap.totals.van) + ')' +
     (snap.totals.reserved ? (' · ขายได้จริง ' + botNum_(snap.totals.available)) : '');
   return { type: 'flex', altText: alt.substring(0, 400),
-    contents: botFlexInventory_(snap, botReportLink_(tenantId, lineUserId)) };
+    contents: botFlexInventory_(snap, botReportLink_('inv', lineUserId, { t: tenantId })) };
 }
 
 /* ── Flex: การ์ดของคงเหลือ ──
@@ -986,7 +986,8 @@ function answerSalesReport_(lineUserId, arg) {
   /* ★ ติดปุ่มสลับมุมมองไปกับการ์ดเลย — ดูอีกมุมหนึ่งเป็นสิ่งที่คนทำต่อทันทีเสมอ
      ไม่ควรต้องพิมพ์คำสั่งใหม่ทั้งชุด (quickReply ใช้กับข้อความแบบ flex ได้) */
   var other = view === 'staff' ? 'cust' : 'staff';
-  return [{ type: 'flex', altText: alt.substring(0, 400), contents: botFlexSales_(snap, view),
+  var printUrl = botReportLink_('sal', lineUserId, { t: hit.tenantId, m: month, v: view });
+  return [{ type: 'flex', altText: alt.substring(0, 400), contents: botFlexSales_(snap, view, printUrl),
     quickReply: { items: [{ type: 'action', action: { type: 'postback',
       label: botCut_('ดู' + BOT_SALES_VIEWS[other].label, 20),
       data: 'cmd=sal&t=' + encodeURIComponent(hit.tenantId) + '&m=' + month + '&v=' + other,
@@ -1016,7 +1017,7 @@ function botMonthPicker_(tenant) {
   return { type: 'text', text: 'เลือกเดือนของ ' + tenant.name, quickReply: { items: items } };
 }
 
-function botFlexSales_(snap, view) {
+function botFlexSales_(snap, view, reportUrl) {
   var v = BOT_SALES_VIEWS[view] || BOT_SALES_VIEWS.staff;
   var rows = v.key === 'cust' ? snap.cust : snap.staff;
   var rowMax = v.key === 'cust' ? BOT_SALES_CUST_MAX : BOT_SALES_STAFF_MAX;
@@ -1063,6 +1064,12 @@ function botFlexSales_(snap, view) {
     botFlexText_('ทั้งเดือน (ไม่นับใบที่ยกเลิก/ปฏิเสธ) ' + snap.allBills + ' ใบ · ' + botNum_(snap.allAmount) + ' บาท',
       { size: 'xxs', color: BOT_INK_SOFT, wrap: true, margin: 'sm' })
   ];
+  /* ★ ปุ่มพิมพ์ — การ์ดในแชตตัดรายการที่เกินเพดานทิ้ง ส่วนใบที่พิมพ์เอา **ทุกแถว**
+     (เจ้าของระบบสั่ง 21 ต.ค. 2026: "หน้าจอไม่พอ ก็สร้างปุ่มพิมพ์รายงาน pdf แบบรายงาน inventory") */
+  if (reportUrl) {
+    footer.push({ type: 'button', style: 'primary', color: BOT_BLUE, height: 'sm', margin: 'md',
+      action: { type: 'uri', label: 'พิมพ์รายงาน (PDF)', uri: reportUrl } });
+  }
 
   return {
     type: 'bubble', size: 'mega',
@@ -1110,14 +1117,21 @@ function botWebUrl_() {
   catch (err) { console.error('botWebUrl_: หา URL ของ web app ไม่ได้ (' + err + ')'); return ''; }
 }
 
-/** ออกลิงก์รายงานของตัวแทนรายหนึ่ง · คืน '' ถ้าออกให้ไม่ได้ (การ์ดจะไม่ใส่ปุ่มเลย ดีกว่าปุ่มที่กดแล้วพัง) */
-function botReportLink_(tenantId, lineUserId) {
+/**
+ * ออกลิงก์รายงาน · คืน '' ถ้าออกให้ไม่ได้ (การ์ดจะไม่ใส่ปุ่มเลย ดีกว่าปุ่มที่กดแล้วพัง)
+ * @param kind 'inv' = ของคงเหลือ · 'sal' = ยอดขายรายเดือน
+ * @param params สิ่งที่หน้ารายงานต้องรู้ — { t } หรือ { t, m, v }
+ * ★ เก็บ "สิ่งที่ขอ" ไม่ใช่ "ผลลัพธ์" — หน้ารายงานไปดึงข้อมูลสดตอนเปิด เวลาที่พิมพ์บนหัวกระดาษ
+ *   จึงตรงกับตัวเลขที่พิมพ์เสมอ (และ token ไม่บวมจนเกินขนาดที่ CacheService เก็บได้)
+ */
+function botReportLink_(kind, lineUserId, params) {
   var base = botWebUrl_();
   if (!base) return '';
   var token = Utilities.getUuid().replace(/-/g, '');
+  var ref = { k: String(kind || 'inv'), u: String(lineUserId || '') };
+  Object.keys(params || {}).forEach(function(k) { ref[k] = String(params[k]); });
   try {
-    CacheService.getScriptCache().put(BOT_REPORT_PREFIX + token,
-      JSON.stringify({ t: String(tenantId), u: String(lineUserId || '') }), BOT_REPORT_TTL_SEC);
+    CacheService.getScriptCache().put(BOT_REPORT_PREFIX + token, JSON.stringify(ref), BOT_REPORT_TTL_SEC);
   } catch (err) {
     console.error('botReportLink_: เก็บ token ไม่ได้ (' + err + ')');
     return '';
@@ -1141,8 +1155,15 @@ function doGet(e) {
   }
   try {
     var ref = JSON.parse(raw);
+    if (String(ref.k || 'inv') === 'sal') {
+      var ss = botSalesSnapshot_(ref.t, ref.m);
+      var sspec = botSalesReportSpec_(ss, ref.v);
+      return HtmlService.createHtmlOutput(botPrintPage_(sspec))
+        .setTitle(sspec.title + ' ' + ss.tenantName)
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
     var snap = botInventorySnapshot_(ref.t, 0);     // 0 = เอาทุกแถว ไม่ใช่ 15 แถวแบบในการ์ด
-    return HtmlService.createHtmlOutput(botReportHtml_(snap))
+    return HtmlService.createHtmlOutput(botPrintPage_(botReportSpec_(snap)))
       .setTitle('รายงานของคงเหลือ ' + snap.tenantName)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   } catch (err) {
@@ -1220,9 +1241,50 @@ function botReportSpec_(snap) {
   };
 }
 
-function botReportHtml_(snap) {
-  var spec = botReportSpec_(snap);
-  // ★ กัน `</script>` ที่อาจหลุดมาจากชื่อสินค้าปิด block ก่อนเวลา
+/**
+ * spec ของรายงานยอดขาย — **พิมพ์รายการที่เลือกดูให้ครบทุกแถว** (การ์ดในแชตตัดที่ 10/24 เพราะจอไม่พอ
+ * ซึ่งเป็นเหตุผลที่เจ้าของระบบสั่งให้มีปุ่มพิมพ์ 21 ต.ค. 2026)
+ * ★ พิมพ์ "มุมมองที่กำลังดูอยู่" ไม่ใช่ยัดทั้งสองมุมลงใบเดียว — ตัวพิมพ์กลางพิมพ์ได้ตารางเดียวต่อใบ
+ *   และคนสั่งพิมพ์ตอนนั้นกำลังดูมุมไหนอยู่ก็ต้องการมุมนั้น · อีกมุมกดสลับแล้วสั่งพิมพ์ใหม่ได้
+ */
+function botSalesReportSpec_(snap, view) {
+  var v = BOT_SALES_VIEWS[view] || BOT_SALES_VIEWS.staff;
+  var rows = (v.key === 'cust' ? snap.cust : snap.staff);
+  var notes = ['นับเฉพาะบิลสถานะ "พร้อมส่ง" · ทั้งเดือนที่ไม่นับใบยกเลิก/ปฏิเสธ ' +
+    snap.allBills + ' ใบ ' + botNum_(snap.allAmount) + ' บาท'];
+  if (v.key === 'cust') notes.push('ยอดรายวันดูได้จากรายงานมุมมอง "ตามพนักงานขาย" (ตัวเลขชุดเดียวกัน)');
+
+  var spec = {
+    title: 'รายงานยอดขาย ' + v.label,
+    subtitle: snap.tenantName + ' · ' + snap.monthLabel + ' · เฉพาะบิลสถานะ "พร้อมส่ง"',
+    issuerName: botTenantLabel_(BOT_OWNER_TENANT, ''),
+    printedAt: Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm'),
+    columns: [
+      { label: v.head, key: 'name', width: 4 },
+      { label: 'จำนวนบิล', key: 'bills', align: 'r', width: 1.2 },
+      { label: 'ยอดขาย (บาท)', key: 'amount', align: 'r', width: 1.6 }
+    ],
+    rows: rows.map(function(r) { return { name: r.name, bills: r.bills, amount: botNum_(r.amount) }; }),
+    totals: [['รวมที่พร้อมส่ง ' + snap.bills + ' ใบ (บาท)', botNum_(snap.amount), 'grand']],
+    note: notes.join(' · '),
+    landscape: false,
+    filename: 'sales-' + snap.tenantId + '-' + snap.month + '-' + v.key
+  };
+  /* ★ มุมมองพนักงานขายพิมพ์ยอดรายวันต่อท้ายในตารางเดียวกัน — ตัวพิมพ์กลางพิมพ์ตารางเดียวต่อใบ
+     แถวคั่นหัวข้อจึงเป็นแถวข้อมูลที่ทำตัวหนา (boldRows) ไม่ใช่ตารางที่สอง */
+  if (v.key !== 'cust' && snap.days.length) {
+    spec.boldRows = [spec.rows.length];
+    spec.rows.push({ name: 'ยอดขายรายวัน', bills: '', amount: '' });
+    snap.days.forEach(function(d) {
+      spec.rows.push({ name: d.date, bills: d.bills, amount: botNum_(d.amount) });
+    });
+  }
+  return spec;
+}
+
+/** หน้าเว็บสำหรับสั่งพิมพ์ — ใช้ร่วมกันทุกรายงาน (ส่ง spec ของ DocPrint เข้ามา) */
+function botPrintPage_(spec) {
+  // ★ กัน `</script>` ที่อาจหลุดมาจากชื่อสินค้า/ชื่อร้านปิด block ก่อนเวลา
   var json = JSON.stringify(spec).replace(/</g, '\\u003c');
   var head = spec.columns.map(function(c) { return '<th>' + botHtmlEsc_(c.label) + '</th>'; }).join('');
   var body = spec.rows.map(function(r) {
@@ -1234,7 +1296,7 @@ function botReportHtml_(snap) {
      ไม่ใช่หน้าขาวที่อธิบายไม่ได้ */
   return '<!doctype html><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>' + botHtmlEsc_(spec.title) + ' ' + botHtmlEsc_(snap.tenantName) + '</title>' +
+    '<title>' + botHtmlEsc_(spec.title) + ' ' + botHtmlEsc_(spec.subtitle) + '</title>' +
     '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
     '<style>' +
     ':root{--doc-fs:10px}' +
