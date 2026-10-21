@@ -120,6 +120,11 @@ function handleMessage_(event) {
   if (isGroupChat) {
     if (text.charAt(0) !== '/') return; // ข้อความคุยกันเฉยๆ ในกลุ่ม ไม่ใช่การเรียกบอท — เงียบไว้ ไม่ตอบ ไม่ลงทะเบียน ไม่ log
     text = text.substring(1).trim();
+  } else if (text.charAt(0) === '/') {
+    /* ★ แชทเดี่ยวก็ยอมรับ "/" นำหน้า (21 ต.ค. 2026) — เดิมตัดทิ้งเฉพาะในกลุ่ม คนที่ชินกับการพิมพ์
+       `/inventory` ในแชทเดี่ยวจึงได้คำตอบว่า "ยังไม่เข้าใจคำถามนี้" ทั้งที่พิมพ์คำสั่งถูกแล้ว
+       (ไม่ได้บังคับให้ใส่ — แชทเดี่ยวพิมพ์เฉยๆ ก็ยังได้เหมือนเดิม) */
+    text = text.substring(1).trim();
   }
 
   var displayName = '';
@@ -179,7 +184,7 @@ function answerQuestion_(text, lineUserId) {
 function helpText_() {
   return 'คำสั่งที่ใช้ได้ตอนนี้ครับ:\n' +
     '• ยอดขายวันนี้ — ยอดขายรวมวันนี้ (ทุกตัวแทน+บริษัท)\n' +
-    '• ของคงเหลือ — ของในคลังและบนรถ หน่วยลัง (เลือกตัวแทนได้ถ้าดูแลหลายราย)\n' +
+    '• ของคงเหลือ (หรือ inventory) — ของในคลังและบนรถ หน่วยลัง (เลือกตัวแทนได้ถ้าดูแลหลายราย)\n' +
     '• สต็อก <รหัส/ชื่อสินค้า> — สินค้าตัวเดียวในคลังกลางบริษัท หน่วยฐาน + ยอดจอง\n' +
     '• ยอดค้างชำระ <รหัส/ชื่อลูกค้า> — ใบแจ้งหนี้ที่ยังค้างของลูกค้ารายนั้น\n' +
     '• สถานะบิล <รหัส/ชื่อลูกค้า> — บิลขายล่าสุดของลูกค้ารายนั้น (สถานะส่งของ+การชำระเงิน)\n' +
@@ -626,37 +631,53 @@ function botFlexText_(text, opts) {
   return t;
 }
 
-/** แถวตาราง 4 ช่อง: ชื่อสินค้า | คลัง | รถ | รวม */
-function botFlexRow_(label, wh, van, total, opts) {
+/* ★ แถวตาราง **2 ช่อง**: รหัสสินค้า | คลัง + รถ = รวม  (เจ้าของระบบสั่ง 21 ต.ค. 2026 หลังทดสอบจริง)
+   เดิมเป็น 4 ช่อง (ชื่อสินค้า | คลัง | รถ | รวม) — บนจอมือถือชื่อสินค้ายาวกินที่จนตัวเลขเบียดกัน
+   · รหัสสินค้าสั้นและเป็นตัวที่คนใช้สั่งของจริง · ตัวเลขสามตัวยุบมาอยู่ช่องเดียวโดย**ไม่ทิ้งข้อมูล**
+     เขียนเป็น "คลัง + รถ = รวม" ซึ่งอ่านได้ในตัวเองว่าตัวไหนคืออะไร ไม่ต้องพึ่งหัวตาราง
+   · ใช้ span ให้ยอดรวมเป็นสีฟ้าตัวหนา ส่วนตัวแยกเป็นสีอ่อน — ตาจับ "รวม" ได้ก่อน */
+function botFlexRow_(code, nums, opts) {
   opts = opts || {};
   var size = opts.size || 'sm', color = opts.color || BOT_INK, weight = opts.bold ? 'bold' : 'regular';
+  var right = { type: 'text', flex: 6, align: 'end', size: size, wrap: !!opts.wrap, color: color, weight: weight };
+  if (!opts.wrap) right.maxLines = 1;
+  if (typeof nums === 'string') right.text = nums;
+  else right.contents = nums;          // span: [แยก, รวม]
   return { type: 'box', layout: 'horizontal', spacing: 'xs', contents: [
-    botFlexText_(label, { size: size, color: color, weight: weight, flex: 5, wrap: false, maxLines: 1 }),
-    botFlexText_(wh,    { size: size, color: color, weight: weight, flex: 3, align: 'end' }),
-    botFlexText_(van,   { size: size, color: color, weight: weight, flex: 3, align: 'end' }),
-    botFlexText_(total, { size: size, color: opts.totalColor || color, weight: 'bold', flex: 3, align: 'end' })
+    botFlexText_(code, { size: size, color: color, weight: weight, flex: 4, wrap: false, maxLines: 1 }),
+    right
   ] };
+}
+
+/** "10.5 + 3 = 13.5" แบบ span — ตัวแยกสีอ่อน ยอดรวมสีฟ้าตัวหนา */
+function botFlexNums_(wh, van, total, opts) {
+  opts = opts || {};
+  return [
+    { type: 'span', text: botNum_(wh) + ' + ' + botNum_(van) + ' = ', size: opts.size || 'sm', color: BOT_INK_SOFT },
+    { type: 'span', text: botNum_(total), size: opts.size || 'sm', color: opts.totalColor || BOT_BLUE, weight: 'bold' }
+  ];
 }
 
 function botFlexInventory_(snap) {
   var body = [
-    botFlexRow_('สินค้า', 'คลัง', 'รถ', 'รวม', { size: 'xs', color: BOT_INK_SOFT, bold: true }),
+    botFlexRow_('รหัสสินค้า', 'คลัง + รถ = รวม', { size: 'xs', color: BOT_INK_SOFT, bold: true }),
     { type: 'separator', margin: 'sm', color: BOT_LINE_CLR }
   ];
   if (!snap.rows.length) {
     body.push(botFlexText_('ไม่มีของคงเหลือในคลังและบนรถ', { size: 'sm', color: BOT_INK_SOFT, margin: 'md', wrap: true }));
   } else {
     snap.rows.forEach(function(r) {
-      // ★ ดอกจัน = ยังไม่ยืนยันขนาดบรรจุ ตัวเลขแถวนั้นเป็น "ชิ้น" ไม่ใช่ "ลัง" (เชิงอรรถอยู่ท้ายการ์ด)
-      var name = (r.confirmed ? '' : '*') + (r.productName || r.productCode);
-      body.push(botFlexRow_(name, botNum_(r.warehouse), botNum_(r.van), botNum_(r.total), { totalColor: BOT_BLUE }));
+      // ★ ดอกจันนำหน้ารหัส = ยังไม่ยืนยันขนาดบรรจุ ตัวเลขแถวนั้นเป็น "ชิ้น" ไม่ใช่ "ลัง" (เชิงอรรถท้ายการ์ด)
+      body.push(botFlexRow_((r.confirmed ? '' : '*') + r.productCode,
+        botFlexNums_(r.warehouse, r.van, r.total)));
     });
   }
 
   var footer = [
     { type: 'separator', color: BOT_LINE_CLR },
-    botFlexRow_('รวมทั้งหมด (ลัง)', botNum_(snap.totals.warehouse), botNum_(snap.totals.van), botNum_(snap.totals.total),
-      { bold: true, totalColor: BOT_BLUE })
+    // ยอดรวมทุกแถวอาจยาวกว่าแถวข้อมูล → ให้ตัดบรรทัดได้ ดีกว่าถูกตัดท้ายทิ้ง
+    botFlexRow_('รวมทั้งหมด (ลัง)', botFlexNums_(snap.totals.warehouse, snap.totals.van, snap.totals.total),
+      { bold: true, wrap: true })
   ];
   var notes = [];
   if (snap.products > snap.shown) notes.push('แสดง ' + snap.shown + ' จาก ' + snap.products + ' รายการ (เรียงตามของรวมมากสุด)');
@@ -784,6 +805,90 @@ function backfillMissingFollowers_() {
   var createdCount = 0;
   ids.forEach(function(uid) { if (ensureLiffUser_(uid)) createdCount++; });
   console.log('backfillMissingFollowers_: เป็นเพื่อนกับบอทอยู่ ' + ids.length + ' คน — เพิ่มแถวที่ขาดไป ' + createdCount + ' คน');
+}
+
+/* ═══════════════ ตัวตรวจ — Run จาก editor (ไม่ต้อง deploy · อ่านอย่างเดียว ไม่เขียนอะไรเลย) ═══════════════
+ * ตอบคำถามว่า "ถ้ามีคนพิมพ์คำสั่งตอนนี้ จะได้อะไร" โดยไม่ต้องยิงผ่าน LINE และไม่แตะ chatlog/liff_users
+ * ★ ใช้ฟังก์ชันตัวจริงทุกตัว (botAdminUser_ / botManagedTenants_ / botInventorySnapshot_ / answerTodaySales_)
+ *   จะได้ไม่ใช่การทดสอบโค้ดคนละชุดกับที่ผู้ใช้เจอ
+ * วิธีใช้: Apps Script editor → เลือก diagnoseBot → Run → ดูที่ Execution log
+ */
+function diagnoseBot() {
+  var out = [];
+  function say(s) { out.push(s); }
+  var props = PropertiesService.getScriptProperties();
+  say('── ค่าตั้ง ──');
+  ['CENTRAL_SHEET_FILEID_PROD', 'CENTRAL_SHEET_FILEID_UAT', 'LINE_CHANNEL_ACCESS_TOKEN'].forEach(function(k) {
+    say('  ' + k + ': ' + (props.getProperty(k) ? 'ตั้งแล้ว' : '★ ยังไม่ได้ตั้ง'));
+  });
+
+  say('');
+  say('── ตาราง admin_user_tenants (ผู้รับผิดชอบตัวแทน) ──');
+  var autRows = null;
+  try { autRows = sheetObjects_(prodSheet_('admin_user_tenants')); }
+  catch (err) { say('  ยังไม่มีแท็บนี้ใน prod (ยังไม่ได้ deploy backend ใหม่) → ทุกคนฝั่งบริษัทเห็นทุกตัวแทน'); }
+  if (autRows) say('  มี ' + autRows.length + ' แถว');
+
+  say('');
+  say('── ใครใช้คำสั่ง "ของคงเหลือ" ได้ตอนนี้ ──');
+  var admins = sheetObjects_(prodSheet_('admin_users')).filter(function(u) { return String(u.line_user_id || '').trim(); });
+  if (!admins.length) {
+    say('  ★ ไม่มีบัญชีแอดมินที่ผูก LINE ไว้เลย — คำสั่งนี้จะตอบว่า "ต้องใช้บัญชีแอดมิน" กับทุกคน');
+    say('    แก้: ผูก LINE ที่เมนู "บัญชีผู้ใช้งาน" ในแอปแอดมิน หรือ Run bindAdminLineId() ใน backend');
+  }
+  admins.forEach(function(u) {
+    var admin = botAdminUser_(u.line_user_id);
+    if (!admin) {
+      say('  ✗ ' + u.username + ' (' + u.status + (String(u.role_code || '') ? '' : ' · ยังไม่มีบทบาท') + ') — ไม่ผ่านด่านบัญชี');
+      return;
+    }
+    var canSee = botHasPermission_(admin, 'inventory', 'view');
+    var tenants = botManagedTenants_(admin);
+    say('  ' + (canSee ? '✓' : '✗') + ' ' + admin.username + ' · ' + admin.role_code +
+        ' · สังกัด ' + (String(admin.tenant_id || '') || '(บริษัท)') +
+        ' · สิทธิ์คลัง: ' + (canSee ? 'ดูได้' : '★ ยังไม่มี') +
+        ' · ดูแล ' + tenants.length + ' ราย: ' + tenants.map(function(t) { return t.tenantId; }).join(', '));
+  });
+  var liffOk = sheetObjects_(prodSheet_('liff_users')).filter(function(u) { return String(u.status) === 'Yes'; });
+  say('  (คำสั่งอื่นใช้ได้อีก ' + liffOk.length + ' คนจาก liff_users ที่อนุมัติแล้ว)');
+
+  say('');
+  say('── ยอดขายวันนี้ (คำสั่ง "ยอดขายวันนี้" จะตอบแบบนี้) ──');
+  try { say('  ' + answerTodaySales_().split('\n').join(' · ')); }
+  catch (err) { say('  ★ ล้มเหลว: ' + err.message); }
+
+  say('');
+  say('── ของคงเหลือ ──');
+  var seen = {}, tested = 0;
+  admins.forEach(function(u) {
+    var admin = botAdminUser_(u.line_user_id);
+    if (!admin || tested >= 3) return;
+    botManagedTenants_(admin).forEach(function(t) {
+      if (seen[t.tenantId] || tested >= 3) return;
+      seen[t.tenantId] = 1; tested++;
+      try {
+        var snap = botInventorySnapshot_(t.tenantId);
+        var flex = { type: 'flex', altText: 'x', contents: botFlexInventory_(snap) };
+        say('  [' + t.tenantId + '] ' + snap.tenantName + ' — สินค้าที่มีของ ' + snap.products + ' รายการ · ' +
+            'คลัง ' + botNum_(snap.totals.warehouse) + ' ลัง · รถ ' + botNum_(snap.totals.van) + ' ลัง · ' +
+            'รวม ' + botNum_(snap.totals.total) + ' ลัง' +
+            (snap.vanAvailable ? (' · พนักงานที่มีของบนรถ ' + snap.vanStaff + ' คน') : ' · ★ อ่านของบนรถไม่ได้') +
+            (snap.unconfirmed ? (' · ★ ยังไม่ยืนยันขนาดบรรจุ ' + snap.unconfirmed + ' รายการ') : '') +
+            ' · ขนาดการ์ด ' + JSON.stringify(flex).length + ' ตัวอักษร');
+        snap.rows.slice(0, 3).forEach(function(r) {
+          say('      ' + (r.confirmed ? '' : '*') + r.productCode + ' ' + r.productName +
+              ' — คลัง ' + botNum_(r.warehouse) + ' · รถ ' + botNum_(r.van) + ' · รวม ' + botNum_(r.total));
+        });
+      } catch (err) {
+        say('  [' + t.tenantId + '] ★ ล้มเหลว: ' + err.message);
+      }
+    });
+  });
+  if (!tested) say('  (ไม่มีใครใช้คำสั่งนี้ได้ จึงไม่ได้ลองดึงตัวเลข)');
+
+  var text = out.join('\n');
+  console.log(text);
+  return text;
 }
 
 function findLiffUser_(sh, lineUserId) {

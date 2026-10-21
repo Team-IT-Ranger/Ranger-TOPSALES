@@ -174,6 +174,10 @@ const ok = (name, cond, extra) => {
   if (!cond) failed++;
 };
 
+// แถวการ์ดมี 2 ช่อง: รหัส | ตัวเลข (ช่องตัวเลขเป็น span เพื่อให้ยอดรวมเป็นสีฟ้าตัวหนา)
+const cellText = c => (c.text !== undefined ? c.text : (c.contents || []).map(s => s.text).join(''));
+const rowOf = box => box.contents.map(cellText);
+
 let evSeq = 0;
 const post = events => { sent.length = 0; return ctx.doPost({ postData: { contents: JSON.stringify({ destination: 'Ux', events }) } }); };
 const msg = (uid, text, source) => ({ type: 'message', webhookEventId: 'ev' + (++evSeq), replyToken: 'rt' + evSeq,
@@ -235,31 +239,50 @@ post([msg('U3', 'ของคงเหลือ')]);
 let m = lastMsgs()[0];
 eq('แอดมินตัวแทน → ได้ Flex ทันที ไม่ต้องเลือก', m.type, 'flex');
 eq('หัวการ์ด', m.contents.header.contents[1].text, 'บีดีซี ตะวันออก');
-eq('★ หัวตารางสี่ช่อง', m.contents.body.contents[0].contents.map(c => c.text), ['สินค้า', 'คลัง', 'รถ', 'รวม']);
+eq('★ หัวตาราง 2 ช่อง: รหัสสินค้า | คลัง + รถ = รวม (ของเดิม 4 ช่อง ตัวเลขเบียดกันบนมือถือ)',
+  rowOf(m.contents.body.contents[0]), ['รหัสสินค้า', 'คลัง + รถ = รวม']);
 // เรียงตามของรวมหน่วยฐานมากไปน้อย: กาว 250 ชิ้น มาก่อน น้ำยา 36 ชิ้น (ไม่ใช่เรียงตามลัง 2.5 vs 3)
-eq('★ รหัสหน่วยเก่า CASE ยังนับเป็นลัง (250 ÷ 100 = 2.5) และอยู่แถวแรกเพราะของมากสุด',
-  m.contents.body.contents[2].contents.map(c => c.text), ['กาวดักแมลงวัน', '2.5', '0', '2.5']);
+eq('★ แถวแรกเป็นรหัสสินค้า ไม่ใช่ชื่อ · รหัสหน่วยเก่า CASE ยังนับเป็นลัง (250 ÷ 100 = 2.5)',
+  rowOf(m.contents.body.contents[2]), ['10505', '2.5 + 0 = 2.5']);
 eq('แถวถัดมา: คลัง 24 ชิ้น ÷ 12 = 2 ลัง · รถ 12 ชิ้น = 1 ลัง · รวม 3',
-  m.contents.body.contents[3].contents.map(c => c.text), ['น้ำยาถูพื้น 900ml', '2', '1', '3']);
-eq('ท้ายการ์ดมีช่องรวม', m.contents.footer.contents[1].contents.map(c => c.text), ['รวมทั้งหมด (ลัง)', '4.5', '1', '5.5']);
-ok('ของบริษัทไม่ปนมา', !JSON.stringify(m.contents).includes('สเปรย์'), 'leak');
+  rowOf(m.contents.body.contents[3]), ['10143', '2 + 1 = 3']);
+eq('ท้ายการ์ดมีช่องรวม', rowOf(m.contents.footer.contents[1]), ['รวมทั้งหมด (ลัง)', '4.5 + 1 = 5.5']);
+ok('★ ยอดรวมในช่องเดียวกันเป็น span สีฟ้าตัวหนา (ตาจับ "รวม" ได้ก่อนตัวแยก)',
+  m.contents.body.contents[2].contents[1].contents[1].color === '#2B63D9' &&
+  m.contents.body.contents[2].contents[1].contents[1].weight === 'bold',
+  m.contents.body.contents[2].contents[1]);
+ok('ของบริษัทไม่ปนมา (รหัส 10185 ต้องไม่อยู่ในการ์ด)', !JSON.stringify(m.contents).includes('10185'), 'leak');
 ok('altText มีตัวเลขรวม', /รวม 5\.5 ลัง/.test(m.altText), m.altText);
+
+console.log('\n-- ★ พิมพ์คำสั่งได้หลายแบบ --');
+['ของคงเหลือ', 'inventory', 'INVENTORY', 'inv', '/ของคงเหลือ', '/inventory', '/inv'].forEach(w => {
+  post([msg('U3', w)]);
+  const got = lastMsgs()[0];
+  ok('"' + w + '" ใช้ได้', got && got.type === 'flex', lastText());
+});
+post([msg('U3', '/inventory BDC')]);
+ok('★ มี / นำหน้าพร้อมรหัสตัวแทนก็ยังได้ (แชทเดี่ยวเดิมตัด / ไม่ออก คำสั่งจึงไม่เข้าเงื่อนไข)',
+  lastMsgs()[0].type === 'flex', lastText());
+post([msg('U3', 'inventoryx')]);
+ok('คำที่พิมพ์ติดกันไม่ใช่คำสั่ง', /ยังไม่เข้าใจ/.test(lastText()), lastText());
 
 console.log('\n-- ของคงเหลือ: ขอบเขตของบริษัท --');
 post([msg('U1', 'ของคงเหลือ TNKI')]);
 m = lastMsgs()[0];
-const rowsOf = flex => flex.contents.body.contents.filter(c => c.type === 'box').slice(1).map(b => b.contents.map(c => c.text));
+const rowsOf = flex => flex.contents.body.contents.filter(c => c.type === 'box').slice(1).map(rowOf);
 const own = rowsOf(m);
 eq('★ คลัง = แถว tenant_id ว่าง (126 ชิ้น = 10.5 ลัง) · แถว TNKI 999999 ไม่ถูกนับ',
-  own[0], ['น้ำยาถูพื้น 900ml', '10.5', '3', '13.5']);
+  own[0], ['10143', '10.5 + 3 = 13.5']);
 ok('★ สเปรย์กันยุง 90 ชิ้น ÷ 60 = 1.5 (หน่วยที่ปิดใช้งาน factor 999 ไม่ถูกหยิบ)',
-  own.some(r => r[0] === 'สเปรย์กันยุง' && r[1] === '1.5'), own);
-ok('★ สินค้ายังไม่ยืนยันขนาดบรรจุ: ติด * และไม่หาร (7 ชิ้น)',
-  own.some(r => r[0] === '*สินค้ายังไม่ยืนยันบรรจุ' && r[3] === '7'), own);
+  own.some(r => r[0] === '10185' && r[1] === '1.5 + 0 = 1.5'), own);
+ok('★ สินค้ายังไม่ยืนยันขนาดบรรจุ: ดอกจันนำหน้ารหัส และไม่หาร (7 ชิ้น)',
+  own.some(r => r[0] === '*10999' && r[1] === '7 + 0 = 7'), own);
 eq('★ ยอดรวมลังไม่บวกชิ้นเข้าไป (10.5 + 1.5 = 12)',
-  m.contents.footer.contents[1].contents.map(c => c.text), ['รวมทั้งหมด (ลัง)', '12', '3.5', '15.5']);
+  rowOf(m.contents.footer.contents[1]), ['รวมทั้งหมด (ลัง)', '12 + 3.5 = 15.5']);
+ok('ยอดรวมท้ายการ์ดตัดบรรทัดได้ (ยาวกว่าแถวข้อมูล ไม่ควรถูกตัดท้ายทิ้ง)',
+  m.contents.footer.contents[1].contents[1].wrap === true, m.contents.footer.contents[1].contents[1]);
 ok('เชิงอรรถบอกเรื่องขนาดบรรจุ', JSON.stringify(m.contents.footer).includes('ยังไม่ยืนยันขนาดบรรจุ'), m.contents.footer);
-ok('ของที่หมดทั้งคลังและรถไม่โผล่', !own.some(r => /ของหมด/.test(r[0])), own);
+ok('ของที่หมดทั้งคลังและรถไม่โผล่', !own.some(r => r[0] === '10777'), own);
 ok('แถวขยะที่ไม่มีรหัสสินค้าไม่เข้ารายงาน', own.every(r => r[0] !== ''), own);
 ok('บอกจำนวนพนักงานที่มีของบนรถ (2 คน — คนที่รถว่างไม่นับ)',
   JSON.stringify(m.contents.footer).includes('พนักงาน 2 คน'), m.contents.footer);
