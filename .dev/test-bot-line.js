@@ -57,7 +57,9 @@ const resetData = () => {
         { record_id: 2, product_code: '10185', name: 'สเปรย์กันยุง', unit: 'ชิ้น' },
         { record_id: 3, product_code: '10505', name: 'กาวดักแมลงวัน', unit: 'แผ่น' },
         { record_id: 4, product_code: '10999', name: 'สินค้ายังไม่ยืนยันบรรจุ', unit: 'ชิ้น' },
-        { record_id: 5, product_code: '10777', name: 'ของหมดทั้งคลังและรถ', unit: 'ชิ้น' }
+        { record_id: 5, product_code: '10777', name: 'ของหมดทั้งคลังและรถ', unit: 'ชิ้น' },
+        // ★ ชื่อสินค้าที่คนคีย์อะไรลงไปก็ได้ — ต้องไม่ปิด <script> ของหน้ารายงานก่อนเวลา
+        { record_id: 6, product_code: '10888', name: 'กาว</script><script>alert(1)</script>', unit: 'ชิ้น' }
       ]),
       product_units: sheet(['record_id', 'product_id', 'unit_code', 'unit_label', 'unit_factor', 'is_active'], [
         { record_id: 1, product_id: 1, unit_code: 'CT', unit_label: 'ลัง', unit_factor: 12, is_active: 'TRUE' },
@@ -66,7 +68,8 @@ const resetData = () => {
         { record_id: 4, product_id: 3, unit_code: 'CASE', unit_label: 'หีบ', unit_factor: 100, is_active: 'TRUE' },
         { record_id: 5, product_id: 4, unit_code: 'CT', unit_label: 'ลัง (ยังไม่ยืนยันขนาดบรรจุ)', unit_factor: 1, is_active: 'TRUE' },
         { record_id: 6, product_id: 5, unit_code: 'CT', unit_label: 'ลัง', unit_factor: 10, is_active: 'TRUE' },
-        { record_id: 7, product_id: 2, unit_code: 'CT', unit_label: 'ลังเก่า', unit_factor: 999, is_active: 'FALSE' }
+        { record_id: 7, product_id: 2, unit_code: 'CT', unit_label: 'ลังเก่า', unit_factor: 999, is_active: 'FALSE' },
+        { record_id: 8, product_id: 6, unit_code: 'CT', unit_label: 'ลัง', unit_factor: 6, is_active: 'TRUE' }
       ]),
       warehouse_stock: sheet(['record_id', 'tenant_id', 'warehouse_id', 'product_id', 'qty'], [
         { record_id: 1, tenant_id: '', warehouse_id: 1, product_id: 1, qty: 120 },
@@ -76,7 +79,8 @@ const resetData = () => {
         { record_id: 5, tenant_id: '', warehouse_id: 1, product_id: 5, qty: 0 },
         { record_id: 6, tenant_id: 'BDC', warehouse_id: 9, product_id: 1, qty: 24 },
         { record_id: 7, tenant_id: 'BDC', warehouse_id: 9, product_id: 3, qty: 250 },
-        { record_id: 8, tenant_id: 'TNKI', warehouse_id: 1, product_id: 2, qty: 999999 }
+        { record_id: 8, tenant_id: 'TNKI', warehouse_id: 1, product_id: 2, qty: 999999 },
+        { record_id: 9, tenant_id: 'BDC', warehouse_id: 9, product_id: 6, qty: 12 }
       ]),
       stock_reservations: sheet(['record_id', 'tenant_id', 'product_id', 'qty', 'status'], [
         { record_id: 1, tenant_id: '', product_id: 1, qty: 12, status: 'active' }
@@ -125,6 +129,7 @@ resetData();
 
 const sent = [];
 const CACHE = {};
+let uuidSeq = 0;
 const PROPS = { CENTRAL_SHEET_FILEID_PROD: PROD, CENTRAL_SHEET_FILEID_UAT: UAT, LINE_CHANNEL_ACCESS_TOKEN: 'tok-1' };
 const NOW = new Date('2026-10-21T09:30:00+07:00');
 
@@ -132,7 +137,13 @@ const ctx = {
   console: { error: () => {}, log: () => {} },
   JSON, String, Number, Object, Array, Date, isNaN, isFinite, parseInt, parseFloat, RegExp, Math,
   encodeURIComponent, decodeURIComponent,
-  Utilities: { formatDate: (d, tz, fmt) => {
+  Utilities: { getUuid: () => {
+    // รูปแบบเดียวกับของจริง (มีขีด) — โค้ดบอทถอดขีดออกเองแล้วได้ hex 32 ตัว
+    uuidSeq++;
+    const h = n => String(uuidSeq).padStart(n, '0').replace(/[^0-9a-f]/g, 'a');
+    return h(8) + '-' + h(4) + '-' + h(4) + '-' + h(4) + '-' + h(12);
+  },
+  formatDate: (d, tz, fmt) => {
     const p = n => String(n).padStart(2, '0');
     const dt = d instanceof Date ? d : new Date(d);
     const s = dt.getFullYear() + '-' + p(dt.getMonth() + 1) + '-' + p(dt.getDate());
@@ -150,6 +161,8 @@ const ctx = {
     };
   } },
   ContentService: { MimeType: { JSON: 'application/json' }, createTextOutput: t => ({ __body: t, setMimeType() { return this; } }) },
+  ScriptApp: { getService: () => ({ getUrl: () => 'https://script.google.com/macros/s/DEPLOY/exec' }) },
+  HtmlService: { createHtmlOutput: html => ({ __html: html, setTitle() { return this; }, addMetaTag() { return this; } }) },
   UrlFetchApp: { fetch: (url, opts) => {
     sent.push({ url, body: opts && opts.payload ? JSON.parse(opts.payload) : null });
     if (url.indexOf('/profile/') !== -1) return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ displayName: 'ชื่อจาก LINE' }) };
@@ -246,13 +259,13 @@ eq('★ แถวแรกเป็นรหัสสินค้า ไม่�
   rowOf(m.contents.body.contents[2]), ['10505', '2.5 + 0 = 2.5']);
 eq('แถวถัดมา: คลัง 24 ชิ้น ÷ 12 = 2 ลัง · รถ 12 ชิ้น = 1 ลัง · รวม 3',
   rowOf(m.contents.body.contents[3]), ['10143', '2 + 1 = 3']);
-eq('ท้ายการ์ดมีช่องรวม', rowOf(m.contents.footer.contents[1]), ['รวมทั้งหมด (ลัง)', '4.5 + 1 = 5.5']);
+eq('ท้ายการ์ดมีช่องรวม', rowOf(m.contents.footer.contents[1]), ['รวมทั้งหมด (ลัง)', '6.5 + 1 = 7.5']);
 ok('★ ยอดรวมในช่องเดียวกันเป็น span สีฟ้าตัวหนา (ตาจับ "รวม" ได้ก่อนตัวแยก)',
   m.contents.body.contents[2].contents[1].contents[1].color === '#2B63D9' &&
   m.contents.body.contents[2].contents[1].contents[1].weight === 'bold',
   m.contents.body.contents[2].contents[1]);
 ok('ของบริษัทไม่ปนมา (รหัส 10185 ต้องไม่อยู่ในการ์ด)', !JSON.stringify(m.contents).includes('10185'), 'leak');
-ok('altText มีตัวเลขรวม', /รวม 5\.5 ลัง/.test(m.altText), m.altText);
+ok('altText มีตัวเลขรวม', /รวม 7\.5 ลัง/.test(m.altText), m.altText);
 
 console.log('\n-- ★ พิมพ์คำสั่งได้หลายแบบ --');
 ['ของคงเหลือ', 'inventory', 'INVENTORY', 'inv', '/ของคงเหลือ', '/inventory', '/inv'].forEach(w => {
@@ -389,6 +402,55 @@ eq('แถวใหม่รออนุมัติ ไม่ใช่ใช้
   files[PROD].liff_users.__rows.find(r => r.line_user_id === 'U9').status, 'No');
 eq('และเติมให้ไฟล์ UAT ด้วย (สำเนาสำรองตัวตน)',
   files[UAT].liff_users.__rows.filter(r => r.line_user_id === 'U9').length, 1);
+
+console.log('\n-- ปุ่มพิมพ์รายงานท้ายการ์ด --');
+post([msg('U3', 'ของคงเหลือ')]);
+m = lastMsgs()[0];
+const btn = m.contents.footer.contents.filter(c => c.type === 'button')[0];
+ok('★ การ์ดมีปุ่มพิมพ์รายงาน', !!btn, m.contents.footer.contents.map(c => c.type));
+eq('ป้ายปุ่มไม่เกิน 20 ตัวอักษร (เพดานของ LINE)', btn.action.label.length <= 20, true);
+eq('เป็นลิงก์เปิดหน้าเว็บ', btn.action.type, 'uri');
+ok('ลิงก์ชี้ที่ web app ของบอทเอง พร้อม token', /^https:\/\/script\.google\.com\/macros\/s\/DEPLOY\/exec\?r=[0-9a-f]{32}&/.test(btn.action.uri), btn.action.uri);
+ok('★ บอกให้ LINE เปิดด้วยเบราว์เซอร์จริง (ในเบราว์เซอร์ของ LINE สั่งพิมพ์ไม่ได้)',
+  /openExternalBrowser=1/.test(btn.action.uri), btn.action.uri);
+const token = btn.action.uri.match(/r=([0-9a-f]+)/)[1];
+ok('token ถูกเก็บไว้พร้อมรหัสตัวแทน', JSON.parse(CACHE['botrpt_' + token]).t === 'BDC', CACHE['botrpt_' + token]);
+
+console.log('\n-- หน้ารายงาน (doGet) --');
+let page = ctx.doGet({ parameter: {} });
+ok('ไม่มี token → บอกว่าต้องขอลิงก์จากบอท', /ต้องขอลิงก์จากบอท/.test(page.__html), page.__html.substring(0, 200));
+page = ctx.doGet({ parameter: { r: 'ไม่มีจริง' } });
+ok('★ token หมดอายุ/ไม่รู้จัก → บอกวิธีขอใหม่ ไม่ใช่หน้าพัง', /ลิงก์หมดอายุ/.test(page.__html), page.__html.substring(0, 200));
+page = ctx.doGet({ parameter: { r: token } });
+const html = page.__html;
+ok('หัวรายงาน + ชื่อตัวแทน', /รายงานของคงเหลือ/.test(html) && /บีดีซี ตะวันออก/.test(html), html.substring(0, 300));
+ok('★ มีชื่อสินค้าด้วย (การ์ดในแชตมีแต่รหัส)', /น้ำยาถูพื้น 900ml/.test(html), 'no name');
+ok('มีคอลัมน์หน่วย', /หน่วย/.test(html), 'no unit col');
+ok('★ โหลดตัวพิมพ์กลางตัวเดียวกับแอปแอดมิน ไม่เขียนตัวพิมพ์ใหม่',
+  /ranger-topsales-admin\.pages\.dev\/doc-print\.js\?v=/.test(html), 'no doc-print');
+ok('มีตารางธรรมดาไว้เป็นทางสำรองถ้าโหลดสคริปต์ไม่ได้', /<table>/.test(html) && /display:table-header-group/.test(html), 'no fallback');
+ok('★ ชื่อสินค้าที่มี </script> ต้องไม่ปิด block ก่อนเวลา',
+  html.indexOf('</script><script>alert') === -1 && /\\u003c\/script/.test(html), 'escape');
+ok('ตารางสำรองก็ escape ด้วย', /&lt;\/script&gt;/.test(html), 'fallback escape');
+
+/* ดูหน้าตาเอกสารจริงในเบราว์เซอร์: DUMP_REPORT=<path> node .dev/test-bot-line.js
+   (หน้ารายงานโหลด doc-print.js จากเว็บแอดมินฝั่ง prod ตัวจริง — ตรวจการแบ่งหน้า A4 ได้เลย) */
+if (process.env.DUMP_REPORT) {
+  require('fs').writeFileSync(process.env.DUMP_REPORT, html, 'utf8');
+  console.log('      เขียนหน้ารายงานไว้ที่ ' + process.env.DUMP_REPORT);
+}
+
+const spec = ctx.botReportSpec_(ctx.botInventorySnapshot_('TNKI', 0));
+eq('★ รายงานเอาทุกแถว ไม่ใช่ 15 แถวแบบในการ์ด', spec.rows.length, ctx.botInventorySnapshot_('TNKI', 0).products);
+eq('หกคอลัมน์ → พิมพ์แนวตั้ง (ตัวพิมพ์กลางสลับแนวนอนเองที่ 9 คอลัมน์)', spec.landscape, false);
+eq('ยอดรวมสามบรรทัด คลัง/รถ/ทั้งหมด', spec.totals.map(t => t[0]),
+  ['รวมในคลัง (ลัง)', 'รวมบนรถ (ลัง)', 'รวมทั้งหมด (ลัง)']);
+eq('บรรทัดสุดท้ายเป็นยอดรวมใหญ่', spec.totals[2][2], 'grand');
+eq('ยอดรวมตรงกับที่การ์ดบอก', spec.totals[2][1], '15.5');
+ok('ดอกจันนำหน้ารหัสของแถวที่ยังไม่ยืนยันขนาดบรรจุ และหน่วยเป็นชิ้น',
+  spec.rows.some(r => r.code === '*10999' && r.unit === 'ชิ้น'), spec.rows);
+ok('เชิงอรรถอธิบายคอลัมน์คลัง/บนรถ', /คลัง = ของในคลัง/.test(spec.note), spec.note);
+eq('ชื่อไฟล์ส่งออกมีรหัสตัวแทนกับวันที่', spec.filename, 'inventory-TNKI-2026-10-21');
 
 console.log(failed ? '\n' + failed + ' เทสต์ไม่ผ่าน' : '\nผ่านทั้งหมด');
 process.exit(failed ? 1 : 0);

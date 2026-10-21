@@ -498,8 +498,11 @@ function botVanRows_(tenantId) {
   return null;   // อ่านไม่ได้จริงๆ — คนละเรื่องกับ "รถว่าง"
 }
 
-/** ภาพรวมของคงเหลือของตัวแทนรายหนึ่ง (อ่าน prod เหมือนคำสั่งอื่นของบอท) */
-function botInventorySnapshot_(tenantId) {
+/**
+ * ภาพรวมของคงเหลือของตัวแทนรายหนึ่ง (อ่าน prod เหมือนคำสั่งอื่นของบอท)
+ * @param limit จำนวนแถวที่คืน · ไม่ส่ง = ตามเพดานของการ์ด (15) · **0 = ทุกแถว** (ใช้กับหน้ารายงานที่พิมพ์)
+ */
+function botInventorySnapshot_(tenantId, limit) {
   var tid = String(tenantId || '') || BOT_OWNER_TENANT;
   var isOwner = (tid === BOT_OWNER_TENANT || tid === 'HOUSE');
   var whScope = isOwner ? '' : tid;        // ★ คลังของบริษัท = tenant_id ว่าง
@@ -558,8 +561,10 @@ function botInventorySnapshot_(tenantId) {
   ['warehouse', 'van', 'total'].forEach(function(k) { totals[k] = Math.round(totals[k] * 100) / 100; });
 
   var all = rows.length;
-  return { tenantId: tid, tenantName: tenantName, rows: rows.slice(0, BOT_INV_ROW_LIMIT),
-    shown: Math.min(all, BOT_INV_ROW_LIMIT), products: all, totals: totals,
+  var cap = (limit === undefined) ? BOT_INV_ROW_LIMIT : (parseInt(limit, 10) || 0);
+  if (cap > 0) rows = rows.slice(0, cap);
+  return { tenantId: tid, tenantName: tenantName, rows: rows,
+    shown: rows.length, products: all, totals: totals,
     vanAvailable: vanRows !== null, vanStaff: vanStaff, unconfirmed: unconfirmed,
     asOf: Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm') };
 }
@@ -586,9 +591,9 @@ function botInventoryMessages_(lineUserId, arg) {
       return [{ type: 'text', text: 'ไม่พบตัวแทน "' + want + '" ในรายการที่คุณดูแลครับ\n\nรายที่ดูแลอยู่:\n' +
         list.map(function(t) { return '• ' + t.tenantId + ' — ' + t.name; }).join('\n') }];
     }
-    return [botInventoryFlex_(hit.tenantId)];
+    return [botInventoryFlex_(hit.tenantId, lineUserId)];
   }
-  if (list.length === 1) return [botInventoryFlex_(list[0].tenantId)];
+  if (list.length === 1) return [botInventoryFlex_(list[0].tenantId, lineUserId)];
   return [botTenantPicker_(list)];
 }
 
@@ -600,11 +605,12 @@ function botMatchTenant_(list, want) {
   return byName.length === 1 ? byName[0] : null;
 }
 
-function botInventoryFlex_(tenantId) {
+function botInventoryFlex_(tenantId, lineUserId) {
   var snap = botInventorySnapshot_(tenantId);
   var alt = 'ของคงเหลือ ' + snap.tenantName + ' — รวม ' + botNum_(snap.totals.total) + ' ลัง (คลัง ' +
     botNum_(snap.totals.warehouse) + ' · รถ ' + botNum_(snap.totals.van) + ')';
-  return { type: 'flex', altText: alt.substring(0, 400), contents: botFlexInventory_(snap) };
+  return { type: 'flex', altText: alt.substring(0, 400),
+    contents: botFlexInventory_(snap, botReportLink_(tenantId, lineUserId)) };
 }
 
 /* ── Flex: การ์ดของคงเหลือ ──
@@ -658,7 +664,7 @@ function botFlexNums_(wh, van, total, opts) {
   ];
 }
 
-function botFlexInventory_(snap) {
+function botFlexInventory_(snap, reportUrl) {
   var body = [
     botFlexRow_('รหัสสินค้า', 'คลัง + รถ = รวม', { size: 'xs', color: BOT_INK_SOFT, bold: true }),
     { type: 'separator', margin: 'sm', color: BOT_LINE_CLR }
@@ -685,6 +691,15 @@ function botFlexInventory_(snap) {
   if (!snap.vanAvailable) notes.push('อ่านของบนรถไม่ได้ (ยังไม่มีไฟล์ของตัวแทนรายนี้) — ช่องรถจึงเป็น 0');
   else if (snap.vanStaff) notes.push('ของบนรถรวมจากพนักงาน ' + snap.vanStaff + ' คน');
   notes.forEach(function(n) { footer.push(botFlexText_(n, { size: 'xxs', color: BOT_INK_SOFT, wrap: true, margin: 'sm' })); });
+
+  /* ★ ปุ่มพิมพ์รายงาน (เจ้าของระบบสั่ง 21 ต.ค. 2026) — การ์ดในแชตโชว์ได้ 15 แถว แต่รายงานที่พิมพ์
+     เอาทุกแถว + ชื่อสินค้า + แยกคอลัมน์ครบ · LINE ส่งไฟล์ให้บอทไม่ได้ (ไม่มีชนิดข้อความแบบไฟล์)
+     จึงเป็นลิงก์เปิดหน้าเว็บที่ใช้ `DocPrint` ตัวเดียวกับแอปแอดมิน แล้วผู้ใช้กด "พิมพ์ → Save as PDF"
+     ★ ป้ายปุ่มต้องไม่เกิน 20 ตัวอักษร (เพดานของ LINE) · ไม่มี URL = ไม่ใส่ปุ่ม ดีกว่าปุ่มที่กดแล้วพัง */
+  if (reportUrl) {
+    footer.push({ type: 'button', style: 'primary', color: BOT_BLUE, height: 'sm', margin: 'md',
+      action: { type: 'uri', label: 'พิมพ์รายงาน (PDF)', uri: reportUrl } });
+  }
 
   return {
     type: 'bubble', size: 'mega',
@@ -724,6 +739,177 @@ function botTenantPicker_(tenants) {
 function botCut_(s, n) {
   var t = String(s || '');
   return t.length <= n ? t : (t.substring(0, n - 1) + '…');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * หน้ารายงานสำหรับพิมพ์ — ปุ่ม "พิมพ์รายงาน (PDF)" ท้ายการ์ด (เจ้าของระบบสั่ง 21 ต.ค. 2026)
+ *
+ * ★★ ทำไมเป็น "ลิงก์หน้าเว็บ" ไม่ใช่ไฟล์ PDF แนบไปในแชต
+ *   1. **LINE ไม่มีชนิดข้อความแบบไฟล์เอกสารสำหรับบอท** (มีแต่ text/image/video/audio/location/
+ *      imagemap/template/flex) — บอทแนบ .pdf ส่งให้ไม่ได้เลย ไม่ว่าจะทำไฟล์ได้หรือไม่
+ *   2. ทำ PDF ไว้บน Drive แล้วส่งลิงก์ก็ได้ แต่ติดนโยบายแชร์ลิงก์ของ Workspace (ถ้าองค์กรปิด
+ *      "ทุกคนที่มีลิงก์" คนใน LINE จะเปิดไม่ได้เลย) · ต้องมีกติกาลบไฟล์เก่าทิ้ง · และสร้างไฟล์ช้าเกิน
+ *      เวลาที่ตอบ reply ทัน ต้องตอบก่อนแล้ว push ลิงก์ตามทีหลัง (กินโควตาข้อความ)
+ *   3. ทางนี้ไม่แตะ Drive ไม่กินโควตา และ **ใช้ตัวพิมพ์กลางตัวเดียวกับแอปแอดมิน**
+ *      (`frontend-admin/doc-print.js` → `DocPrint.table`) จึงได้เอกสารหน้าตาชุดเดียวกับที่พิมพ์จากแอป
+ *      ตรงกับกติกาในโปรเจกต์: "ห้ามเขียนตัวพิมพ์ใหม่ต่อหน้า ให้ส่งข้อมูลเข้าตัวกลางแทน"
+ *
+ * ★ ลิงก์พก token ที่เก็บใน CacheService **อายุ 30 นาที** — เปิดได้โดยไม่ต้องล็อกอิน เพราะคนใน LINE
+ *   ไม่มีบัญชี Google ของบริษัท · **ใครได้ลิงก์ในช่วงนั้นก็เปิดได้** ซึ่งเท่ากับความเปิดของการ์ดเองอยู่แล้ว
+ *   (ในแชทกลุ่ม ทั้งกลุ่มเห็นการ์ดและปุ่ม) · token ผูกกับตัวแทนรายที่ขอ จึงข้ามไปดูรายอื่นไม่ได้
+ * ★ หน้านี้ดึงข้อมูล **สดตอนเปิด** ไม่ใช่ภาพนิ่งตอนกดปุ่ม — เวลาที่พิมพ์บนหัวรายงานจึงตรงกับของที่เห็น
+ * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+var BOT_REPORT_TTL_SEC = 1800;          // 30 นาที
+var BOT_REPORT_PREFIX = 'botrpt_';
+/* ★ โหลดตัวพิมพ์กลางจากเว็บแอดมินฝั่ง prod (บอทอ่านข้อมูล prod) — **Cloudflare Pages ไม่ใช่ GitHub Pages**
+   (github.io เหลือไว้เป็นหน้าแจ้งย้ายแล้ว ตอบ 404 ให้ไฟล์ — เช็คแล้ว 21 ต.ค. 2026)
+   **แก้ doc-print.js แล้วต้องบัมป์ `?v=` ที่นี่ด้วย** ไม่งั้นเบราว์เซอร์เสิร์ฟของเก่า */
+var BOT_DOCPRINT_URL = 'https://ranger-topsales-admin.pages.dev/doc-print.js?v=20261021';
+
+/** URL ของ web app ตัวเอง · ตั้ง Script Property `BOT_WEB_URL` ทับได้ถ้า getUrl() ให้ค่าที่ไม่ต้องการ */
+function botWebUrl_() {
+  var p = PropertiesService.getScriptProperties().getProperty('BOT_WEB_URL');
+  if (p) return String(p);
+  try { return ScriptApp.getService().getUrl() || ''; }
+  catch (err) { console.error('botWebUrl_: หา URL ของ web app ไม่ได้ (' + err + ')'); return ''; }
+}
+
+/** ออกลิงก์รายงานของตัวแทนรายหนึ่ง · คืน '' ถ้าออกให้ไม่ได้ (การ์ดจะไม่ใส่ปุ่มเลย ดีกว่าปุ่มที่กดแล้วพัง) */
+function botReportLink_(tenantId, lineUserId) {
+  var base = botWebUrl_();
+  if (!base) return '';
+  var token = Utilities.getUuid().replace(/-/g, '');
+  try {
+    CacheService.getScriptCache().put(BOT_REPORT_PREFIX + token,
+      JSON.stringify({ t: String(tenantId), u: String(lineUserId || '') }), BOT_REPORT_TTL_SEC);
+  } catch (err) {
+    console.error('botReportLink_: เก็บ token ไม่ได้ (' + err + ')');
+    return '';
+  }
+  // openExternalBrowser=1 = บอกเบราว์เซอร์ในแอป LINE ให้เปิดด้วยเบราว์เซอร์จริงของเครื่อง
+  // (ในเบราว์เซอร์ของ LINE สั่งพิมพ์/บันทึก PDF ไม่ได้)
+  return base + '?r=' + encodeURIComponent(token) + '&openExternalBrowser=1';
+}
+
+function doGet(e) {
+  var token = (e && e.parameter && e.parameter.r) ? String(e.parameter.r) : '';
+  if (!token) {
+    return botSimplePage_('ต้องขอลิงก์จากบอท',
+      'เปิดหน้านี้ได้จากปุ่ม "พิมพ์รายงาน (PDF)" ในแชตของบอทเท่านั้น');
+  }
+  var raw = null;
+  try { raw = CacheService.getScriptCache().get(BOT_REPORT_PREFIX + token); } catch (err) {}
+  if (!raw) {
+    return botSimplePage_('ลิงก์หมดอายุแล้ว',
+      'ลิงก์รายงานมีอายุ 30 นาที — พิมพ์ "ของคงเหลือ" ในแชตเพื่อขอลิงก์ใหม่ได้เลย');
+  }
+  try {
+    var ref = JSON.parse(raw);
+    var snap = botInventorySnapshot_(ref.t, 0);     // 0 = เอาทุกแถว ไม่ใช่ 15 แถวแบบในการ์ด
+    return HtmlService.createHtmlOutput(botReportHtml_(snap))
+      .setTitle('รายงานของคงเหลือ ' + snap.tenantName)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  } catch (err) {
+    console.error('doGet error: ' + (err && err.stack || err));
+    return botSimplePage_('เปิดรายงานไม่สำเร็จ', 'ลองใหม่อีกครั้ง หรือแจ้งแอดมิน (' + err.message + ')');
+  }
+}
+
+function botHtmlEsc_(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+var BOT_PAGE_FONT = "'Sarabun',-apple-system,'Segoe UI',sans-serif";
+
+function botSimplePage_(title, detail) {
+  var html = '<!doctype html><meta charset="utf-8"><title>' + botHtmlEsc_(title) + '</title>' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">' +
+    '<div style="font-family:' + BOT_PAGE_FONT + ';max-width:30em;margin:18vh auto;padding:0 20px;color:#0F1B2D">' +
+    '<h1 style="font-size:20px;margin:0 0 10px">' + botHtmlEsc_(title) + '</h1>' +
+    '<p style="margin:0;color:#5B6B84;line-height:1.7">' + botHtmlEsc_(detail) + '</p></div>';
+  return HtmlService.createHtmlOutput(html).setTitle(title)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** spec ที่ส่งเข้า DocPrint.table — แยกออกมาเพื่อเทสต์ได้โดยไม่ต้องแกะ HTML */
+function botReportSpec_(snap) {
+  var notes = [];
+  if (snap.unconfirmed) notes.push('* ' + snap.unconfirmed + ' รายการยังไม่ยืนยันขนาดบรรจุ — ตัวเลขเป็นชิ้น ไม่ได้รวมในยอดลัง');
+  if (!snap.vanAvailable) notes.push('อ่านของบนรถไม่ได้ (ยังไม่มีไฟล์ของตัวแทนรายนี้) — ช่องบนรถจึงเป็น 0');
+  else if (snap.vanStaff) notes.push('ของบนรถรวมจากพนักงาน ' + snap.vanStaff + ' คน');
+  notes.push('คลัง = ของในคลังของตัวแทนรายนี้ · บนรถ = รวมของบนรถพนักงานทุกคน');
+
+  return {
+    title: 'รายงานของคงเหลือ',
+    subtitle: snap.tenantName + ' · ณ ' + snap.asOf,
+    issuerName: botTenantLabel_(BOT_OWNER_TENANT, ''),
+    printedAt: snap.asOf,
+    columns: [
+      { label: 'รหัสสินค้า', key: 'code', width: 1.2 },
+      { label: 'ชื่อสินค้า', key: 'name', width: 3.4 },
+      { label: 'คลัง', key: 'wh', align: 'r', width: 1 },
+      { label: 'บนรถ', key: 'van', align: 'r', width: 1 },
+      { label: 'รวม', key: 'total', align: 'r', width: 1 },
+      { label: 'หน่วย', key: 'unit', width: 0.8 }
+    ],
+    rows: snap.rows.map(function(r) {
+      return {
+        code: (r.confirmed ? '' : '*') + r.productCode,
+        name: r.productName,
+        wh: botNum_(r.warehouse), van: botNum_(r.van), total: botNum_(r.total),
+        unit: r.confirmed ? 'ลัง' : 'ชิ้น'
+      };
+    }),
+    // ยอดรวมนับเฉพาะแถวที่ยืนยันขนาดบรรจุแล้ว (บวกชิ้นเข้าไปในลังคือตัวเลขที่ไม่มีความหมาย)
+    totals: [
+      ['รวมในคลัง (ลัง)', botNum_(snap.totals.warehouse)],
+      ['รวมบนรถ (ลัง)', botNum_(snap.totals.van)],
+      ['รวมทั้งหมด (ลัง)', botNum_(snap.totals.total), 'grand']
+    ],
+    note: notes.join(' · '),
+    landscape: false,
+    filename: 'inventory-' + snap.tenantId + '-' + String(snap.asOf).substring(0, 10)
+  };
+}
+
+function botReportHtml_(snap) {
+  var spec = botReportSpec_(snap);
+  // ★ กัน `</script>` ที่อาจหลุดมาจากชื่อสินค้าปิด block ก่อนเวลา
+  var json = JSON.stringify(spec).replace(/</g, '\\u003c');
+  var head = spec.columns.map(function(c) { return '<th>' + botHtmlEsc_(c.label) + '</th>'; }).join('');
+  var body = spec.rows.map(function(r) {
+    return '<tr>' + spec.columns.map(function(c) { return '<td>' + botHtmlEsc_(r[c.key]) + '</td>'; }).join('') + '</tr>';
+  }).join('');
+
+  /* ★ ตารางธรรมดาถูกเขียนลงหน้าไว้เสมอ แล้วให้ overlay ของ DocPrint ทับ —
+     โหลดสคริปต์จาก GitHub Pages ไม่สำเร็จ (เน็ตผู้ใช้/Pages ล่ม) ก็ยังเห็นข้อมูลและสั่งพิมพ์ได้
+     ไม่ใช่หน้าขาวที่อธิบายไม่ได้ */
+  return '<!doctype html><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<title>' + botHtmlEsc_(spec.title) + ' ' + botHtmlEsc_(snap.tenantName) + '</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
+    '<style>' +
+    ':root{--doc-fs:10px}' +
+    'body{margin:0;background:#8891a3;font-family:' + BOT_PAGE_FONT + ';color:#0F1B2D}' +
+    '#dp-close{display:none}' +            /* หน้านี้ไม่มีอะไรให้ย้อนกลับไป ปิดแล้วเหลือหน้าว่าง */
+    '.fb{max-width:900px;margin:0 auto;padding:16px;background:#fff}' +
+    '.fb h1{font-size:17px;margin:0 0 2px}.fb p{margin:0 0 12px;color:#5B6B84;font-size:12.5px}' +
+    '.fb table{border-collapse:collapse;width:100%;font-size:12px}' +
+    '.fb th,.fb td{border:1px solid #D7DEE8;padding:4px 6px;text-align:left}' +
+    '.fb th{background:#F1F5FA}' +
+    '.fb thead{display:table-header-group}' +            /* พิมพ์หลายหน้าให้หัวตารางซ้ำทุกหน้า */
+    '@page{size:A4;margin:12mm}' +
+    '</style>' +
+    '<div class="fb"><h1>' + botHtmlEsc_(spec.title) + ' — ' + botHtmlEsc_(spec.subtitle) + '</h1>' +
+    '<p>กำลังจัดหน้าเอกสาร… ถ้าหน้าจัดเสร็จ จะมีปุ่ม "พิมพ์" ขึ้นด้านบน (ถ้าไม่ขึ้น พิมพ์หน้านี้ได้เลย)</p>' +
+    '<table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+    '<script>var SPEC=' + json + ';<\/script>' +
+    '<script src="' + BOT_DOCPRINT_URL + '"><\/script>' +
+    '<script>window.addEventListener("load",function(){' +
+    'if(window.DocPrint&&window.DocPrint.table){try{DocPrint.table(SPEC);}catch(e){}}});<\/script>';
 }
 
 function toDateSafe_(v) { return v instanceof Date ? v : new Date(v); }
