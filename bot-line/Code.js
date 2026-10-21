@@ -388,6 +388,24 @@ function botAdminUser_(lineUserId) {
   return found;
 }
 
+/**
+ * พนักงานขายของบริษัทที่อนุมัติแล้ว (liff_users · ไม่สังกัดตัวแทน) — กลุ่มที่ "แต่งตั้ง" ให้ดูแลตัวแทนได้
+ * (เจ้าของระบบสั่ง 21 ต.ค. 2026) · ★ คนกลุ่มนี้ไม่มีบทบาทและไม่มีสิทธิ์รายโมดูล **การแต่งตั้งคือสิทธิ์**
+ *   จึงเห็นได้เฉพาะตัวแทนที่ถูกระบุไว้เท่านั้น ไม่มีกรณี "ว่าง = เห็นทุกราย" แบบบัญชีแอดมิน
+ * ★ พนักงานที่สังกัดตัวแทนไม่เข้ากลุ่มนี้ — ของบนรถของเขาดูในแอปมือถืออยู่แล้ว และการเปิดคลังทั้งตัวแทน
+ *   ให้พนักงานขายเป็นการเปิดข้อมูลใหม่ที่ยังไม่มีใครสั่ง
+ */
+function botStaffUser_(lineUserId) {
+  var lid = String(lineUserId || '');
+  if (!lid) return null;
+  var found = null;
+  sheetObjects_(prodSheet_('liff_users')).forEach(function(u) { if (String(u.line_user_id) === lid) found = u; });
+  if (!found || String(found.status) !== 'Yes') return null;
+  var own = String(found.tenant_id || '');
+  if (own && own !== BOT_OWNER_TENANT && own !== 'HOUSE') return null;
+  return found;
+}
+
 /** สิทธิ์รายโมดูล — มิเรอร์ `hasPermission()` ใน backend/14_permissions.gs */
 function botHasPermission_(admin, moduleCode, action) {
   if (!admin) return false;
@@ -426,27 +444,33 @@ function botTenantLabel_(tenantId, name) {
  * super_admin → ทุกราย · ฝั่งบริษัทที่มีแถว → เฉพาะรายที่ระบุ · ฝั่งบริษัทที่ไม่มีแถว → ทุกราย
  * ★ ว่าง = "ทุกราย" ไม่ใช่ "ไม่มีใคร" — ตารางนี้เป็นตัวกรองรายการ ไม่ใช่การมอบสิทธิ์
  */
-function botManagedTenantIds_(admin) {
-  if (!admin) return [];
-  var own = String(admin.tenant_id || '');
+function botManagedTenantIds_(user) {
+  if (!user) return [];
+  var own = String(user.tenant_id || '');
   if (own && own !== BOT_OWNER_TENANT && own !== 'HOUSE') return [own];
 
   var active = botActiveTenants_();
   var all = Object.keys(active);
-  if (String(admin.role_code) === 'super_admin') return all;
+  var isStaff = !!user.isStaff;
+  if (!isStaff && String(user.role_code) === 'super_admin') return all;
 
-  var id = String(admin.record_id || '');
+  var id = isStaff ? '' : String(user.record_id || '');
+  var lid = String(user.line_user_id || '');
   var rows = [];
   try { rows = sheetObjects_(prodSheet_('admin_user_tenants')); }
-  catch (err) { return all; }   // ยังไม่มีแท็บนี้ (ยังไม่ได้ deploy backend ใหม่) = ยังไม่เคยตั้งค่า
+  catch (err) { return isStaff ? [] : all; }   // ยังไม่มีแท็บนี้ = ยังไม่เคยตั้งค่า (พนักงานขาย = ยังไม่ถูกแต่งตั้ง)
   var seen = {}, mine = [];
   rows.forEach(function(r) {
-    if (String(r.admin_user_id) !== id) return;
+    var hit = id ? (String(r.admin_user_id || '') === id)
+                 : (!!lid && String(r.line_user_id || '') === lid);
+    if (!hit) return;
     var t = String(r.tenant_id);
     if (active[t] === undefined || seen[t]) return;    // ปิดใช้งานแล้ว/ซ้ำ ไม่ต้องโผล่
     seen[t] = 1; mine.push(t);
   });
-  return mine.length ? mine : all;
+  if (mine.length) return mine;
+  // ★ ว่าง: บัญชีแอดมิน = ยังไม่เคยตั้งค่า เห็นทุกราย · พนักงานขาย = ยังไม่ถูกแต่งตั้ง ไม่เห็นใครเลย
+  return isStaff ? [] : all;
 }
 
 function botManagedTenants_(admin) {
@@ -587,18 +611,29 @@ function botInventorySnapshot_(tenantId, limit) {
 
 /** คำสั่ง "ของคงเหลือ" — คืน array ของ message object (Flex หรือข้อความบอกเหตุ) */
 function botInventoryMessages_(lineUserId, arg) {
+  /* ★ ใช้ได้สองกลุ่ม: บัญชีแอดมิน (ตรวจสิทธิ์รายโมดูลตามเดิม) และ **พนักงานขายของบริษัทที่ถูกแต่งตั้ง**
+     (เจ้าของระบบสั่ง 21 ต.ค. 2026) — กลุ่มหลังไม่มีบทบาทให้ตรวจ การแต่งตั้งคือสิทธิ์ของเขา */
+  var who = null, isStaff = false;
   var admin = botAdminUser_(lineUserId);
-  if (!admin) {
+  if (admin) {
+    who = admin;
+  } else {
+    var st = botStaffUser_(lineUserId);
+    if (st) { who = { isStaff: true, line_user_id: String(lineUserId), tenant_id: st.tenant_id }; isStaff = true; }
+  }
+  if (!who) {
     return [{ type: 'text', text: 'คำสั่งนี้ต้องใช้บัญชีแอดมินที่ผูก LINE ไว้กับระบบครับ\n' +
       'ให้ผู้ดูแลผูก LINE ของคุณกับบัญชีแอดมินที่เมนู "บัญชีผู้ใช้งาน" ก่อน\n' +
       '(คำสั่งอื่นยังใช้ได้ปกติ — พิมพ์ "ช่วยเหลือ")' }];
   }
-  if (!botHasPermission_(admin, 'inventory', 'view')) {
+  if (!isStaff && !botHasPermission_(who, 'inventory', 'view')) {
     return [{ type: 'text', text: 'บัญชีนี้ยังไม่มีสิทธิ์ดูเมนูคลังสินค้าครับ — ให้ผู้ดูแลเปิดสิทธิ์ "คลังสินค้า" ให้บทบาทของคุณก่อน' }];
   }
 
-  var list = botManagedTenants_(admin);
-  if (!list.length) return [{ type: 'text', text: 'ยังไม่มีตัวแทนที่คุณดูแลอยู่ครับ — ให้ผู้ดูแลระบบตั้งผู้รับผิดชอบให้ก่อน' }];
+  var list = botManagedTenants_(who);
+  if (!list.length) return [{ type: 'text', text: isStaff
+    ? 'คุณยังไม่ได้รับแต่งตั้งให้ดูแลตัวแทนรายใดครับ — ให้ผู้ดูแลระบบแต่งตั้งที่เมนู "บัญชีผู้ใช้งาน" ก่อน'
+    : 'ยังไม่มีตัวแทนที่คุณดูแลอยู่ครับ — ให้ผู้ดูแลระบบตั้งผู้รับผิดชอบให้ก่อน' }];
 
   var want = String(arg || '').trim();
   if (want) {
@@ -1085,6 +1120,16 @@ function diagnoseBot() {
   });
   var liffOk = sheetObjects_(prodSheet_('liff_users')).filter(function(u) { return String(u.status) === 'Yes'; });
   say('  (คำสั่งอื่นใช้ได้อีก ' + liffOk.length + ' คนจาก liff_users ที่อนุมัติแล้ว)');
+  var appointed = 0;
+  liffOk.forEach(function(u) {
+    var st = botStaffUser_(u.line_user_id);
+    if (!st) return;
+    var ts = botManagedTenantIds_({ isStaff: true, line_user_id: String(u.line_user_id), tenant_id: st.tenant_id });
+    if (!ts.length) return;
+    appointed++;
+    say('  ✓ ' + (u.display_name || u.line_user_id) + ' (พนักงานขายที่ถูกแต่งตั้ง) · ดูแล ' + ts.join(', '));
+  });
+  if (!appointed) say('  (ยังไม่มีพนักงานขายคนไหนถูกแต่งตั้งให้ดูแลตัวแทน)');
 
   say('');
   say('── ยอดขายวันนี้ (คำสั่ง "ยอดขายวันนี้" จะตอบแบบนี้) ──');

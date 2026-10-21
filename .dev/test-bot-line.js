@@ -47,10 +47,11 @@ const resetData = () => {
         { role_code: 'tenant_admin', module_code: 'inventory', can_view: true, can_edit: 'FALSE' },
         { role_code: 'viewer', module_code: 'sales', can_view: 'TRUE', can_edit: 'FALSE' }
       ]),
-      admin_user_tenants: sheet(['record_id', 'admin_user_id', 'tenant_id', 'created_at', 'created_by'], []),
+      admin_user_tenants: sheet(['record_id', 'admin_user_id', 'tenant_id', 'created_at', 'created_by', 'line_user_id'], []),
       liff_users: sheet(['line_user_id', 'display_name', 'role', 'tenant_id', 'status', 'last_login'], [
         { line_user_id: 'U7', display_name: 'พนักงานที่อนุมัติแล้ว', role: 'sales', tenant_id: '', status: 'Yes' },
-        { line_user_id: 'U8', display_name: 'ยังไม่อนุมัติ', role: 'รออนุมัติ', tenant_id: '', status: 'No' }
+        { line_user_id: 'U8', display_name: 'ยังไม่อนุมัติ', role: 'รออนุมัติ', tenant_id: '', status: 'No' },
+        { line_user_id: 'U10', display_name: 'พนักงานของ BDC', role: 'sales', tenant_id: 'BDC', status: 'Yes' }
       ]),
       products: sheet(['record_id', 'product_code', 'name', 'unit'], [
         { record_id: 1, product_code: '10143', name: 'น้ำยาถูพื้น 900ml', unit: 'ชิ้น' },
@@ -242,13 +243,33 @@ ok('ไม่ใช่ข้อความ "ดึงข้อมูลไม�
 
 console.log('\n-- ของคงเหลือ: ด่านของคำสั่งนี้เข้มกว่าคำสั่งอื่น --');
 post([msg('U7', 'ของคงเหลือ')]);
-ok('★ liff_users ที่ไม่มีบัญชีแอดมิน → ปฏิเสธคำสั่งนี้ แต่บอกว่าคำสั่งอื่นยังใช้ได้',
-  /ต้องใช้บัญชีแอดมิน/.test(lastText()) && /คำสั่งอื่นยังใช้ได้/.test(lastText()), lastText());
+ok('★ พนักงานขายของบริษัทที่ยังไม่ถูกแต่งตั้ง → บอกให้ไปขอแต่งตั้ง',
+  /ยังไม่ได้รับแต่งตั้ง/.test(lastText()), lastText());
+post([msg('U10', 'ของคงเหลือ')]);
+ok('★ พนักงานที่สังกัดตัวแทน ไม่เข้ากลุ่มนี้ (ของบนรถดูในแอปมือถืออยู่แล้ว)',
+  /ต้องใช้บัญชีแอดมิน/.test(lastText()), lastText());
 post([msg('U4', 'ของคงเหลือ')]);
 ok('★ มีบัญชีแอดมินแต่บทบาทไม่มีสิทธิ์โมดูลคลัง → ปฏิเสธ', /ไม่มีสิทธิ์ดูเมนูคลัง/.test(lastText()), lastText());
 post([msg('U6', 'ของคงเหลือ')]);
 // ไม่มีบทบาท = botAdminUser_ คืน null และไม่มีแถว liff_users ที่อนุมัติ → ตกด่านแรกสุดของ handleMessage_
 ok('บัญชีที่ยังไม่ได้กำหนดบทบาท → ไม่ผ่านตั้งแต่ด่านแรก', /รอแอดมินอนุมัติ/.test(lastText()), lastText());
+
+console.log('\n-- ★★ พนักงานขายของบริษัทที่ถูกแต่งตั้ง (21 ต.ค. 2026) --');
+files[PROD].admin_user_tenants.__rows.push({ record_id: 50, admin_user_id: '', line_user_id: 'U7', tenant_id: 'BDC' });
+post([msg('U7', 'ของคงเหลือ')]);
+let sm = lastMsgs()[0];
+eq('★ แต่งตั้งแล้วใช้คำสั่งได้ ทั้งที่ไม่มีบัญชีแอดมินและไม่มีบทบาท', sm.type, 'flex');
+ok('ได้ของตัวแทนที่ถูกแต่งตั้งให้ดูแล', /บีดีซี/.test(sm.altText), sm.altText);
+files[PROD].admin_user_tenants.__rows.push({ record_id: 51, admin_user_id: '', line_user_id: 'U7', tenant_id: 'NKN' });
+post([msg('U7', 'ของคงเหลือ')]);
+sm = lastMsgs()[0];
+eq('แต่งตั้งสองราย = ได้เมนูให้เลือกเหมือนแอดมิน', sm.type, 'text');
+eq('★ เมนูมีเฉพาะรายที่ถูกแต่งตั้ง ไม่ใช่ทุกตัวแทน', sm.quickReply.items.length, 2);
+post([pb('U7', 'cmd=inv&t=TNKI')]);
+ok('★ ปลอม postback ขอดูรายที่ไม่ได้ถูกแต่งตั้ง → ปฏิเสธ', /ไม่พบตัวแทน/.test(lastText()), lastText());
+files[PROD].admin_user_tenants.__rows.length = 0;
+post([msg('U7', 'ของคงเหลือ')]);
+ok('ถอนการแต่งตั้ง = กลับไปใช้ไม่ได้ทันที', /ยังไม่ได้รับแต่งตั้ง/.test(lastText()), lastText());
 
 console.log('\n-- ของคงเหลือ: ดูแลรายเดียว --');
 post([msg('U3', 'ของคงเหลือ')]);

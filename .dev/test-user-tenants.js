@@ -18,9 +18,17 @@ const sheets = {
     { record_id: 2, username: 'somchai', display_name: 'สมชาย', role_code: 'owner_admin', tenant_id: '', status: 'active' },
     { record_id: 3, username: 'malee', display_name: 'มาลี', role_code: 'owner_admin', tenant_id: 'TNKI', status: 'active' },
     { record_id: 4, username: 'bdcadmin', display_name: 'แอดมิน BDC', role_code: 'tenant_admin', tenant_id: 'BDC', status: 'active' },
-    { record_id: 5, username: 'quit', display_name: 'ลาออกแล้ว', role_code: 'owner_admin', tenant_id: '', status: 'suspended' }
+    { record_id: 5, username: 'quit', display_name: 'ลาออกแล้ว', role_code: 'owner_admin', tenant_id: '', status: 'suspended' },
+    { record_id: 6, username: 'both', display_name: 'คนที่มีบัญชีแอดมินด้วย', role_code: 'owner_admin', tenant_id: '', status: 'active', line_user_id: 'Uadmin9' }
   ],
-  admin_user_tenants: []
+  admin_user_tenants: [],
+  // พนักงานขาย (แอปมือถือ) — ฝั่งบริษัทคือ tenant_id ว่าง
+  liff_users: [
+    { line_user_id: 'Ustaff1', display_name: 'พนักงานขายบริษัท', role: 'van_sales', tenant_id: '', status: 'Yes' },
+    { line_user_id: 'Ustaff2', display_name: 'ยังไม่อนุมัติ', role: 'van_sales', tenant_id: '', status: 'No' },
+    { line_user_id: 'Ustaff3', display_name: 'พนักงานของ BDC', role: 'van_sales', tenant_id: 'BDC', status: 'Yes' },
+    { line_user_id: 'Uadmin9', display_name: 'คนที่มีบัญชีแอดมินด้วย', role: 'van_sales', tenant_id: '', status: 'Yes' }
+  ]
 };
 const sheetOf = n => { if (!sheets[n]) sheets[n] = []; return sheets[n]; };
 const ctx = {
@@ -130,13 +138,58 @@ eq('ที่เหลือเรียงตามชื่อไทย', list
 console.log('\n-- หน้าจอตั้งค่า (listTenantResponsibilities) --');
 const view = ctx.listTenantResponsibilities(ULTRA, {});
 eq('แสดงเฉพาะบัญชีฝั่งบริษัทที่ยังใช้งาน (คนลาออก/แอดมินตัวแทนไม่อยู่ในลิสต์)',
-  view.users.map(u => u.username).sort(), ['malee', 'somchai', 'ultra']);
+  view.users.filter(u => u.kind === 'admin').map(u => u.username).sort(), ['both', 'malee', 'somchai', 'ultra']);
 eq('★ บอกค่าที่มีผลจริงมาด้วย ไม่ให้คนอ่านช่องว่างแล้วเดา',
   view.users.find(u => u.username === 'malee').effectiveTenantIds.length, 4);
 eq('super_admin ติดธงว่าเห็นทุกรายตลอด', view.users.find(u => u.username === 'ultra').alwaysAll, true);
 eq('ส่ง adminUserId มา = เฉพาะคนนั้น', ctx.listTenantResponsibilities(ULTRA, { adminUserId: '2' }).users.length, 1);
 fails('★ แอดมินตัวแทนเปิดดูไม่ได้ (ตั้งค่าไม่ได้อยู่แล้ว ให้อ่านได้ = เปิดรายชื่อคนของบริษัทให้เปล่าๆ)',
   ctx.listTenantResponsibilities(BDCADM, {}), /ฝั่งบริษัท/);
+
+console.log('\n-- ★★ แต่งตั้งพนักงานขายของบริษัทเป็นผู้ดูแลตัวแทน (21 ต.ค. 2026) --');
+const staff = lid => ({ isStaff: true, line_user_id: lid, tenant_id: (sheets.liff_users.find(u => u.line_user_id === lid) || {}).tenant_id });
+sheets.admin_user_tenants.length = 0;
+eq('★★ ยังไม่ได้แต่งตั้ง = ไม่ได้ดูแลใครเลย (ไม่ใช่ "ทุกราย" แบบบัญชีแอดมิน)',
+  ctx.managedTenantIds(staff('Ustaff1')), []);
+eq('แต่งตั้งแล้ว', ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff1', tenantIds: ['BDC', 'NKN'] }).success, true);
+eq('★ เห็นเฉพาะรายที่แต่งตั้ง', ctx.managedTenantIds(staff('Ustaff1')).slice().sort(), ['BDC', 'NKN']);
+eq('แถวใช้คีย์ line_user_id ไม่ใช่ admin_user_id',
+  sheets.admin_user_tenants.filter(r => r.line_user_id === 'Ustaff1' && !r.admin_user_id).length, 2);
+eq('เขียนทับทั้งชุด',
+  (ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff1', tenantIds: ['CBI'] }),
+   ctx.managedTenantIds(staff('Ustaff1'))), ['CBI']);
+eq('★ ล้างค่า = กลับไปไม่ได้ดูแลใครเลย',
+  (ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff1', tenantIds: [] }),
+   ctx.managedTenantIds(staff('Ustaff1'))), []);
+eq('ข้อความตอนล้างค่าบอกตรงกับความหมายของกลุ่มนี้',
+  /ไม่ได้ดูแลตัวแทนรายใด/.test(ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff1', tenantIds: [] }).message), true);
+eq('พนักงานที่สังกัดตัวแทน เห็นตัวแทนของตัวเองรายเดียว (ตารางนี้ไม่เกี่ยว)',
+  ctx.managedTenantIds(staff('Ustaff3')), ['BDC']);
+eq('บัญชีแอดมินยังเป็นกติกาเดิม: ว่าง = ทุกราย', ids(SOMCHAI), ['BDC', 'CBI', 'NKN', 'TNKI']);
+
+console.log('\n-- กติกาการแต่งตั้งพนักงานขาย --');
+fails('พนักงานที่ยังไม่อนุมัติ', ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff2', tenantIds: ['BDC'] }), /ยังไม่ได้รับอนุมัติ/);
+fails('พนักงานที่สังกัดตัวแทน', ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff3', tenantIds: ['NKN'] }), /สังกัด/);
+fails('★ คนที่มีบัญชีแอดมินอยู่แล้ว ต้องตั้งทางบัญชีแอดมิน (ไม่งั้นมีผู้ดูแลสองชุดไม่ตรงกัน)',
+  ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Uadmin9', tenantIds: ['BDC'] }), /มีบัญชีแอดมินอยู่แล้ว/);
+fails('ไม่พบพนักงาน', ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Uไม่มีจริง', tenantIds: ['BDC'] }), /ไม่พบพนักงานขาย/);
+fails('ส่งมาทั้งสองคีย์', ctx.saveTenantResponsibilities(ULTRA, { adminUserId: '2', lineUserId: 'Ustaff1', tenantIds: [] }), /ทีละคน/);
+fails('ตัวแทนตั้งให้ใครไม่ได้เหมือนเดิม', ctx.saveTenantResponsibilities(BDCADM, { lineUserId: 'Ustaff1', tenantIds: ['BDC'] }), /ฝั่งบริษัท/);
+
+console.log('\n-- หน้าจอ: รายชื่อรวมทั้งสองกลุ่ม --');
+ctx.saveTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff1', tenantIds: ['BDC'] });
+const view2 = ctx.listTenantResponsibilities(ULTRA, {});
+eq('มีทั้ง kind admin และ staff', [...new Set(view2.users.map(u => u.kind))].sort(), ['admin', 'staff']);
+eq('★ คนที่มีบัญชีแอดมินอยู่แล้วไม่โผล่ซ้ำในกลุ่มพนักงานขาย',
+  view2.users.filter(u => u.kind === 'staff').map(u => u.lineUserId).sort(), ['Ustaff1']);
+eq('พนักงานที่ยังไม่อนุมัติ/สังกัดตัวแทน ไม่อยู่ในรายการ',
+  view2.users.some(u => u.lineUserId === 'Ustaff2' || u.lineUserId === 'Ustaff3'), false);
+eq('ค่าที่ตั้งไว้ของพนักงานถูกส่งกลับมา',
+  view2.users.find(u => u.lineUserId === 'Ustaff1').tenantIds, ['BDC']);
+eq('และ effective ของพนักงานไม่ใช่ "ทุกราย"',
+  view2.users.find(u => u.lineUserId === 'Ustaff1').effectiveTenantIds, ['BDC']);
+eq('ขอเฉพาะคนเดียวด้วย lineUserId ได้',
+  ctx.listTenantResponsibilities(ULTRA, { lineUserId: 'Ustaff1' }).users.map(u => u.kind), ['staff']);
 
 console.log(failed ? '\n' + failed + ' เทสต์ไม่ผ่าน' : '\nผ่านทั้งหมด');
 process.exit(failed ? 1 : 0);

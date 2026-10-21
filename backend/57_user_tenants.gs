@@ -27,11 +27,23 @@
 
 var AUT_SHEET = 'admin_user_tenants';
 
-/** แถวของบัญชีหนึ่ง (เรียงตามลำดับที่บันทึก) */
-function _autRowsOf(adminUserId) {
-  var id = String(adminUserId || '');
-  if (!id) return [];
-  return centralObjects(AUT_SHEET).filter(function(r) { return String(r.admin_user_id) === id; });
+/** แถวของคนหนึ่ง — คีย์เป็นบัญชีแอดมิน (`admin_user_id`) หรือพนักงานขาย (`line_user_id`) อย่างใดอย่างหนึ่ง */
+function _autRowsOf(adminUserId, lineUserId) {
+  var id = String(adminUserId || ''), lid = String(lineUserId || '');
+  if (!id && !lid) return [];
+  return centralObjects(AUT_SHEET).filter(function(r) {
+    if (id && String(r.admin_user_id || '') === id) return true;
+    return !!lid && String(r.line_user_id || '') === lid;
+  });
+}
+
+/** คนที่ถูกแต่งตั้งได้: แอดมินฝั่งบริษัท หรือ **พนักงานขายของบริษัท** (liff_users ที่อนุมัติแล้ว ไม่สังกัดตัวแทน) */
+function _autStaffRow(lineUserId) {
+  var lid = String(lineUserId || '');
+  if (!lid) return null;
+  var found = null;
+  centralObjects('liff_users').forEach(function(u) { if (String(u.line_user_id) === lid) found = u; });
+  return found;
 }
 
 /** ตัวแทนที่ยังเปิดใช้งาน → { tenantId: name } (รวมบริษัทเจ้าของสินค้าเอง ซึ่งก็มีคลังของตัวเอง) */
@@ -57,23 +69,31 @@ function _autTenantLabel(tenantId, name) {
  * รหัสตัวแทนที่บัญชีนี้ดูแล — ลำดับการตัดสินอยู่ในหัวไฟล์
  * @param adminUser แถว admin_users หรือ session (ต้องมี record_id/adminUserId, role_code, tenant_id)
  */
-function managedTenantIds(adminUser) {
-  if (!adminUser) return [];
-  var own = String(adminUser.tenant_id || '');
+function managedTenantIds(user) {
+  if (!user) return [];
+  var own = String(user.tenant_id || '');
   if (own && own !== OWNER_TENANT_ID) return [own];           // ข้อ 1 — สังกัดตัวแทน
 
   var active = _autActiveTenantMap();
   var all = Object.keys(active);
-  if (String(adminUser.role_code || '') === 'super_admin') return all;   // ข้อ 2
+  /* ★ พนักงานขาย (liff_users) ไม่ใช่บัญชีแอดมิน — ไม่มีบทบาท ไม่มีสิทธิ์รายโมดูล
+     "การแต่งตั้ง" คือสิ่งเดียวที่ให้เขาเห็นข้อมูลของตัวแทน จึงต้องระบุชัดเสมอ (ดูข้อ 5 ท้ายฟังก์ชัน) */
+  var isStaff = !!user.isStaff;
+  if (!isStaff && String(user.role_code || '') === 'super_admin') return all;   // ข้อ 2
 
-  var id = String(adminUser.record_id || adminUser.adminUserId || '');
-  var mine = _autRowsOf(id)
+  var id = String(user.record_id || user.adminUserId || '');
+  var mine = _autRowsOf(isStaff ? '' : id, user.line_user_id || user.lineUserId)
     .map(function(r) { return String(r.tenant_id); })
     .filter(function(t) { return active[t] !== undefined; });            // ที่ปิดใช้งานไปแล้วไม่ต้องโผล่
   // ซ้ำกันได้ถ้ามีคนเขียนชีตเอง — ตัดซ้ำที่นี่ ไม่ใช่ไปพึ่งว่าข้อมูลสะอาด
   var seen = {}, uniq = [];
   mine.forEach(function(t) { if (!seen[t]) { seen[t] = 1; uniq.push(t); } });
-  return uniq.length ? uniq : all;                                       // ข้อ 3 / ข้อ 4
+  if (uniq.length) return uniq;                                          // ข้อ 3
+  /* ★★ ข้อ 5 — **ว่างแปลว่าคนละอย่างกันสำหรับสองกลุ่ม**
+     แอดมินฝั่งบริษัท: ว่าง = ยังไม่เคยตั้งค่า = เห็นทุกราย (ของเดิมที่ใช้อยู่ต้องไม่หยุดทำงาน)
+     พนักงานขาย: ว่าง = **ยังไม่ได้รับแต่งตั้ง = ไม่ได้ดูแลใครเลย** — ถ้าให้เห็นทุกรายเท่ากับว่า
+     พนักงานขายทุกคนในบริษัทเปิดดูของทุกตัวแทนได้ทันทีที่เพิ่มฟีเจอร์นี้ ซึ่งไม่มีใครสั่ง */
+  return isStaff ? [] : all;                                             // ข้อ 4 / ข้อ 5
 }
 
 /** เหมือน managedTenantIds แต่ได้ชื่อมาด้วย เรียงชื่อไทย — บริษัทเจ้าของสินค้าอยู่หัวรายการเสมอ */
@@ -118,31 +138,51 @@ function listTenantResponsibilities(session, payload) {
     return String(a.name).localeCompare(String(b.name), 'th');
   });
 
-  var users = centralObjects('admin_users').filter(function(u) {
-    return _isCompanySide({ tenant_id: u.tenant_id }) && String(u.status) === ADMIN_STATUS_ACTIVE;
-  });
-  if (payload.adminUserId) {
-    users = users.filter(function(u) { return String(u.record_id) === String(payload.adminUserId); });
-  }
   var rows = centralObjects(AUT_SHEET);
-  var byUser = {};
+  var byAdmin = {}, byStaff = {};
   rows.forEach(function(r) {
-    var k = String(r.admin_user_id);
-    (byUser[k] = byUser[k] || []).push(String(r.tenant_id));
+    var t = String(r.tenant_id);
+    if (String(r.admin_user_id || '')) (byAdmin[String(r.admin_user_id)] = byAdmin[String(r.admin_user_id)] || []).push(t);
+    else if (String(r.line_user_id || '')) (byStaff[String(r.line_user_id)] = byStaff[String(r.line_user_id)] || []).push(t);
   });
+  var live = function(list) { return (list || []).filter(function(t) { return active[t] !== undefined; }); };
 
-  return { success: true, tenants: tenants, users: users.map(function(u) {
-    var picked = (byUser[String(u.record_id)] || []).filter(function(t) { return active[t] !== undefined; });
-    return {
+  var out = [];
+  centralObjects('admin_users').forEach(function(u) {
+    if (!_isCompanySide({ tenant_id: u.tenant_id }) || String(u.status) !== ADMIN_STATUS_ACTIVE) return;
+    if (payload.adminUserId && String(u.record_id) !== String(payload.adminUserId)) return;
+    if (payload.lineUserId) return;
+    out.push({
+      kind: 'admin',
       adminUserId: String(u.record_id), username: u.username, displayName: u.display_name || u.username,
-      roleCode: u.role_code,
-      tenantIds: picked,
+      roleCode: u.role_code, lineUserId: String(u.line_user_id || ''),
+      tenantIds: live(byAdmin[String(u.record_id)]),
       /* ★ ส่ง effective มาด้วย เพื่อให้หน้าจอบอกความจริงได้ว่า "ยังไม่ได้ตั้ง = เห็นทุกราย"
          ไม่ใช่ปล่อยให้คนอ่านช่องว่างแล้วเดาว่าเขาไม่เห็นอะไรเลย */
       effectiveTenantIds: managedTenantIds(u),
       alwaysAll: String(u.role_code) === 'super_admin'
-    };
-  }) };
+    });
+  });
+  /* ★ พนักงานขายของบริษัท (liff_users ที่อนุมัติแล้ว ไม่สังกัดตัวแทน) — แต่งตั้งเป็นผู้ดูแลตัวแทนได้
+     **ข้ามคนที่มีบัญชีแอดมินอยู่แล้ว** ไม่งั้นคนคนเดียวโผล่สองแถวแล้วตั้งค่าคนละคีย์ ทับกันไปมา */
+  var adminLine = {};
+  centralObjects('admin_users').forEach(function(u) { if (String(u.line_user_id || '')) adminLine[String(u.line_user_id)] = 1; });
+  centralObjects('liff_users').forEach(function(u) {
+    var lid = String(u.line_user_id || '');
+    if (!lid || adminLine[lid]) return;
+    if (!_isCompanySide({ tenant_id: u.tenant_id }) || String(u.status) !== 'Yes') return;
+    if (payload.lineUserId && lid !== String(payload.lineUserId)) return;
+    if (payload.adminUserId) return;
+    var picked = live(byStaff[lid]);
+    out.push({
+      kind: 'staff', lineUserId: lid, username: '', displayName: u.display_name || lid,
+      roleCode: String(u.role || ''), tenantIds: picked,
+      effectiveTenantIds: managedTenantIds({ isStaff: true, line_user_id: lid, tenant_id: u.tenant_id }),
+      alwaysAll: false
+    });
+  });
+
+  return { success: true, tenants: tenants, users: out };
 }
 
 /**
@@ -157,13 +197,30 @@ function saveTenantResponsibilities(session, payload) {
   if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะฝั่งบริษัทเจ้าของสินค้าตั้งผู้รับผิดชอบตัวแทนได้' };
 
   var userId = String(payload.adminUserId || '').trim();
-  if (!userId) return { success: false, message: 'ไม่ได้ระบุบัญชีผู้ใช้' };
-  var user = null;
-  centralObjects('admin_users').forEach(function(u) { if (String(u.record_id) === userId) user = u; });
-  if (!user) return { success: false, message: 'ไม่พบบัญชีผู้ใช้นี้' };
-  // ★ บัญชีที่สังกัดตัวแทนตั้งไม่ได้ ไม่ใช่ตั้งแล้วไม่มีผล — ต้องบอกให้รู้ตัว ไม่ใช่เงียบ
-  if (!_isCompanySide({ tenant_id: user.tenant_id })) {
-    return { success: false, message: 'บัญชีนี้สังกัด "' + user.tenant_id + '" อยู่แล้ว จึงดูแลได้เฉพาะตัวแทนของตัวเอง' };
+  var lineId = String(payload.lineUserId || '').trim();
+  if (!userId && !lineId) return { success: false, message: 'ไม่ได้ระบุบัญชีผู้ใช้' };
+  if (userId && lineId) return { success: false, message: 'ระบุได้ทีละคน (บัญชีแอดมิน หรือ พนักงานขาย)' };
+
+  var user = null, staff = null;
+  if (userId) {
+    centralObjects('admin_users').forEach(function(u) { if (String(u.record_id) === userId) user = u; });
+    if (!user) return { success: false, message: 'ไม่พบบัญชีผู้ใช้นี้' };
+    // ★ บัญชีที่สังกัดตัวแทนตั้งไม่ได้ ไม่ใช่ตั้งแล้วไม่มีผล — ต้องบอกให้รู้ตัว ไม่ใช่เงียบ
+    if (!_isCompanySide({ tenant_id: user.tenant_id })) {
+      return { success: false, message: 'บัญชีนี้สังกัด "' + user.tenant_id + '" อยู่แล้ว จึงดูแลได้เฉพาะตัวแทนของตัวเอง' };
+    }
+  } else {
+    /* ★ พนักงานขายของบริษัท — ต้องอนุมัติแล้วและไม่สังกัดตัวแทน · **คนที่มีบัญชีแอดมินอยู่แล้วให้ตั้งทางบัญชี
+       แอดมินเท่านั้น** ไม่งั้นคนคนเดียวมีผู้ดูแลสองชุดที่ไม่ตรงกัน แล้วผลขึ้นกับว่าโค้ดตรงนั้นอ่านคีย์ไหนก่อน */
+    staff = _autStaffRow(lineId);
+    if (!staff) return { success: false, message: 'ไม่พบพนักงานขายรายนี้' };
+    if (String(staff.status) !== 'Yes') return { success: false, message: 'พนักงานรายนี้ยังไม่ได้รับอนุมัติให้ใช้งาน' };
+    if (!_isCompanySide({ tenant_id: staff.tenant_id })) {
+      return { success: false, message: 'พนักงานรายนี้สังกัด "' + staff.tenant_id + '" อยู่แล้ว จึงดูแลได้เฉพาะตัวแทนของตัวเอง' };
+    }
+    var dup = null;
+    centralObjects('admin_users').forEach(function(u) { if (String(u.line_user_id || '') === lineId) dup = u; });
+    if (dup) return { success: false, message: 'คนนี้มีบัญชีแอดมินอยู่แล้ว (' + dup.username + ') — ตั้งผู้ดูแลที่บัญชีแอดมินแทน' };
   }
 
   var active = _autActiveTenantMap();
@@ -178,14 +235,17 @@ function saveTenantResponsibilities(session, payload) {
   if (bad.length) return { success: false, message: 'ไม่พบตัวแทน (หรือปิดใช้งานแล้ว): ' + bad.join(', ') };
 
   var sh = centralSheet(AUT_SHEET);
-  deleteRowsWhere(sh, 'admin_user_id', userId);     // เขียนทับทั้งชุด = ลบของเดิมก่อนเสมอ
+  deleteRowsWhere(sh, userId ? 'admin_user_id' : 'line_user_id', userId || lineId);   // เขียนทับทั้งชุด = ลบของเดิมก่อนเสมอ
   if (want.length) {
     var nextId = centralNextId(AUT_SHEET);
     centralAppendMany(AUT_SHEET, want.map(function(t, i) {
-      return { record_id: nextId + i, admin_user_id: userId, tenant_id: t,
+      return { record_id: nextId + i, admin_user_id: userId, line_user_id: lineId, tenant_id: t,
         created_at: nowStr(), created_by: String(session && session.adminUserId || '') };
     }));
   }
-  return { success: true, message: want.length ? ('ตั้งผู้รับผิดชอบ ' + want.length + ' ราย') : 'ล้างค่าแล้ว — บัญชีนี้กลับไปเห็นทุกราย',
-    tenantIds: want, effectiveTenantIds: managedTenantIds(user) };
+  var who = userId ? user : { isStaff: true, line_user_id: lineId, tenant_id: staff.tenant_id };
+  var cleared = userId ? 'ล้างค่าแล้ว — บัญชีนี้กลับไปเห็นทุกราย'
+                       : 'ล้างค่าแล้ว — พนักงานรายนี้ไม่ได้ดูแลตัวแทนรายใด';
+  return { success: true, message: want.length ? ('ตั้งผู้รับผิดชอบ ' + want.length + ' ราย') : cleared,
+    tenantIds: want, effectiveTenantIds: managedTenantIds(who) };
 }

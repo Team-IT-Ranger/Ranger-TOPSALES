@@ -33,7 +33,10 @@ var CENTRAL_SHEETS = {
      · ใช้เลือกรายการให้บอท LINE (/inventory) และหน้าจอที่ต้องถามว่า "ของตัวแทนไหน"
      · **ไม่ใช่ตัวให้สิทธิ์** สิทธิ์รายโมดูลยังตรวจที่ role_permissions เหมือนเดิมทุก action
        และบัญชีที่สังกัดตัวแทนอยู่แล้วข้ามไปตัวแทนอื่นไม่ได้ ไม่ว่าตารางนี้จะเขียนอะไรไว้ */
-  admin_user_tenants: ['record_id','admin_user_id','tenant_id','created_at','created_by'],
+  /* ★ 21 ต.ค. 2026 เพิ่ม `line_user_id` — **พนักงานขายของบริษัทก็ถูกแต่งตั้งเป็นผู้ดูแลตัวแทนได้**
+     (เจ้าของระบบสั่ง) คนกลุ่มนี้มีแถวใน `liff_users` ไม่มีบัญชีแอดมิน จึงไม่มี admin_user_id ให้อ้าง
+     · หนึ่งแถวใช้คีย์เดียว: เป็นแอดมินก็กรอก `admin_user_id` · เป็นพนักงานขายก็กรอก `line_user_id` */
+  admin_user_tenants: ['record_id','admin_user_id','tenant_id','created_at','created_by','line_user_id'],
   tenants: ['tenant_id','name','sheet_file_id','region','is_active','created_at',
     'address','tax_id','branch_code','phone','email','logo_url','bank_name','bank_account_no','bank_account_name',
     'is_house',   // TRUE บนแถวเดียว = "ตัวแทนบ้าน" ของบริษัทเจ้าของสินค้าเอง ใช้เก็บยอดขายตรงที่ไม่ผ่านตัวแทนจำหน่าย (ดู _ensureHouseTenant ใน 13_tenants.gs)

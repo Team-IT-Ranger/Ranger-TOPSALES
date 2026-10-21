@@ -7859,7 +7859,9 @@ function renderUserDirTable(){
   ).join('');
 }
 /* ── ผู้รับผิดชอบตัวแทน (backend/57_user_tenants.gs) ──
-   `tenantRespCache[adminUserId] = ['BDC','NKN']` · ว่าง = ยังไม่ได้ตั้ง = **เห็นทุกตัวแทน** (ไม่ใช่ไม่เห็นอะไรเลย)
+   คีย์ผสม: `'a:'+adminUserId` สำหรับบัญชีแอดมิน · `'s:'+lineUserId` สำหรับพนักงานขายของบริษัท
+   ★★ **ว่างแปลว่าคนละอย่างกัน**: แอดมิน = ยังไม่ได้ตั้ง → เห็นทุกตัวแทน · พนักงานขาย = ยังไม่ถูกแต่งตั้ง
+     → ไม่ได้ดูแลใครเลย (ถ้าปล่อยให้เป็น "ทุกราย" เท่ากับพนักงานขายทุกคนเปิดดูของทุกตัวแทนได้ทันที)
    ★ โหลดเฉพาะฝั่งบริษัท — ตารางนี้พูดถึงบัญชีฝั่งบริษัททั้งหมด ฝั่งตัวแทนไม่ต้องรู้ว่ามีใครบ้าง
      (backend ก็ปฏิเสธให้อีกชั้นแล้ว ที่นี่แค่ไม่ยิงคำขอที่รู้อยู่แล้วว่าจะถูกปฏิเสธ) */
 let tenantRespCache = null, tenantRespAll = [];
@@ -7911,15 +7913,22 @@ function openUserManageModal(kind, id){
    ★ บัญชีที่สังกัดตัวแทนไม่มีช่องนี้เลย (ไม่ใช่มีแล้วกดไม่ได้) — เขาดูแลตัวแทนของตัวเองรายเดียวเสมอ
      ตามกติกาเดิมของระบบ ตารางผู้รับผิดชอบไม่มีผลกับเขา · backend ปฏิเสธถ้าดันส่งมา
    ★ super_admin เห็นทุกรายตลอด ตั้งแล้วไม่มีผล จึงบอกไปตรงๆ แทนที่จะให้ติ๊กแล้วงงว่าทำไมไม่เปลี่ยน */
+function tenantRespKey(u){
+  // คนที่มีบัญชีแอดมินให้ตั้งทางบัญชีแอดมินเสมอ (backend ปฏิเสธถ้าส่งเป็นพนักงานขาย) — คนคนเดียวต้องมีชุดเดียว
+  return u.adminRaw ? ('a:' + u.adminRaw.id) : ('s:' + (u.staffRaw ? u.staffRaw.lineUserId : u.id));
+}
 function tenantRespField(u, kind, isSuperAdmin){
-  if (kind !== 'admin' || EFFECTIVE_TENANT_ID() || !tenantRespCache) return '';
+  if (EFFECTIVE_TENANT_ID() || !tenantRespCache) return '';
   const own = String(u.raw.tenantId || '');
   if (own && own !== ownerTenantCode()) return '';
+  if (!u.adminRaw && !u.staffRaw) return '';
+  if (!u.adminRaw && !u.statusOk) return '';      // พนักงานที่ยังไม่อนุมัติ — backend ปฏิเสธอยู่แล้ว
   if (isSuperAdmin) {
     return '<div class="field"><label>ตัวแทนที่ดูแล</label>' +
       '<div>ทุกตัวแทน <span class="form-hint" style="display:inline">· Ultra Admin เห็นทุกรายเสมอ ตั้งเฉพาะรายไม่ได้</span></div></div>';
   }
-  const picked = tenantRespCache[String(u.adminRaw ? u.adminRaw.id : u.id)] || [];
+  const isStaffOnly = !u.adminRaw;                // พนักงานขายของบริษัทที่ไม่มีบัญชีแอดมิน
+  const picked = tenantRespCache[tenantRespKey(u)] || [];
   const boxes = tenantRespAll.map(t =>
     '<label class="tr-pick"><input type="checkbox" class="tr-box" value="'+esc(t.tenantId)+'"' +
       (picked.indexOf(t.tenantId) !== -1 ? ' checked' : '') + '> ' + esc(t.name) +
@@ -7930,7 +7939,9 @@ function tenantRespField(u, kind, isSuperAdmin){
     '<div class="form-hint" style="margin-top:6px">' +
       '<a href="javascript:void(0)" onclick="trPickAll(true)">เลือกทั้งหมด</a> · ' +
       '<a href="javascript:void(0)" onclick="trPickAll(false)">ล้างทั้งหมด</a> · ' +
-      '<b>ไม่ติ๊กเลย = เห็นทุกตัวแทน</b> (ค่าตั้งต้น) — ติ๊กเมื่อต้องการให้เห็นเฉพาะรายที่เลือก' +
+      (isStaffOnly
+        ? '<b>ไม่ติ๊กเลย = ยังไม่ได้ดูแลตัวแทนรายใด</b> — พนักงานขายต้องถูกแต่งตั้งก่อนถึงจะเปิดดูของตัวแทนได้'
+        : '<b>ไม่ติ๊กเลย = เห็นทุกตัวแทน</b> (ค่าตั้งต้น) — ติ๊กเมื่อต้องการให้เห็นเฉพาะรายที่เลือก') +
       '<br>ใช้กับเมนูที่ต้องถามว่า "ของตัวแทนไหน" เช่นคำสั่ง <b>ของคงเหลือ</b> ในบอท LINE</div></div>';
 }
 function trPickAll(on){ document.querySelectorAll('#tr-list .tr-box').forEach(b => { b.checked = on; }); }
@@ -7969,13 +7980,16 @@ async function saveUserManage(){
     /* ★ บันทึกเฉพาะตอนค่าเปลี่ยนจริง — เปิดโมดัลแล้วกดบันทึกเฉยๆ ไม่ควรเขียนทับตารางผู้รับผิดชอบ
        (เขียนทับทั้งชุดทุกครั้ง ถ้าอีกคนเพิ่งแก้อยู่จะถูกลบทิ้งโดยไม่มีใครตั้งใจ) */
     const trNow = trPicked();
-    if (r.success && trNow && u.adminRaw) {
-      const before = tenantRespCache[String(u.adminRaw.id)] || [];
+    if (r.success && trNow) {
+      const key = tenantRespKey(u);
+      const before = tenantRespCache[key] || [];
       const same = before.length === trNow.length && before.every(t => trNow.indexOf(t) !== -1);
       if (!same) {
-        const rr = await callApi('saveTenantResponsibilities', { adminUserId: u.adminRaw.id, tenantIds: trNow });
+        const who = u.adminRaw ? { adminUserId: u.adminRaw.id }
+                               : { lineUserId: (u.staffRaw ? u.staffRaw.lineUserId : u.id) };
+        const rr = await callApi('saveTenantResponsibilities', Object.assign(who, { tenantIds: trNow }));
         if (!rr.success) { plModalErr(rr.message); return; }
-        tenantRespCache[String(u.adminRaw.id)] = trNow;
+        tenantRespCache[key] = trNow;
       }
     }
     if (!r.success) { plModalErr(r.message); return; }
@@ -8104,7 +8118,9 @@ async function loadUserDirectory(){
   if (respR && respR.success) {
     tenantRespAll = respR.tenants || [];
     tenantRespCache = {};
-    (respR.users || []).forEach(x => { tenantRespCache[String(x.adminUserId)] = x.tenantIds || []; });
+    (respR.users || []).forEach(x => {
+      tenantRespCache[(x.kind === 'staff' ? 's:' + x.lineUserId : 'a:' + x.adminUserId)] = x.tenantIds || [];
+    });
   }
   if (!adminR.success && !staffR.success) {
     if (!userDirCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(adminR.message || staffR.message)+'</td></tr>';
