@@ -654,21 +654,25 @@ function botFlexText_(text, opts) {
   return t;
 }
 
-/* ★ แถวตาราง **2 ช่อง**: รหัสสินค้า | คลัง + รถ = รวม  (เจ้าของระบบสั่ง 21 ต.ค. 2026 หลังทดสอบจริง)
-   เดิมเป็น 4 ช่อง (ชื่อสินค้า | คลัง | รถ | รวม) — บนจอมือถือชื่อสินค้ายาวกินที่จนตัวเลขเบียดกัน
-   · รหัสสินค้าสั้นและเป็นตัวที่คนใช้สั่งของจริง · ตัวเลขสามตัวยุบมาอยู่ช่องเดียวโดย**ไม่ทิ้งข้อมูล**
-     เขียนเป็น "คลัง + รถ = รวม" ซึ่งอ่านได้ในตัวเองว่าตัวไหนคืออะไร ไม่ต้องพึ่งหัวตาราง
-   · ใช้ span ให้ยอดรวมเป็นสีฟ้าตัวหนา ส่วนตัวแยกเป็นสีอ่อน — ตาจับ "รวม" ได้ก่อน */
+/* ★ แถวตาราง **2 ช่อง**: รหัส+ชื่อสินค้า | คลัง + รถ = รวม  (เจ้าของระบบสั่ง 21 ต.ค. 2026 หลังทดสอบจริง)
+   เดิมเป็น 4 ช่อง (ชื่อสินค้า | คลัง | รถ | รวม) — บนจอมือถือชื่อเต็มกินที่จนตัวเลขเบียดกัน
+   · ตัวเลขสามตัวยุบมาอยู่ช่องเดียวโดย**ไม่ทิ้งข้อมูล** เขียนเป็น "คลัง + รถ = รวม" ซึ่งอ่านได้ในตัวเอง
+     ว่าตัวไหนคืออะไร ไม่ต้องพึ่งหัวตาราง · span ทำให้ยอดรวมเป็นสีฟ้าตัวหนา ตาจับ "รวม" ได้ก่อน
+   · **ชื่อสินค้าตัดที่ 20 ตัวอักษร** (เจ้าของระบบสั่งเพิ่ม 21 ต.ค. 2026) — รหัสอย่างเดียวจำไม่ไหวเวลาอ่านเร็วๆ
+     ★ ลดตัวอักษรแถวข้อมูลเป็น `xs` พร้อมกัน ไม่งั้น "รหัส + ชื่อ 20 ตัว + ตัวเลข 15 ตัว" ยาวเกินบรรทัดเดียว
+       แล้ว LINE จะตัดท้ายทิ้งเอง (maxLines:1) — ตัวเลขหายไปจากจอโดยไม่มีอะไรฟ้อง */
+var BOT_NAME_MAX = 20;
+
 function botFlexRow_(code, nums, opts) {
   opts = opts || {};
-  var size = opts.size || 'sm', color = opts.color || BOT_INK, weight = opts.bold ? 'bold' : 'regular';
-  var right = { type: 'text', flex: 6, align: 'end', size: size, wrap: !!opts.wrap,
+  var size = opts.size || 'xs', color = opts.color || BOT_INK, weight = opts.bold ? 'bold' : 'regular';
+  var right = { type: 'text', flex: 5, align: 'end', size: size, wrap: !!opts.wrap,
     color: opts.rightColor || color, weight: weight };
   if (!opts.wrap) right.maxLines = 1;
   if (typeof nums === 'string') right.text = nums;
   else right.contents = nums;          // span: [แยก, รวม]
   return { type: 'box', layout: 'horizontal', spacing: 'xs', contents: [
-    botFlexText_(code, { size: size, color: color, weight: weight, flex: 4, wrap: false, maxLines: 1 }),
+    botFlexText_(code, { size: size, color: color, weight: weight, flex: 7, wrap: false, maxLines: 1 }),
     right
   ] };
 }
@@ -677,14 +681,14 @@ function botFlexRow_(code, nums, opts) {
 function botFlexNums_(wh, van, total, opts) {
   opts = opts || {};
   return [
-    { type: 'span', text: botNum_(wh) + ' + ' + botNum_(van) + ' = ', size: opts.size || 'sm', color: BOT_INK_SOFT },
-    { type: 'span', text: botNum_(total), size: opts.size || 'sm', color: opts.totalColor || BOT_BLUE, weight: 'bold' }
+    { type: 'span', text: botNum_(wh) + ' + ' + botNum_(van) + ' = ', size: opts.size || 'xs', color: BOT_INK_SOFT },
+    { type: 'span', text: botNum_(total), size: opts.size || 'xs', color: opts.totalColor || BOT_BLUE, weight: 'bold' }
   ];
 }
 
 function botFlexInventory_(snap, reportUrl) {
   var body = [
-    botFlexRow_('รหัสสินค้า', 'คลัง + รถ = รวม', { size: 'xs', color: BOT_INK_SOFT, bold: true }),
+    botFlexRow_('สินค้า', 'คลัง + รถ = รวม', { size: 'xs', color: BOT_INK_SOFT, bold: true }),
     { type: 'separator', margin: 'sm', color: BOT_LINE_CLR }
   ];
   if (!snap.rows.length) {
@@ -692,12 +696,14 @@ function botFlexInventory_(snap, reportUrl) {
   } else {
     snap.rows.forEach(function(r) {
       // ★ ดอกจันนำหน้ารหัส = ยังไม่ยืนยันขนาดบรรจุ ตัวเลขแถวนั้นเป็น "ชิ้น" ไม่ใช่ "ลัง" (เชิงอรรถท้ายการ์ด)
-      body.push(botFlexRow_((r.confirmed ? '' : '*') + r.productCode,
-        botFlexNums_(r.warehouse, r.van, r.total)));
+      // รหัส + ชื่อย่อ · ดอกจันนำหน้ารหัสเหมือนเดิม
+      var label = (r.confirmed ? '' : '*') + r.productCode +
+        (r.productName ? (' ' + botCut_(r.productName, BOT_NAME_MAX)) : '');
+      body.push(botFlexRow_(label, botFlexNums_(r.warehouse, r.van, r.total)));
       /* ★ บรรทัดเล็กใต้แถว **เฉพาะสินค้าที่มีคนจองไว้** — ตัวเลขหลักยังเป็นของคงเหลือจริง (on-hand)
          แต่คนอ่านต้องเห็นว่าขายได้เท่าไรก่อนจะไปรับปากลูกค้า · ไม่มีจอง = ไม่มีบรรทัดนี้ ไม่รกเปล่าๆ */
       if (r.reservedBase > 0) {
-        body.push(botFlexText_('กันไว้ ' + botNum_(r.reserved) + ' · ขายได้ ' + botNum_(r.available),
+        body.push(botFlexText_('จอง ' + botNum_(r.reserved) + ' · ขายได้ ' + botNum_(r.available),
           { size: 'xxs', color: BOT_INK_SOFT, align: 'end' }));
       }
     });
@@ -711,13 +717,13 @@ function botFlexInventory_(snap, reportUrl) {
   ];
   /* ★ สองบรรทัดนี้ขึ้นเฉพาะตอนมีของถูกจองไว้จริง — ไม่มีจอง "ขายได้จริง" ก็เท่ากับยอดรวม เขียนไปก็รก */
   if (snap.totals.reserved) {
-    footer.push(botFlexRow_('กันไว้ให้บิลที่รอส่ง', '−' + botNum_(snap.totals.reserved),
+    footer.push(botFlexRow_('จองให้บิลที่รอส่ง', '−' + botNum_(snap.totals.reserved),
       { size: 'xs', color: BOT_INK_SOFT }));
     footer.push(botFlexRow_('ขายได้จริง (ลัง)', botNum_(snap.totals.available),
       { bold: true, rightColor: BOT_BLUE }));
   }
   var notes = [];
-  if (snap.totals.reserved) notes.push('กันไว้ = ของที่บิลรอจัดส่งจองไว้แล้ว ยังไม่ถูกตัดออกจากคลัง');
+  if (snap.totals.reserved) notes.push('จอง = ของที่บิลรอจัดส่งจองไว้แล้ว ยังไม่ถูกตัดออกจากคลัง');
   if (snap.products > snap.shown) notes.push('แสดง ' + snap.shown + ' จาก ' + snap.products + ' รายการ (เรียงตามของรวมมากสุด)');
   if (snap.unconfirmed) notes.push('* ' + snap.unconfirmed + ' รายการยังไม่ยืนยันขนาดบรรจุ — ตัวเลขเป็นชิ้น ไม่ได้รวมในยอดลัง');
   if (!snap.vanAvailable) notes.push('อ่านของบนรถไม่ได้ (ยังไม่มีไฟล์ของตัวแทนรายนี้) — ช่องรถจึงเป็น 0');
@@ -873,8 +879,8 @@ function botReportSpec_(snap) {
   if (!snap.vanAvailable) notes.push('อ่านของบนรถไม่ได้ (ยังไม่มีไฟล์ของตัวแทนรายนี้) — ช่องบนรถจึงเป็น 0');
   else if (snap.vanStaff) notes.push('ของบนรถรวมจากพนักงาน ' + snap.vanStaff + ' คน');
   notes.push('คลัง = ของในคลังของตัวแทนรายนี้ · บนรถ = รวมของบนรถพนักงานทุกคน · ' +
-    'กันไว้ = บิลที่รอจัดส่งจองไว้แล้ว ยังไม่ถูกตัดออกจากคลัง (ของบนรถไม่มียอดจอง เพราะขายจากรถตัดทันที) · ' +
-    'ขายได้ = คลัง − กันไว้ + บนรถ');
+    'จอง = บิลที่รอจัดส่งจองไว้แล้ว ยังไม่ถูกตัดออกจากคลัง (ของบนรถไม่มียอดจอง เพราะขายจากรถตัดทันที) · ' +
+    'ขายได้ = คลัง − จอง + บนรถ');
 
   return {
     title: 'รายงานของคงเหลือ',
@@ -886,9 +892,9 @@ function botReportSpec_(snap) {
        8 คอลัมน์ยังพิมพ์แนวตั้งได้ (ตัวพิมพ์กลางสลับเป็นแนวนอนเองที่ 9 คอลัมน์) */
     columns: [
       { label: 'รหัสสินค้า', key: 'code', width: 1.1 },
-      { label: 'ชื่อสินค้า', key: 'name', width: 2.8 },
+      { label: 'ชื่อสินค้า', key: 'name', width: 2.8 },   // รายงานที่พิมพ์ใช้ชื่อเต็ม ไม่ตัดเหมือนในแชต
       { label: 'คลัง', key: 'wh', align: 'r', width: 0.9 },
-      { label: 'กันไว้', key: 'res', align: 'r', width: 0.9 },
+      { label: 'จอง', key: 'res', align: 'r', width: 0.9 },
       { label: 'ขายได้', key: 'avail', align: 'r', width: 0.9 },
       { label: 'บนรถ', key: 'van', align: 'r', width: 0.9 },
       { label: 'รวม', key: 'total', align: 'r', width: 0.9 },
@@ -906,7 +912,7 @@ function botReportSpec_(snap) {
     // ยอดรวมนับเฉพาะแถวที่ยืนยันขนาดบรรจุแล้ว (บวกชิ้นเข้าไปในลังคือตัวเลขที่ไม่มีความหมาย)
     totals: [
       ['รวมในคลัง (ลัง)', botNum_(snap.totals.warehouse)],
-      ['กันไว้ให้บิลที่รอจัดส่ง (ลัง)', botNum_(snap.totals.reserved)],
+      ['จองให้บิลที่รอจัดส่ง (ลัง)', botNum_(snap.totals.reserved)],
       ['รวมบนรถ (ลัง)', botNum_(snap.totals.van)],
       ['รวมทั้งหมด — ของคงเหลือจริง (ลัง)', botNum_(snap.totals.total)],
       ['ขายได้จริง หลังหักที่จองไว้ (ลัง)', botNum_(snap.totals.available), 'grand']
