@@ -220,10 +220,8 @@ var ADMIN_ACTION_MAP = {
   cancelGoodsReceipt:     cancelGoodsReceipt,
   listWarehouseStock:     listWarehouseStock,
   listStockLedger:        listStockLedger,
-  // ของคงเหลือ คลัง+บนรถ+รวม หน่วยลัง (58_inventory_report.gs) — ตัวเดียวกับที่บอท LINE /inventory ตอบ
-  getInventorySnapshot:   getInventorySnapshot,
-
   // ── ผู้รับผิดชอบตัวแทน (57_user_tenants.gs) — "บัญชีนี้ดูแลตัวแทนรายไหน" ──
+  //    ใช้โดยบอท LINE (`bot-line/` อ่านตาราง `admin_user_tenants` ตรงจากชีต) — สองตัวนี้คือทางที่ใช้ตั้งค่า
   listTenantResponsibilities: listTenantResponsibilities,
   saveTenantResponsibilities: saveTenantResponsibilities,
 

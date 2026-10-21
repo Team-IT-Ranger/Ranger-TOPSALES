@@ -23,6 +23,18 @@
  *
  * ★ ยังไม่ตรวจลายเซ็น X-Line-Signature — Apps Script doPost(e) ไม่ให้เข้าถึง request header เลย (ข้อจำกัดของแพลตฟอร์ม)
  *   จึงพึ่ง URL ของ deployment ที่ยาว/สุ่มแทนการตรวจลายเซ็น ห้ามเผยแพร่ URL นี้นอกจากช่อง Webhook URL ของ LINE
+ *   ★ สิ่งที่ทำให้คำขอปลอมดึงข้อมูลออกไปไม่ได้จริงๆ คือ **คำตอบออกทาง reply token ของ LINE เท่านั้น**
+ *     (token ปลอมถูก LINE ปฏิเสธ) — คำสั่งอ่านอย่างเดียวจึงปลอดภัยอยู่ · **คำสั่งที่เขียนข้อมูลไม่ได้อาศัย
+ *     ข้อนี้เลย ถ้าจะเพิ่มต้องคิดเรื่องตัวตน/ลายเซ็นใหม่ทั้งหมดก่อน**
+ *
+ * ★★ 21 ต.ค. 2026 — เจ้าของระบบเลือกให้ **โปรเจกต์นี้เป็นบอทตัวจริงตัวเดียว** (LINE channel หนึ่งตัวชี้ webhook
+ *   ได้ URL เดียว และใช้ channel เดิมตัวเดียวกัน) · `/inventory` ที่เคยเขียนไว้ใน backend หลัก
+ *   (`59_line_bot.gs` / `60_flex_inventory.gs`) จึงถูก**ถอดออกจาก backend แล้วย้ายมาอยู่ที่นี่**
+ *   - ข้อแลกเปลี่ยนที่ยอมรับแล้ว: **สูตรรวมสต็อกและกติกา "ใครดูแลตัวแทนไหน" ถูกคัดลอกมาไว้ที่นี่**
+ *     เพราะโปรเจกต์นี้อ่านชีตตรงๆ เรียกฟังก์ชันของ backend ไม่ได้
+ *   - **★ แก้ที่ไหนต้องแก้อีกที่ด้วยเสมอ** — คู่ที่ต้องตรงกันคือ `botManagedTenantIds_()` ที่นี่ กับ
+ *     `managedTenantIds()` ใน `backend/57_user_tenants.gs` (ตัวเดียวกันคนละภาษาของการอ่านชีต)
+ *     และ `botInventorySnapshot_()` ที่นี่ กับการตัดสินใจเรื่องหน่วยลัง/ขอบเขตคลัง-รถ ใน CLAUDE.md
  */
 
 function doPost(e) {
@@ -37,9 +49,46 @@ function doPost(e) {
 }
 
 function handleLineEvent_(event) {
+  // LINE ส่ง webhook เดิมซ้ำเมื่อไม่ได้ 200 ทันเวลา (เช่นตอบช้าเพราะเปิดชีตหลายไฟล์) — กันตอบสองรอบ
+  if (seenEvent_(event && event.webhookEventId)) return;
   if (event.type === 'follow') return handleFollow_(event);
   if (event.type === 'message' && event.message && event.message.type === 'text') return handleMessage_(event);
+  if (event.type === 'postback') return handlePostback_(event);
   // ขั้นต่อไป (ยังไม่ทำ): unfollow (ทำเครื่องหมายว่าเลิกติดตาม), ข้อความที่ไม่ใช่ text (สติกเกอร์/รูป)
+}
+
+// จำ webhookEventId ไว้ 10 นาที (LINE retry ภายในไม่กี่นาที) — ใช้ CacheService ไม่ใช้ LockService
+// เพราะคำสั่งทั้งหมดเป็นการอ่าน คนสองคนพิมพ์พร้อมกันไม่ควรต้องรอคิวกัน
+function seenEvent_(eventId) {
+  var id = String(eventId || '');
+  if (!id) return false;
+  try {
+    var cache = CacheService.getScriptCache(), key = 'botev_' + id;
+    if (cache.get(key)) return true;
+    cache.put(key, '1', 600);
+  } catch (err) {}
+  return false;
+}
+
+// ปุ่มเลือกตัวแทนจากเมนู /inventory — data รูปแบบ `cmd=inv&t=<tenantId>`
+// ★ data ที่ส่งกลับมาเชื่อไม่ได้ (คำขอปลอมใส่ค่าอะไรก็ได้) → botInventoryMessages_ ตรวจสิทธิ์ใหม่ทุกครั้ง
+function handlePostback_(event) {
+  var lineUserId = event.source && event.source.userId;
+  var replyToken = event.replyToken;
+  if (!lineUserId || !replyToken) return;
+  var data = String((event.postback && event.postback.data) || '');
+  var parsed = {};
+  data.split('&').forEach(function(pair) {
+    var i = pair.indexOf('=');
+    if (i !== -1) parsed[pair.substring(0, i)] = decodeURIComponent(pair.substring(i + 1).replace(/\+/g, ' '));
+  });
+  if (parsed.cmd !== 'inv') return;
+  try {
+    replyAndLog_(replyToken, lineUserId, '', '[ปุ่ม] ของคงเหลือ ' + (parsed.t || ''), botInventoryMessages_(lineUserId, parsed.t || ''));
+  } catch (err) {
+    console.error('handlePostback_ error: ' + (err && err.stack || err));
+    replyAndLog_(replyToken, lineUserId, '', data, 'ขอโทษครับ ระบบขัดข้องตอนดึงของคงเหลือ ลองใหม่อีกครั้ง');
+  }
 }
 
 // เพิ่มเพื่อนกับบอทครั้งแรก → จองตัวตนไว้ใน liff_users รอแอดมินอนุมัติ + ทักทายให้รู้ว่าคำขอเข้าไปแล้ว
@@ -84,27 +133,43 @@ function handleMessage_(event) {
 
     var me = findLiffUser_(prodSheet_('liff_users'), lineUserId);
     displayName = (me && me.display_name) || '';
-    if (!me || String(me.status) !== 'Yes') {
+    /* ★ ผ่านด่านได้สองทาง: อนุมัติใน liff_users (ทางเดิมของบอท) **หรือ** มีบัญชีแอดมินที่ผูก LINE ไว้แล้ว
+       — ไม่มีข้อหลัง แอดมินที่ผูก LINE เรียบร้อยจะติด "รออนุมัติ" ตลอดไป เพราะ ensureLiffUser_ เพิ่งสร้าง
+       แถว status='No' ให้เขาเมื่อกี้ แล้วไม่มีใครไปกดอนุมัติแถวนั้น (บัญชีเขาอยู่คนละตาราง) */
+    var admin = botAdminUser_(lineUserId);
+    if (admin && !displayName) displayName = admin.display_name || '';
+    if ((!me || String(me.status) !== 'Yes') && !admin) {
       replyAndLog_(replyToken, lineUserId, displayName, rawText, 'บัญชีนี้ยังรอแอดมินอนุมัติอยู่ครับ อนุมัติแล้วถึงจะถามข้อมูลได้');
       return;
     }
 
-    replyAndLog_(replyToken, lineUserId, displayName, rawText, answerQuestion_(text));
+    replyAndLog_(replyToken, lineUserId, displayName, rawText, answerQuestion_(text, lineUserId));
   } catch (err) {
     console.error('handleMessage_ error: ' + (err && err.stack || err));
     replyAndLog_(replyToken, lineUserId, displayName, rawText, 'ขอโทษครับ ระบบขัดข้องตอนตอบคำถามนี้ ลองใหม่อีกครั้ง หรือแจ้งแอดมิน');
   }
 }
 
-function replyAndLog_(replyToken, lineUserId, displayName, userMessage, responseText) {
-  replyMessage_(replyToken, responseText);
-  logChat_(lineUserId, displayName, userMessage, responseText);
+/** response รับได้ทั้งสตริง (ข้อความล้วน) และ array ของ message object (Flex/quick reply) */
+function replyAndLog_(replyToken, lineUserId, displayName, userMessage, response) {
+  var messages = typeof response === 'string' ? [{ type: 'text', text: String(response).substring(0, 5000) }] : response;
+  replyMessages_(replyToken, messages);
+  // chatlog เก็บเป็นข้อความอ่านได้เสมอ — Flex เก็บ altText (ตัว JSON ยาวและอ่านไม่รู้เรื่องในชีต)
+  logChat_(lineUserId, displayName, userMessage, messages.map(function(m) {
+    return m.type === 'text' ? m.text : ('[' + m.type + '] ' + (m.altText || ''));
+  }).join('\n'));
 }
 
 // ── ตอบคำถาม (ชุดคำสั่งเริ่มต้น — เพิ่มเงื่อนไขใหม่ต่อท้ายได้เรื่อยๆ) ──
-function answerQuestion_(text) {
+// คืนสตริง = ข้อความล้วน · คืน array = message object ของ LINE (ใช้กับ Flex/ปุ่มเลือก)
+function answerQuestion_(text, lineUserId) {
   if (!text || /^(ช่วยเหลือ|help|เมนู|คำสั่ง)$/i.test(text)) return helpText_();
   if (/^ยอดขาย/i.test(text)) return answerTodaySales_();
+  // ★ ต้องอยู่ก่อน "สต็อก" เพราะคนละคำถาม: สต็อก = สินค้าตัวเดียวในคลังกลาง หน่วยฐาน + ยอดจอง
+  //   ของคงเหลือ/inventory = ทุกสินค้าของตัวแทนรายหนึ่ง แยกคลัง/รถ หน่วยลัง
+  if (/^(ของคงเหลือ|inventory|inv)(\s|$)/i.test(text)) {
+    return botInventoryMessages_(lineUserId, text.replace(/^(ของคงเหลือ|inventory|inv)\s*/i, '').trim());
+  }
   if (/^(สต็อก|stock)\s+/i.test(text)) return answerStock_(text.replace(/^(สต็อก|stock)\s+/i, '').trim());
   if (/^(ยอดค้างชำระ|ยอดค้าง)\s+/i.test(text)) return answerReceivable_(text.replace(/^(ยอดค้างชำระ|ยอดค้าง)\s+/i, '').trim());
   if (/^(สถานะบิล|บิลขาย)\s+/i.test(text)) return answerSalesOrders_(text.replace(/^(สถานะบิล|บิลขาย)\s+/i, '').trim());
@@ -114,7 +179,8 @@ function answerQuestion_(text) {
 function helpText_() {
   return 'คำสั่งที่ใช้ได้ตอนนี้ครับ:\n' +
     '• ยอดขายวันนี้ — ยอดขายรวมวันนี้ (ทุกตัวแทน+บริษัท)\n' +
-    '• สต็อก <รหัส/ชื่อสินค้า> — ของคงเหลือในคลังกลางบริษัท\n' +
+    '• ของคงเหลือ — ของในคลังและบนรถ หน่วยลัง (เลือกตัวแทนได้ถ้าดูแลหลายราย)\n' +
+    '• สต็อก <รหัส/ชื่อสินค้า> — สินค้าตัวเดียวในคลังกลางบริษัท หน่วยฐาน + ยอดจอง\n' +
     '• ยอดค้างชำระ <รหัส/ชื่อลูกค้า> — ใบแจ้งหนี้ที่ยังค้างของลูกค้ารายนั้น\n' +
     '• สถานะบิล <รหัส/ชื่อลูกค้า> — บิลขายล่าสุดของลูกค้ารายนั้น (สถานะส่งของ+การชำระเงิน)\n' +
     '(กำลังทยอยเพิ่มคำสั่งอื่นครับ)\n\n' +
@@ -239,15 +305,24 @@ function answerSalesOrders_(query) {
   if (found.multiMatch) return found.multiMatch;
   var customer = found.customer;
 
-  var tenantId = customer.tenant_id || 'HOUSE';
-  var orders;
-  try {
-    orders = sheetObjects_(tenantSheet_(tenantId, 'sales_orders')).filter(function(o) {
-      return String(o.customer_id) === String(customer.record_id);
-    });
-  } catch (err) {
-    console.error('answerSalesOrders_ error: ' + err);
-    return 'ดึงข้อมูลบิลขายของลูกค้า ' + customer.customer_code + ' ไม่สำเร็จครับ (ตัวแทน ' + tenantId + ')';
+  /* ★★ แก้ 21 ต.ค. 2026 — เดิมเขียน `customer.tenant_id || 'HOUSE'` แต่ **`HOUSE` เลิกใช้แล้ว กลายเป็น
+     `TNKI`** (ดู CLAUDE.md หัวข้อ OWNER_TENANT_ID · migrate ด้วย `migrateOwnerTenantCode` ไปแล้ว)
+     ลูกค้าขายตรงที่ `tenant_id` ยังว่างจึงไปหาแถว tenants ที่ไม่มีอยู่ แล้วตอบ "ดึงข้อมูลไม่สำเร็จ" ทุกครั้ง
+     ★ ลองทั้งสองรหัสตามลำดับ (เหมือน `packageAllowedForTenant` ใน backend ที่ยอมรับทั้งคู่ไว้ชั่วคราว)
+       เพราะข้อมูลเก่าบางไฟล์อาจยังเป็น HOUSE อยู่ และเราไม่อยากให้บอทพังเพราะลำดับ migrate */
+  var candidates = customer.tenant_id ? [String(customer.tenant_id)] : ['TNKI', 'HOUSE'];
+  var orders = null, lastErr = null, tenantId = candidates[0];
+  for (var ci = 0; ci < candidates.length && orders === null; ci++) {
+    try {
+      tenantId = candidates[ci];
+      orders = sheetObjects_(tenantSheet_(tenantId, 'sales_orders')).filter(function(o) {
+        return String(o.customer_id) === String(customer.record_id);
+      });
+    } catch (err) { lastErr = err; }
+  }
+  if (orders === null) {
+    console.error('answerSalesOrders_ error: ' + lastErr);
+    return 'ดึงข้อมูลบิลขายของลูกค้า ' + customer.customer_code + ' ไม่สำเร็จครับ (ตัวแทน ' + candidates.join('/') + ')';
   }
   if (!orders.length) return 'ลูกค้า ' + customer.customer_code + ' ' + customer.name + ' ยังไม่มีบิลขายในระบบครับ';
 
@@ -263,6 +338,371 @@ function answerSalesOrders_(query) {
   return 'บิลขายล่าสุดของ ' + customer.customer_code + ' ' + customer.name +
     (orders.length > recent.length ? ' (5 ใบล่าสุดจากทั้งหมด ' + orders.length + ' ใบ)' : '') + '\n' +
     lines.join('\n');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * ของคงเหลือ: คลัง + บนรถ + รวม หน่วยลัง  (ย้ายมาจาก backend/58+59+60 เมื่อ 21 ต.ค. 2026)
+ * เจ้าของระบบสั่ง: "มีคอลัมน์คลังหลักและคอลัมน์ของรวมบนรถ ทั้งคู่ มีช่องรวม หน่วยเป็นลัง"
+ *
+ * ★★ ของอยู่สองที่ คนละไฟล์ คนละความหมาย — ห้ามรวมเป็นตัวเดียวแล้วเรียกว่า "สต็อก"
+ *   `warehouse_stock` (Central Sheet · แยกด้วย `tenant_id`) = ของในคลัง
+ *   `van_stock`       (ไฟล์ของตัวแทน · แยกด้วย `line_user_id`) = ของบนรถพนักงาน รวมทุกคนเป็นก้อนเดียว
+ *   ★ ขอบเขตของบริษัท: คลัง = `tenant_id` **ว่าง** แต่รถ = ไฟล์ของตัวแทนบ้าน **TNKI** — คนละค่ากันโดยตั้งใจ
+ *
+ * ★★ ทุกตัวเลขในชีตเป็นหน่วยฐาน (ชิ้น) · แปลงเป็นลังที่ `botCases_()` ที่เดียว จาก `product_units`
+ *   สินค้าที่ยังไม่ยืนยันขนาดบรรจุ (factor ≤ 1 หรือชื่อหน่วยมีคำเตือน) **ไม่หารมั่ว** — คืนจำนวนชิ้น
+ *   ติด `*` ในการ์ด และ **ไม่ถูกบวกเข้ายอดรวมลัง** (บวกชิ้นเข้าไปในลังคือตัวเลขที่ไม่มีความหมาย)
+ * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+var BOT_INV_ROW_LIMIT = 15;     // แถวต่อการ์ด — มากกว่านี้การ์ดยาวเกินจอและเสี่ยงชนเพดานขนาดข้อความ
+var BOT_QUICK_MAX = 13;         // เพดาน quick reply ของ LINE
+var BOT_BUTTON_MAX = 12;        // ปุ่มในการ์ด (ใช้เมื่อตัวแทนเยอะเกิน quick reply)
+var BOT_OWNER_TENANT = 'TNKI';  // = OWNER_TENANT_ID ใน backend/02_helpers.gs (เดิมคือ 'HOUSE')
+var BOT_CASE_CODES = { CT: 1, CASE: 1, CS: 1, CTN: 1, 'หีบ': 1, 'ลัง': 1 };
+
+/** ค่าในชีตเป็น boolean จริงก็ได้ สตริง 'TRUE' ก็ได้ — เทียบดิบๆ ไม่ได้ (บทเรียนเดิมของ backend) */
+function botTrue_(v) {
+  if (v === true) return true;
+  var s = String(v === null || v === undefined ? '' : v).trim().toUpperCase();
+  return s === 'TRUE' || s === 'YES' || s === '1' || s === 'Y';
+}
+
+/** LINE user id → แถว admin_users (prod) ที่ใช้งานได้จริง · ไม่ผ่านด่าน = null */
+function botAdminUser_(lineUserId) {
+  var uid = String(lineUserId || '');
+  if (!uid) return null;
+  var found = null;
+  sheetObjects_(prodSheet_('admin_users')).forEach(function(u) {
+    if (String(u.line_user_id || '') === uid) found = u;
+  });
+  if (!found) return null;
+  // ด่านเดียวกับหน้าล็อกอิน (_adminAccountGate ใน backend/30_admin_line_login.gs):
+  // บัญชีที่เข้าเว็บไม่ได้ ต้องถามทางแชตไม่ได้ด้วย
+  if (String(found.status) !== 'active') return null;
+  if (!String(found.role_code || '').trim()) return null;
+  return found;
+}
+
+/** สิทธิ์รายโมดูล — มิเรอร์ `hasPermission()` ใน backend/14_permissions.gs */
+function botHasPermission_(admin, moduleCode, action) {
+  if (!admin) return false;
+  if (String(admin.role_code) === 'super_admin') return true;
+  var rows = sheetObjects_(prodSheet_('role_permissions'));
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].role_code) === String(admin.role_code) && String(rows[i].module_code) === String(moduleCode)) {
+      return botTrue_(action === 'edit' ? rows[i].can_edit : rows[i].can_view);
+    }
+  }
+  return false;
+}
+
+/** ตัวแทนที่ยังเปิดใช้งาน → { tenantId: ชื่อ } (รวมตัวแทนบ้านของบริษัทเอง ซึ่งก็มีคลังของตัวเอง) */
+function botActiveTenants_() {
+  var out = {};
+  sheetObjects_(prodSheet_('tenants')).forEach(function(t) {
+    if (botTrue_(t.is_active)) out[String(t.tenant_id)] = String(t.name || t.tenant_id);
+  });
+  return out;
+}
+
+/** ชื่อที่ควรแสดงของตัวแทนบ้าน = ชื่อบริษัท (ตรงกับที่แถบบนของแอปแอดมินแสดง) */
+function botTenantLabel_(tenantId, name) {
+  if (String(tenantId) !== BOT_OWNER_TENANT && String(tenantId) !== 'HOUSE') return name;
+  try {
+    var rows = sheetObjects_(prodSheet_('company_profile'));
+    if (rows.length && String(rows[0].name || '').trim()) return String(rows[0].name).trim();
+  } catch (err) {}
+  return name || 'บริษัทเจ้าของสินค้า';
+}
+
+/**
+ * ★★ มิเรอร์ของ `managedTenantIds()` ใน backend/57_user_tenants.gs — **แก้ที่นี่ต้องแก้ที่นั่นด้วย**
+ * ลำดับตัดสิน: สังกัดตัวแทน → รายเดียวของตัวเองตลอด (ตาราง admin_user_tenants ไม่มีผลกับเขา) ·
+ * super_admin → ทุกราย · ฝั่งบริษัทที่มีแถว → เฉพาะรายที่ระบุ · ฝั่งบริษัทที่ไม่มีแถว → ทุกราย
+ * ★ ว่าง = "ทุกราย" ไม่ใช่ "ไม่มีใคร" — ตารางนี้เป็นตัวกรองรายการ ไม่ใช่การมอบสิทธิ์
+ */
+function botManagedTenantIds_(admin) {
+  if (!admin) return [];
+  var own = String(admin.tenant_id || '');
+  if (own && own !== BOT_OWNER_TENANT && own !== 'HOUSE') return [own];
+
+  var active = botActiveTenants_();
+  var all = Object.keys(active);
+  if (String(admin.role_code) === 'super_admin') return all;
+
+  var id = String(admin.record_id || '');
+  var rows = [];
+  try { rows = sheetObjects_(prodSheet_('admin_user_tenants')); }
+  catch (err) { return all; }   // ยังไม่มีแท็บนี้ (ยังไม่ได้ deploy backend ใหม่) = ยังไม่เคยตั้งค่า
+  var seen = {}, mine = [];
+  rows.forEach(function(r) {
+    if (String(r.admin_user_id) !== id) return;
+    var t = String(r.tenant_id);
+    if (active[t] === undefined || seen[t]) return;    // ปิดใช้งานแล้ว/ซ้ำ ไม่ต้องโผล่
+    seen[t] = 1; mine.push(t);
+  });
+  return mine.length ? mine : all;
+}
+
+function botManagedTenants_(admin) {
+  var active = botActiveTenants_();
+  var out = botManagedTenantIds_(admin).map(function(t) {
+    var isOwner = (t === BOT_OWNER_TENANT || t === 'HOUSE');
+    return { tenantId: t, name: botTenantLabel_(t, active[t] || t), isOwner: isOwner };
+  });
+  out.sort(function(a, b) {
+    if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name), 'th');
+  });
+  return out;
+}
+
+/** productId → { factor, confirmed } ของหน่วย "ลัง" (รหัสเก่า CASE/หีบ ยังนับเป็นลัง) */
+function botCaseUnits_() {
+  var out = {};
+  sheetObjects_(prodSheet_('product_units')).forEach(function(u) {
+    if (!botTrue_(u.is_active)) return;
+    // รหัสที่ถือว่าเป็น "ลัง" — ชุดเดียวกับ UNIT_ALIASES ฝั่ง CT ใน backend/28_units.gs
+    // (ข้อมูลเก่ายังมี CASE/CS/CTN/หีบ/ลัง ปนอยู่ ก่อน migrateUnitCodes จะรันครบ)
+    var code = String(u.unit_code || '').trim().toUpperCase();
+    var label = String(u.unit_label || '');
+    if (!BOT_CASE_CODES[code]) return;
+    var factor = parseFloat(u.unit_factor) || 0;
+    out[String(u.product_id)] = {
+      factor: factor,
+      // ขนาดบรรจุ 1 = ค่าที่ ensureDefaultSalesUnit ใส่ไว้ตอนยังไม่รู้ของจริง (ชื่อหน่วยมีคำเตือนต่อท้าย)
+      confirmed: factor > 1 && label.indexOf('ยังไม่ยืนยัน') === -1
+    };
+  });
+  return out;
+}
+
+function botCases_(baseQty, unit) {
+  var q = Number(baseQty) || 0;
+  if (!unit || !unit.confirmed || !(unit.factor > 1)) return q;
+  return Math.round((q / unit.factor) * 100) / 100;
+}
+
+/** อ่าน van_stock ของตัวแทน (ตัวแทนบ้านลองทั้ง TNKI และ HOUSE เพราะข้อมูลเก่าบางไฟล์ยังเป็น HOUSE) */
+function botVanRows_(tenantId) {
+  var candidates = (tenantId === BOT_OWNER_TENANT || tenantId === 'HOUSE') ? [BOT_OWNER_TENANT, 'HOUSE'] : [tenantId];
+  for (var i = 0; i < candidates.length; i++) {
+    try { return sheetObjects_(tenantSheet_(candidates[i], 'van_stock')); }
+    catch (err) { /* ลองรหัสถัดไป */ }
+  }
+  return null;   // อ่านไม่ได้จริงๆ — คนละเรื่องกับ "รถว่าง"
+}
+
+/** ภาพรวมของคงเหลือของตัวแทนรายหนึ่ง (อ่าน prod เหมือนคำสั่งอื่นของบอท) */
+function botInventorySnapshot_(tenantId) {
+  var tid = String(tenantId || '') || BOT_OWNER_TENANT;
+  var isOwner = (tid === BOT_OWNER_TENANT || tid === 'HOUSE');
+  var whScope = isOwner ? '' : tid;        // ★ คลังของบริษัท = tenant_id ว่าง
+
+  var active = botActiveTenants_();
+  var tenantName = botTenantLabel_(tid, active[tid] || tid);
+
+  var products = {};
+  sheetObjects_(prodSheet_('products')).forEach(function(p) { products[String(p.record_id)] = p; });
+  var units = botCaseUnits_();
+
+  var acc = {};
+  function bucket(pid) {
+    var k = String(pid);
+    if (!acc[k]) acc[k] = { wh: 0, van: 0 };
+    return acc[k];
+  }
+  sheetObjects_(prodSheet_('warehouse_stock')).forEach(function(r) {
+    if (String(r.tenant_id || '') !== whScope) return;
+    bucket(r.product_id).wh += Number(r.qty) || 0;
+  });
+
+  var vanRows = botVanRows_(tid), vanStaff = 0, seenStaff = {};
+  (vanRows || []).forEach(function(r) {
+    if (!String(r.product_id || '').trim()) return;
+    var qty = Number(r.qty) || 0;
+    bucket(r.product_id).van += qty;
+    var who = String(r.line_user_id || '');
+    if (who && qty !== 0 && !seenStaff[who]) { seenStaff[who] = 1; vanStaff++; }
+  });
+
+  var rows = [];
+  Object.keys(acc).forEach(function(pid) {
+    var p = products[pid], u = units[pid];
+    var wh = acc[pid].wh, van = acc[pid].van;
+    if (wh + van === 0) return;            // ของที่หมดทั้งคลังและรถ ไม่ต้องรายงาน
+    rows.push({
+      productCode: p ? String(p.product_code || '') : pid,
+      productName: p ? String(p.name || '') : '(สินค้าถูกลบ)',
+      confirmed: !!(u && u.confirmed),
+      warehouseBase: wh, vanBase: van, totalBase: wh + van,
+      warehouse: botCases_(wh, u), van: botCases_(van, u), total: botCases_(wh + van, u)
+    });
+  });
+  // ★ เรียงด้วยหน่วยฐาน ไม่ใช่ลัง — แถวที่ยังไม่ยืนยันขนาดบรรจุมีหน่วยคนละอย่าง เอามาเรียงปนกันจะได้ลำดับที่อธิบายไม่ได้
+  rows.sort(function(a, b) {
+    if (b.totalBase !== a.totalBase) return b.totalBase - a.totalBase;
+    return String(a.productCode).localeCompare(String(b.productCode));
+  });
+
+  var totals = { warehouse: 0, van: 0, total: 0 }, unconfirmed = 0;
+  rows.forEach(function(r) {
+    if (r.confirmed) { totals.warehouse += r.warehouse; totals.van += r.van; totals.total += r.total; }
+    else unconfirmed++;
+  });
+  ['warehouse', 'van', 'total'].forEach(function(k) { totals[k] = Math.round(totals[k] * 100) / 100; });
+
+  var all = rows.length;
+  return { tenantId: tid, tenantName: tenantName, rows: rows.slice(0, BOT_INV_ROW_LIMIT),
+    shown: Math.min(all, BOT_INV_ROW_LIMIT), products: all, totals: totals,
+    vanAvailable: vanRows !== null, vanStaff: vanStaff, unconfirmed: unconfirmed,
+    asOf: Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm') };
+}
+
+/** คำสั่ง "ของคงเหลือ" — คืน array ของ message object (Flex หรือข้อความบอกเหตุ) */
+function botInventoryMessages_(lineUserId, arg) {
+  var admin = botAdminUser_(lineUserId);
+  if (!admin) {
+    return [{ type: 'text', text: 'คำสั่งนี้ต้องใช้บัญชีแอดมินที่ผูก LINE ไว้กับระบบครับ\n' +
+      'ให้ผู้ดูแลผูก LINE ของคุณกับบัญชีแอดมินที่เมนู "บัญชีผู้ใช้งาน" ก่อน\n' +
+      '(คำสั่งอื่นยังใช้ได้ปกติ — พิมพ์ "ช่วยเหลือ")' }];
+  }
+  if (!botHasPermission_(admin, 'inventory', 'view')) {
+    return [{ type: 'text', text: 'บัญชีนี้ยังไม่มีสิทธิ์ดูเมนูคลังสินค้าครับ — ให้ผู้ดูแลเปิดสิทธิ์ "คลังสินค้า" ให้บทบาทของคุณก่อน' }];
+  }
+
+  var list = botManagedTenants_(admin);
+  if (!list.length) return [{ type: 'text', text: 'ยังไม่มีตัวแทนที่คุณดูแลอยู่ครับ — ให้ผู้ดูแลระบบตั้งผู้รับผิดชอบให้ก่อน' }];
+
+  var want = String(arg || '').trim();
+  if (want) {
+    var hit = botMatchTenant_(list, want);
+    if (!hit) {
+      return [{ type: 'text', text: 'ไม่พบตัวแทน "' + want + '" ในรายการที่คุณดูแลครับ\n\nรายที่ดูแลอยู่:\n' +
+        list.map(function(t) { return '• ' + t.tenantId + ' — ' + t.name; }).join('\n') }];
+    }
+    return [botInventoryFlex_(hit.tenantId)];
+  }
+  if (list.length === 1) return [botInventoryFlex_(list[0].tenantId)];
+  return [botTenantPicker_(list)];
+}
+
+/** เทียบรหัสก่อน (ไม่สนตัวพิมพ์) แล้วค่อยเทียบชื่อแบบมีคำนั้นอยู่ — ชื่อตรงหลายรายถือว่าไม่ชัด */
+function botMatchTenant_(list, want) {
+  var w = want.toLowerCase();
+  for (var i = 0; i < list.length; i++) if (String(list[i].tenantId).toLowerCase() === w) return list[i];
+  var byName = list.filter(function(t) { return String(t.name).toLowerCase().indexOf(w) !== -1; });
+  return byName.length === 1 ? byName[0] : null;
+}
+
+function botInventoryFlex_(tenantId) {
+  var snap = botInventorySnapshot_(tenantId);
+  var alt = 'ของคงเหลือ ' + snap.tenantName + ' — รวม ' + botNum_(snap.totals.total) + ' ลัง (คลัง ' +
+    botNum_(snap.totals.warehouse) + ' · รถ ' + botNum_(snap.totals.van) + ')';
+  return { type: 'flex', altText: alt.substring(0, 400), contents: botFlexInventory_(snap) };
+}
+
+/* ── Flex: การ์ดของคงเหลือ ──
+   สีชุดเดียวกับแอปแอดมิน (frontend-admin/index.html): ฟ้า #2B63D9 · หมึก #0F1B2D · หมึกอ่อน #5B6B84 */
+var BOT_INK = '#0F1B2D', BOT_INK_SOFT = '#5B6B84', BOT_BLUE = '#2B63D9', BOT_LINE_CLR = '#E4E9F1';
+
+/** ตัวเลขอ่านง่าย: มีคอมมา · ทศนิยมเฉพาะเมื่อมีเศษ (13 · 13.5 · 12,840.25) */
+function botNum_(n) {
+  var v = Math.round((Number(n) || 0) * 100) / 100;
+  var neg = v < 0; v = Math.abs(v);
+  var whole = Math.floor(v), frac = Math.round((v - whole) * 100);
+  var s = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (frac) {
+    var f = frac < 10 ? ('0' + frac) : String(frac);
+    if (f.charAt(1) === '0') f = f.charAt(0);     // .50 → .5
+    s += '.' + f;
+  }
+  return (neg ? '-' : '') + s;
+}
+
+function botFlexText_(text, opts) {
+  var t = { type: 'text', text: String(text === null || text === undefined ? '' : text) };
+  Object.keys(opts || {}).forEach(function(k) { t[k] = opts[k]; });
+  return t;
+}
+
+/** แถวตาราง 4 ช่อง: ชื่อสินค้า | คลัง | รถ | รวม */
+function botFlexRow_(label, wh, van, total, opts) {
+  opts = opts || {};
+  var size = opts.size || 'sm', color = opts.color || BOT_INK, weight = opts.bold ? 'bold' : 'regular';
+  return { type: 'box', layout: 'horizontal', spacing: 'xs', contents: [
+    botFlexText_(label, { size: size, color: color, weight: weight, flex: 5, wrap: false, maxLines: 1 }),
+    botFlexText_(wh,    { size: size, color: color, weight: weight, flex: 3, align: 'end' }),
+    botFlexText_(van,   { size: size, color: color, weight: weight, flex: 3, align: 'end' }),
+    botFlexText_(total, { size: size, color: opts.totalColor || color, weight: 'bold', flex: 3, align: 'end' })
+  ] };
+}
+
+function botFlexInventory_(snap) {
+  var body = [
+    botFlexRow_('สินค้า', 'คลัง', 'รถ', 'รวม', { size: 'xs', color: BOT_INK_SOFT, bold: true }),
+    { type: 'separator', margin: 'sm', color: BOT_LINE_CLR }
+  ];
+  if (!snap.rows.length) {
+    body.push(botFlexText_('ไม่มีของคงเหลือในคลังและบนรถ', { size: 'sm', color: BOT_INK_SOFT, margin: 'md', wrap: true }));
+  } else {
+    snap.rows.forEach(function(r) {
+      // ★ ดอกจัน = ยังไม่ยืนยันขนาดบรรจุ ตัวเลขแถวนั้นเป็น "ชิ้น" ไม่ใช่ "ลัง" (เชิงอรรถอยู่ท้ายการ์ด)
+      var name = (r.confirmed ? '' : '*') + (r.productName || r.productCode);
+      body.push(botFlexRow_(name, botNum_(r.warehouse), botNum_(r.van), botNum_(r.total), { totalColor: BOT_BLUE }));
+    });
+  }
+
+  var footer = [
+    { type: 'separator', color: BOT_LINE_CLR },
+    botFlexRow_('รวมทั้งหมด (ลัง)', botNum_(snap.totals.warehouse), botNum_(snap.totals.van), botNum_(snap.totals.total),
+      { bold: true, totalColor: BOT_BLUE })
+  ];
+  var notes = [];
+  if (snap.products > snap.shown) notes.push('แสดง ' + snap.shown + ' จาก ' + snap.products + ' รายการ (เรียงตามของรวมมากสุด)');
+  if (snap.unconfirmed) notes.push('* ' + snap.unconfirmed + ' รายการยังไม่ยืนยันขนาดบรรจุ — ตัวเลขเป็นชิ้น ไม่ได้รวมในยอดลัง');
+  if (!snap.vanAvailable) notes.push('อ่านของบนรถไม่ได้ (ยังไม่มีไฟล์ของตัวแทนรายนี้) — ช่องรถจึงเป็น 0');
+  else if (snap.vanStaff) notes.push('ของบนรถรวมจากพนักงาน ' + snap.vanStaff + ' คน');
+  notes.forEach(function(n) { footer.push(botFlexText_(n, { size: 'xxs', color: BOT_INK_SOFT, wrap: true, margin: 'sm' })); });
+
+  return {
+    type: 'bubble', size: 'mega',
+    header: { type: 'box', layout: 'vertical', backgroundColor: BOT_BLUE, paddingAll: '14px', spacing: 'xs', contents: [
+      botFlexText_('ของคงเหลือ · หน่วยลัง', { size: 'xs', color: '#C9DAFB' }),
+      botFlexText_(snap.tenantName || snap.tenantId, { size: 'lg', weight: 'bold', color: '#FFFFFF', wrap: true }),
+      botFlexText_('ณ ' + snap.asOf, { size: 'xxs', color: '#C9DAFB' })
+    ] },
+    body: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px', contents: body },
+    footer: { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '12px', contents: footer }
+  };
+}
+
+/** เมนูเลือกตัวแทน — quick reply ถ้าไม่เกิน 13 ราย ไม่งั้นใช้ปุ่มในการ์ด */
+function botTenantPicker_(tenants) {
+  var head = 'เลือกตัวแทนที่ต้องการดูของคงเหลือ';
+  if (tenants.length <= BOT_QUICK_MAX) {
+    return { type: 'text', text: head, quickReply: { items: tenants.map(function(t) {
+      return { type: 'action', action: { type: 'postback', label: botCut_(t.name, 20),
+        data: 'cmd=inv&t=' + encodeURIComponent(t.tenantId), displayText: 'ของคงเหลือ: ' + t.name } };
+    }) } };
+  }
+  var shown = tenants.slice(0, BOT_BUTTON_MAX);
+  var contents = [botFlexText_(head, { size: 'sm', color: BOT_INK, wrap: true, weight: 'bold' })];
+  shown.forEach(function(t) {
+    contents.push({ type: 'button', style: 'secondary', height: 'sm', margin: 'sm',
+      action: { type: 'postback', label: botCut_(t.name, 20),
+        data: 'cmd=inv&t=' + encodeURIComponent(t.tenantId), displayText: 'ของคงเหลือ: ' + t.name } });
+  });
+  contents.push(botFlexText_('อีก ' + (tenants.length - shown.length) + ' ราย — พิมพ์ "ของคงเหลือ <รหัสตัวแทน>"',
+    { size: 'xxs', color: BOT_INK_SOFT, wrap: true, margin: 'md' }));
+  return { type: 'flex', altText: head, contents: {
+    type: 'bubble', size: 'mega', body: { type: 'box', layout: 'vertical', paddingAll: '14px', contents: contents } } };
+}
+
+/** ป้าย quick reply เกิน 20 ตัวอักษร LINE ปฏิเสธทั้งก้อน */
+function botCut_(s, n) {
+  var t = String(s || '');
+  return t.length <= n ? t : (t.substring(0, n - 1) + '…');
 }
 
 function toDateSafe_(v) { return v instanceof Date ? v : new Date(v); }
@@ -436,14 +876,20 @@ function logChat_(lineUserId, displayName, userMessage, responseMessage) {
 
 // ── LINE Messaging API ──
 function replyMessage_(replyToken, text) {
+  return replyMessages_(replyToken, [{ type: 'text', text: String(text).substring(0, 5000) }]);
+}
+
+/** ตอบได้ไม่เกิน 5 ข้อความต่อ reply token หนึ่งใบ (เพดานของ LINE) */
+function replyMessages_(replyToken, messages) {
+  if (!messages || !messages.length) return;
   var token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
-  if (!token) { console.error('replyMessage_: ยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN'); return; }
+  if (!token) { console.error('replyMessages_: ยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN'); return; }
   try {
     var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'post',
       contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + token },
-      payload: JSON.stringify({ replyToken: replyToken, messages: [{ type: 'text', text: String(text).substring(0, 5000) }] }),
+      payload: JSON.stringify({ replyToken: replyToken, messages: messages.slice(0, 5) }),
       muteHttpExceptions: true
     });
     // muteHttpExceptions ทำให้ 4xx/5xx ไม่โยน exception — ต้องเช็ค status เองไม่งั้นตอบไม่ได้แบบเงียบๆ

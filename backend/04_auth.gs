@@ -174,13 +174,11 @@ function doGet(e) {
 // content-type ฝั่ง client (fetch) ต้องเป็น text/plain โดยเจตนา — GAS Web App ไม่รองรับ
 // preflighted CORS request (custom header/application-json) เชื่อถือได้ ส่ง text/plain
 // แล้ว parse JSON เองใน e.postData.contents จะเลี่ยง preflight ได้
+/* ★ บอท LINE **ไม่ได้อยู่ที่นี่** — เจ้าของระบบเลือก 21 ต.ค. 2026 ให้โปรเจกต์ `bot-line/` (RangerBot-TOPSALES)
+   เป็นบอทตัวจริงตัวเดียว เพราะ LINE channel หนึ่งตัวชี้ webhook ได้ URL เดียว และ channel ที่ใช้อยู่
+   ผูกกับโปรเจกต์นั้นมาก่อนแล้ว · doPost นี้จึงเป็นของ API ของแอปล้วนๆ เหมือนเดิม
+   **ห้ามเอา webhook ของ LINE มาชี้ที่ URL นี้** (เคยมีโค้ดดัก `events` อยู่ครู่หนึ่ง ถอดออกแล้ว) */
 function doPost(e) {
-  /* ★★ บอท LINE ใช้ URL เดียวกับ API นี้ (Apps Script มี doPost ได้ตัวเดียว) — ต้องดักก่อนทุกอย่าง
-     คำขอของ LINE ไม่มี `action` มีแต่ `events` ถ้าปล่อยให้ตกลงไปข้างล่างจะได้ "รูปแบบคำขอไม่ถูกต้อง"
-     แล้ว LINE จะ retry ก้อนเดิมซ้ำๆ · คืน null = ไม่ใช่ของ LINE ไปต่อตามปกติ (59_line_bot.gs) */
-  var hook = lineBotHandleWebhook(e);
-  if (hook) return hook;
-
   var body = {};
   try { body = JSON.parse(e.postData.contents || '{}'); } catch (err) {
     return _jsonOutput({ success: false, message: 'รูปแบบคำขอไม่ถูกต้อง (invalid JSON)' });
