@@ -4818,7 +4818,13 @@ function renderSaleOrderDetail(r){
               head + '</button>');
         }).join('') +
       '</div></div> ' +
-    (o.status !== 'cancelled' ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' : '');
+    (o.status !== 'cancelled'
+      ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' +
+        /* ★ ลิงก์คู่มือวางติดปุ่มยกเลิก ไม่ใช่ไปซ่อนในเมนูคู่มือ — คนอ่านคู่มือเรื่องนี้ตอนกำลังจะกดยกเลิก
+           ไม่ใช่ตอนนั่งว่างแล้วเปิดคู่มืออ่าน (เนื้อหาบอกว่าสถานะไหนระบบคืนของให้ และกรณีไหนต้องใช้ใบลดหนี้แทน) */
+        ' <button class="btn btn-ghost btn-sm" onclick="openHelpArticle(\'sales-cancel\')" ' +
+        'title="เปิดคู่มือ: ยกเลิกบิลขาย — ทำได้เมื่อไหร่ และระบบจัดการอะไรให้บ้าง">คู่มือการยกเลิก</button>'
+      : '');
   renderSaleOrderStatusCard(r);
   renderSaleOrderHistory(r);
   // ★ 2026-09-30 (2) "ราคาก่อนภาษีเป็นตัวตั้งต้น" — เดิมหน้านี้โชว์แค่ราคา/หน่วย+รวม ไม่มีส่วนลดต่อบรรทัดเลย
@@ -10830,6 +10836,12 @@ async function loadHelpCenter(){
   const r = await callApi('listHelpArticles', { includeInactive: true });
   if (!r.success) { if (!helpArticles.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   helpArticles = r.data; helpCanEdit = !!r.canEdit;
+  /* โหลดของสดมาแล้วยังไม่มีบทความรหัสนั้น = ยังไม่ได้ติดตั้งบทความใน env นี้ — บอกไปตรงๆ
+     ดีกว่าพาผู้ใช้มาหน้าคู่มือแล้วปล่อยให้งงว่าทำไมไม่มีอะไรเปิดขึ้นมา */
+  if (helpWantCode && !helpArticles.some(a => a.code === helpWantCode)) {
+    toast('ยังไม่มีบทความนี้ในคู่มือ — ให้เจ้าของระบบติดตั้งก่อน (seedCancelSaleHelpArticle)', true);
+    helpWantCode = null;
+  }
   listSnapSave('helparticles', helpArticles);
   document.getElementById('hc-add-btn').style.display = helpCanEdit ? '' : 'none';
   renderHelpCats(); renderHelpList();
@@ -10843,6 +10855,10 @@ function renderHelpCats(){
 function helpSetCat(c){ helpCatFilter = c; renderHelpCats(); renderHelpList(); }
 function renderHelpList(){
   const box = document.getElementById('hc-list'); if (!box) return;
+  if (helpWantCode && helpArticles.length) {
+    const want = helpArticles.find(a => a.code === helpWantCode);
+    if (want) { helpOpenId = want.id; helpWantCode = null; }
+  }
   const q = (document.getElementById('hc-search').value || '').trim().toLowerCase();
   let rows = helpCanEdit ? helpArticles : helpArticles.filter(a => a.isActive);
   if (helpCatFilter !== 'all') rows = rows.filter(a => a.category === helpCatFilter);
@@ -10870,6 +10886,19 @@ function renderHelpList(){
   box.innerHTML = html;
 }
 function helpToggleOpen(id){ helpOpenId = helpOpenId === id ? null : id; renderHelpList(); }
+
+/* เปิดคู่มือไปที่บทความหนึ่งโดยตรง — เรียกจากหน้าอื่นได้ (เช่นปุ่ม "คู่มือการยกเลิก" บนหน้าบิลขาย)
+   ★ อ้างด้วย **รหัสบทความ** (`code`) ไม่ใช่ `record_id` — id เป็นเลขแถวในชีตซึ่งเปลี่ยนได้ถ้ามีคนลบ/สร้างใหม่
+     แล้วลิงก์จะพาไปผิดบทความเงียบๆ · รหัสเป็นสิ่งที่คนตั้งเองและคงที่
+   ★ ตั้งเป็น "ค้างไว้" แล้วให้ตัววาดเปิดให้ — ตอนกดปุ่ม รายการอาจยังโหลดไม่เสร็จ (หรือมีแค่ของจาก
+     snapshot) พอของสดมาถึง renderHelpList ถูกเรียกอีกครั้งแล้วค่อยเปิดได้ถูกบทความ */
+let helpWantCode = null;
+function openHelpArticle(code){
+  helpWantCode = String(code || '');
+  helpCatFilter = 'all';                                   // ไม่งั้นบทความอาจถูกตัวกรองหมวดซ่อนไว้
+  const q = document.getElementById('hc-search'); if (q) q.value = '';
+  gotoView('helpcenter');
+}
 async function helpToggleActive(id){
   const a = helpArticles.find(x => x.id === id); if (!a) return;
   const r = await callApi('setHelpArticleActive', { id, isActive: !a.isActive });
