@@ -155,6 +155,8 @@ function getSalesOrderAdmin(session, payload) {
       /* ★ 14 ต.ค. 2026 — บิลที่แยกรอบจัดส่งจะ "ถอยกลับ" มาขั้นรับงานหลังส่งรอบหนึ่งเสร็จ (48_delivery_rounds.gs)
          ทั้งที่ตั้งลูกหนี้/ออกใบกำกับภาษีไปแล้ว · ดูสถานะอย่างเดียวจึงไม่พอ เลขใบแจ้งหนี้จะหายจากหน้าจอ
          และปุ่มพิมพ์ใบแจ้งหนี้จะถูกกั้นทั้งที่ใบมีอยู่จริง → ใบที่มีเลขใบกำกับภาษีแล้ว แปลว่าเคยถึงขั้นนั้นแน่นอน */
+      arInvoiceId: (_soReachedReady(order.status) || String(order.tax_invoice_no || '').trim())
+        ? (function(){ var iv = _arInvoiceOf(tenantId, order.record_id); return iv ? String(iv.record_id) : ''; })() : '',
       arInvoiceNo: (_soReachedReady(order.status) || String(order.tax_invoice_no || '').trim())
         ? _arInvoiceNoOf(tenantId, order.record_id) : '',
       // แก้รายการได้เฉพาะขั้น "บันทึกรับงานแล้ว" และยังไม่มีการรับชำระ (ดู editSalesOrderAdmin ใน 34_sales_status.gs)
@@ -183,15 +185,20 @@ function getSalesOrderAdmin(session, payload) {
      ที่บังเอิญ record_id ชนกันจะดึงเลขของอีกบริษัทมาพิมพ์ลงเอกสาร */
 /* ★ อ่านทั้งชีต ar_invoices ทุกครั้งที่เปิดดูบิล — ตารางเอกสารจึงแคชไม่ได้ (ความถูกต้องสำคัญกว่า)
    ผู้เรียกต้องกันไว้เองว่าใบนี้ "มีโอกาสมีใบแจ้งหนี้แล้วหรือยัง" ก่อนเรียก ดู getSalesOrderAdmin */
-function _arInvoiceNoOf(tenantId, salesOrderId) {
-  var hit = '';
+function _arInvoiceOf(tenantId, salesOrderId) {
+  var hit = null;
   centralObjects('ar_invoices').forEach(function(iv) {
-    if (hit || String(iv.status) === 'void') return;
+    // ★ รับทั้ง 'void' และ 'voided' — สองคำนี้ปนกันอยู่ในระบบ (ดูหมายเหตุใน 49_credit_notes.gs)
+    if (hit || String(iv.status) === 'void' || String(iv.status) === 'voided') return;
     if (String(iv.sales_order_id) !== String(salesOrderId)) return;
     if (String(iv.tenant_id || '') !== String(tenantId || '')) return;
-    hit = String(iv.invoice_no || '');
+    hit = iv;
   });
   return hit;
+}
+function _arInvoiceNoOf(tenantId, salesOrderId) {
+  var iv = _arInvoiceOf(tenantId, salesOrderId);
+  return iv ? String(iv.invoice_no || '') : '';
 }
 
 /* ใบนี้เคยไปถึงขั้น "พร้อมจัดส่ง" แล้วหรือยัง — ใช้ตัดสินว่าต้องไปหาเลขใบแจ้งหนี้หรือไม่
@@ -415,6 +422,21 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
   if (order.status === 'cancelled') return { success: false, message: 'บิลนี้ถูกยกเลิกไปแล้ว' };
 
+  /* ★★ ออกใบแจ้งหนี้/ใบกำกับภาษีให้ลูกค้าไปแล้ว = ยกเลิกบิลไม่ได้ ต้องออกใบลดหนี้แทน
+     (เจ้าของระบบสั่ง 22 ต.ค. 2026 — "ให้ไปทำในระบบใบลดหนี้เท่านั้น")
+     เหตุผล: ใบกำกับภาษีที่ออกไปแล้วอยู่ในมือลูกค้าและอยู่ใน ภ.พ.30 ของงวดนั้นแล้ว การกดยกเลิกฝั่งเรา
+     ไม่ได้ดึงเอกสารนั้นกลับมา · **ของเดิมยกเลิกได้โดยไม่มีอะไรเตือน** แล้วใบแจ้งหนี้ค้างเปิดอยู่ในระบบลูกหนี้
+     (รายงานยังทวงเงินลูกค้า ภาษีขายยังอยู่ในสมุด) โดยไม่มีอะไรฟ้องเลย
+     ★ ขายสดจากรถไม่เข้าด่านนี้ เพราะไม่มีใบแจ้งหนี้ลูกหนี้ให้ลดหนี้ — กั้นแล้วจะกลายเป็นทางตัน
+       (ออกใบกำกับให้ตั้งแต่กดบันทึก) จึงปล่อยให้ยกเลิกได้ แต่เตือนให้เก็บต้นฉบับใบกำกับคืน ดูท้ายฟังก์ชัน */
+  var openInv = _arInvoiceOf(tenantId, order.record_id);
+  if (openInv) {
+    return { success: false, needCreditNote: true,
+      invoiceId: String(openInv.record_id), invoiceNo: String(openInv.invoice_no || ''),
+      message: 'บิลนี้ออกใบแจ้งหนี้/ใบกำกับภาษี ' + openInv.invoice_no + ' ไปแล้ว — ยกเลิกบิลไม่ได้ ' +
+        'ต้องออกใบลดหนี้แทน (เมนู งานขาย → ใบลดหนี้ / เพิ่มหนี้ หรือปุ่มใบลดหนี้บนหน้าบิลนี้)' };
+  }
+
   // คืนของเข้าที่เดิม ถ้าบิลนี้เลยจุดตัดสต็อกไปแล้ว — saleStockTaken() คือนิยามเดียวกับที่ใช้ตอนตัดของ
   // ย้ายจุดตัดเมื่อไหร่ ตรงนี้ขยับตามเองทันที (guide ข้อ 1.4 · ดู 34_sales_status.gs)
   // ไม่คืน = ของหายจากระบบถาวรทั้งที่ยังวางอยู่ และไม่มีอะไรเตือนเลย เพราะยอดขายกับยอดสต็อกลดพร้อมกันดูสมเหตุสมผล
@@ -450,11 +472,18 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
   var cashRev = reverseCashSaleGl(tenantId, order, session.adminUserId, 'ยกเลิกบิล');
 
   var shippedWarn = '';
+  /* ★ มาถึงตรงนี้ได้แปลว่า "ไม่มีใบแจ้งหนี้ลูกหนี้" (ด่านข้างบนกั้นไปแล้ว) แต่ยังอาจมีใบกำกับภาษีอยู่:
+     ขายสดจากรถออกให้ตั้งแต่กดบันทึก และบิลเงินสดฝั่งสำนักงานออกตอนเข้าขั้น "พร้อมจัดส่ง"
+     ยกเลิกได้เพราะไม่มีใบแจ้งหนี้ให้ลดหนี้ แต่เอกสารอยู่ในมือลูกค้าแล้ว ต้องเก็บคืนตามแนวปฏิบัติทางบัญชี */
+  if (String(order.tax_invoice_no || '').trim()) {
+    shippedWarn = 'บิลนี้ออกใบกำกับภาษี ' + order.tax_invoice_no + ' ให้ลูกค้าไปแล้ว — ' +
+      'ต้องเก็บต้นฉบับคืนมาเขียน "ยกเลิก" คาดไว้กับสำเนา ถ้าเก็บคืนไม่ได้ให้แจ้งฝ่ายบัญชี';
+  }
   if (saleOrderHasRounds(order)) {
     var cp = saleDeliveryPlan(tenantId, order);
     var shippedLines = cp.lines.filter(function(l) { return l.shipped > 0.0001; });
     if (shippedLines.length) {
-      shippedWarn = 'ใบนี้ส่งของไปแล้ว ' + shippedLines.length + ' รายการ — ของที่ส่งไปแล้วไม่ถูกคืนเข้าคลัง ' +
+      shippedWarn = (shippedWarn ? shippedWarn + ' · ' : '') + 'ใบนี้ส่งของไปแล้ว ' + shippedLines.length + ' รายการ — ของที่ส่งไปแล้วไม่ถูกคืนเข้าคลัง ' +
         'แต่ยอดขายถูกหักคืนทั้งใบ กรุณาตามเก็บของคืนหรือออกใบลดหนี้ให้ลูกค้า';
     }
   }

@@ -144,10 +144,18 @@ const CACHE = {};
 let uuidSeq = 0;
 const PROPS = { CENTRAL_SHEET_FILEID_PROD: PROD, CENTRAL_SHEET_FILEID_UAT: UAT, LINE_CHANNEL_ACCESS_TOKEN: 'tok-1' };
 const NOW = new Date('2026-10-21T09:30:00+07:00');
+/* ★ ตรึงนาฬิกาจริงๆ ด้วยการครอบ Date — `new Date()` ในโค้ดบอทต้องได้วันที่ที่ตรึงไว้
+   เดิมตรึงด้วยตัวแปร `__now` ซึ่งไม่มีโค้ดไหนอ่าน เทสต์ "ยอดขายวันนี้" จึงผ่านเฉพาะวันที่รันตรงกับ
+   วันที่ในข้อมูลทดสอบพอดี แล้วพังเองวันรุ่งขึ้นโดยไม่มีใครแก้อะไร (เจอ 22 ต.ค. 2026)
+   `new Date(x)` ที่ส่งค่ามายังทำงานปกติ จึงใช้แปลงวันที่อื่นได้เหมือนเดิม */
+class FrozenDate extends Date {
+  constructor(...a) { super(...(a.length ? a : [NOW.getTime()])); }
+  static now() { return NOW.getTime(); }
+}
 
 const ctx = {
   console: { error: () => {}, log: () => {} },
-  JSON, String, Number, Object, Array, Date, isNaN, isFinite, parseInt, parseFloat, RegExp, Math,
+  JSON, String, Number, Object, Array, Date: FrozenDate, isNaN, isFinite, parseInt, parseFloat, RegExp, Math,
   encodeURIComponent, decodeURIComponent,
   Utilities: { getUuid: () => {
     // รูปแบบเดียวกับของจริง (มีขีด) — โค้ดบอทถอดขีดออกเองแล้วได้ hex 32 ตัว
@@ -185,8 +193,6 @@ const ctx = {
 ctx.global = ctx;
 vm.createContext(ctx);
 vm.runInContext(SRC, ctx, { filename: 'bot-line/Code.js' });
-// ตรึงเวลาไว้ให้ทดสอบ "วันนี้" ได้ (Date ตัวจริงยังใช้ได้กับการแปลงวันที่อื่น)
-vm.runInContext('var __now = new Date("2026-10-21T09:30:00+07:00");', ctx);
 
 let failed = 0;
 const eq = (name, actual, expected) => {

@@ -4821,7 +4821,12 @@ function renderSaleOrderDetail(r){
         }).join('') +
       '</div></div> ' +
     (o.status !== 'cancelled'
-      ? '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>' +
+      /* ★ ออกใบแจ้งหนี้แล้ว = ยกเลิกไม่ได้ (backend กั้นไว้แล้ว) — หน้าจอจึงไม่ควรยื่นปุ่มที่กดแล้วโดนปฏิเสธ
+         แต่ต้องยื่น "ทางที่ถูก" แทน ไม่ใช่เอาปุ่มออกเฉยๆ แล้วปล่อยให้คนหาเองว่าต้องทำอะไรต่อ */
+      ? (o.arInvoiceId
+          ? '<button class="btn btn-sm btn-primary" onclick="openCreditNoteForm(' + o.arInvoiceId + ')" ' +
+            'title="บิลนี้ออกใบแจ้งหนี้ ' + esc(o.arInvoiceNo || '') + ' แล้ว — ยกเลิกบิลไม่ได้ ต้องลดยอดด้วยใบลดหนี้">ออกใบลดหนี้</button>'
+          : '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>') +
         /* ★ ลิงก์คู่มือวางติดปุ่มยกเลิก ไม่ใช่ไปซ่อนในเมนูคู่มือ — คนอ่านคู่มือเรื่องนี้ตอนกำลังจะกดยกเลิก
            ไม่ใช่ตอนนั่งว่างแล้วเปิดคู่มืออ่าน (เนื้อหาบอกว่าสถานะไหนระบบคืนของให้ และกรณีไหนต้องใช้ใบลดหนี้แทน) */
         ' <button class="btn btn-ghost btn-sm" onclick="openHelpArticle(\'sales-cancel\')" ' +
