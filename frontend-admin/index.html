@@ -1767,7 +1767,9 @@
           <div class="view-head"><div><h1>ทะเบียนคลังสินค้า</h1>
             <p><b>หน้าที่ของคลัง</b>เป็นตัวตัดสินว่าของในคลังนั้นนับเป็นของที่ขายได้หรือไม่ —
               การขายตัดของจาก<b>คลังหลัก</b>เท่านั้น</p></div>
-            <div><button class="btn btn-primary" onclick="openWarehouseModal()">+ เพิ่มคลัง</button></div></div>
+            <div><button class="btn" id="dbl-whmerge" onclick="mergeWarehousesUI()"
+                title="รวมคลังรับคืน/ของเสียที่ระบบเผลอสร้างซ้ำ — ย้ายของมารวมที่ใบหลักแล้วปิดใบซ้ำ">รวมคลังที่ซ้ำ</button>
+              <button class="btn btn-primary" onclick="openWarehouseModal()">+ เพิ่มคลัง</button></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>ชื่อคลัง</th><th>หน้าที่</th><th>ที่อยู่</th><th>สถานะ</th><th></th></tr></thead>
             <tbody id="wh-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
@@ -1899,7 +1901,6 @@
               <button class="btn" onclick="loadDbLayout()">ดูตำแหน่งไฟล์</button>
               <button class="btn btn-primary" id="dbl-fix" onclick="organizeDbFiles()">จัดระเบียบไฟล์ตามโครงสร้าง</button>
               <button class="btn" id="dbl-schema" onclick="syncTenantSchemaUI()">ปรับสคีมาไฟล์ตัวแทน</button>
-              <button class="btn" id="dbl-whmerge" onclick="mergeWarehousesUI()">รวมคลังที่ซ้ำ</button>
             </div>
             <p class="form-hint">"ปรับสคีมาไฟล์ตัวแทน" = เติม tab/คอลัมน์ที่ขาดให้ไฟล์ของตัวแทนที่สร้างไว้ก่อนระบบเพิ่มฟิลด์ใหม่
               (เช่น สถานะการเงินของบิลขาย และตารางประวัติสถานะ) — ข้อมูลเดิมไม่ถูกแตะ รันซ้ำได้ ปกติระบบเติมให้เองอยู่แล้วตอนบันทึกบิล

@@ -199,12 +199,28 @@ function _ensureWarehouseByPurpose(scope, purpose) {
  *   มีของค้างอยู่ → **ย้ายของมารวมที่ตัวจริงก่อน** แล้วค่อยปิด (ของหายไม่ได้)
  *   ไม่มีของ      → ปิดใช้งานเฉยๆ (ไม่ลบแถว เผื่อมีเอกสารเก่าอ้างถึง)
  */
+/** หน้าที่ของคลังแบบเดาย้อนหลัง — ใช้ `purpose` ก่อน ไม่มีค่าก็ดูจากรหัส/ชื่อที่ระบบตั้งให้เอง */
+function _whInferredPurpose(w) {
+  var p = String((w && w.purpose) || '').trim();
+  if (WH_PURPOSES[p]) return p;
+  var code = String((w && w.code) || '').toUpperCase();
+  var name = String((w && w.name) || '').trim();
+  for (var k in WH_PURPOSE_CODE) {
+    if (code === WH_PURPOSE_CODE[k] || name === WH_PURPOSES[k]) return k;
+  }
+  return 'sale';
+}
+
 function mergeDuplicateWarehouses(session, payload) {
   if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
   centralEnsureColumns('warehouses');
   var keep = {}, dups = [];
   centralObjects('warehouses').forEach(function(w) {
-    var p = _whPurpose(w);
+    /* ★★★ ห้ามดูแค่ `purpose` — ใบที่งอกซ้ำคือใบที่ **เขียน purpose ไม่ติด** (คอลัมน์ยังไม่มีในชีต)
+       ค่าจึงว่าง แล้ว `_whPurpose()` คืน 'sale' ตามกติกาความเข้ากันได้ → ถ้ากรองด้วย purpose อย่างเดียว
+       **ตัวซ่อมจะมองไม่เห็นใบที่มันต้องซ่อมเลยสักใบ** (เจอ 23 ต.ค. 2026 ผู้ใช้บอกว่ายังซ้ำอยู่)
+       คลังพวกนี้ระบบตั้งรหัสและชื่อเองตายตัว จึงใช้สองตัวนั้นเดาหน้าที่ย้อนหลังได้ */
+    var p = _whInferredPurpose(w);
     if (p === 'sale') return;                       // คลังขายมีได้หลายใบตามปกติ ไม่ใช่ของที่ระบบสร้าง
     if (!_isTrue(w.is_active)) return;              // ใบที่ปิดไปแล้วไม่ใช่ของซ้ำอีกต่อไป (รันซ้ำได้)
     var k = String(w.tenant_id || '') + '|' + p;
@@ -216,7 +232,8 @@ function mergeDuplicateWarehouses(session, payload) {
 
   var moved = 0, closed = 0;
   dups.forEach(function(w) {
-    var k = String(w.tenant_id || '') + '|' + _whPurpose(w);
+    // ★ ต้องเดาหน้าที่แบบเดียวกับตอนสแกน ไม่งั้นหาใบหลักไม่เจอแล้วพัง
+    var k = String(w.tenant_id || '') + '|' + _whInferredPurpose(w);
     var target = keep[k];
     _scoped('warehouse_stock', String(w.tenant_id || '')).forEach(function(r) {
       if (String(r.warehouse_id) !== String(w.record_id)) return;
@@ -230,6 +247,11 @@ function mergeDuplicateWarehouses(session, payload) {
     });
     centralUpdate('warehouses', w.record_id, { is_active: 'FALSE', name: w.name + ' (ซ้ำ-ปิดแล้ว)' });
     closed++;
+  });
+  // ★ ใบที่เก็บไว้ต้องมี purpose จริงๆ ไม่งั้นรอบหน้ายังถูกนับเป็นคลังขาย แล้วของเสียโผล่เป็นของขายได้
+  Object.keys(keep).forEach(function(k) {
+    var w = keep[k], p = _whInferredPurpose(w);
+    if (_whPurpose(w) !== p) centralUpdate('warehouses', w.record_id, { purpose: p });
   });
   return { success: true, closed: closed, movedLines: moved,
     message: closed ? ('ปิดคลังซ้ำ ' + closed + ' ใบ' + (moved ? ' · ย้ายของมารวม ' + moved + ' รายการ' : ''))
