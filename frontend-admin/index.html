@@ -1760,6 +1760,20 @@
           </div>
         </section>
 
+        <!-- ═══ ทะเบียนคลังสินค้า (23 ต.ค. 2026) ═══
+             ★ ก่อนหน้านี้ไม่มีหน้านี้เลย — คลังถูกสร้างอัตโนมัติอย่างเดียว (`_ensureScopeWarehouse`
+               และ `_ensureWarehouseByPurpose`) จึงแก้ชื่อ ปิดใช้งาน หรือเพิ่มคลังเองไม่ได้ -->
+        <section class="view" id="view-warehouses">
+          <div class="view-head"><div><h1>ทะเบียนคลังสินค้า</h1>
+            <p><b>หน้าที่ของคลัง</b>เป็นตัวตัดสินว่าของในคลังนั้นนับเป็นของที่ขายได้หรือไม่ —
+              การขายตัดของจาก<b>คลังหลัก</b>เท่านั้น</p></div>
+            <div><button class="btn btn-primary" onclick="openWarehouseModal()">+ เพิ่มคลัง</button></div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>รหัส</th><th>ชื่อคลัง</th><th>หน้าที่</th><th>ที่อยู่</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="wh-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
         <!-- ═══ ข้อมูลกลาง: ช่องทางการจัดจำหน่าย ═══ -->
         <section class="view" id="view-distchannels">
           <div class="view-head"><div><h1>ช่องทางการจัดจำหน่าย</h1><p>ข้อมูลกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — จัดการได้เฉพาะบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
@@ -2888,6 +2902,8 @@ const NAV_GROUPS = [
     { n:'4.3', label:'นำเข้าจากรายการขายออกของบริษัท', items:[
       {n:'4.3.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner'},
       {n:'4.3.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'} ]},
+    { n:'4.7', label:'ตั้งค่าคลัง', items:[
+      {n:'4.7.1', label:'ทะเบียนคลังสินค้า', view:'warehouses', mod:'inventory', ready:true, scope:'both'} ]},
     { n:'4.8', label:'รายงานเคลื่อนไหวสินค้า', items:[
       {n:'4.8.1', label:'รายงานเคลื่อนไหวสินค้า', view:'v-stockledger', mod:'inventory', ready:false, scope:'both',
         soon:'รายงานเคลื่อนไหวสินค้า', desc:'เข้า-ออก-คงเหลือรายสินค้า อ้างเอกสารต้นทาง (ข้อมูลมีอยู่แล้วใน stock_ledger)'}
@@ -3414,6 +3430,7 @@ const LOADERS = {
   custrequests: loadCustRequests,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
   companyprofile: loadCompanyProfile, adminusers: loadUserDirectory, pricelists: loadPriceLists,
+  warehouses: loadWarehousesView,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
   salesorders: loadSalesOrders,
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
@@ -3796,6 +3813,67 @@ async function ensureCustomerGroups(){
 }
 
 /* ══════════════ ข้อมูลกลาง: กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน ══════════════ */
+/* ══════════ ทะเบียนคลังสินค้า ══════════
+   ★ หน้าที่ของคลัง (`purpose`) ไม่ใช่แค่ป้าย — ของในคลังที่ไม่ใช่ "คลังขาย" ไม่ถูกนับเป็นของที่ขายได้
+     ทั้งในหน้าคลัง หน้าขาย และบอท (ดู CLAUDE.md "คลังมีหน้าที่") */
+const WH_PURPOSE_LABEL = { sale: 'คลังขาย', quarantine: 'คลังรับคืน (รอตรวจ)', scrap: 'คลังของเสีย' };
+let whCache = [];
+async function loadWarehousesView(){
+  const body = document.getElementById('wh-body');
+  if (!whCache.length) whCache = listSnapLoad('warehouses') || [];
+  if (whCache.length) renderWarehouses(); else tblLoading(body, 6);
+  const r = await callApi('listWarehouses', {});
+  if (!r.success) { if (!whCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="6">'+esc(r.message)+'</td></tr>'; return; }
+  whCache = r.data;
+  listSnapSave('warehouses', whCache);
+  renderWarehouses();
+}
+function renderWarehouses(){
+  document.getElementById('wh-body').innerHTML = rowsOrEmpty(whCache.map(w =>
+    '<tr><td class="mono-data">'+esc(w.code || '-')+'</td>' +
+    '<td class="wrap">'+esc(w.name)+(w.isDefault ? ' <span class="tag tag-ok">คลังหลัก</span>' : '')+'</td>' +
+    /* ★ คลังที่ขายไม่ได้ต้องเห็นชัด — คนดูยอดคงเหลือจะได้ไม่นับรวมไปด้วย */
+    '<td>'+(w.sellable ? '<span class="tag tag-ok">'+esc(w.purposeLabel || WH_PURPOSE_LABEL.sale)+'</span>'
+                       : '<span class="tag tag-warn">'+esc(w.purposeLabel || '')+' — ไม่นับเป็นของขายได้</span>')+'</td>' +
+    '<td class="wrap">'+esc(w.address || '-')+'</td>' +
+    '<td>'+(w.isActive ? '<span class="pill ok">ใช้งาน</span>' : '<span class="pill off">ปิด</span>')+'</td>' +
+    '<td><button class="btn btn-sm" onclick="openWarehouseModal('+w.id+')">แก้ไข</button></td></tr>'),
+    6, 'ยังไม่มีคลัง');
+}
+function openWarehouseModal(id){
+  const w = id ? (whCache.filter(x => String(x.id) === String(id))[0] || {}) : {};
+  plModal('<h3>'+(id ? 'แก้ไขคลัง' : 'เพิ่มคลังใหม่')+'</h3>' +
+    '<div class="form-grid g2">' +
+      plField('รหัสคลัง', '<input id="wh-code" value="'+esc(w.code || '')+'" placeholder="เช่น MAIN">') +
+      plField('ชื่อคลัง', '<input id="wh-name" value="'+esc(w.name || '')+'">') +
+    '</div>' +
+    plField('หน้าที่ของคลัง', '<select id="wh-purpose">' + Object.keys(WH_PURPOSE_LABEL).map(k =>
+      '<option value="'+k+'"'+((w.purpose || 'sale') === k ? ' selected' : '')+'>'+esc(WH_PURPOSE_LABEL[k])+'</option>').join('') + '</select>') +
+    '<p class="form-hint">★ มีแต่ <b>คลังขาย</b> ที่ของในนั้นถูกนับว่าขายได้ · คลังรับคืนและคลังของเสีย ' +
+      'เก็บของไว้ให้ตรวจสอบได้ แต่ไม่โผล่ในยอดที่พนักงานขายเห็น</p>' +
+    plField('ที่อยู่', '<input id="wh-addr" value="'+esc(w.address || '')+'">') +
+    '<div class="toggle-row"><input type="checkbox" id="wh-default"'+(w.isDefault ? ' checked' : '')+'>' +
+      '<label for="wh-default">เป็นคลังหลัก (การขายตัดของจากคลังนี้)</label></div>' +
+    '<p class="form-hint">คลังหลักมีได้ใบเดียว และต้องเป็นคลังขาย — ตั้งใบใหม่แล้วใบเดิมจะถูกปลดให้เอง</p>' +
+    '<div class="toggle-row"><input type="checkbox" id="wh-active"'+(id ? (w.isActive ? ' checked' : '') : ' checked')+'>' +
+      '<label for="wh-active">เปิดใช้งาน</label></div>' +
+    plModalActions('plBusy(() => saveWarehouseUI('+(id || 0)+'))', '✓ บันทึก'));
+}
+async function saveWarehouseUI(id){
+  const name = document.getElementById('wh-name').value.trim();
+  if (!name) { plModalErr('กรุณาระบุชื่อคลัง'); return; }
+  const r = await callApi('saveWarehouse', { id: id || '', name: name,
+    code: document.getElementById('wh-code').value.trim(),
+    purpose: document.getElementById('wh-purpose').value,
+    address: document.getElementById('wh-addr').value.trim(),
+    isDefault: document.getElementById('wh-default').checked,
+    isActive: document.getElementById('wh-active').checked });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose();
+  toast('บันทึกคลังแล้ว');
+  listSnapDrop('warehouses'); whCache = []; loadWarehousesView();
+}
+
 async function loadCustomerGroupsView(){
   const body = document.getElementById('custgroups-body');
   if (!customerGroupsCache.length) customerGroupsCache = listSnapLoad('custgroups') || [];
