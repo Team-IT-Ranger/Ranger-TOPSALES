@@ -3947,7 +3947,7 @@ function renderTaxInvoices(sum, truncated){
     '<td class="mono-data">฿'+bahtPlain(t.vatAmount)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(t.total)+'</td>' +
     '<td style="white-space:nowrap">' +
-      '<button class="btn btn-sm" onclick="openSaleOrderDetail('+t.orderId+')">เปิดบิล</button>' +
+      '<button class="btn btn-sm" onclick="openSaleOrderDetail('+t.orderId+')">ดูใบขาย</button>' +
       /* ★ ออกใบลดหนี้ได้เฉพาะใบที่มีใบแจ้งหนี้ลูกหนี้รองรับ — ขายสดยังทำไม่ได้ทั้งระบบ
          (ใบลดหนี้ผูกกับ ar_invoices) บอกเหตุผลไว้ใน title แทนที่จะยื่นปุ่มที่กดแล้วพัง */
       (t.cancelled ? ''
