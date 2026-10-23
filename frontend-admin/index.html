@@ -782,6 +782,11 @@
     animation:btnspin .6s linear infinite; }
   .btn-primary.is-busy::after{ color:#fff; }
   @keyframes btnspin{ to{ transform:rotate(360deg); } }
+  /* หน้าต่างที่กางมารอข้อมูล — สูงพอให้กรอบไม่กระตุกตอนข้อมูลมาถึง */
+  .modal-wait{ display:flex; align-items:center; gap:10px; min-height:120px; padding:24px 2px;
+    color:var(--ink-soft); font-size:13px; }
+  .modal-wait .spin{ width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--brand,#2B63D9);
+    border-radius:50%; animation:btnspin .6s linear infinite; flex:0 0 auto; }
   /* กฎกลาง: ช่องกรอกทุกตัวในทุกหน้าหน้าตาเดียวกัน แม้จะไม่ได้ใส่คลาส (เดิมบางหน้าใช้ <select>/<input> เปล่า ๆ
      เลยได้หน้าตา default ของเบราว์เซอร์ มุมเหลี่ยม ไม่มีกรอบ ดูหลุดจากหน้าอื่น) */
   .view input:not([type=checkbox]):not([type=radio]):not([type=file]),.view select,.view textarea{
@@ -6445,7 +6450,23 @@ function plModal(html){
   m.style.display = 'flex';
   const f = m.querySelector('input:not([type=checkbox]),select'); if (f) f.focus();
 }
-function plModalClose(){ document.getElementById('pl-modal').style.display = 'none'; }
+function plModalClose(){ document.getElementById('pl-modal').style.display = 'none'; PL_MODAL_WAIT = 0; }
+
+/* ★★ กางหน้าต่างทันทีที่กด แล้วค่อยเติมข้อมูลเมื่อมาถึง (ผู้ใช้สั่ง 23 ต.ค. 2026)
+   คำขอหนึ่งครั้งบน Apps Script ไม่เคยต่ำกว่า ~1.5 วินาที (CLAUDE.md ข้อ 5) ระหว่างนั้นถ้าจอยังนิ่งสนิท
+   คนจะไม่รู้ว่ากดติดหรือยังแล้วกดซ้ำ — หลักเดียวกับ `tblLoading()` ของตาราง แต่สำหรับหน้าต่าง
+   ★ หัวเรื่องต้องเป็นของจริงตั้งแต่วินาทีแรก คนจะได้รู้ว่ากดถูกปุ่ม ไม่ใช่ขึ้นว่า "กำลังโหลด" เฉยๆ
+   ★ `PL_MODAL_WAIT` กันผลที่มาช้ามาทับหน้าต่างที่ผู้ใช้ปิดไปแล้ว หรือหน้าต่างใหม่ที่เพิ่งกดเปิด
+     — คืน false แปลว่า "ของนี้ตกรถแล้ว อย่าวาด" */
+let PL_MODAL_WAIT = 0;
+function plModalWait(title, hint){
+  PL_MODAL_WAIT++;
+  plModal('<h3>' + title + '</h3>' +
+    '<div class="modal-wait"><span class="spin"></span>' + (hint || 'กำลังโหลดข้อมูล…') + '</div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
+  return PL_MODAL_WAIT;
+}
+const plModalStale = tok => tok !== PL_MODAL_WAIT;
 function plModalErr(msg){ const e = document.getElementById('plm-err'); if (e) { e.textContent = msg; e.style.display = msg ? 'block' : 'none'; } }
 const plModalActions = (fn, label) => '<div class="err" id="plm-err" style="margin:12px 0 0"></div><div class="form-actions"><button class="btn" onclick="plModalClose()">ยกเลิก</button><button class="btn btn-primary" id="plm-save" onclick="'+fn+'">'+label+'</button></div>';
 // กันกดซ้ำระหว่างรอ backend (UAT บางทีช้า 10+ วิ)
@@ -9159,14 +9180,17 @@ async function openGoodsReturnForm(orderId){
     if (!hit) { toast('ไม่พบบิลขายเลขนี้ในรายการที่เปิดอยู่ — เปิดหน้าใบสั่งขายแล้วกดรับคืนจากในบิล', true); return; }
     orderId = hit.id;
   }
+  const tok = plModalWait('รับคืนสินค้า', 'กำลังดึงรายการและราคาที่ขายจริงจากบิล…');
   const d = await callApi('getGoodsReturnDraft', { orderId });
-  if (!d.success) { toast(d.message, true); return; }
-  if (!d.lines.length) { toast('บิลนี้ไม่มีของที่รับคืนได้แล้ว', true); return; }
+  if (plModalStale(tok)) return;
+  if (!d.success) { plModalClose(); toast(d.message, true); return; }
+  if (!d.lines.length) { plModalClose(); toast('บิลนี้ไม่มีของที่รับคืนได้แล้ว', true); return; }
   GRN_DRAFT = d;
   const today = new Date().toISOString().slice(0, 10);
   plModal('<h3>รับคืนสินค้า — บิล ' + esc(d.order.orderCode) + '</h3>' +
     '<p class="form-hint">ใส่จำนวนที่รับคืนจริง · <b>สภาพของ</b> (บันทึกไว้บนเอกสาร) · และ<b>คลังปลายทาง</b> ' +
-      'ที่ของเข้าไปจริง — เลือกคลังให้แล้วตามสภาพของ แต่เปลี่ยนเองได้ทุกบรรทัด ' +
+      'ที่ของเข้าไปจริง — เลือกคลังให้แล้วตามสภาพของ แต่เปลี่ยนเองได้ทุกบรรทัด · ' +
+      'ราคาคือ<b>ราคาที่บิลใบนี้ขายไปจริง</b> หักส่วนลดทุกชั้นแล้ว ไม่ใช่ราคาตั้งหรือราคาวันนี้ ' +
       '(ของสภาพดีที่ยังไม่ได้ตรวจ ใส่คลังรับคืนรอตรวจไว้ก่อนได้) · ' +
       '<b>เฉพาะของในคลังขายเท่านั้นที่ถูกนับว่าขายได้</b></p>' +
     '<div class="form-grid g2">' +
@@ -9175,13 +9199,16 @@ async function openGoodsReturnForm(orderId){
       plField('วันที่รับคืน', '<input type="date" id="grn-date" value="'+today+'">') +
     '</div>' +
     '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
-      '<th>ส่งไป</th><th>คืนแล้ว</th><th>รับคืนครั้งนี้</th><th>สภาพ</th><th>เข้าคลัง</th></tr></thead><tbody>' +
+      /* ★ ราคาต้องเห็นบนจอ — เป็นราคาที่ขายไปจริงตามบิลใบนั้น (หักส่วนลดทุกชั้นแล้ว) คนรับคืนจะได้
+         ทานกับใบกำกับในมือลูกค้าได้ทันที ไม่ต้องเชื่อยอดรวมท้ายฟอร์มอย่างเดียว */
+      '<th>ส่งไป</th><th>คืนแล้ว</th><th>รับคืนครั้งนี้</th><th>ราคาที่ขายจริง</th><th>สภาพ</th><th>เข้าคลัง</th></tr></thead><tbody>' +
       d.lines.map((l, i) =>
         '<tr><td class="mono-data">'+esc(l.productCode || '-')+'</td><td class="wrap">'+esc(l.productName)+'</td>' +
         '<td class="mono-data">'+esc(l.unitCode)+'</td><td class="mono-data">'+l.shipped+'</td>' +
         '<td class="mono-data">'+(l.returned || '—')+'</td>' +
         '<td><input type="number" class="grn-qty" data-i="'+i+'" min="0" max="'+l.returnable+'" step="1" value="0" ' +
           'style="width:80px" oninput="grnRecalc()"></td>' +
+        '<td class="mono-data">฿'+bahtPlain(l.unitPrice)+'</td>' +
         /* ★ เปลี่ยนสภาพของแล้วคลังปลายทางขยับตามให้ (grnCondChanged) แต่ไม่ทับถ้าคนตั้งใจเลือกเอง —
            ของสภาพดีที่ต้องรอตรวจ กับของชำรุดที่ซ่อมแล้วขายได้ มีจริงทั้งคู่ */
         '<td><select class="grn-cond" data-i="'+i+'" onchange="grnCondChanged('+i+')">' +
@@ -9794,9 +9821,11 @@ function renderAdjNotes(){
    ★ ใบเพิ่มหนี้ไม่มีขั้นนี้ ไม่มีของคืนให้พูดถึง (คิดเงินขาด/ลืมเก็บค่าขนส่ง) — เข้าตัวเลือกใบแจ้งหนี้เลย */
 async function openAdjNotePicker(kind){
   if (kind === 'debit') { adjPickInvoice('debit'); return; }
+  const tok = plModalWait('ออกใบลดหนี้ — ลดหนี้เพราะอะไร');
   // ยิงขนานกัน — คำขอที่สองแทบไม่มีราคาเพิ่ม (CLAUDE.md "คำขอขนานกันได้จริง")
   const [ri, rg] = await Promise.all([callApi('listArInvoices', {}), callApi('listGoodsReturns', {})]);
-  if (!ri.success) { toast(ri.message, true); return; }
+  if (plModalStale(tok)) return;
+  if (!ri.success) { plModalClose(); toast(ri.message, true); return; }
   const pend = adjPendingReturns(rg);
   const n = adjCreditableInvoices(ri.data).length;
   plModal('<h3>ออกใบลดหนี้ — ลดหนี้เพราะอะไร</h3>' +
@@ -9823,8 +9852,10 @@ const adjPendingReturns = r => ((r && r.success ? r.data : []) || [])
 
 /** ขั้นเลือกใบรับคืนสินค้า — ของเข้าคลังไปแล้วตอนรับคืน ใบลดหนี้จึงไม่ขยับสต็อกซ้ำ */
 async function adjPickReturn(){
+  const tok = plModalWait('ออกใบลดหนี้ — เลือกใบรับคืนสินค้า');
   const r = await callApi('listGoodsReturns', {});
-  if (!r.success) { toast(r.message, true); return; }
+  if (plModalStale(tok)) return;
+  if (!r.success) { plModalClose(); toast(r.message, true); return; }
   const gs = adjPendingReturns(r);
   plModal('<h3>ออกใบลดหนี้ — เลือกใบรับคืนสินค้า</h3>' +
     '<p class="form-hint">แสดงเฉพาะใบที่รับของแล้วและยังไม่ได้ออกใบลดหนี้ · ' +
@@ -9848,11 +9879,13 @@ async function adjFromReturn(id){ plModalClose(); await grnMakeCreditNote(id); }
 /** ขั้นเลือกใบแจ้งหนี้ — ใช้ทั้งใบลดหนี้ (ทางที่ไม่มีของคืน) และใบเพิ่มหนี้ */
 async function adjPickInvoice(kind){
   const K = ADJ_UI[kind] || ADJ_UI.credit;
+  const tok = plModalWait('ออก' + K.label + ' — เลือกใบแจ้งหนี้ที่จะอ้างถึง');
   /* ★ ใบแจ้งหนี้ของบิลที่มีใบรับคืนค้างอยู่ ต้องขึ้นป้ายเตือน ไม่งั้นลดสองรอบกับของก้อนเดียวกัน
      (ลดตรงนี้รอบหนึ่ง แล้วมีคนไปกดออกใบลดหนี้จากใบรับคืนอีกรอบ — ทั้งสองใบถูกกติกาแยกกันดู) */
   const [r, rg] = await Promise.all([callApi('listArInvoices', {}),
     kind === 'credit' ? callApi('listGoodsReturns', {}) : Promise.resolve({ success: true, data: [] })]);
-  if (!r.success) { toast(r.message, true); return; }
+  if (plModalStale(tok)) return;
+  if (!r.success) { plModalClose(); toast(r.message, true); return; }
   const pendByOrder = {};
   adjPendingReturns(rg).forEach(g => { pendByOrder[String(g.salesOrderId)] = g.returnNo; });
   const ivs = kind === 'debit' ? (r.data || []).filter(iv => iv.status !== 'void')
@@ -9900,9 +9933,11 @@ const openCreditNoteForm = id => openAdjustNoteForm(id, 'credit');
 const openDebitNoteForm = id => openAdjustNoteForm(id, 'debit');
 async function openAdjustNoteForm(invoiceId, kind){
   const K = ADJ_UI[kind] || ADJ_UI.credit;
+  const tok = plModalWait('ออก' + K.label, 'กำลังดึงรายการและราคาที่ขายจริงจากบิล…');
   const d = await callApi('getArCreditNoteDraft', { invoiceId, kind: kind });
-  if (!d.success) { toast(d.message, true); return; }
-  if (K.capped && !(d.invoice.creditable > 0)) { toast('ใบแจ้งหนี้นี้ถูกลดหนี้เต็มจำนวนไปแล้ว', true); return; }
+  if (plModalStale(tok)) return;
+  if (!d.success) { plModalClose(); toast(d.message, true); return; }
+  if (K.capped && !(d.invoice.creditable > 0)) { plModalClose(); toast('ใบแจ้งหนี้นี้ถูกลดหนี้เต็มจำนวนไปแล้ว', true); return; }
   CN_DRAFT = d; CN_KIND = kind;
   const today = new Date().toISOString().slice(0, 10);
   const rows = d.lines.map((l, i) =>

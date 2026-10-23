@@ -338,5 +338,68 @@ console.log('\n-- priceCart() ส่ง listPriceExVat ต่อบรรทั�
   eq('ไม่มี list_price_ex_vat (ชุดราคาเดิมก่อนมีคอลัมน์นี้) → listPriceExVat เป็น null', r2.lines[0].listPriceExVat, null);
 }
 
+
+/* ══════════ ★★ ราคาที่ "ขายจริง" ต่อหน่วย — ใบลดหนี้/ใบรับคืนต้องคิดจากตัวนี้ (23 ต.ค. 2026) ══════════
+   คืนของแล้วลดหนี้จากราคาตั้งหรือราคาวันนี้ = คืนเงินผิดจำนวน และใบลดหนี้ไม่ตรงกับใบกำกับเดิม */
+console.log('\n-- ราคาที่ขายจริงต่อหน่วย (soldNetByItem) --');
+// ทะเบียนสินค้าจำลอง — ND = สินค้าที่ห้ามลดราคา (no_discount)
+ctx.centralObjects = n => (n === 'products' ? [{ record_id: 'A', no_discount: '' }, { record_id: 'ND', no_discount: 'TRUE' }] : []);
+{
+  // บิลยุคปัจจุบัน: ส่วนลดถูกเฉลี่ยลงบรรทัดตั้งแต่ตอนขายแล้ว
+  const order = { discount: 300, total: 9700 };
+  const items = [
+    { record_id: 1, product_id: 'A', qty: 10, line_total: 7000, line_discount: 210, is_free: 0 },
+    { record_id: 2, product_id: 'B', qty: 5,  line_total: 3000, line_discount: 90,  is_free: 0 }
+  ];
+  const net = ctx.soldNetByItem(order, items);
+  eq('ส่วนลดเฉลี่ยลงบรรทัดแล้ว → ใช้ค่าที่บันทึกไว้ตรงๆ',
+    [net['1'], net['2'], ctx.soldUnitNet(net['1'], items[0])], [6790, 2910, 679]);
+  eq('  ผลรวมเท่ากับยอดสุทธิของบิล', ctx._round2(net['1'] + net['2']), order.total);
+}
+{
+  /* ★★★ บิลก่อน 30 ก.ย. 2026 — ไม่มี line_discount แต่หัวบิลมีส่วนลด 300
+     อ่านบรรทัดตรงๆ จะได้ 700/หน่วย ซึ่ง **ลดหนี้เกินจริง** โดยไม่มีอะไรฟ้อง */
+  const order = { discount: 300, total: 9700 };
+  const items = [
+    { record_id: 1, product_id: 'A', qty: 10, line_total: 7000, line_discount: '', is_free: 0 },
+    { record_id: 2, product_id: 'B', qty: 5,  line_total: 3000, line_discount: '', is_free: 0 }
+  ];
+  const net = ctx.soldNetByItem(order, items);
+  eq('★★ บิลเก่าที่ส่วนลดอยู่แต่หัวบิล → เฉลี่ยลงบรรทัดให้ ไม่ใช่คิดราคาก่อนหักส่วนลด',
+    [net['1'], net['2'], ctx.soldUnitNet(net['1'], items[0])], [6790, 2910, 679]);
+  eq('  ★ ผลรวมต้องเท่ากับยอดสุทธิของบิลเป๊ะ (ตัวสุดท้ายรับเศษ)',
+    ctx._round2(net['1'] + net['2']), order.total);
+}
+{
+  // ของแถมและสินค้าห้ามลดราคา ไม่รับส่วนลดท้ายบิล (เหมือนตอนขาย)
+  const order = { discount: 100, total: 9900 };
+  const items = [
+    { record_id: 1, product_id: 'A', qty: 10, line_total: 5000, line_discount: '', is_free: 0 },
+    { record_id: 2, product_id: 'ND', qty: 5, line_total: 5000, line_discount: '', is_free: 0 },
+    { record_id: 3, product_id: 'A', qty: 1,  line_total: 0,    line_discount: '', is_free: 1 }
+  ];
+  const net = ctx.soldNetByItem(order, items);
+  eq('★ สินค้าห้ามลดราคาและของแถมไม่ถูกหักส่วนลดท้ายบิล',
+    [net['1'], net['2'], net['3']], [4900, 5000, 0]);
+}
+{
+  // ยอดหารไม่ลงตัว — เศษต้องไม่หาย
+  const order = { discount: 100, total: 9900 };
+  const items = [
+    { record_id: 1, product_id: 'A', qty: 3, line_total: 3333, line_discount: '', is_free: 0 },
+    { record_id: 2, product_id: 'A', qty: 3, line_total: 3333, line_discount: '', is_free: 0 },
+    { record_id: 3, product_id: 'A', qty: 3, line_total: 3334, line_discount: '', is_free: 0 }
+  ];
+  const net = ctx.soldNetByItem(order, items);
+  eq('★ ยอดหารไม่ลงตัว: ผลรวมยังเท่ากับยอดสุทธิของบิล',
+    ctx._round2(net['1'] + net['2'] + net['3']), order.total);
+}
+{
+  // หัวบิลไม่มีส่วนลด = ไม่ต้องเฉลี่ยอะไร
+  const net = ctx.soldNetByItem({ discount: 0, total: 1000 },
+    [{ record_id: 1, product_id: 'A', qty: 2, line_total: 1000, line_discount: '', is_free: 0 }]);
+  eq('ไม่มีส่วนลดท้ายบิล → ราคาเท่ากับที่บันทึกไว้', [net['1'], ctx.soldUnitNet(net['1'], { qty: 2 })], [1000, 500]);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

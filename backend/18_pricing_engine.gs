@@ -107,6 +107,55 @@ function isNoDiscountProduct(p) {
  * แถวสุดท้ายที่ไม่ถูกยกเว้นรับเศษที่เหลือ ให้ sum(lineDiscount) === totalDiscount เป๊ะเสมอ (แพทเทิร์นเดียวกับ
  * saleVatBreakdown ด้านล่างที่ให้แถวสุดท้ายรับเศษ)
  */
+/* ═══════════ ราคาที่ "ขายจริง" ต่อหน่วยขาย — แหล่งเดียวของทั้งใบลดหนี้และใบรับคืน ═══════════
+ * ★★ การคืนของ/ลดหนี้ต้องคิดจากเงินที่เรียกเก็บลูกค้าไปจริงตามบิลใบนั้น **ไม่ใช่ราคาตั้งขาย
+ *   และไม่ใช่ราคาตามชุดราคาที่ใช้อยู่วันนี้** (ชุดราคาเปลี่ยนงวดได้ โปรหมดอายุได้ — คิดใหม่เมื่อไหร่
+ *   ใบลดหนี้กับใบกำกับเดิมจะไม่ตรงกัน ซึ่งผิดทั้งทางบัญชีและทางภาษี)
+ * ★ ราคาที่ขายจริง = (line_total − line_discount) ÷ qty  โดย `line_discount` รวมส่วนลดทุกชั้น
+ *   ที่เฉลี่ยลงบรรทัดแล้ว (โปร + ส่วนลดท้ายบิล — `_allocateLineDiscount` ใน 18_pricing_engine.gs)
+ * ★★★ **บิลก่อน 30 ก.ย. 2026 ไม่มี `line_discount`** (คอลัมน์เพิ่งเพิ่ม) ส่วนลดท้ายบิลของใบพวกนั้น
+ *   อยู่แต่ที่หัวบิล — ถ้าอ่านบรรทัดตรงๆ จะได้ราคาก่อนหักส่วนลด แล้ว**ลดหนี้ให้ลูกค้าเกินจริง**
+ *   โดยไม่มีอะไรฟ้อง · จึงเฉลี่ยส่วนที่ขาดลงบรรทัดให้ตรงนี้ ด้วยสัดส่วนเดียวกับตอนขาย
+ *   เงื่อนไขของทั้งบิลที่ต้องเป็นจริงเสมอคือ **ผลรวม netTotal = order.total**
+ */
+function soldNetByItem(order, items) {
+  var net = {}, lineSum = 0, discSum = 0;
+  items.forEach(function(it) {
+    var lt = parseFloat(it.line_total) || 0;
+    var ld = parseFloat(it.line_discount) || 0;
+    net[String(it.record_id)] = lt - ld;
+    lineSum += lt; discSum += ld;
+  });
+  /* ส่วนลดที่หัวบิลบอกไว้ แต่ยังไม่ถูกเฉลี่ยลงบรรทัด — เฉลี่ยตามสัดส่วนมูลค่าบรรทัด
+     (ข้ามบรรทัดของแถมและสินค้าห้ามลดราคา เหมือนตอนขาย) */
+  var head = parseFloat(order && order.discount) || 0;
+  var missing = _round2(head - discSum);
+  if (missing > 0.009) {
+    var noDisc = {};
+    centralObjects('products').forEach(function(p) { if (isNoDiscountProduct(p)) noDisc[String(p.record_id)] = 1; });
+    var elig = items.filter(function(it) {
+      return String(it.is_free) !== '1' && !noDisc[String(it.product_id)] && (parseFloat(it.line_total) || 0) > 0;
+    });
+    var base = 0;
+    elig.forEach(function(it) { base += parseFloat(it.line_total) || 0; });
+    var used = 0;
+    elig.forEach(function(it, i) {
+      // ตัวสุดท้ายรับเศษที่เหลือ — ผลรวมจึงเท่ากับส่วนลดที่หัวบิลเป๊ะ ไม่ขาดไม่เกินทีละสตางค์
+      var d = (i === elig.length - 1) ? _round2(missing - used)
+        : (base > 0 ? _round2(missing * (parseFloat(it.line_total) || 0) / base) : 0);
+      if (i < elig.length - 1) used += d;
+      net[String(it.record_id)] = _round2(net[String(it.record_id)] - d);
+    });
+  }
+  return net;
+}
+/** ราคาต่อหน่วยขายที่ขายจริง (ใช้คู่กับ soldNetByItem) */
+function soldUnitNet(netOfItem, item) {
+  var qty = parseFloat(item.qty) || 0;
+  // ★ ใช้ _round2 ของไฟล์นี้ ไม่ใช่ _money ของงานซื้อ — ผลเท่ากัน แต่ตัวนี้อยู่ไฟล์เดียวกับเครื่องคิดราคา
+  return qty > 0 ? _round2((Number(netOfItem) || 0) / qty) : 0;
+}
+
 function _allocateLineDiscount(items, totalDiscount, noDiscOf) {
   noDiscOf = noDiscOf || {};
   var base = 0;

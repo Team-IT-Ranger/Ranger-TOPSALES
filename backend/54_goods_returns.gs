@@ -72,16 +72,18 @@ function _goodsReturnDraftCore(tenantId, orderId) {
 
   var products = {};
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
+  // ★ ราคาต้องเป็นของที่บิลใบนั้นขายไปจริง (ดู soldNetByItem) ไม่ใช่ราคาตั้งหรือราคาวันนี้
+  var orderItems = tenantRowsWhere(tenantId, 'order_items', 'order_id', order.record_id);
+  var netOf = soldNetByItem(order, orderItems);
   var lines = [];
-  tenantRowsWhere(tenantId, 'order_items', 'order_id', order.record_id).forEach(function(it) {
+  orderItems.forEach(function(it) {
     var shipped = shippedByItem[String(it.record_id)];
     if (shipped === undefined) shipped = parseFloat(it.qty) || 0;
     var done = already[String(it.record_id)] || 0;
     var left = shipped - done;
     if (!(left > 0)) return;
     var p = products[String(it.product_id)] || {};
-    var ordered = parseFloat(it.qty) || 0;
-    var unitNet = ordered > 0 ? ((parseFloat(it.line_total) || 0) - (parseFloat(it.line_discount) || 0)) / ordered : 0;
+    var unitNet = soldUnitNet(netOf[String(it.record_id)], it);
     lines.push({ itemId: it.record_id, productId: it.product_id, productCode: p.product_code || '',
       productName: p.name || '(สินค้าถูกลบ)', unitCode: it.unit_code || '', unitFactor: _drLineFactor(it),
       shipped: shipped, returned: done, returnable: left, unitPrice: _money(unitNet),

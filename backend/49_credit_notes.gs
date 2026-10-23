@@ -135,11 +135,13 @@ function getArCreditNoteDraft(session, payload) {
   }
 
   var ov = _orderVat(order);
+  // ★ ราคาต่อหน่วยต้องเป็นของที่บิลใบนั้นขายไปจริง (soldNetByItem ใน 18_pricing_engine.gs)
+  var netOf = soldNetByItem(order, items);
   items.forEach(function(it) {
     var ordered = parseFloat(it.qty) || 0;
     var qty = roundQty ? (roundQty[String(it.record_id)] || 0) : ordered;
     if (!(qty > 0) || !(ordered > 0)) return;
-    var unitNet = ((parseFloat(it.line_total) || 0) - (parseFloat(it.line_discount) || 0)) / ordered;
+    var unitNet = soldUnitNet(netOf[String(it.record_id)], it);
     var p = products[String(it.product_id)] || {};
     out.lines.push({ itemId: it.record_id, productId: it.product_id, productCode: p.product_code || '',
       productName: p.name || '(สินค้าถูกลบ)', unitCode: it.unit_code || '', unitFactor: _drLineFactor(it),
