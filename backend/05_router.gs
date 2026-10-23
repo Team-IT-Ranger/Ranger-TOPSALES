@@ -292,6 +292,7 @@ var ADMIN_ACTION_MAP = {
   listArCreditNotes:      listArCreditNotes,
   getArCreditNote:        getArCreditNote,         // ใบเดียวพร้อมรายการ — ใช้ตอนพิมพ์
   listTaxInvoices:        listTaxInvoices,
+  backfillCashSaleGl:     backfillCashSaleGl,
   createArInvoice:        createArInvoice,
   receiveArPayment:       receiveArPayment,
   getArAging:             getArAging,

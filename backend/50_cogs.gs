@@ -44,10 +44,13 @@ function _acctSettings(book) {
     recordId: row ? row.record_id : '',
     costMethod: row && COGS_METHODS[String(row.cost_method)] ? String(row.cost_method) : 'none',
     cogsFrom: row ? _dOnly(row.cogs_from) : '',
-    /* ลงบัญชีขายสด (52_cash_sales_gl.gs) — ปิดไว้เป็นค่าเริ่มต้นเหมือนต้นทุนขาย
-       ★ ปิดไว้ไม่ใช่เพราะมันไม่ถูกต้อง แต่เพราะผู้ทำบัญชีอาจบันทึกขายสดด้วยมือไว้แล้วนอกระบบ
-         เปิดย้อนหลังทับของเดิม = นับซ้ำ ซึ่งหาทีหลังยากกว่าขาดไปเสียอีก */
-    cashSales: row && String(row.cash_sales) === 'on' ? 'on' : 'off',
+    /* ★★ ลงบัญชีขายสด (52_cash_sales_gl.gs) — **เปิดเป็นค่าเริ่มต้น** (เจ้าของระบบสั่ง 23 ต.ค. 2026
+       "ระบบควรลงบัญชีอัตโนมัติ") · มีแต่การตั้งเป็น `'off'` ชัดเจนเท่านั้นที่ปิด
+       ★ เดิมปิดไว้เพราะกลัวนับซ้ำกับที่ผู้ทำบัญชีลงมือไว้นอกระบบ — ความกลัวนั้นใช้กับ **การลงย้อนหลัง**
+         ซึ่งไม่เคยมีในโค้ดนี้: `postCashSaleGl` ถูกเรียก ณ จังหวะที่ออกใบกำกับเท่านั้น ไม่มีตัวไล่ลงให้บิลเก่า
+         บิลที่ออกใบไปก่อนหน้านี้จึงไม่ถูกแตะ เว้นแต่จะสั่ง `backfillCashSaleGl` เอง
+       ★ ของที่ยังปิดไว้เป็นค่าเริ่มต้นคือ **ต้นทุนขาย** กับ **เบิกของขึ้นรถ** ซึ่งคนละเรื่องกัน */
+    cashSales: row && String(row.cash_sales) === 'off' ? 'off' : 'on',
     cashFrom: row ? _dOnly(row.cash_from) : '',
     /* เบิกของขึ้นรถ = ตัดจากคลังกลางจริง (55_van_stock_link.gs) — เปิดแล้วการขายจากรถตัดต้นทุนได้
        ★ ปิดไว้เป็นค่าเริ่มต้นเพราะเปิดแล้ว **เบิกของไม่ได้ถ้าคลังกลางมีของไม่พอ** */
@@ -89,12 +92,13 @@ function saveAccountingSettings(session, payload) {
     if (!_validDate(from)) return { success: false, message: 'วันที่เริ่มตัดต้นทุนต้องเป็น yyyy-MM-dd' };
   }
 
-  var cash = String(payload.cashSales || 'off') === 'on' ? 'on' : 'off';
+  /* ★ ค่าเริ่มต้นของช่องนี้คือ 'on' แล้ว (ดู _acctSettings) — ต้องส่ง 'off' มาชัดเจนถึงจะปิด
+     ★ **ไม่บังคับวันที่เริ่มอีกแล้ว** ว่าง = ลงให้ทุกใบที่ออกใบกำกับตั้งแต่นี้ไป ซึ่งเป็นพฤติกรรมจริง
+       ของโค้ดอยู่แล้ว (ไม่มีการลงย้อนหลัง) · ใส่วันที่ได้ถ้าอยากกันบิลที่ลงวันที่ย้อนหลัง */
+  var cash = String(payload.cashSales || 'on') === 'off' ? 'off' : 'on';
   var cashFrom = String(payload.cashFrom || '').trim();
-  if (cash === 'on') {
-    if (!cashFrom) return { success: false, message: 'ต้องระบุวันที่เริ่มลงบัญชีขายสด' };
-    if (!_validDate(cashFrom)) return { success: false, message: 'วันที่เริ่มลงบัญชีขายสดต้องเป็น yyyy-MM-dd' };
-  }
+  if (cash === 'on' && cashFrom && !_validDate(cashFrom))
+    return { success: false, message: 'วันที่เริ่มลงบัญชีขายสดต้องเป็น yyyy-MM-dd' };
 
   var vanIssue = String(payload.vanIssue || 'off') === 'on' ? 'on' : 'off';
 
@@ -107,7 +111,7 @@ function saveAccountingSettings(session, payload) {
 
   var msg = [method === 'none' ? 'ปิดการตัดต้นทุนอัตโนมัติ'
       : 'ต้นทุน: ' + COGS_METHODS[method].label + ' เริ่ม ' + from,
-    cash === 'on' ? 'ลงบัญชีขายสด เริ่ม ' + cashFrom : 'ไม่ลงบัญชีขายสด',
+    cash === 'on' ? ('ลงบัญชีขายสด' + (cashFrom ? ' เริ่ม ' + cashFrom : ' ทุกใบตั้งแต่นี้ไป')) : 'ไม่ลงบัญชีขายสด',
     vanIssue === 'on' ? 'เบิกของขึ้นรถตัดจากคลังกลาง' : 'เบิกของขึ้นรถไม่ตัดคลังกลาง'].join(' · ');
   return { success: true, settings: _acctSettings(book), message: 'บันทึกแล้ว — ' + msg };
 }

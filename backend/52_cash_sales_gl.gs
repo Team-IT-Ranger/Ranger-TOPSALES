@@ -128,3 +128,64 @@ function reverseCashSaleGl(tenantId, order, userId, reason) {
     return { posted: false, skipped: 'ผิดพลาด: ' + e.message };
   }
 }
+
+/* ═══════════ ★★ ตามเก็บบิลขายสดที่ออกใบกำกับไปแล้วแต่ยังไม่ได้ลงบัญชี ═══════════
+ * (เจ้าของระบบสั่ง 23 ต.ค. 2026 — "ระบบควรลงบัญชีอัตโนมัติ")
+ *
+ * ★ ตั้งแต่วันนี้บิลใหม่ลงให้เองตอนออกใบกำกับ (ค่าตั้งเริ่มต้นเปิดแล้ว) แต่บิลที่ออกใบไป**ก่อนหน้านั้น**
+ *   ไม่มีใครย้อนไปลงให้ — บน UAT 23 ต.ค. 2026 ค้างอยู่ 46 ใบ ภาษีขาย 82,789.62 บาท
+ *   งบกำไรขาดทุนจึงขาดรายได้ก้อนนั้น และบัญชีภาษีขายต่ำกว่าที่ยื่นจริง
+ *
+ * ★★★ **ดูอย่างเดียวเป็นค่าเริ่มต้น** (`commit !== true`) — ต้องสั่งลงจริงอีกทีเสมอ
+ *   เพราะผู้ทำบัญชีอาจบันทึกการขายสดด้วยมือไว้แล้วนอกระบบ ลงทับ = นับซ้ำ
+ *   ซึ่งหาทีหลังยากกว่าขาดไปเสียอีก · **ต้องถามผู้ทำบัญชีก่อนว่าลงมือไว้ถึงวันไหน** แล้วใส่ `from`
+ * ★ `postCashSaleGl` กันซ้ำในตัวอยู่แล้ว (หาใบสำคัญ SALES_CASH ของบิลนั้น) รันซ้ำจึงไม่งอกใบที่สอง
+ */
+function backfillCashSaleGl(session, payload) {
+  var err = _requirePermission(session, 'accounting', 'edit'); if (err) return err;
+  payload = payload || {};
+  var book = _bookScope(session, payload);
+  var tenantId = _bookSalesTenant(book);
+  var from = String(payload.from || '').trim();
+  var to = String(payload.to || '').trim();
+  if (from && !_validDate(from)) return { success: false, message: 'วันที่เริ่มต้องเป็น yyyy-MM-dd' };
+  if (to && !_validDate(to)) return { success: false, message: 'วันที่สิ้นสุดต้องเป็น yyyy-MM-dd' };
+
+  var st = _acctSettings(book);
+  if (st.cashSales !== 'on') return { success: false, message: 'ยังปิดการลงบัญชีขายสดอยู่ — เปิดที่ ตั้งค่าบัญชี ก่อน' };
+
+  var pending = [], amount = 0, vatSum = 0;
+  tenantObjectsIfExists(tenantId, 'sales_orders').forEach(function(o) {
+    if (!_isCashSaleForGl(o)) return;
+    var when = _dOnly(o.tax_invoice_at || o.created_at) || '';
+    if (from && when < from) return;
+    if (to && when > to) return;
+    if (_findCashSaleJournal(book, _cashSaleRefId(o))) return;      // ลงไปแล้ว
+    var v = _orderVat(o);
+    pending.push({ orderId: o.record_id, orderCode: o.order_code || '', taxInvoiceNo: o.tax_invoice_no || '',
+      date: when, total: _money(Number(o.total) || 0), vat: _money(Number(o.vat_amount) || v.vat || 0) });
+    amount += Number(o.total) || 0;
+    vatSum += Number(o.vat_amount) || v.vat || 0;
+  });
+  pending.sort(function(a, b) { return String(a.date).localeCompare(String(b.date)); });
+
+  if (payload.commit !== true) {
+    return { success: true, dryRun: true, count: pending.length, amount: _money(amount), vat: _money(vatSum),
+      rows: pending.slice(0, 200),
+      message: pending.length
+        ? 'พบ ' + pending.length + ' ใบที่ยังไม่ได้ลงบัญชี (ยอด ' + _money(amount).toLocaleString() +
+          ' · ภาษีขาย ' + _money(vatSum).toLocaleString() + ') — ยังไม่ได้ลงให้ กดยืนยันอีกครั้งเพื่อลงจริง'
+        : 'ไม่มีบิลขายสดที่ค้างลงบัญชีในช่วงนี้' };
+  }
+
+  /* ★ ลงทีละใบผ่าน postCashSaleGl ตัวเดิม ไม่เขียน journal เองซ้ำอีกชุด —
+     ชุดที่สองเมื่อไหร่ วันหนึ่งจะมีคนแก้คู่บัญชีข้างเดียวแล้วสองทางลงไม่ตรงกัน */
+  var done = 0, failedRows = [];
+  pending.forEach(function(p) {
+    var o = tenantRowById(tenantId, 'sales_orders', p.orderId);
+    var r = postCashSaleGl(tenantId, o, session.adminUserId);
+    if (r && r.posted) done++; else failedRows.push({ orderCode: p.orderCode, reason: (r && (r.skipped || r.error)) || 'ไม่ทราบสาเหตุ' });
+  });
+  return { success: true, dryRun: false, count: pending.length, posted: done, failed: failedRows.slice(0, 50),
+    message: 'ลงบัญชีย้อนหลัง ' + done + ' ใบ' + (failedRows.length ? ' · ข้าม ' + failedRows.length + ' ใบ' : '') };
+}

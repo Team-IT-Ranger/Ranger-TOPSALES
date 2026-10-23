@@ -1085,15 +1085,24 @@ console.log('\n── ลงบัญชีขายสด ──');
     return ctx.tenantRowById('T1', 'sales_orders', id);
   };
 
-  // ── ปิดไว้เป็นค่าเริ่มต้น ──
+  /* ── ★ ค่าเริ่มต้น = **เปิด** (เจ้าของระบบสั่ง 23 ต.ค. 2026) ── */
+  eq('★★ ยังไม่เคยตั้งค่าอะไรเลย → ลงบัญชีขายสดให้เองเลย',
+    ctx._acctSettings('T2').cashSales, 'on');
+  // ── ปิดต้องสั่งชัดเจน ──
   ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'off' });
   let o = mkCash(140, 'SO-CASH-OFF', 'cash', 1070, 1000, 70, 'TAX-IV-900');
   let r = ctx.postCashSaleGl('T1', o, 'tester');
   eq('★ ปิดอยู่ → ไม่ลงบัญชี', [r.posted, /ยังไม่ได้เปิด/.test(r.skipped)], [false, true]);
 
   // ── เปิดใช้ ──
+  /* ★ 23 ต.ค. 2026 — เปิดโดยไม่ระบุวันที่เริ่มได้แล้ว (ว่าง = ลงให้ทุกใบที่ออกใบกำกับตั้งแต่นี้ไป)
+     ไม่มีการลงย้อนหลังอยู่แล้ว การบังคับวันที่จึงเป็นด่านที่ไม่ได้กันอะไร แค่ทำให้เปิดยากขึ้นเฉยๆ */
   r = ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'on' });
-  eq('เปิดแล้วไม่ระบุวันที่เริ่ม → ปฏิเสธ', r.success, false);
+  eq('เปิดโดยไม่ระบุวันที่เริ่มได้ (ว่าง = ทุกใบตั้งแต่นี้ไป)',
+    [r.success, r.settings.cashSales, r.settings.cashFrom], [true, 'on', '']);
+  eq('★ วันที่เริ่มผิดรูปแบบยังถูกปฏิเสธ',
+    ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'on', cashFrom: '16/10/2026' }).success, false);
+
   ok('เปิดลงบัญชีขายสด เริ่ม 16 ต.ค.',
     ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'on', cashFrom: '2026-10-16' }));
 
@@ -1107,6 +1116,27 @@ console.log('\n── ลงบัญชีขายสด ──');
   // ── ลงซ้ำไม่ได้ ──
   r = ctx.postCashSaleGl('T1', o, 'tester');
   eq('★ เรียกซ้ำ → ไม่ลงใบที่สอง', [r.posted, /ไปแล้ว/.test(r.skipped)], [false, true]);
+  /* ★★ ตัวตามเก็บบิลที่ออกใบกำกับไปแล้วแต่ยังไม่ได้ลงบัญชี — ดูอย่างเดียวเป็นค่าเริ่มต้น */
+  {
+    /* ★ ไม่แตะค่าตั้ง (เทสต์ข้างล่างยังใช้ cashFrom เดิมอยู่) และจำกัดช่วงวันให้แคบ
+       จะได้ไม่ไปลงบิลของเทสต์อื่นที่ตั้งใจให้ค้างไว้ */
+    const DAY = '2026-10-18';
+    append(tenantSheets.sales_orders, { record_id: 1410, order_code: 'SO-CASH-BACKFILL', customer_id: 500,
+      subtotal: 2140, discount: 0, total: 2140, payment_method: 'cash', fulfillment_type: 'immediate',
+      status: 'completed', created_at: DAY + ' 09:00:00',
+      tax_invoice_no: 'TAX-IV-BF1', tax_invoice_at: DAY + ' 09:00:00',
+      apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07,
+      subtotal_ex_vat: 2000, vat_amount: 140, exempt_amount: 0 });
+    const range = { tenantId: 'T1', from: DAY, to: DAY };
+    const dry = ctx.backfillCashSaleGl(FIN, range);
+    eq('★★★ ค่าเริ่มต้นคือ "ดูอย่างเดียว" ไม่ลงให้เอง (ผู้ทำบัญชีอาจลงมือไว้แล้ว)',
+      [dry.success, dry.dryRun, dry.count, !!ctx._findCashSaleJournal('T1', '1410')],
+      [true, true, 1, false]);
+    const run = ctx.backfillCashSaleGl(FIN, Object.assign({ commit: true }, range));
+    eq('★★ สั่งลงจริงแล้วลงให้', [run.success, run.posted, !!ctx._findCashSaleJournal('T1', '1410')],
+      [true, 1, true]);
+    eq('★ รันซ้ำไม่ลงใบที่สอง', ctx.backfillCashSaleGl(FIN, Object.assign({ commit: true }, range)).posted, 0);
+  }
 
   // ── โอนเงินเข้าแบงก์ ──
   const bank0 = bal('1120');

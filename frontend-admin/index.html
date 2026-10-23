@@ -2450,7 +2450,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings',
   'createBillingNote','cancelBillingNote','createGoodsReturn','cancelGoodsReturn','createCreditNoteFromReturn',
   'voidArAdjustNote','repairDraftOrderCodes','organizeDatabaseFiles','syncTenantSheets','saveCreditSettings',
-  'mergeDuplicateWarehouses',
+  'mergeDuplicateWarehouses','backfillCashSaleGl',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -9944,17 +9944,32 @@ async function loadAcctSettings(){
     '<div class="form-card"><h3>ลงบัญชีการขายสด</h3>' +
     '<p class="form-hint">บิล<b>ขายสด</b>จะลง <b>เดบิต เงินสด/ธนาคาร / เครดิต รายได้ (4100) + ภาษีขาย (2200)</b> ' +
       'ตอนออกใบกำกับภาษี · บิล<b>เครดิต</b>ลงผ่านใบแจ้งหนี้ลูกหนี้อยู่แล้ว ไม่เกี่ยวกับช่องนี้</p>' +
-    '<p class="form-hint" style="color:var(--orange)">★ ก่อนหน้านี้ระบบ<b>ไม่เคยลงบัญชีขายสดเลย</b> ' +
-      'งบกำไรขาดทุนจึงขาดรายได้ส่วนนั้น และภาษีขายต่ำกว่าความจริง — ดูส่วนต่างได้ที่เมนู 5.8.1</p>' +
+    '<p class="form-hint">★ <b>เปิดไว้เป็นค่าเริ่มต้น</b> — บิลขายสดที่ออกใบกำกับตั้งแต่นี้ไปจะถูกลงบัญชีให้เอง ' +
+      '<b>ไม่ลงย้อนหลัง</b> บิลเก่าไม่ถูกแตะ (ตามเก็บได้ด้วยปุ่มข้างล่าง)</p>' +
     '<label class="acct-opt'+(cur.cashSales === 'on' ? ' on' : '')+'">' +
       '<input type="checkbox" id="acct-cash"'+(cur.cashSales === 'on' ? ' checked' : '')+(editable ? '' : ' disabled') +
         ' onchange="acctToggleCash(this.checked)">' +
-      '<span><b>ให้ระบบลงบัญชีขายสดให้</b><span class="s">★ เปิดเฉพาะเมื่อผู้ทำบัญชี<b>ยังไม่ได้</b>บันทึกการขายสดด้วยมือนอกระบบ — ' +
-      'ถ้าบันทึกไว้แล้วจะกลายเป็นนับซ้ำ ซึ่งหาทีหลังยากกว่าขาดไปเสียอีก</span></span></label>' +
+      '<span><b>ให้ระบบลงบัญชีขายสดให้</b><span class="s">ปิดเฉพาะเมื่อผู้ทำบัญชีบันทึกการขายสดด้วยมือนอกระบบอยู่ — ' +
+      'ลงทั้งสองทางพร้อมกันจะกลายเป็นนับซ้ำ ซึ่งหาทีหลังยากกว่าขาดไปเสียอีก</span></span></label>' +
     '<div id="acct-cashfrom-wrap" style="margin-top:12px'+(cur.cashSales === 'on' ? '' : ';display:none')+'">' +
-      plField('เริ่มลงบัญชีขายสดตั้งแต่บิลลงวันที่', '<input type="date" id="acct-cashfrom" value="'+esc(cur.cashFrom || today)+'"'+(editable ? '' : ' disabled')+'>') +
-      '<p class="form-hint">★ ไม่ย้อนหลัง บิลก่อนหน้านี้จะไม่ถูกลงบัญชีให้</p>' +
-    '</div></div>' +
+      plField('ไม่ลงบัญชีให้บิลที่ลงวันที่ก่อน (เว้นว่างได้)', '<input type="date" id="acct-cashfrom" value="'+esc(cur.cashFrom || '')+'"'+(editable ? '' : ' disabled')+'>') +
+      '<p class="form-hint">เว้นว่าง = ลงให้ทุกใบที่ออกใบกำกับตั้งแต่นี้ไป · ใส่วันที่เมื่อมีบิลย้อนหลังที่ผู้ทำบัญชีลงมือไว้แล้ว</p>' +
+    '</div>' +
+    /* ★★ ตามเก็บบิลที่ออกใบกำกับไปก่อนเปิดสวิตช์ — ดูก่อนเสมอ ไม่ลงให้ทันที
+       เพราะถ้าผู้ทำบัญชีลงมือไว้แล้ว การลงทับคือนับซ้ำ ซึ่งหาทีหลังยากกว่าขาดไป */
+    (editable ? '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">' +
+      '<b style="font-size:13px">ตามเก็บบิลที่ยังไม่ได้ลงบัญชี</b>' +
+      '<p class="form-hint">บิลขายสดที่ออกใบกำกับไปก่อนเปิดสวิตช์นี้ ไม่มีใครย้อนไปลงให้ — ' +
+      'กด<b>ดูก่อน</b>ว่ามีกี่ใบ แล้วค่อยสั่งลงจริง</p>' +
+      '<div class="form-grid g2" style="margin-top:8px">' +
+        plField('ตั้งแต่วันที่ (เว้นว่าง = ทั้งหมด)', '<input type="date" id="acct-bf-from">') +
+        plField('ถึงวันที่ (เว้นว่าง = ถึงปัจจุบัน)', '<input type="date" id="acct-bf-to">') +
+      '</div>' +
+      '<div class="form-actions" style="justify-content:flex-start;margin-top:8px">' +
+        '<button class="btn" onclick="plBusy(() => acctBackfill(false))">ดูว่ามีกี่ใบ</button></div>' +
+      '<div id="acct-bf-out" class="form-hint"></div>' +
+    '</div>' : '') +
+    '</div>' +
     (editable ? '<div class="form-actions" style="justify-content:flex-start"><button class="btn btn-primary" onclick="plBusy(acctSave)">บันทึก</button></div>' : '') +
     (cur.updatedAt ? '<p class="form-hint">แก้ล่าสุด '+esc(cur.updatedAt)+'</p>' : '') +
     /* ★★ สวิตช์นี้เปลี่ยน "พฤติกรรมของสต็อก" ไม่ใช่แค่การลงบัญชี — เปิดแล้วการเบิกของขึ้นรถ
@@ -9996,6 +10011,24 @@ function acctPickMethod(v){
   document.getElementById('acct-from-wrap').style.display = v === 'none' ? 'none' : '';
   document.querySelectorAll('.acct-opt').forEach(l => l.classList.toggle('on', l.querySelector('input').value === v));
 }
+/* ตามเก็บบิลขายสดที่ยังไม่ได้ลงบัญชี — ดูก่อน แล้วค่อยยืนยัน (backend: backfillCashSaleGl) */
+async function acctBackfill(commit){
+  const box = document.getElementById('acct-bf-out'); if (!box) return;
+  box.innerHTML = 'กำลังตรวจ…';
+  const r = await callApi('backfillCashSaleGl', { commit: commit === true,
+    from: (document.getElementById('acct-bf-from') || {}).value || '',
+    to: (document.getElementById('acct-bf-to') || {}).value || '' });
+  if (!r.success) { box.innerHTML = '<span style="color:var(--red)">'+esc(r.message)+'</span>'; return; }
+  if (r.dryRun) {
+    box.innerHTML = esc(r.message) +
+      /* ★ ปุ่มยืนยันโผล่หลังเห็นตัวเลขแล้วเท่านั้น — กดลงจริงโดยไม่เคยเห็นว่ากี่ใบไม่ได้ */
+      (r.count ? '<div class="form-actions" style="justify-content:flex-start;margin-top:8px">' +
+        '<button class="btn btn-primary" onclick="plBusy(() => acctBackfill(true))">✓ ลงบัญชีย้อนหลัง ' + r.count + ' ใบ</button></div>' : '');
+    return;
+  }
+  box.innerHTML = esc(r.message);
+  toast(r.message);
+}
 async function acctSave(){
   const m = document.querySelector('input[name=cogs-method]:checked');
   if (!m) { toast('เลือกวิธีคิดต้นทุนก่อน', true); return; }
@@ -10003,7 +10036,7 @@ async function acctSave(){
   const r = await callApi('saveAccountingSettings', { costMethod: m.value,
     cogsFrom: m.value === 'none' ? '' : document.getElementById('acct-from').value,
     cashSales: cash && cash.checked ? 'on' : 'off',
-    cashFrom: cash && cash.checked ? document.getElementById('acct-cashfrom').value : '',
+    cashFrom: cash && cash.checked ? (document.getElementById('acct-cashfrom').value || '') : '',
     vanIssue: document.getElementById('acct-van')?.checked ? 'on' : 'off' });
   if (!r.success) { toast(r.message, true); return; }
   toast(r.message);
