@@ -1503,6 +1503,58 @@ console.log('\n── ใบรับคืนสินค้า ──');
       [noStock.success, noStock.returnNo || '', stockOf('80', CSALE) - sB2], [true, '', 0]);
   }
 
+  /* ══ ★★★ ใบลดหนี้ของ "บิลขายสด" — ไม่มีใบแจ้งหนี้ให้อ้าง (เจ้าของระบบสั่ง 23 ต.ค. 2026) ══
+     คู่บัญชีต้องเป็นการ**คืนเงิน** ไม่ใช่ลดลูกหนี้ ไม่งั้นลูกหนี้ติดลบทั้งที่ลูกค้าไม่เคยติดหนี้ */
+  {
+    append(tenantSheets.sales_orders, { record_id: 190, order_code: 'SO-CASH-1', customer_id: 500,
+      subtotal: 1070, discount: 0, total: 1070, payment_method: 'cash', fulfillment_type: 'immediate',
+      status: 'completed', created_at: '2026-10-22 09:00:00', tax_invoice_no: 'TAX-CASH-001',
+      tax_invoice_at: '2026-10-22 09:00:00',
+      apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 1000, vat_amount: 70, exempt_amount: 0 });
+    append(tenantSheets.order_items, { record_id: 19001, order_id: 190, product_id: '80', unit_code: 'CT',
+      unit_factor: 10, qty: 1, base_qty: 10, price: 1070, line_total: 1070, line_discount: 0, is_free: 0, tax_status: 'vat' });
+
+    const cd = ctx.getArCreditNoteDraft(FIN, { tenantId: 'T1', salesOrderId: 190, kind: 'credit' });
+    eq('★ ร่างใบลดหนี้ของบิลขายสดเปิดได้ และบอกว่าเป็นขายสด',
+      [cd.success, cd.isCash, cd.invoice.invoiceNo, cd.invoice.creditable, (cd.lines || []).length],
+      [true, true, 'TAX-CASH-001', 1070, 1]);
+
+    const jBefore = ctx.centralObjects('gl_journal_lines').length;
+    const cn = ctx.createArCreditNote(FIN, { tenantId: 'T1', salesOrderId: 190, reasonCode: 'return',
+      creditDate: '2026-10-22', vatRate: 0.07,
+      lines: [{ itemId: 19001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 1070, taxStatus: 'vat' }] });
+    eq('★★ ออกใบลดหนี้จากบิลขายสดได้', [cn.success, /^CN-/.test(cn.noteNo || '')], [true, true]);
+
+    const note = ctx.centralObjects('ar_credit_notes').filter(n => String(n.credit_note_no) === String(cn.noteNo))[0];
+    eq('★ ใบผูกกับบิลขาย ไม่ใช่ใบแจ้งหนี้ (ar_invoice_id ว่าง)',
+      [String(note.ar_invoice_id || ''), String(note.sales_order_id)], ['', '190']);
+
+    const jl = ctx.centralObjects('gl_journal_lines').slice(jBefore);
+    const credited = jl.filter(l => Number(l.credit) > 0).map(l => l.account_code);
+    eq('★★★ คู่บัญชีเครดิต "เงินสด" (1110) ไม่ใช่ลูกหนี้ (1200)', credited, ['1110']);
+    eq('  และเดบิตรายได้ + ภาษีขาย',
+      jl.filter(l => Number(l.debit) > 0).map(l => l.account_code).sort(), ['2200', '4100']);
+
+    /* เพดานนับจากบิล ไม่ใช่จากใบแจ้งหนี้ — ลดซ้ำเกินยอดบิลไม่ได้ */
+    const again = ctx.getArCreditNoteDraft(FIN, { tenantId: 'T1', salesOrderId: 190, kind: 'credit' });
+    eq('★ รอบถัดไปรู้ว่าลดไปแล้วเท่าไร (เพดานเหลือ 0)',
+      [again.invoice.credited, again.invoice.creditable, again.lines[0].remainQty], [1070, 0, 0]);
+    const over = ctx.createArCreditNote(FIN, { tenantId: 'T1', salesOrderId: 190, reasonCode: 'return',
+      creditDate: '2026-10-22', vatRate: 0.07,
+      lines: [{ itemId: 19001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 1070, taxStatus: 'vat' }] });
+    eq('★★ ลดซ้ำเกินยอดบิลไม่ได้', over.success, false);
+
+    eq('★ บิลขายสดออกใบเพิ่มหนี้ยังไม่ได้ (ต้องให้ผู้ทำบัญชีตัดสินคู่บัญชีก่อน)',
+      ctx.createArDebitNote(FIN, { tenantId: 'T1', salesOrderId: 190, reasonCode: 'undercharge',
+        lines: [{ productId: '80', unitCode: 'CT', qty: 1, unitPrice: 10, taxStatus: 'vat' }] }).success, false);
+
+    /* ยกเลิกใบลดหนี้ของขายสดต้องกลับรายการได้ โดยไม่ไปแตะใบแจ้งหนี้ที่ไม่มีอยู่ */
+    const vd = ctx.voidArAdjustNote(FIN, { tenantId: 'T1', id: cn.noteId, kind: 'credit', reason: 'ทดสอบ' });
+    eq('★ ยกเลิกใบลดหนี้ของขายสดได้ และของกลับมาลดได้ใหม่',
+      [vd.success, ctx.getArCreditNoteDraft(FIN, { tenantId: 'T1', salesOrderId: 190, kind: 'credit' }).invoice.creditable],
+      [true, 1070]);
+  }
+
   /* ── ยกเลิกต้องหักจากคลังที่ของเข้าไปจริง ไม่ใช่คลังหลักเสมอไป ── */
   r = ctx.cancelGoodsReturn(FIN, { tenantId: 'T1', id: r.returnId, reason: 'คีย์ผิดคลัง' });
   eq('★★★ ยกเลิกแล้วหักออกจากคลังรอตรวจ — คลังขายต้องไม่ติดลบ',

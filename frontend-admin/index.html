@@ -3950,9 +3950,11 @@ function renderTaxInvoices(sum, truncated){
       '<button class="btn btn-sm" onclick="openSaleOrderDetail('+t.orderId+')">เปิดบิล</button>' +
       /* ★ ออกใบลดหนี้ได้เฉพาะใบที่มีใบแจ้งหนี้ลูกหนี้รองรับ — ขายสดยังทำไม่ได้ทั้งระบบ
          (ใบลดหนี้ผูกกับ ar_invoices) บอกเหตุผลไว้ใน title แทนที่จะยื่นปุ่มที่กดแล้วพัง */
-      (t.arInvoiceId
-        ? ' <button class="btn btn-sm" onclick="openCreditNoteForm('+t.arInvoiceId+')">ใบลดหนี้</button>'
-        : (t.cancelled ? '' : ' <span class="form-hint" title="ใบลดหนี้ยังผูกกับใบแจ้งหนี้ลูกหนี้เท่านั้น บิลเงินสดจึงยังออกไม่ได้">—</span>')) +
+      (t.cancelled ? ''
+        : t.arInvoiceId
+          ? ' <button class="btn btn-sm" onclick="openCreditNoteForm('+t.arInvoiceId+')">ใบลดหนี้</button>'
+          /* ขายสด: อ้างบิล/รอบตรงๆ — ใบลดหนี้จะลงบัญชีเป็นการคืนเงิน */
+          : ' <button class="btn btn-sm" onclick="openCreditNoteForSale('+t.orderId+',\''+(t.roundId||'')+'\')">ใบลดหนี้</button>') +
     '</td></tr>'), 9, 'ยังไม่มีใบกำกับภาษีในช่วงที่เลือก');
 }
 
@@ -10185,13 +10187,19 @@ const ADJ_UI = {
     diffLabel: 'ผลต่างที่เพิ่มขึ้น (ก่อนภาษี)', vatLabel: 'ที่เพิ่มขึ้น', sumLabel: 'รวมเงินที่เพิ่มหนี้', sign: 1,
     signers: ['ผู้ออกใบเพิ่มหนี้', 'ผู้รับใบเพิ่มหนี้'] }
 };
-let CN_DRAFT = null, CN_KIND = 'credit';
+let CN_DRAFT = null, CN_KIND = 'credit', CN_SRC = null;
 const openCreditNoteForm = id => openAdjustNoteForm(id, 'credit');
 const openDebitNoteForm = id => openAdjustNoteForm(id, 'debit');
-async function openAdjustNoteForm(invoiceId, kind){
+/* ★★ บิลขายสดไม่มีใบแจ้งหนี้ให้อ้าง จึงอ้างบิล/รอบจัดส่งตรงๆ (เจ้าของระบบสั่ง 23 ต.ค. 2026)
+   backend เดินทางเดียวกันทั้งสองแบบ ต่างกันแค่คู่บัญชี (คืนเงิน ไม่ใช่ลดลูกหนี้ — 49_credit_notes.gs) */
+const openCreditNoteForSale = (orderId, roundId) =>
+  openAdjustNoteForm({ salesOrderId: orderId, deliveryRoundId: roundId || '' }, 'credit');
+async function openAdjustNoteForm(src, kind){
   const K = ADJ_UI[kind] || ADJ_UI.credit;
+  // รับได้ทั้งเลขใบแจ้งหนี้ (ของเดิม) และก้อน { salesOrderId, deliveryRoundId } ของบิลขายสด
+  CN_SRC = (src && typeof src === 'object') ? src : { invoiceId: src };
   const tok = plModalWait('ออก' + K.label, 'กำลังดึงรายการและราคาที่ขายจริงจากบิล…');
-  const d = await callApi('getArCreditNoteDraft', { invoiceId, kind: kind });
+  const d = await callApi('getArCreditNoteDraft', Object.assign({ kind: kind }, CN_SRC));
   if (plModalStale(tok)) return;
   if (!d.success) { plModalClose(); toast(d.message, true); return; }
   if (K.capped && !(d.invoice.creditable > 0)) { plModalClose(); toast('ใบแจ้งหนี้นี้ถูกลดหนี้เต็มจำนวนไปแล้ว', true); return; }
@@ -10215,7 +10223,11 @@ async function openAdjustNoteForm(invoiceId, kind){
     '<td><input type="number" class="cn-price" data-i="'+i+'" min="0" max="'+l.unitPrice+'" step="0.01" ' +
       'value="'+l.unitPrice+'" style="width:96px" oninput="cnRecalc()"></td>' +
     '<td class="mono-data cn-amt" data-i="'+i+'">฿'+bahtPlain(l.amount)+'</td></tr>').join('');
-  plModal('<h3>ออก'+K.label+' — อ้างใบแจ้งหนี้ ' + esc(d.invoice.invoiceNo) + '</h3>' +
+  plModal('<h3>ออก'+K.label+' — อ้าง' + (d.isCash ? 'ใบกำกับภาษี ' : 'ใบแจ้งหนี้ ') + esc(d.invoice.invoiceNo) + '</h3>' +
+    /* ★ ขายสดต้องบอกตั้งแต่บรรทัดแรกว่า "คืนเงิน" ไม่ใช่ "ลดหนี้" — ไม่มีหนี้ให้ลด
+       คนทำบัญชีต้องรู้ว่าเงินจะออกจากลิ้นชักจริง ไม่ใช่แค่ตัวเลขในระบบขยับ */
+    (d.isCash ? '<p class="form-hint"><b>บิลนี้เป็นการขายสด</b> — ลูกค้าจ่ายเงินไปแล้ว ' +
+      'ใบลดหนี้ใบนี้จึงเป็นการ<b>คืนเงินให้ลูกค้า</b> และลงบัญชีเป็น เงินสดลดลง (ไม่ใช่ลูกหนี้ลดลง)</p>' : '') +
     '<p class="form-hint">' +
     (K.capped ? 'ลดหนี้ได้สูงสุด <b>฿'+bahtPlain(d.invoice.creditable)+'</b> (ยอดใบ ฿'+bahtPlain(d.invoice.total)+
       (d.invoice.credited ? ' · ลดไปแล้ว ฿'+bahtPlain(d.invoice.credited) : '')+')'
@@ -10346,13 +10358,13 @@ async function cnSave(){
     }).filter(l => l.qty > 0);
     if (!lines.length) { plModalErr('ต้องมีรายการอย่างน้อย 1 รายการ'); return; }
   }
-  const r = await callApi(K.action, { invoiceId: CN_DRAFT.invoice.id, reasonCode: reasonCode,
+  const r = await callApi(K.action, Object.assign({}, CN_SRC, { reasonCode: reasonCode,
     reason: note ? (CN_DRAFT.reasons[reasonCode] + ' — ' + note) : CN_DRAFT.reasons[reasonCode],
     creditDate: document.getElementById('cn-date').value, vatRate: CN_DRAFT.vatRate,
     moveStock: document.getElementById('cn-stock').checked, returnStock: document.getElementById('cn-stock').checked,
     warehouseId: (document.getElementById('cn-wh') || {}).value || '',
     priceOverride: !!(document.getElementById('cn-ovr') || {}).checked,
-    lines: lines });
+    lines: lines }));
   if (!r.success) { plModalErr(r.message); return; }
   plModalClose();
   toast(r.message);

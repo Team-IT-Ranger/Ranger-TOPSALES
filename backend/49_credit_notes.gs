@@ -69,15 +69,61 @@ var AR_ADJ = {
     capped: false, reasons: DN_REASONS, moveType: 'sale_out', refType: 'AR_DEBIT_NOTE' }
 };
 
+/* ═══════════ ★★ ต้นเรื่องของใบปรับหนี้มีสองแบบ (เจ้าของระบบสั่ง 23 ต.ค. 2026) ═══════════
+ * 1. **บิลเครดิต** → อ้าง `ar_invoices` เหมือนเดิมทุกอย่าง
+ * 2. **บิลขายสด** → ไม่มีใบแจ้งหนี้ให้อ้าง (เก็บเงินจบที่หน้าร้าน) จึงอ้าง **บิลขาย/รอบจัดส่ง** ตรงๆ
+ *    ซึ่งเป็นที่ที่เลขใบกำกับภาษีอยู่จริง
+ * ★★★ **คู่บัญชีไม่เหมือนกัน** — เครดิตลดลูกหนี้ (Cr 1200) · ขายสด**คืนเงินออกไป** (Cr 1110)
+ *   เขียนเหมือนกันเมื่อไหร่ = ลูกหนี้ติดลบทั้งที่ไม่เคยมีหนี้ และเงินสดในบัญชีไม่ตรงกับลิ้นชักจริง
+ * ★ ตัวโค้ดเดินทางเดียวกันทั้งสองแบบ โดยปั้น "ใบแจ้งหนี้เสมือน" จากบิลขาย — แยกเป็นสองฟังก์ชัน
+ *   เมื่อไหร่ วันหนึ่งจะมีคนแก้ข้างเดียวแล้วอีกข้างเงียบๆ ผิดไปคนละทาง (หลักเดียวกับ AR_ADJ)
+ */
+function _adjSourceKey(iv) {
+  return String(iv.record_id || '') ? 'IV#' + iv.record_id
+    : 'SO#' + String(iv.sales_order_id || '') + '#' + String(iv.delivery_round_id || '');
+}
+function _adjNoteKey(n) {
+  return String(n.ar_invoice_id || '') ? 'IV#' + n.ar_invoice_id
+    : 'SO#' + String(n.sales_order_id || '') + '#' + String(n.delivery_round_id || '');
+}
+
+/** ใบแจ้งหนี้เสมือนของบิลขายสด — มีหน้าตาเหมือน ar_invoices พอให้โค้ดที่เหลือใช้ได้ */
+function _cashAdjSource(session, payload, book) {
+  var tenantId = _bookSalesTenant(book);
+  var order = tenantRowById(tenantId, 'sales_orders', payload.salesOrderId);
+  if (!order) return null;
+  var round = null;
+  if (payload.deliveryRoundId) {
+    tenantObjectsIfExists(tenantId, 'delivery_rounds').forEach(function(r) {
+      if (String(r.record_id) === String(payload.deliveryRoundId)) round = r;
+    });
+    if (!round) return null;
+  }
+  var src = round || order;
+  var v = _orderVat(order);
+  return {
+    record_id: '',                                   // ★ ว่าง = ไม่มีใบแจ้งหนี้จริง ห้ามเอาไป centralUpdate
+    invoice_no: String(src.tax_invoice_no || ''),    // เลขที่อ้างบนใบลดหนี้ = เลขใบกำกับภาษี
+    customer_id: order.customer_id, tenant_id: order.tenant_id || tenantId,
+    sales_order_id: order.record_id, delivery_round_id: round ? round.record_id : '',
+    subtotal_ex_vat: Number(src.subtotal_ex_vat) || v.exVat || 0,
+    vat_amount: Number(src.vat_amount) || v.vat || 0,
+    total: Number(src.total) || 0,
+    received_amount: Number(src.total) || 0,         // ขายสด = รับเงินครบแล้วเสมอ
+    status: 'paid', _cash: true, _order: order
+  };
+}
+
 /* ★★ จำนวน (ไม่ใช่ยอดเงิน) ที่เคยปรับไปแล้วของใบแจ้งหนี้ รายบรรทัดสินค้า
    ★ นับเฉพาะใบที่ยังไม่ถูกยกเลิก — ใบที่ voided แล้วถูกกลับรายการไปหมดแล้ว ของกลับมาลดได้ใหม่
    ★ คู่กับเพดานยอดเงิน (`creditable`) ไม่ใช่แทนกัน: เพดานเงินกันไม่ให้ลดเกินยอดใบ
      ส่วนตัวนี้กันไม่ให้ลด "จำนวนชิ้น" เกินที่ขายไป ซึ่งเงินอาจยังไม่ถึงเพดานก็ได้
      (ลดชิ้นละถูกๆ หลายรอบจนเกินจำนวนที่ขาย = ของที่ไม่เคยขายถูกคืนเข้าคลัง) */
-function _arAdjQtyByItem(kindDef, invoiceId) {
+function _arAdjQtyByItem(kindDef, source) {
+  var key = typeof source === 'object' ? _adjSourceKey(source) : 'IV#' + source;
   var live = {};
   centralObjects(kindDef.table).forEach(function(n) {
-    if (String(n.ar_invoice_id) !== String(invoiceId)) return;
+    if (_adjNoteKey(n) !== key) return;
     if (String(n.status) === 'void' || String(n.status) === 'voided') return;
     live[String(n.record_id)] = true;
   });
@@ -92,10 +138,11 @@ function _arAdjQtyByItem(kindDef, invoiceId) {
 }
 
 /** ยอดที่ปรับไปแล้วของใบแจ้งหนี้ใบหนึ่ง (ใบที่ยังไม่ถูกยกเลิก) */
-function _arAdjSumOf(kindDef, invoiceId) {
+function _arAdjSumOf(kindDef, source) {
+  var key = typeof source === 'object' ? _adjSourceKey(source) : 'IV#' + source;
   var sum = 0;
   centralObjects(kindDef.table).forEach(function(n) {
-    if (String(n.ar_invoice_id) !== String(invoiceId)) return;
+    if (_adjNoteKey(n) !== key) return;
     /* ★★ รับทั้ง 'void' และ 'voided' — ไฟล์นี้เคยใช้สองคำขัดกันเองมาก่อนแล้ว
        (`_listArAdjustNotes` กรอง 'voided' ส่วนที่นี่กรอง 'void') — ไม่เคยระเบิดเพราะ
        ยังยกเลิกใบไม่ได้ · พอทำปุ่มยกเลิกขึ้นมา รายการหายแต่ยอดยังถูกหักอยู่
@@ -120,15 +167,27 @@ function getArCreditNoteDraft(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
   payload = payload || {};
   var K = AR_ADJ[String(payload.kind || 'credit')] || AR_ADJ.credit;
-  var iv = _findById('ar_invoices', payload.invoiceId);
-  if (!iv) return { success: false, message: 'ไม่พบใบแจ้งหนี้นี้' };
-  if (String(iv.status) === 'void') return { success: false, message: 'ใบแจ้งหนี้นี้ถูกยกเลิกแล้ว' };
+  /* ★ ต้นเรื่องมีสองแบบ — ใบแจ้งหนี้ (เครดิต) หรือบิลขายตรงๆ (ขายสด) ดู _cashAdjSource */
+  var iv;
+  if (payload.invoiceId) {
+    iv = _findById('ar_invoices', payload.invoiceId);
+    if (!iv) return { success: false, message: 'ไม่พบใบแจ้งหนี้นี้' };
+    if (String(iv.status) === 'void') return { success: false, message: 'ใบแจ้งหนี้นี้ถูกยกเลิกแล้ว' };
+  } else if (payload.salesOrderId) {
+    iv = _cashAdjSource(session, payload, _bookScope(session, payload));
+    if (!iv) return { success: false, message: 'ไม่พบบิลขายหรือรอบจัดส่งนี้' };
+    if (!iv.invoice_no) return { success: false, message: 'บิลนี้ยังไม่ได้ออกใบกำกับภาษี — ออกใบลดหนี้ไม่ได้' };
+  } else {
+    return { success: false, message: 'ต้องระบุใบแจ้งหนี้หรือบิลขาย' };
+  }
 
-  var credited = _arAdjSumOf(AR_ADJ.credit, iv.record_id);
-  var debited = _arAdjSumOf(AR_ADJ.debit, iv.record_id);
+  var credited = _arAdjSumOf(AR_ADJ.credit, iv);
+  var debited = _arAdjSumOf(AR_ADJ.debit, iv);
   var out = { success: true, kind: K.kind, label: K.label, reasons: K.reasons,
     // หน้าจอใช้ตัวนี้ตัดสินว่าช่องราคาแก้ได้ไหม เมื่อเลือกเหตุผลแต่ละข้อ
-    reasonFault: K.kind === 'credit' ? CN_FAULT : {}, invoice: {
+    reasonFault: K.kind === 'credit' ? CN_FAULT : {},
+    // ★ ขายสดไม่มีใบแจ้งหนี้ — หน้าจอต้องรู้ เพราะต้องส่ง salesOrderId กลับมาแทน invoiceId
+    isCash: !!iv._cash, invoice: {
     id: iv.record_id, invoiceNo: iv.invoice_no, invoiceDate: _dOnly(iv.invoice_date), customerId: iv.customer_id,
     tenantId: iv.tenant_id || '', salesOrderId: iv.sales_order_id || '', deliveryRoundId: iv.delivery_round_id || '',
     subtotalExVat: Number(iv.subtotal_ex_vat) || 0, vatAmount: Number(iv.vat_amount) || 0,
@@ -184,7 +243,7 @@ function getArCreditNoteDraft(session, payload) {
   var ov = _orderVat(order);
   // ★ ราคาต่อหน่วยต้องเป็นของที่บิลใบนั้นขายไปจริง (soldNetByItem ใน 18_pricing_engine.gs)
   var netOf = soldNetByItem(order, items);
-  var doneQty = _arAdjQtyByItem(K, iv.record_id);
+  var doneQty = _arAdjQtyByItem(K, iv);
   items.forEach(function(it) {
     var ordered = parseFloat(it.qty) || 0;
     var qty = roundQty ? (roundQty[String(it.record_id)] || 0) : ordered;
@@ -212,11 +271,25 @@ function getArCreditNoteDraft(session, payload) {
 function _arAdjustNote(session, payload, K) {
   payload = payload || {};
   return _withDocLock(function() {
-    var iv = _findById('ar_invoices', payload.invoiceId);
-    if (!iv) return { success: false, message: 'ไม่พบใบแจ้งหนี้นี้' };
-    if (String(iv.status) === 'void') return { success: false, message: 'ใบแจ้งหนี้นี้ถูกยกเลิกแล้ว' };
     var book = _bookScope(session, payload);
-    if (!_inBook(iv, book)) return { success: false, message: 'ใบแจ้งหนี้นี้ไม่ได้อยู่ในสมุดที่เลือกอยู่' };
+    var iv;
+    if (payload.invoiceId) {
+      iv = _findById('ar_invoices', payload.invoiceId);
+      if (!iv) return { success: false, message: 'ไม่พบใบแจ้งหนี้นี้' };
+      if (String(iv.status) === 'void') return { success: false, message: 'ใบแจ้งหนี้นี้ถูกยกเลิกแล้ว' };
+      if (!_inBook(iv, book)) return { success: false, message: 'ใบแจ้งหนี้นี้ไม่ได้อยู่ในสมุดที่เลือกอยู่' };
+    } else if (payload.salesOrderId) {
+      /* ★ บิลขายสด — ออกใบลดหนี้ได้ แต่คู่บัญชีคนละแบบ (คืนเงิน ไม่ใช่ลดลูกหนี้) ดู jrLines ข้างล่าง
+         ★ ใบเพิ่มหนี้ของบิลขายสดยังไม่เปิด: "คิดเงินขาด" ของการขายสดคือการเก็บเงินเพิ่มหน้าร้าน
+           ซึ่งเป็นรายการรับเงิน ไม่ใช่การตั้งลูกหนี้ — ต้องให้ผู้ทำบัญชีตัดสินก่อนว่าจะลงทางไหน */
+      if (K.kind !== 'credit') return { success: false, message: 'บิลขายสดออกใบเพิ่มหนี้ยังไม่ได้ — ให้เก็บเงินเพิ่มเป็นการขายใหม่แทน' };
+      iv = _cashAdjSource(session, payload, book);
+      if (!iv) return { success: false, message: 'ไม่พบบิลขายหรือรอบจัดส่งนี้' };
+      if (!iv.invoice_no) return { success: false, message: 'บิลนี้ยังไม่ได้ออกใบกำกับภาษี — ออกใบลดหนี้ไม่ได้' };
+      if (String(iv._order.status) === 'cancelled') return { success: false, message: 'บิลนี้ถูกยกเลิกไปแล้ว' };
+    } else {
+      return { success: false, message: 'ต้องระบุใบแจ้งหนี้หรือบิลขาย' };
+    }
 
     var date = payload.creditDate || payload.noteDate || _todayStr();
     if (!_validDate(date)) return { success: false, message: 'วันที่' + K.label + 'ต้องเป็น yyyy-MM-dd' };
@@ -251,7 +324,7 @@ function _arAdjustNote(session, payload, K) {
     /* จำนวนที่ยังลดได้ของแต่ละบรรทัด = ที่ขายไป − ที่เคยลดไปแล้ว */
     var soldQtyLeft = {};
     if (K.capped && capItems) {
-      var doneNow = _arAdjQtyByItem(K, iv.record_id);
+      var doneNow = _arAdjQtyByItem(K, iv);
       capItems.forEach(function(it) {
         soldQtyLeft[String(it.record_id)] = Math.max(0, (parseFloat(it.qty) || 0) - (doneNow[String(it.record_id)] || 0));
       });
@@ -289,8 +362,8 @@ function _arAdjustNote(session, payload, K) {
     var total = _money(taxable + exempt);
     var exVat = _money(sv.exVat + exempt), vat = _money(sv.vat);
 
-    var credited = _arAdjSumOf(AR_ADJ.credit, iv.record_id);
-    var debited = _arAdjSumOf(AR_ADJ.debit, iv.record_id);
+    var credited = _arAdjSumOf(AR_ADJ.credit, iv);
+    var debited = _arAdjSumOf(AR_ADJ.debit, iv);
     /* ★ ลดหนี้มีเพดาน: ลดได้ไม่เกินยอดที่ยังไม่ถูกลด · เพิ่มหนี้ไม่มีเพดาน (คิดเงินขาดเท่าไรก็เพิ่มได้เท่านั้น) */
     if (K.capped) {
       var creditable = _money((Number(iv.total) || 0) + debited - credited);
@@ -310,8 +383,13 @@ function _arAdjustNote(session, payload, K) {
     var jrLines = K.kind === 'credit' ? [
       { accountCode: GL_ACCT.SALES, description: 'ลดรายได้: ' + reason, debit: exVat, credit: 0 },
       { accountCode: GL_ACCT.VAT_OUTPUT, description: 'ลดภาษีขาย', debit: vat, credit: 0 },
-      { accountCode: GL_ACCT.AR, description: 'ลดลูกหนี้ ' + (iv.invoice_no || ''), debit: 0, credit: total,
-        partyType: 'customer', partyId: customer.record_id }
+      /* ★★★ ขายสดคืนเงินออกไปจริง — เครดิตเงินสด ไม่ใช่ลูกหนี้
+         ลงเป็นลูกหนี้เมื่อไหร่ = ลูกหนี้ติดลบทั้งที่ลูกค้าไม่เคยติดหนี้ และเงินในบัญชีไม่ตรงกับลิ้นชัก
+         ★ ไม่ผูก partyType บนบรรทัดเงินสด — บัญชีแยกรายลูกค้าเป็นของบัญชีลูกหนี้เท่านั้น */
+      iv._cash
+        ? { accountCode: GL_ACCT.CASH, description: 'คืนเงินลูกค้า ' + (iv.invoice_no || ''), debit: 0, credit: total }
+        : { accountCode: GL_ACCT.AR, description: 'ลดลูกหนี้ ' + (iv.invoice_no || ''), debit: 0, credit: total,
+            partyType: 'customer', partyId: customer.record_id }
     ] : [
       { accountCode: GL_ACCT.AR, description: 'เพิ่มลูกหนี้ ' + (iv.invoice_no || ''), debit: total, credit: 0,
         partyType: 'customer', partyId: customer.record_id },
@@ -323,7 +401,7 @@ function _arAdjustNote(session, payload, K) {
       createdBy: session.adminUserId, lines: jrLines });
     if (!jr.success) return jr;
 
-    var row = { record_id: noteId, ar_invoice_id: iv.record_id, invoice_no: iv.invoice_no || '',
+    var row = { record_id: noteId, ar_invoice_id: iv.record_id || '', invoice_no: iv.invoice_no || '',
       customer_id: customer.record_id, tenant_id: iv.tenant_id || '',
       sales_order_id: iv.sales_order_id || '', delivery_round_id: iv.delivery_round_id || '',
       credit_date: date, reason_code: reasonCode, reason: reason, vat_rate: rate,
@@ -342,14 +420,18 @@ function _arAdjustNote(session, payload, K) {
     /* ยอดค้างของใบแจ้งหนี้ = ยอดใบ + เพิ่มหนี้ − รับชำระ − ลดหนี้
        ลดจนไม่เหลือ = ปิดใบด้วยสถานะ `credited` (ไม่ใช่ `paid` — คนละเรื่องกัน ลูกค้าไม่ได้จ่ายเงิน)
        เพิ่มหนี้ให้ใบที่ปิดไปแล้ว = ใบกลับมาค้างอีกครั้งโดยอัตโนมัติ ซึ่งถูกต้อง */
-    var patch = {};
-    patch[K.invCol] = _money((K.kind === 'credit' ? credited : debited) + total);
-    var recv = Number(iv.received_amount) || 0;
-    var newCredited = K.kind === 'credit' ? patch[K.invCol] : credited;
-    var newDebited = K.kind === 'debit' ? patch[K.invCol] : debited;
-    var left = _money((Number(iv.total) || 0) + newDebited - recv - newCredited);
-    patch.status = left <= 0.009 ? (recv > 0.009 ? 'paid' : 'credited') : (recv > 0.009 ? 'partial' : 'open');
-    centralUpdate('ar_invoices', iv.record_id, patch);
+    /* ★ ขายสดไม่มีแถวใบแจ้งหนี้ให้อัปเดต — ยอดที่ลดไปแล้วนับสดจากใบลดหนี้ที่อ้างบิลนั้น
+       (`_arAdjSumOf` คีย์ตามต้นเรื่อง) จึงไม่ต้องเก็บยอดสะสมไว้ที่ไหน */
+    if (iv.record_id) {
+      var patch = {};
+      patch[K.invCol] = _money((K.kind === 'credit' ? credited : debited) + total);
+      var recv = Number(iv.received_amount) || 0;
+      var newCredited = K.kind === 'credit' ? patch[K.invCol] : credited;
+      var newDebited = K.kind === 'debit' ? patch[K.invCol] : debited;
+      var left = _money((Number(iv.total) || 0) + newDebited - recv - newCredited);
+      patch.status = left <= 0.009 ? (recv > 0.009 ? 'paid' : 'credited') : (recv > 0.009 ? 'partial' : 'open');
+      centralUpdate('ar_invoices', iv.record_id, patch);
+    }
 
     /* ของขยับตามไหม — เฉพาะเมื่อคนออกใบสั่ง และเฉพาะใบที่รู้ว่าคลังไหน
        ★★ ใบลดหนี้ที่มีของคืนจริง **ออกใบรับคืนสินค้าให้ด้วยเสมอ** (เจ้าของระบบสั่ง 23 ต.ค. 2026)
