@@ -1447,6 +1447,21 @@ console.log('\n── ใบรับคืนสินค้า ──');
       lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 900, taxStatus: 'vat' }] });
     eq('★ ลดราคาต่อหน่วยลงได้ (ยอดคิดตามราคาที่ใส่)', [low.success, low.total], [true, 900]);
 
+    /* ★★ เพดาน "จำนวน" รายบรรทัด = ที่ขายไป − ที่เคยลดไปแล้ว (ผู้ใช้สั่ง 23 ต.ค. 2026)
+       คนละตัวกับเพดานยอดเงิน — ลดชิ้นละถูกๆ หลายรอบจนเกินจำนวนที่ขาย เงินอาจยังไม่ถึงเพดาน
+       แต่ของที่ไม่เคยขายจะถูกคืนเข้าคลัง */
+    const dft2 = ctx.getArCreditNoteDraft(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id, kind: 'credit' });
+    const ln = dft2.lines.filter(l => String(l.itemId) === '18001')[0];
+    eq('★ ร่างบอกจำนวนขาย · ที่เคยลดไปแล้ว · ที่ยังลดได้',
+      [ln.qty, ln.doneQty > 0, ln.remainQty === ln.qty - ln.doneQty], [10, true, true]);
+
+    const overQ = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'return', creditDate: '2026-10-21',
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10,
+        qty: ln.remainQty + 1, unitPrice: 1, taxStatus: 'vat' }] });
+    eq('★★★ ลดเกินจำนวนที่ยังลดได้ → ปฏิเสธ แม้ยอดเงินจะยังไม่ถึงเพดาน',
+      [overQ.success, /เกินจำนวนที่ยังลดได้/.test(overQ.message || '')], [false, true]);
+
     const high = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
       reasonCode: 'return', creditDate: '2026-10-21',
       lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 5000, taxStatus: 'vat' }] });

@@ -69,6 +69,28 @@ var AR_ADJ = {
     capped: false, reasons: DN_REASONS, moveType: 'sale_out', refType: 'AR_DEBIT_NOTE' }
 };
 
+/* ★★ จำนวน (ไม่ใช่ยอดเงิน) ที่เคยปรับไปแล้วของใบแจ้งหนี้ รายบรรทัดสินค้า
+   ★ นับเฉพาะใบที่ยังไม่ถูกยกเลิก — ใบที่ voided แล้วถูกกลับรายการไปหมดแล้ว ของกลับมาลดได้ใหม่
+   ★ คู่กับเพดานยอดเงิน (`creditable`) ไม่ใช่แทนกัน: เพดานเงินกันไม่ให้ลดเกินยอดใบ
+     ส่วนตัวนี้กันไม่ให้ลด "จำนวนชิ้น" เกินที่ขายไป ซึ่งเงินอาจยังไม่ถึงเพดานก็ได้
+     (ลดชิ้นละถูกๆ หลายรอบจนเกินจำนวนที่ขาย = ของที่ไม่เคยขายถูกคืนเข้าคลัง) */
+function _arAdjQtyByItem(kindDef, invoiceId) {
+  var live = {};
+  centralObjects(kindDef.table).forEach(function(n) {
+    if (String(n.ar_invoice_id) !== String(invoiceId)) return;
+    if (String(n.status) === 'void' || String(n.status) === 'voided') return;
+    live[String(n.record_id)] = true;
+  });
+  var out = {};
+  centralObjects(kindDef.itemsTable).forEach(function(it) {
+    if (!live[String(it.note_id)]) return;
+    var k = String(it.order_item_id || '');
+    if (!k) return;
+    out[k] = (out[k] || 0) + (parseFloat(it.qty) || 0);
+  });
+  return out;
+}
+
 /** ยอดที่ปรับไปแล้วของใบแจ้งหนี้ใบหนึ่ง (ใบที่ยังไม่ถูกยกเลิก) */
 function _arAdjSumOf(kindDef, invoiceId) {
   var sum = 0;
@@ -162,15 +184,20 @@ function getArCreditNoteDraft(session, payload) {
   var ov = _orderVat(order);
   // ★ ราคาต่อหน่วยต้องเป็นของที่บิลใบนั้นขายไปจริง (soldNetByItem ใน 18_pricing_engine.gs)
   var netOf = soldNetByItem(order, items);
+  var doneQty = _arAdjQtyByItem(K, iv.record_id);
   items.forEach(function(it) {
     var ordered = parseFloat(it.qty) || 0;
     var qty = roundQty ? (roundQty[String(it.record_id)] || 0) : ordered;
     if (!(qty > 0) || !(ordered > 0)) return;
     var unitNet = soldUnitNet(netOf[String(it.record_id)], it);
     var p = products[String(it.product_id)] || {};
+    var done = doneQty[String(it.record_id)] || 0;
     out.lines.push({ itemId: it.record_id, productId: it.product_id, productCode: p.product_code || '',
       productName: p.name || '(สินค้าถูกลบ)', unitCode: it.unit_code || '', unitFactor: _drLineFactor(it),
-      qty: qty, unitPrice: _money(unitNet), amount: _money(unitNet * qty),
+      /* qty = จำนวนที่ขายไปตามใบนี้ · done = เคยปรับไปแล้ว · left = ที่ยังปรับได้
+         ★ ใบลดหนี้เท่านั้นที่มีเพดานจำนวน — ใบเพิ่มหนี้คือ "ส่งของเพิ่ม" จำนวนจึงไม่ผูกกับที่ขายไป */
+      qty: qty, doneQty: done, remainQty: K.capped ? Math.max(0, qty - done) : qty,
+      unitPrice: _money(unitNet), amount: _money(unitNet * qty),
       taxStatus: String(it.tax_status || '') || TAX_VAT, isFree: String(it.is_free) === '1' });
   });
   out.vatRate = ov.rate;
@@ -221,10 +248,22 @@ function _arAdjustNote(session, payload, K) {
       }
     }
 
-    var lines = [], taxable = 0, exempt = 0, overPriced = '', underPriced = '';
+    /* จำนวนที่ยังลดได้ของแต่ละบรรทัด = ที่ขายไป − ที่เคยลดไปแล้ว */
+    var soldQtyLeft = {};
+    if (K.capped && capItems) {
+      var doneNow = _arAdjQtyByItem(K, iv.record_id);
+      capItems.forEach(function(it) {
+        soldQtyLeft[String(it.record_id)] = Math.max(0, (parseFloat(it.qty) || 0) - (doneNow[String(it.record_id)] || 0));
+      });
+    }
+    var lines = [], taxable = 0, exempt = 0, overPriced = '', underPriced = '', overQty = '';
     (payload.lines || []).forEach(function(l) {
       var qty = parseFloat(l.qty) || 0, price = parseFloat(l.unitPrice) || 0;
       if (!(qty > 0)) return;
+      /* ★ กันจำนวนเกินที่ฝั่งเซิร์ฟเวอร์ด้วย — หน้าจอกันไว้แล้ว แต่ action ยิงตรงได้ และหน้าจอที่
+         เปิดค้างไว้นานอาจถือตัวเลขเก่าตอนที่ยังไม่มีใครลด (คนละคนเปิดพร้อมกันเป็นเรื่องปกติ) */
+      if (K.capped && l.itemId && soldQtyLeft[String(l.itemId)] !== undefined &&
+          qty > soldQtyLeft[String(l.itemId)] + 0.0001) overQty = String(soldQtyLeft[String(l.itemId)]);
       if (soldCap && l.itemId && soldCap[String(l.itemId)] !== undefined) {
         var cap = soldCap[String(l.itemId)];
         if (price > cap + 0.009) overPriced = String(cap);
@@ -238,6 +277,8 @@ function _arAdjustNote(session, payload, K) {
         unitFactor: parseFloat(l.unitFactor) || 1, qty: qty, unitPrice: _money(price), amount: amount, taxStatus: taxStatus });
     });
     if (!lines.length) return { success: false, message: 'ต้องมีรายการอย่างน้อย 1 รายการ' };
+    if (overQty) return { success: false, message: 'ลดหนี้เกินจำนวนที่ยังลดได้ (เหลืออีก ' + overQty +
+      ' หน่วย) — ใบนี้ถูกลดหนี้ไปบางส่วนแล้ว ปิดหน้าต่างแล้วเปิดใหม่เพื่อดูตัวเลขล่าสุด' };
     if (overPriced) return { success: false, message: 'ราคาที่ลดหนี้สูงกว่าราคาที่ขายไปจริง (สูงสุด ' +
       Number(overPriced).toLocaleString() + ' ต่อหน่วย) — ลดหนี้เกินกว่าที่เก็บเงินมาไม่ได้' };
     if (underPriced) return { success: false, message: 'เหตุผลนี้เป็นความผิดฝั่งเรา — ต้องลดหนี้เต็มราคาที่ขายไป (' +

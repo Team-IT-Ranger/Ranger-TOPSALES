@@ -10057,8 +10057,15 @@ async function openAdjustNoteForm(invoiceId, kind){
   const rows = d.lines.map((l, i) =>
     '<tr><td class="mono-data">'+esc(l.productCode || '-')+'</td><td class="wrap">'+esc(l.productName)+'</td>' +
     '<td class="mono-data">'+esc(l.unitCode)+'</td>' +
-    '<td><input type="number" class="cn-qty" data-i="'+i+'" min="0" step="1" value="'+l.qty+'" ' +
-      (K.capped ? 'max="'+l.qty+'" ' : '') + 'style="width:80px" oninput="cnRecalc()"></td>' +
+    /* ★ สามช่องเรียงให้เห็นที่มาของตัวเลข (ผู้ใช้สั่ง 23 ต.ค. 2026): ขายไปเท่าไร · เคยลดไปแล้วเท่าไร ·
+       ครั้งนี้เท่าไร — เดิมมีแต่ช่องเดียวที่ตั้งต้นเต็มจำนวน คนกดบันทึกผ่านโดยไม่ทันคิดว่าเคยลดไปแล้ว */
+    '<td class="mono-data">'+sodNum(l.qty)+'</td>' +
+    '<td class="mono-data">'+(l.doneQty ? '<span class="tag tag-warn">'+sodNum(l.doneQty)+'</span>' : '—')+'</td>' +
+    /* ★★ ตั้งต้น 0 เสมอ — ใบลดหนี้ส่วนใหญ่ลดบางรายการ ไม่ใช่ทั้งใบ · ค่าตั้งต้นเต็มจำนวนคือการ
+       เดาแทนผู้ใช้ในเรื่องที่เดาผิดแล้วเป็นเงินจริง */
+    '<td><input type="number" class="cn-qty" data-i="'+i+'" min="0" step="1" value="0" ' +
+      (K.capped ? 'max="'+(l.remainQty !== undefined ? l.remainQty : l.qty)+'" ' : '') +
+      'style="width:80px" oninput="cnRecalc()"></td>' +
     /* ★ ราคาแก้ได้ (เจ้าของระบบสั่ง 23 ต.ค. 2026) — ซื้อเยอะได้ราคาขั้นถูก แล้วคืนบางส่วน
        ของที่เหลือไม่ควรอยู่ในราคาขั้นที่ลูกค้าไม่ถึงแล้ว จึงลดหนี้ต่ำกว่าราคาที่ขายไปได้
        ★ ขึ้นเกินราคาที่ขายจริงไม่ได้ (max) — backend กั้นซ้ำอีกชั้น */
@@ -10079,7 +10086,9 @@ async function openAdjustNoteForm(invoiceId, kind){
     '</div>' +
     plField('รายละเอียดเพิ่มเติม (ถ้ามี)', '<input id="cn-note" placeholder="เช่น อ้างใบรับคืนเลขที่… / ส่งเพิ่มตามที่ตกลง">') +
     (d.lines.length ? '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
-      '<th>จำนวนที่'+K.verb+'</th><th>ราคา/หน่วย ที่ขายจริง<br><span class="form-hint">แก้ลงได้</span></th>' +
+      (K.capped ? '<th>จำนวนขาย</th><th>เคยลดแล้ว</th>' : '<th>จำนวนขาย</th><th></th>') +
+      '<th>จำนวนที่'+K.verb+'<br><span class="form-hint">ครั้งนี้</span></th>' +
+      '<th>ราคา/หน่วย ที่ขายจริง<br><span class="form-hint">แก้ลงได้</span></th>' +
       '<th>เป็นเงิน</th></tr></thead><tbody>'+rows+'</tbody></table></div>' +
       '<p class="form-hint" id="cn-fault"></p>'
       : '<p class="form-hint">ใบแจ้งหนี้นี้ไม่ได้ผูกกับบิลขาย — ระบุยอดเอง</p>' +
@@ -10109,6 +10118,8 @@ function cnStockToggled(){
 }
 /* ราคาต่อหน่วยที่จะใช้คิด — จากช่องที่แก้ได้ ถ้าไม่มีช่อง (ใบเพิ่มหนี้) ใช้ของเดิม
    ★ ตัดไม่ให้เกินราคาที่ขายจริงตั้งแต่บนจอ ไม่ปล่อยให้ไปโดนปฏิเสธที่เซิร์ฟเวอร์ */
+/** จำนวนที่ยังลดได้ของบรรทัดนี้ — ที่ขายไป ลบที่เคยลดไปแล้ว (ใบเก่าที่ backend ยังไม่ส่ง remainQty มา ใช้ที่ขายไป) */
+const cnRemain = l => (l.remainQty !== undefined ? l.remainQty : l.qty);
 function cnUnitPrice(i, l){
   const inp = document.querySelector('.cn-price[data-i="'+i+'"]');
   if (!inp) return l.unitPrice;
@@ -10155,7 +10166,7 @@ function cnRecalc(){
   document.querySelectorAll('.cn-qty').forEach(inp => {
     const l = CN_DRAFT.lines[Number(inp.dataset.i)];
     const want = Math.max(0, parseFloat(inp.value) || 0);
-    const qty = K.capped ? Math.min(want, l.qty) : want;
+    const qty = K.capped ? Math.min(want, cnRemain(l)) : want;
     const amt = Math.round(qty * cnUnitPrice(Number(inp.dataset.i), l) * 100) / 100;
     total += amt;
     const cell = document.querySelector('.cn-amt[data-i="'+inp.dataset.i+'"]');
@@ -10187,7 +10198,7 @@ async function cnSave(){
       const l = CN_DRAFT.lines[Number(inp.dataset.i)];
       const want = Math.max(0, parseFloat(inp.value) || 0);
       return { itemId: l.itemId, productId: l.productId, unitCode: l.unitCode, unitFactor: l.unitFactor,
-        qty: K.capped ? Math.min(want, l.qty) : want, unitPrice: cnUnitPrice(Number(inp.dataset.i), l),
+        qty: K.capped ? Math.min(want, cnRemain(l)) : want, unitPrice: cnUnitPrice(Number(inp.dataset.i), l),
         taxStatus: l.taxStatus };
     }).filter(l => l.qty > 0);
     if (!lines.length) { plModalErr('ต้องมีรายการอย่างน้อย 1 รายการ'); return; }
