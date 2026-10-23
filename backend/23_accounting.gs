@@ -586,10 +586,27 @@ function _createArInvoiceCore(session, payload, book) {
       customerId = order.customer_id;
       if (roundId) {
         /* ยอดของรอบคิดมาจาก 48_delivery_rounds.gs (deliveryRoundAmounts) แล้ว — ที่นี่ไม่คิดซ้ำ
-           คิดซ้ำคือช่องทางให้ใบกำกับภาษีกับใบแจ้งหนี้ของรอบเดียวกันไม่เท่ากันทีละสตางค์ */
+           คิดซ้ำคือช่องทางให้ใบกำกับภาษีกับใบแจ้งหนี้ของรอบเดียวกันไม่เท่ากันทีละสตางค์
+           ★★ แต่ **ต้องอ่านจากแถวรอบได้ด้วย** เมื่อผู้เรียกไม่ได้ส่งยอดมา (แก้ 23 ต.ค. 2026)
+             เดิมอ่านจาก payload ทางเดียว ซึ่งมีแต่ `issueRoundInvoices` ที่ส่งให้ —
+             **การกดปุ่ม "ตั้งหนี้" กับบิลที่แยกรอบจึงตอบ "ยอดเป็นศูนย์" เสมอ ไม่มีทางสำเร็จ**
+             พอตัวอัตโนมัติพลาดไปครั้งหนึ่ง ก็ตามเก็บด้วยมือไม่ได้เลย (เจอจริงบน UAT 2 ใบ)
+           ★ ลำดับ: ค่าที่ส่งมา → ยอดที่รอบบันทึกไว้ → ไม่มีเลยค่อยปฏิเสธ
+             ไม่คำนวณใหม่เอง เพราะตัวเลขต้องเป็นชุดเดียวกับที่ใบกำกับภาษีของรอบนั้นใช้ */
         subtotal = _money(_numOrNull(payload.subtotalExVat));
         vat = _money(_numOrNull(payload.vatAmount));
-        if (!(subtotal + vat > 0)) return { success: false, message: 'รอบจัดส่งนี้ยอดเป็นศูนย์' };
+        if (!(subtotal + vat > 0)) {
+          var rdRow = null;
+          tenantObjectsIfExists(tenantId, 'delivery_rounds').forEach(function(r) {
+            if (String(r.record_id) === String(roundId)) rdRow = r;
+          });
+          if (rdRow) {
+            subtotal = _money(Number(rdRow.subtotal_ex_vat) || 0);
+            vat = _money(Number(rdRow.vat_amount) || 0);
+          }
+        }
+        if (!(subtotal + vat > 0)) return { success: false,
+          message: 'รอบจัดส่งนี้ยังไม่มียอด — ออกใบกำกับภาษีของรอบนี้ก่อน แล้วค่อยตั้งลูกหนี้' };
       } else {
         // ใช้ยอดแยกภาษีที่บิลบันทึกไว้ตอนขาย (_orderVat ใน 18_pricing_engine.gs) — ไม่ถอดเองซ้ำ
         // ถอดซ้ำคือช่องทางให้ตัวเลขบนกระดาษกับในบัญชีต่างกันทีละสตางค์ แล้วงบไม่ลงตัว
@@ -754,7 +771,13 @@ function listUninvoicedSalesOrders(session, payload) {
   centralObjects('customers').forEach(function(c) { customers[String(c.record_id)] = c.name; });
   var out = [];
   tenantObjects(tenantId, 'sales_orders').forEach(function(o) {
+    /* ★★★ ต้อง "ถึงขั้นพร้อมจัดส่งแล้ว" เท่านั้น (แก้ 23 ต.ค. 2026) — เดิมกรองออกแค่บิลที่ยกเลิก
+       บิลที่ถูก **ปฏิเสธ** · ยังเป็นร่าง · รออนุมัติ จึงโผล่มาในคิวรอตั้งหนี้ด้วย
+       ใครเห็นคิวแล้วกดออกรวด = ได้ลูกหนี้จากบิลที่ไม่มีวันส่งของ (เจอจริงบน UAT: บิลสถานะ
+       `rejected` ยอด 57,809.50 นอนอยู่ในคิว) · หนี้ที่ไม่มีอยู่จริงหาทีหลังยากกว่าหนี้ที่ขาดไป
+       ★ `_soReachedReady` รวม `cancelled` ด้วย จึงยังต้องกรองบิลที่ยกเลิกออกต่างหาก */
     if (String(o.status) === 'cancelled') return;
+    if (!soReachedReady(o.status)) return;
     if (!isCreditPayment(o.payment_method)) return;           // เงินสดเก็บเงินหน้าร้านแล้ว ไม่ต้องตั้งลูกหนี้
     if (invoiced[String(o.record_id)]) return;
     out.push({ id: o.record_id, orderCode: o.order_code, customerId: o.customer_id, customerName: customers[String(o.customer_id)] || '',

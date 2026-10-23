@@ -376,7 +376,17 @@ eq('อายุหนี้เจ้าหนี้ ณ 20 ต.ค.', aging.map
 console.log('\n── ลูกหนี้ (AR) ──');
 append(tenantSheets.sales_orders, { record_id: 77, order_code: 'SO-26092301', customer_id: 500, total: 10700, payment_method: 'credit_term', status: 'completed', created_at: '2026-09-23 09:00:00' });
 append(tenantSheets.sales_orders, { record_id: 78, order_code: 'SO-26092302', customer_id: 500, total: 500, payment_method: 'cash', status: 'completed', created_at: '2026-09-23 09:30:00' });
+/* ★★★ คิวรอตั้งหนี้ต้องมีเฉพาะบิลที่ "ถึงขั้นพร้อมจัดส่งแล้ว" (แก้ 23 ต.ค. 2026)
+   เดิมกรองออกแค่บิลที่ยกเลิก บิลที่ถูกปฏิเสธ/ยังเป็นร่าง/รออนุมัติจึงโผล่มาด้วย
+   ใครเห็นคิวแล้วกดออกรวด = ได้ลูกหนี้จากบิลที่ไม่มีวันส่งของ (เจอจริงบน UAT ยอด 57,809.50) */
+append(tenantSheets.sales_orders, { record_id: 79, order_code: 'SO-26092303', customer_id: 500, total: 9999,
+  payment_method: 'credit_term', status: 'rejected', created_at: '2026-09-23 09:45:00' });
+append(tenantSheets.sales_orders, { record_id: 80, order_code: 'SO-26092304', customer_id: 500, total: 8888,
+  payment_method: 'credit_term', status: 'pending_delivery', created_at: '2026-09-23 09:50:00' });
 eq('บิลเครดิตที่ยังไม่ออกใบแจ้งหนี้ (บิลเงินสดไม่นับ)', ctx.listUninvoicedSalesOrders(FIN, { tenantId: 'T1' }).data.map(o => o.orderCode), ['SO-26092301']);
+eq('★★★ บิลที่ถูกปฏิเสธและบิลที่ยังไม่ถึงพร้อมจัดส่ง ต้องไม่อยู่ในคิว',
+  ctx.listUninvoicedSalesOrders(FIN, { tenantId: 'T1' }).data.filter(o => ['SO-26092303', 'SO-26092304'].indexOf(o.orderCode) !== -1).length, 0);
+
 r = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 77, invoiceDate: '2026-09-23', dueDays: 30 });
 ok('ออกใบแจ้งหนี้จากบิลขายเครดิต', r);
 const INV1 = r.invoiceId;
@@ -410,6 +420,7 @@ fails('ตัวแทนที่ไม่มีในระบบ → ปฏ�
   ctx.createArInvoice(FIN, { tenantId: 'T404', salesOrderId: 77 }), /ไม่พบตัวแทน/);
 eq('อายุหนี้ลูกหนี้ ณ 20 ต.ค. (เกินกำหนด 50 วัน → ช่วง 31-60)',
    ctx.getArAging(FIN, { asOf: '2026-10-20' }).data.map(a => [a.total, a.d31_60, a.docs[0].overdueDays]), [[2140, 2140, 50]]);
+
 
 /* ★ อีกครึ่งของกติกาเดียวกัน: สวมสิทธิ์เข้าไปแล้ว "ต้องออกให้ได้" และต้องไปอยู่ในสมุดของตัวแทน
    ถ้าเทสต์มีแต่ฝั่ง "ปฏิเสธ" ใครมาปิดทางทั้งหมดทีหลังก็ยังเขียว ทั้งที่ตัวแทนทำบัญชีไม่ได้เลย */
@@ -1835,6 +1846,29 @@ eq('การ์ดแยกพนักงานใช้เกณฑ์เด�
 /* ★ เกณฑ์ "ออกใบแล้ว" กับ "จัดส่งสำเร็จ" เป็นคนละมิติ — ส่งพร้อมกันต้องได้ส่วนร่วม ไม่ใช่ทับกัน */
 r = ctx.salesReportBills(MGR, { dateFrom: '2026-09-05', dateTo: '2026-09-09', invoiced: 'yes', statuses: ['completed'] });
 eq('ส่งทั้งสองเกณฑ์พร้อมกัน = ต้องเข้าทั้งคู่ (ชุดนี้ไม่มีใบไหนเข้า)', r.totalBills, 0);
+
+console.log('\n── ตั้งลูกหนี้รายรอบจัดส่ง ──');
+/* ★★★ ตั้งลูกหนี้ "รายรอบจัดส่ง" ด้วยมือต้องทำได้ (แก้ 23 ต.ค. 2026)
+   เดิมอ่านยอดจาก payload ทางเดียว ซึ่งมีแต่ `issueRoundInvoices` ที่ส่งให้ —
+   ปุ่ม "ตั้งหนี้" กับบิลที่แยกรอบจึงตอบ "ยอดเป็นศูนย์" เสมอ ตามเก็บด้วยมือไม่ได้เลย */
+{
+  append(tenantSheets.sales_orders, { record_id: 81, order_code: 'SO-ROUND-1', customer_id: 500, total: 3210,
+    payment_method: 'credit_term', status: 'ready_to_ship', created_at: '2026-09-23 10:00:00' });
+  append(tenantSheets.delivery_rounds, { record_id: 9001, order_id: 81, round_no: 1, status: 'shipped',
+    tax_invoice_no: 'TAX-RD-1', tax_invoice_at: '2026-09-23 10:00:00',
+    subtotal_ex_vat: 2000, vat_amount: 140, total: 2140 });
+  const rd = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 81, deliveryRoundId: 9001,
+    invoiceDate: '2026-09-23', dueDays: 30 });
+  eq('★★★ ตั้งลูกหนี้รายรอบโดยไม่ต้องส่งยอดมาเอง (อ่านจากแถวรอบ)',
+    [rd.success, rd.total], [true, 2140]);
+
+  append(tenantSheets.sales_orders, { record_id: 82, order_code: 'SO-ROUND-2', customer_id: 500, total: 1000,
+    payment_method: 'credit_term', status: 'ready_to_ship', created_at: '2026-09-23 10:10:00' });
+  append(tenantSheets.delivery_rounds, { record_id: 9002, order_id: 82, round_no: 1, status: 'planned' });
+  const rd0 = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 82, deliveryRoundId: 9002 });
+  eq('★ รอบที่ยังไม่มียอดเลย → ปฏิเสธพร้อมบอกว่าต้องออกใบกำกับก่อน',
+    [rd0.success, /ออกใบกำกับภาษีของรอบนี้ก่อน/.test(rd0.message || '')], [false, true]);
+}
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

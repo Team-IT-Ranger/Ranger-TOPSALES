@@ -89,6 +89,11 @@ var SO_MOBILE_CANCELLABLE = [SO_DRAFT, SO_CONFIRMED, SO_PENDING];
    รอตัดตอนรถออกวิ่ง = ระบบบอกว่ามีของทั้งที่ของนอนอยู่ในกล่อง แล้วจะมีคนมาขายซ้ำ (เหตุผลเดียวกับที่เคยย้ายมาที่ delivering)
    ไม่ต้องแก้ที่อื่นเลย — จุดตัดและจุดคืนของอ่านจาก saleStockTaken() ตัวเดียวกันทั้งคู่ */
 var SO_STOCK_TAKEN_STATUSES = [SO_READY, SO_DELIVERING, SO_COMPLETED];
+/* ★ "ถึงขั้นพร้อมจัดส่งแล้วหรือยัง" — จุดที่เอกสารการเงินเริ่มมีผล (ใบกำกับภาษี/ลูกหนี้)
+   นิยามอยู่ที่นี่ที่เดียวเพราะโมดูลนี้เป็นเจ้าของสถานะบิลขาย · `19_sales_admin.gs` และ
+   `23_accounting.gs` เรียกตัวนี้ ห้ามก๊อบลิสต์สถานะไปเขียนซ้ำ */
+var SO_REACHED_READY_STATUSES = [SO_READY, SO_DELIVERING, SO_COMPLETED, SO_CANCELLED];
+function soReachedReady(status) { return SO_REACHED_READY_STATUSES.indexOf(String(status || '')) !== -1; }
 /* ยอดจอง (กันของไว้แต่ยังไม่ตัดจริง) ย้ายไปอยู่ที่ `DR_RESERVE_STATUSES` + `saleReserveBaseByProduct()`
    ใน 48_delivery_rounds.gs — เพราะ "ควรกันไว้เท่าไร" ไม่ใช่คำถามแบบใช่/ไม่ใช่ตามสถานะอีกแล้ว
    แต่เป็นจำนวน: ของที่สั่ง − ของที่ส่งไปแล้วในรอบก่อนๆ − ของที่รอบนี้ถูกตัดไปแล้ว */

@@ -203,9 +203,8 @@ function _arInvoiceNoOf(tenantId, salesOrderId) {
 
 /* ใบนี้เคยไปถึงขั้น "พร้อมจัดส่ง" แล้วหรือยัง — ใช้ตัดสินว่าต้องไปหาเลขใบแจ้งหนี้หรือไม่
    ★ รวม cancelled ด้วย — ใบที่เคยตั้งหนี้แล้วค่อยยกเลิกมีเลขใบแจ้งหนี้จริง ต้องยังเห็นเลขนั้นอยู่ */
-function _soReachedReady(status) {
-  return ['ready_to_ship', 'delivering', 'completed', 'cancelled'].indexOf(String(status || '')) !== -1;
-}
+// ชื่อเดิมที่ไฟล์นี้ใช้อยู่ — นิยามจริงอยู่ที่ 34_sales_status.gs (soReachedReady)
+function _soReachedReady(status) { return soReachedReady(status); }
 function _docIssuer(session, tenantId) {
   var tenant = null;
   centralObjects('tenants').forEach(function(t) { if (String(t.tenant_id) === String(tenantId)) tenant = t; });
