@@ -598,6 +598,19 @@
   .field .unit{ font-size:10.5px; color:var(--ink-faint); margin-left:6px; }
   .form-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
   .toggle-row{ display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:500!important; }
+  /* ตัวเลือกที่มาของใบลดหนี้ — ปุ่มสูงเต็มบรรทัด อ่านคำอธิบายได้ก่อนกด ไม่ใช่ปุ่มสั้นๆ ที่ต้องเดา */
+  .adj-pick{ display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+  /* ★ .btn เป็น inline-flex — ถ้าไม่สั่งแกนตั้ง หัวเรื่องกับคำอธิบายจะไปเรียงข้างกันเป็นสองคอลัมน์
+     (เจอตอนทดสอบจริงในเบราว์เซอร์ 23 ต.ค. 2026) · สั่งทั้ง flex-direction และ align-items ไว้
+     จะได้ไม่พังอีกถ้าวันหนึ่งมีคนเปลี่ยน display ของ .btn */
+  /* ★ ไม่ใส่คลาส `.btn` ให้ตัวเลือกพวกนี้โดยตั้งใจ — `.btn` ถูกบีบความสูง/ระยะขอบไว้หลายชั้น
+     (`body.density-compact .btn` ชนะกฎคลาสเดี่ยวทุกตัว) ปุ่มสองบรรทัดจึงล้นกรอบออกมา
+     เขียนสไตล์ของตัวเองทั้งก้อนจบกว่าการไล่เพิ่มน้ำหนัก selector ไปเรื่อยๆ */
+  .adj-pick-item{ display:flex; flex-direction:column; align-items:flex-start; gap:3px; width:100%;
+    text-align:left; white-space:normal; padding:12px 14px; line-height:1.5; font:inherit; color:var(--ink);
+    border:1px solid var(--border); border-radius:var(--r-ctl,8px); background:var(--surface); cursor:pointer; }
+  .adj-pick-item:hover{ border-color:var(--brand,#2B63D9); background:var(--bg,#F6F8FC); }
+  .adj-pick-item > span{ display:block; text-align:left; }
   /* รายการติ๊ก "ตัวแทนที่ดูแล" ในโมดัลจัดการผู้ใช้ — แถวละตัวแทน กดได้ทั้งแถว (ป้ายผูกกับช่องติ๊กอยู่แล้ว) */
   .tr-pick{ display:flex; align-items:center; gap:8px; padding:3px 0; font-size:13px; cursor:pointer; }
   /* ★ ต้องตั้ง width เอง — กฎฟอร์มรวมของแอปคือ `.field input{width:100%}` ช่องติ๊กจึงถูกยืดเต็มบรรทัด
@@ -4821,11 +4834,14 @@ function renderSaleOrderDetail(r){
         }).join('') +
       '</div></div> ' +
     (o.status !== 'cancelled'
-      /* ★ ออกใบแจ้งหนี้แล้ว = ยกเลิกไม่ได้ (backend กั้นไว้แล้ว) — หน้าจอจึงไม่ควรยื่นปุ่มที่กดแล้วโดนปฏิเสธ
-         แต่ต้องยื่น "ทางที่ถูก" แทน ไม่ใช่เอาปุ่มออกเฉยๆ แล้วปล่อยให้คนหาเองว่าต้องทำอะไรต่อ */
+      /* ★ ออกใบแจ้งหนี้แล้ว = ยกเลิกไม่ได้ (backend กั้นไว้แล้ว) — หน้าจอจึงไม่ยื่นปุ่มที่กดแล้วโดนปฏิเสธ
+         ★★ และ **ไม่ยื่นปุ่มออกใบลดหนี้ตรงนี้ด้วย** (เจ้าของระบบสั่ง 23 ต.ค. 2026) — พอออกใบแจ้งหนี้แล้ว
+            หนี้ก้อนนั้นถูกตัดออกจากงานขายไปเป็นงานบัญชีลูกหนี้แล้ว คนละสายงานกัน · วันที่บริษัทโตพอจะ
+            แยกแอดมินขายกับแอดมินบัญชีจริงๆ ปุ่มนี้จะกลายเป็นช่องให้ฝั่งขายไปออกเอกสารการเงินเอง
+            → บอกทางไปเมนู 1.1.2 แทน ไม่ใช่เอาปุ่มออกเฉยๆ แล้วปล่อยให้คนหาเอง */
       ? (o.arInvoiceId
-          ? '<button class="btn btn-sm btn-primary" onclick="openCreditNoteForm(' + o.arInvoiceId + ')" ' +
-            'title="บิลนี้ออกใบแจ้งหนี้ ' + esc(o.arInvoiceNo || '') + ' แล้ว — ยกเลิกบิลไม่ได้ ต้องลดยอดด้วยใบลดหนี้">ออกใบลดหนี้</button>'
+          ? '<span class="form-hint" style="display:inline-block;padding:6px 0">ออกใบแจ้งหนี้ ' +
+            esc(o.arInvoiceNo || '') + ' แล้ว — ยกเลิกบิลไม่ได้ · ลดยอดที่เมนู งานขาย → ใบลดหนี้ / เพิ่มหนี้</span>'
           : '<button class="btn btn-sm" onclick="cancelSaleOrderUI()">ยกเลิกบิลนี้</button>') +
         /* ★ ลิงก์คู่มือวางติดปุ่มยกเลิก ไม่ใช่ไปซ่อนในเมนูคู่มือ — คนอ่านคู่มือเรื่องนี้ตอนกำลังจะกดยกเลิก
            ไม่ใช่ตอนนั่งว่างแล้วเปิดคู่มืออ่าน (เนื้อหาบอกว่าสถานะไหนระบบคืนของให้ และกรณีไหนต้องใช้ใบลดหนี้แทน) */
@@ -4962,9 +4978,8 @@ function renderSaleDelivery(dp){
         '<button class="btn btn-sm" onclick="printRoundDoc(\'delivery\','+r.id+')">ใบส่งสินค้า</button>' +
         (r.taxInvoiceNo ? ' <button class="btn btn-sm" onclick="printRoundDoc(\'taxinvoice\','+r.id+')">ใบกำกับภาษี</button>' : '') +
         (r.arInvoiceNo ? ' <button class="btn btn-sm" onclick="printRoundDoc(\'invoice\','+r.id+')">ใบแจ้งหนี้</button>' : '') +
-        /* ลูกค้าคืนของ/ยกเลิกหลังออกใบกำกับ = ออกใบลดหนี้จากตรงนี้ได้เลย ไม่ต้องไปหาหน้าลูกหนี้ */
-        (r.arInvoiceId ? ' <button class="btn btn-sm" onclick="openCreditNoteForm('+r.arInvoiceId+')">ใบลดหนี้</button>' +
-                         ' <button class="btn btn-sm" onclick="openDebitNoteForm('+r.arInvoiceId+')">ใบเพิ่มหนี้</button>' : '') +
+        /* ★ ไม่มีปุ่มออกใบลดหนี้/เพิ่มหนี้ตรงนี้ (เจ้าของระบบสั่ง 23 ต.ค. 2026) — แท็บนี้เป็นงานส่งของ
+           ออกเอกสารการเงินที่เมนู งานขาย → ใบลดหนี้ / เพิ่มหนี้ เท่านั้น (เหตุผลเดียวกับปุ่มบนหัวบิล) */
     '</td></tr>').join('');
 
   /* ★ ป้ายบนแท็บ = เหตุผลเดียวที่คนจะกดเข้ามาดู · เรียงตามความเร่งด่วนจริง
@@ -9740,25 +9755,95 @@ function renderAdjNotes(){
 
 /* ออกใบใหม่จากหน้านี้ = ต้องเลือกใบแจ้งหนี้ที่จะอ้างถึงก่อน (ใบปรับหนี้ลอยๆ ไม่มีอยู่ตามกฎหมาย
    ม.86/10 และ 86/9 บังคับให้อ้างเลขใบกำกับภาษีเดิม) */
+/* ★★ ออกใบลดหนี้เริ่มที่ "เลือกที่มา" ไม่ใช่เลือกใบแจ้งหนี้เลย (เจ้าของระบบสั่ง 23 ต.ค. 2026)
+   คำถามแรกที่ต้องตอบไม่ใช่ "ลดใบไหน" แต่คือ **"ของกลับมาไหม"** — ตอบคนละอย่างแล้วเอกสารคนละชุดกัน:
+   ของกลับมาจริงต้องมีใบรับคืนสินค้าเป็นหลักฐานว่าได้ของดีกี่ชิ้น ของเสียกี่ชิ้น แล้วใบลดหนี้ออกต่อจากใบนั้น ·
+   ไม่มีของกลับมา (คิดราคาผิด / ส่วนลดเพิ่ม / ของเสียทิ้งไปแล้ว) จึงอ้างใบแจ้งหนี้ตรงๆ
+   ★ ถ้าให้เลือกใบแจ้งหนี้ก่อนอย่างเดิม คนจะลดหนี้ตรงๆ ทั้งที่ลูกค้าคืนของมาจริง แล้วของก้อนนั้นไม่เคยถูก
+     บันทึกว่าเข้าคลังหรือเป็นของเสีย — หายไปเงียบๆ ทั้งก้อนโดยไม่มีอะไรฟ้อง
+   ★ ใบเพิ่มหนี้ไม่มีขั้นนี้ ไม่มีของคืนให้พูดถึง (คิดเงินขาด/ลืมเก็บค่าขนส่ง) — เข้าตัวเลือกใบแจ้งหนี้เลย */
 async function openAdjNotePicker(kind){
-  const K = ADJ_UI[kind] || ADJ_UI.credit;
-  const r = await callApi('listArInvoices', {});
+  if (kind === 'debit') { adjPickInvoice('debit'); return; }
+  // ยิงขนานกัน — คำขอที่สองแทบไม่มีราคาเพิ่ม (CLAUDE.md "คำขอขนานกันได้จริง")
+  const [ri, rg] = await Promise.all([callApi('listArInvoices', {}), callApi('listGoodsReturns', {})]);
+  if (!ri.success) { toast(ri.message, true); return; }
+  const pend = adjPendingReturns(rg);
+  const n = adjCreditableInvoices(ri.data).length;
+  plModal('<h3>ออกใบลดหนี้ — ลดหนี้เพราะอะไร</h3>' +
+    '<p class="form-hint">เลือกที่มาก่อน เพื่อให้ใบลดหนี้อ้างอิงได้ว่าลดด้วยสาเหตุใด และมีของกลับเข้ามาหรือไม่</p>' +
+    '<div class="adj-pick">' +
+      '<button type="button" class="adj-pick-item" onclick="adjPickReturn()">' +
+        '<b>ลูกค้าคืนของจริง — ออกจากใบรับคืนสินค้า</b>' +
+        '<span class="form-hint">ระบบดึงรายการ จำนวนของดีที่เข้าคลัง และจำนวนของเสีย มาให้ครบ · ' +
+        (pend.length ? 'มีใบรับคืนที่ยังไม่ได้ออกใบลดหนี้ <b>' + pend.length + '</b> ใบ'
+                     : 'ตอนนี้ไม่มีใบรับคืนที่รออยู่') + '</span></button>' +
+      '<button type="button" class="adj-pick-item" onclick="adjPickInvoice(\'credit\')">' +
+        '<b>ไม่มีของคืน — อ้างใบแจ้งหนี้/ใบกำกับภาษีโดยตรง</b>' +
+        '<span class="form-hint">คิดราคาผิด · ให้ส่วนลดเพิ่มหลังออกใบกำกับ · ของเสียที่ทิ้งไปแล้วไม่ได้รับคืน · ' +
+        'เลือกได้ <b>' + n + '</b> ใบ</span></button>' +
+    '</div>' +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
+}
+/** ใบที่ยังลดไม่เต็มยอด — ใบที่รับเงินครบแล้วก็ลดได้ (ลูกค้าคืนของทีหลัง) */
+const adjCreditableInvoices = rows => (rows || []).filter(iv => iv.status !== 'void' &&
+  (Number(iv.total) + Number(iv.debitedAmount || 0) - Number(iv.creditedAmount || 0)) > 0.009);
+/** ใบรับคืนที่รับของแล้วและยังไม่ได้ออกใบลดหนี้ */
+const adjPendingReturns = r => ((r && r.success ? r.data : []) || [])
+  .filter(g => g.status === 'received' && !g.creditNoteId);
+
+/** ขั้นเลือกใบรับคืนสินค้า — ของเข้าคลังไปแล้วตอนรับคืน ใบลดหนี้จึงไม่ขยับสต็อกซ้ำ */
+async function adjPickReturn(){
+  const r = await callApi('listGoodsReturns', {});
   if (!r.success) { toast(r.message, true); return; }
-  const ivs = (r.data || []).filter(iv => iv.status !== 'void' &&
-    (kind === 'debit' || (Number(iv.total) + Number(iv.debitedAmount || 0) - Number(iv.creditedAmount || 0)) > 0.009));
+  const gs = adjPendingReturns(r);
+  plModal('<h3>ออกใบลดหนี้ — เลือกใบรับคืนสินค้า</h3>' +
+    '<p class="form-hint">แสดงเฉพาะใบที่รับของแล้วและยังไม่ได้ออกใบลดหนี้ · ' +
+      'ใบลดหนี้จะอ้างใบแจ้งหนี้ของบิลนั้นให้เอง และ<b>ไม่ขยับสต็อกซ้ำ</b> เพราะของเข้าคลังไปแล้วตอนรับคืน</p>' +
+    (gs.length ? '<div class="table-wrap"><table><thead><tr><th>เลขที่</th><th>วันที่</th><th>บิลขาย</th>' +
+      '<th>ลูกค้า</th><th>เหตุผล</th><th>มูลค่า</th><th>ของดีเข้าคลัง</th><th>ของเสีย</th><th></th></tr></thead><tbody>' +
+      gs.map(g => '<tr><td class="mono-data">'+esc(g.returnNo)+'</td><td class="mono-data">'+esc(g.returnDate)+'</td>' +
+        '<td class="mono-data">'+dash(g.orderCode)+'</td><td class="wrap">'+esc(g.customerName)+'</td>' +
+        '<td class="wrap">'+esc(g.reason)+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
+        '<td class="mono-data">'+(g.restockQty ? '<span class="tag tag-ok">'+g.restockQty+'</span>' : '—')+'</td>' +
+        '<td class="mono-data">'+(g.scrapQty ? '<span class="tag tag-warn">'+g.scrapQty+'</span>' : '—')+'</td>' +
+        '<td><button class="btn btn-sm" onclick="adjFromReturn('+g.id+')">เลือก</button></td></tr>').join('') +
+      '</tbody></table></div>'
+      : '<p class="form-hint">ไม่มีใบรับคืนที่รออยู่ — ถ้าลูกค้าคืนของมาจริง ให้ไปรับของที่เมนู ' +
+        '<b>งานขาย → ใบรับคืนสินค้า</b> ก่อน แล้วค่อยกลับมาออกใบลดหนี้</p>') +
+    '<div class="form-actions"><button class="btn" onclick="openAdjNotePicker(\'credit\')">← ย้อนกลับ</button>' +
+      '<button class="btn" onclick="plModalClose()">ปิด</button></div>');
+}
+async function adjFromReturn(id){ plModalClose(); await grnMakeCreditNote(id); }
+
+/** ขั้นเลือกใบแจ้งหนี้ — ใช้ทั้งใบลดหนี้ (ทางที่ไม่มีของคืน) และใบเพิ่มหนี้ */
+async function adjPickInvoice(kind){
+  const K = ADJ_UI[kind] || ADJ_UI.credit;
+  /* ★ ใบแจ้งหนี้ของบิลที่มีใบรับคืนค้างอยู่ ต้องขึ้นป้ายเตือน ไม่งั้นลดสองรอบกับของก้อนเดียวกัน
+     (ลดตรงนี้รอบหนึ่ง แล้วมีคนไปกดออกใบลดหนี้จากใบรับคืนอีกรอบ — ทั้งสองใบถูกกติกาแยกกันดู) */
+  const [r, rg] = await Promise.all([callApi('listArInvoices', {}),
+    kind === 'credit' ? callApi('listGoodsReturns', {}) : Promise.resolve({ success: true, data: [] })]);
+  if (!r.success) { toast(r.message, true); return; }
+  const pendByOrder = {};
+  adjPendingReturns(rg).forEach(g => { pendByOrder[String(g.salesOrderId)] = g.returnNo; });
+  const ivs = kind === 'debit' ? (r.data || []).filter(iv => iv.status !== 'void')
+                               : adjCreditableInvoices(r.data);
   plModal('<h3>ออก'+K.label+' — เลือกใบแจ้งหนี้ที่จะอ้างถึง</h3>' +
     '<p class="form-hint">' + (kind === 'debit'
       ? 'เพิ่มหนี้ได้ทุกใบที่ยังไม่ถูกยกเลิก (คิดเงินขาดรู้ทีหลังได้เสมอ)'
-      : 'แสดงเฉพาะใบที่ยังลดไม่เต็มยอด — ใบที่รับเงินครบแล้วก็ลดได้ (ลูกค้าคืนของทีหลัง)') + '</p>' +
+      : 'แสดงเฉพาะใบที่ยังลดไม่เต็มยอด — ใบที่รับเงินครบแล้วก็ลดได้') + '</p>' +
     (ivs.length ? '<div class="table-wrap"><table><thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>วันที่</th>' +
       '<th>ยอดรวม</th><th>คงค้าง</th><th></th></tr></thead><tbody>' +
-      ivs.map(iv => '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td class="wrap">'+esc(iv.customerName)+'</td>' +
+      ivs.map(iv => { const back = pendByOrder[String(iv.salesOrderId)];
+        return '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td class="wrap">'+esc(iv.customerName)+
+        (back ? '<br><span class="tag tag-warn">มีใบรับคืน '+esc(back)+' รออยู่ — ควรออกจากใบนั้นแทน</span>' : '') + '</td>' +
         '<td class="mono-data">'+esc(iv.invoiceDate)+'</td><td class="mono-data">฿'+bahtPlain(iv.total)+'</td>' +
         '<td class="mono-data">฿'+bahtPlain(iv.outstanding)+'</td>' +
-        '<td><button class="btn btn-sm" onclick="adjPick('+iv.id+',\''+kind+'\')">เลือก</button></td></tr>').join('') +
+        '<td><button class="btn btn-sm" onclick="adjPick('+iv.id+',\''+kind+'\')">เลือก</button></td></tr>'; }).join('') +
       '</tbody></table></div>'
       : '<p class="form-hint">ไม่มีใบแจ้งหนี้ที่'+K.verb+'หนี้ได้</p>') +
-    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
+    '<div class="form-actions">' +
+      (kind === 'credit' ? '<button class="btn" onclick="openAdjNotePicker(\'credit\')">← ย้อนกลับ</button>' : '') +
+      '<button class="btn" onclick="plModalClose()">ปิด</button></div>');
 }
 function adjPick(invoiceId, kind){ plModalClose(); openAdjustNoteForm(invoiceId, kind); }
 
