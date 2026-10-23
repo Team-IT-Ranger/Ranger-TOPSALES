@@ -433,8 +433,8 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
   if (openInv) {
     return { success: false, needCreditNote: true,
       invoiceId: String(openInv.record_id), invoiceNo: String(openInv.invoice_no || ''),
-      message: 'บิลนี้ออกใบแจ้งหนี้/ใบกำกับภาษี ' + openInv.invoice_no + ' ไปแล้ว — ยกเลิกบิลไม่ได้ ' +
-        'ต้องออกใบลดหนี้แทน ที่เมนู งานขาย → ใบลดหนี้ / เพิ่มหนี้ (ต้องมีสิทธิ์บัญชี)' };
+      // ★ สั้นๆ พอ — ข้อความเด้งตอนกดเท่านั้น ส่วนวิธีทำอยู่ในคู่มือ "ยกเลิกบิลขาย" ที่ปุ่มข้างกัน
+      message: 'ออกใบแจ้งหนี้ ' + openInv.invoice_no + ' แล้ว — ยกเลิกไม่ได้ ต้องออกใบลดหนี้แทน' };
   }
 
   // คืนของเข้าที่เดิม ถ้าบิลนี้เลยจุดตัดสต็อกไปแล้ว — saleStockTaken() คือนิยามเดียวกับที่ใช้ตอนตัดของ
