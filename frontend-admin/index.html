@@ -3955,7 +3955,7 @@ function renderTaxInvoices(sum, truncated){
           ? ' <button class="btn btn-sm" onclick="openCreditNoteForm('+t.arInvoiceId+')">ใบลดหนี้</button>'
           /* ขายสด: อ้างบิล/รอบตรงๆ — ใบลดหนี้จะลงบัญชีเป็นการคืนเงิน */
           : ' <button class="btn btn-sm" onclick="openCreditNoteForSale('+t.orderId+',\''+(t.roundId||'')+'\')">ใบลดหนี้</button>') +
-    '</td></tr>'), 9, 'ยังไม่มีใบกำกับภาษีในช่วงที่เลือก');
+    '</td></tr>').join(''), 9, 'ยังไม่มีใบกำกับภาษีในช่วงที่เลือก');
 }
 
 /* ══════════ ทะเบียนคลังสินค้า ══════════
@@ -3982,7 +3982,7 @@ function renderWarehouses(){
                        : '<span class="tag tag-warn">'+esc(w.purposeLabel || '')+' — ไม่นับเป็นของขายได้</span>')+'</td>' +
     '<td class="wrap">'+esc(w.address || '-')+'</td>' +
     '<td>'+(w.isActive ? '<span class="pill ok">ใช้งาน</span>' : '<span class="pill off">ปิด</span>')+'</td>' +
-    '<td><button class="btn btn-sm" onclick="openWarehouseModal('+w.id+')">แก้ไข</button></td></tr>'),
+    '<td><button class="btn btn-sm" onclick="openWarehouseModal('+w.id+')">แก้ไข</button></td></tr>').join(''),
     6, 'ยังไม่มีคลัง');
 }
 function openWarehouseModal(id){
