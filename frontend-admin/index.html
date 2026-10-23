@@ -840,7 +840,74 @@
   .form-grid > .field > select{ height:40px; box-sizing:border-box; }
   .field label{ font-size:12px; }
   .form-actions{ margin-top:18px; padding-top:16px; }
-  .modal-box{ border-radius:16px; box-shadow:var(--shadow-md); padding:22px 24px; }
+  .modal-box{ border-radius:16px; box-shadow:var(--shadow-md); padding:0; }
+
+  /* ══════════ หน้าต่างแก้ไขข้อมูล — ปรับโฉม 23 ต.ค. 2026 (ผู้ใช้สั่ง) ══════════
+     ★ "ทำตะมุตะมิเกินไป โปรแกรมแอดมินเขาใช้งานบนจอคอมพิวเตอร์" — ของเดิมกว้างสุด 720px
+       บนจอ 1920 เหลือที่ว่างสองข้างมหาศาล ตารางสินค้าในฟอร์มถูกบีบจนต้องเลื่อนแนวนอน
+     ★ "ราบเรียบไม่เห็นความแตกต่างเลย อันนี้ช่องป้อนข้อมูล อันไหนป้ายข้อความ อันไหนหัวเรื่อง"
+       — หัวเรื่อง ป้าย และช่องกรอก เคยสีเทาใกล้กันหมดและไม่มีพื้นหลังแยก
+       → หัวเรื่องมีแถบสีน้ำเงินของตัวเอง · ตัวฟอร์มพื้นเทาอ่อน · ช่องกรอกพื้นขาวมีกรอบชัด
+         (กลับทางกับทั้งแอปโดยตั้งใจ: ที่อื่นพื้นเทา-การ์ดขาว ที่นี่กล่องขาว-เนื้อเทา
+          ช่องกรอกจึงเป็นสิ่งเดียวที่ "ขาวและนูน" ตาจึงวิ่งไปหาเองโดยไม่ต้องอ่าน) */
+  .modal-box > h3{
+    margin:0; padding:16px 26px; font-size:17px; font-weight:800; letter-spacing:-.01em;
+    color:#fff; background:linear-gradient(135deg, var(--blue) 0%, #1E4BB8 100%);
+    border-radius:16px 16px 0 0; }
+  /* ★ เทาต้องเข้มกว่า --ground (#F6F8FC) ที่ใช้เป็นพื้นแอป ไม่งั้นบนกล่องขาวแทบไม่ต่างกันเลย
+     — ดูด้วยตาบนจอจริงแล้วถึงรู้ว่ายังเรียบอยู่ */
+  .modal-body{ background:#EEF2F8; padding:20px 26px !important; margin:0 !important;
+    border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+
+  /* ก้อนคำอธิบายใต้หัวเรื่อง = ข้อมูล ไม่ใช่ฟอร์ม → การ์ดฟ้าจางมีเส้นนำซ้าย */
+  .modal-body > p.form-hint:first-child{ background:var(--blue-pale); border-left:3px solid var(--blue);
+    border-radius:0 8px 8px 0; padding:10px 14px; margin:0 0 16px; color:var(--ink-soft); }
+  /* บรรทัดยอดรวมท้ายฟอร์ม = ตัวเลขที่ต้องอ่านก่อนกดบันทึก ไม่ใช่หมายเหตุ */
+  #cn-total, #grn-total{ background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; font-size:14px !important; color:var(--ink) !important; margin-top:14px !important; }
+  #cn-total b, #grn-total b{ font-size:17px; color:var(--blue); }
+  .modal-box > .form-actions{ padding:14px 26px; margin:0 !important; border-radius:0 0 16px 16px; }
+  .modal-box > .err{ margin:0 !important; padding:0 26px; }
+
+  /* ป้ายชื่อช่อง: ตัวพิมพ์เล็กกว่า ทึบกว่า และมีระยะหายใจเหนือช่องกรอก */
+  .modal-box .field label{ font-size:12px; font-weight:700; color:var(--ink-soft);
+    letter-spacing:.01em; margin-bottom:6px; }
+  /* ช่องกรอก: ขาว กรอบเข้มขึ้น เงาบางๆ — ต้อง "นูน" ออกจากพื้นเทาของฟอร์ม */
+  .modal-box .field input:not([type=checkbox]):not([type=radio]),
+  .modal-box .field select, .modal-box .field textarea{
+    background:var(--surface); border:1px solid #CBD5E6; box-shadow:0 1px 2px rgba(15,27,45,.04);
+    font-size:14px; padding:10px 12px; }
+  .modal-box .field input:focus, .modal-box .field select:focus, .modal-box .field textarea:focus{
+    border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
+  /* ช่องกรอกในตาราง (จำนวน/ราคา) ก็ต้องขาวเหมือนกัน ไม่งั้นกลืนไปกับแถว */
+  .modal-body table input[type=number], .modal-body table input[type=text], .modal-body table select{
+    background:var(--surface); border:1px solid #CBD5E6; border-radius:var(--r-ctl,7px);
+    padding:7px 9px; font-size:13.5px; font-family:inherit; color:var(--ink); }
+  .modal-body table input:focus, .modal-body table select:focus{
+    outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
+  /* ช่องที่ถูกล็อก (เช่นราคาตอนเป็นความผิดฝั่งเรา) ต้องดูต่างจากช่องที่พิมพ์ได้ชัดเจน */
+  .modal-body table input[readonly]{ background:var(--surface-2); color:var(--ink-soft); border-style:dashed; }
+  /* ข้อความอธิบาย: เล็กและจางกว่าทุกอย่าง จะได้ไม่แย่งสายตากับของที่ต้องกรอก */
+  .modal-box .form-hint{ font-size:12px; color:var(--ink-faint); line-height:1.65; }
+  /* ตารางในฟอร์ม: หัวตารางทึบและเข้มขึ้น แยกจากแถวข้อมูลให้ชัด */
+  .modal-body .table-wrap{ background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; overflow:hidden; }
+  .modal-body thead th{ background:var(--surface-2); font-size:12px; font-weight:700; color:var(--ink-soft); }
+  /* หัวข้อย่อยในฟอร์ม (h4) — เส้นนำสายตาสั้นๆ ให้รู้ว่าเริ่มกลุ่มใหม่ */
+  .modal-box h4{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--ink); }
+  .modal-box h4::before{ content:''; width:3px; height:14px; background:var(--blue); border-radius:2px; flex:none; }
+  /* แถวติ๊กในหน้าต่าง: ให้เป็นการ์ดเล็กๆ จะได้ไม่ลอยอยู่บนพื้นเทาเฉยๆ */
+  .modal-body .toggle-row{ background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:9px 12px; }
+  body.density-compact .modal-box > h3{ padding:13px 20px; font-size:15.5px; }
+  body.density-compact .modal-body{ padding:15px 20px !important; }
+  body.density-compact .modal-box > .form-actions{ padding:11px 20px; }
+  body.density-compact .modal-box > .err{ padding:0 20px; }
+  @media (max-width:900px){
+    .modal-box > h3{ padding:13px 16px; }
+    .modal-body{ padding:14px 16px !important; }
+    .modal-box > .form-actions, .modal-box > .err{ padding-left:16px; padding-right:16px; }
+  }
   .modal-bg{ background:rgba(15,27,45,.35); }
   .toast{ border-radius:var(--r-ctl); box-shadow:var(--shadow-md); }
   .login-card{ border-radius:18px; box-shadow:var(--shadow-md); }
@@ -873,7 +940,7 @@
   body.density-compact .sb-action{ padding:5px 10px; font-size:13px; }
   body.density-compact .sb-subgroup-hd{ padding:5px 12px 5px 18px; font-size:13px; }
   body.density-compact .sb-group-hd{ padding:6px 14px; }
-  body.density-compact .modal-box{ padding:16px 18px; }
+  body.density-compact .modal-box{ padding:0; }
   body.density-compact .plm-row{ margin-bottom:4px; }
   body.density-compact .plm-row input{ padding:5px 8px; font-size:12.5px; }
   body.density-compact header.topbar{ height:52px; }
@@ -882,11 +949,18 @@
   .modal-bg{ position:fixed; inset:0; background:rgba(22,28,31,.45); display:none; align-items:center; justify-content:center; z-index:60; padding:32px 16px; }
   /* ★ หน้าต่างแก้ไขข้อมูล: หัวเรื่องกับแถวปุ่มอยู่กับที่ เลื่อนเฉพาะช่องกรอกตรงกลาง
      ฟอร์มยาวๆ (สินค้า/ชุดแถม) เดิมต้องเลื่อนทั้งกล่องลงไปหาปุ่มบันทึก พอเลื่อนแล้วก็ไม่เห็นว่ากำลังแก้อะไรอยู่ */
-  .modal-box{ background:var(--surface); border-radius:12px; width:100%; max-width:720px; padding:20px 22px;
+  /* ★ ความกว้างต้องตั้งที่กฎฐานตัวนี้ — บล็อก "ปรับโฉม" อยู่ก่อนหน้าในไฟล์ คลาสเดียวกันน้ำหนักเท่ากัน
+     ตัวที่อยู่ทีหลังชนะ (เคยตั้งไว้ข้างบนแล้วไม่มีผล ต้องมาดูด้วยตาถึงรู้) */
+  .modal-box{ background:var(--surface); border-radius:12px; width:100%;
+    max-width:min(820px, calc(100vw - 48px)); padding:0;
     box-shadow:0 20px 50px -12px rgba(0,0,0,.35);
     display:flex; flex-direction:column; max-height:calc(100vh - 64px); }
+  /* ★ หน้าต่างที่มีตารางต้องกว้าง (ฟอร์มใบลดหนี้/รับคืนมี 8 คอลัมน์ ถูกบีบจนต้องเลื่อนแนวนอน)
+     ส่วนฟอร์มสองสามช่องไม่ต้อง — ยืดเต็ม 1180 แล้วช่องกรอกยาวข้ามจอโดยไม่ได้อะไรเพิ่ม
+     plModal ติดคลาสนี้ให้เองเมื่อเนื้อในมี <table> */
+  .modal-box.modal-wide{ max-width:min(1180px, calc(100vw - 48px)); }
   .modal-box > h3{ flex:none; }
-  .modal-body{ flex:1; min-height:0; overflow:auto; margin:0 -22px; padding:0 22px; }
+  .modal-body{ flex:1; min-height:0; overflow:auto; }
   .modal-box > .form-actions, .modal-box > .err{ flex:none; }
   .modal-box > .form-actions{ margin-top:14px; background:var(--surface); }
   body.density-compact .modal-body{ margin:0 -18px; padding:0 18px; }
@@ -6517,6 +6591,7 @@ const plLiveEdit = l => l.status === 'active';
 function plModal(html){
   const m = document.getElementById('pl-modal'), box = m.querySelector('.modal-box');
   box.innerHTML = html;
+  box.classList.toggle('modal-wide', !!box.querySelector('table'));
   const kids = [...box.children];
   const head = kids.length && kids[0].tagName === 'H3' ? kids[0] : null;
   const foot = kids.filter(el => el.classList.contains('form-actions') || el.classList.contains('err'));
