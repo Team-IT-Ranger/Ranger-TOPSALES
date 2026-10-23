@@ -1424,6 +1424,29 @@ console.log('\n── ใบรับคืนสินค้า ──');
       lines: [{ itemId: 18001, qty: 1, condition: 'good', unitPrice: 99999 }] });
     eq('★ ใบรับคืนก็กั้นราคาเดียวกัน', grnHigh.success, false);
 
+    /* ★★ เรียกคืนส่วนลดขั้นได้เฉพาะตอนลูกค้าเลือกคืนเอง — ความผิดฝั่งเราห้ามเรียกคืน */
+    eq('★ เหตุผลฝั่งเรา/ฝั่งลูกค้า แยกไว้ให้หน้าจอใช้ตัดสิน',
+      [ctx.cnFaultOf('shortage'), ctx.cnFaultOf('return'), ctx.cnFaultOf('overcharge'),
+        ctx.grnFaultOf('wrong_item'), ctx.grnFaultOf('other')],
+      ['seller', 'buyer', 'none', 'seller', 'none']);
+
+    const faultLow = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'shortage', creditDate: '2026-10-21',
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 900, taxStatus: 'vat' }] });
+    eq('★★★ ส่งของไม่ครบ (ความผิดเรา) + กดราคาลง → ปฏิเสธ ลูกค้าไม่ได้เลือกลดจำนวนเอง',
+      [faultLow.success, /ความผิดฝั่งเรา/.test(faultLow.message || '')], [false, true]);
+
+    const faultOvr = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'shortage', creditDate: '2026-10-21', priceOverride: true,
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 900, taxStatus: 'vat' }] });
+    const ovrRow = ctx.centralObjects('ar_credit_notes').filter(n => String(n.credit_note_no) === String(faultOvr.noteNo))[0];
+    eq('★ ปลดล็อกได้ แต่ถูกบันทึกไว้ในเหตุผลของใบ (ต้องมีร่องรอยว่าใครตัดสินใจ)',
+      [faultOvr.success, /ปรับราคาเอง/.test((ovrRow || {}).reason || '')], [true, true]);
+
+    const grnFault = ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'wrong_item',
+      lines: [{ itemId: 18001, qty: 1, condition: 'good', unitPrice: 900 }] });
+    eq('★ ใบรับคืนใช้กติกาเดียวกัน (ส่งผิดรายการ = ความผิดเรา)', grnFault.success, false);
+
     const sB2 = stockOf('80', CSALE);
     const noStock = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
       reasonCode: 'overcharge', creditDate: '2026-10-21',

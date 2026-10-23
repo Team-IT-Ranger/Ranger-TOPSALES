@@ -9194,7 +9194,7 @@ async function openGoodsReturnForm(orderId){
       '(ของสภาพดีที่ยังไม่ได้ตรวจ ใส่คลังรับคืนรอตรวจไว้ก่อนได้) · ' +
       '<b>เฉพาะของในคลังขายเท่านั้นที่ถูกนับว่าขายได้</b></p>' +
     '<div class="form-grid g2">' +
-      plField('เหตุผลที่รับคืน', '<select id="grn-reason">' +
+      plField('เหตุผลที่รับคืน', '<select id="grn-reason" onchange="grnFaultChanged()">' +
         Object.keys(d.reasons).map(k => '<option value="'+k+'">'+esc(d.reasons[k])+'</option>').join('') + '</select>') +
       plField('วันที่รับคืน', '<input type="date" id="grn-date" value="'+today+'">') +
     '</div>' +
@@ -9222,9 +9222,11 @@ async function openGoodsReturnForm(orderId){
             esc(w.name) + (w.sellable ? '' : ' — ไม่นับเป็นของขายได้') + '</option>').join('') +
           '</select></td></tr>').join('') +
       '</tbody></table></div>' +
+    '<p class="form-hint" id="grn-fault"></p>' +
     plField('หมายเหตุ', '<input id="grn-note" placeholder="เช่น ลูกค้าแจ้งกล่องบุบตอนรับของ">') +
     '<div id="grn-total" class="form-hint" style="margin-top:8px"></div>' +
     plModalActions('plBusy(grnSave)', '✓ รับคืนสินค้า'));
+  grnFaultChanged();
   grnRecalc();
 }
 /* บรรทัดที่คนเลือกคลังเองแล้ว — เปลี่ยนสภาพของทีหลังจะไม่ไปทับที่เขาเลือกไว้ */
@@ -9235,6 +9237,14 @@ function grnCondChanged(i){
   const cond = document.querySelector('.grn-cond[data-i="'+i+'"]');
   const def = (GRN_DRAFT && GRN_DRAFT.defaultWarehouseId) || {};
   if (sel && cond && !GRN_WH_TOUCHED[i] && def[cond.value]) sel.value = String(def[cond.value]);
+  grnRecalc();
+}
+function grnFaultChanged(){
+  if (!GRN_DRAFT) return;
+  const sel = document.getElementById('grn-reason');
+  faultApply((GRN_DRAFT.reasonFault || {})[sel ? sel.value : ''] || 'none', '.grn-price', 'grn-fault', 'grn-ovr');
+  const ov = document.getElementById('grn-ovr');
+  if (ov && !ov.onchange) ov.onchange = () => { grnFaultChanged(); grnRecalc(); };
   grnRecalc();
 }
 /* ราคารับคืนต่อหน่วย — ตัดไม่ให้เกินราคาที่ขายจริง (หลักเดียวกับ cnUnitPrice) */
@@ -9281,7 +9291,8 @@ async function grnSave(){
   const r = await callApi('createGoodsReturn', { orderId: GRN_DRAFT.order.id,
     reasonCode: document.getElementById('grn-reason').value,
     returnDate: document.getElementById('grn-date').value,
-    note: document.getElementById('grn-note').value.trim(), lines: lines });
+    note: document.getElementById('grn-note').value.trim(),
+    priceOverride: !!(document.getElementById('grn-ovr') || {}).checked, lines: lines });
   if (!r.success) { plModalErr(r.message); return; }
   plModalClose();
   toast(r.message);
@@ -9971,7 +9982,7 @@ async function openAdjustNoteForm(invoiceId, kind){
         ' — ใบเพิ่มหนี้ไม่มีเพดาน คิดเงินขาดเท่าไรก็เพิ่มได้เท่านั้น') + '<br>' +
     K.label+'เป็นเอกสารภาษี — ต้องระบุเหตุผล และจะอ้างเลขใบกำกับภาษีเดิมให้อัตโนมัติ</p>' +
     '<div class="form-grid g2">' +
-      plField('เหตุผลที่'+K.verb+'หนี้', '<select id="cn-reason">' +
+      plField('เหตุผลที่'+K.verb+'หนี้', '<select id="cn-reason" onchange="cnFaultChanged()">' +
         Object.keys(d.reasons).map(k => '<option value="'+k+'">'+esc(d.reasons[k])+'</option>').join('') + '</select>') +
       plField('วันที่'+K.label, '<input type="date" id="cn-date" value="'+today+'">') +
     '</div>' +
@@ -9979,8 +9990,7 @@ async function openAdjustNoteForm(invoiceId, kind){
     (d.lines.length ? '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
       '<th>จำนวนที่'+K.verb+'</th><th>ราคา/หน่วย ที่ขายจริง<br><span class="form-hint">แก้ลงได้</span></th>' +
       '<th>เป็นเงิน</th></tr></thead><tbody>'+rows+'</tbody></table></div>' +
-      '<p class="form-hint">★ ราคาตั้งต้นคือราคาที่บิลใบนี้ขายไปจริง · <b>ลดลงได้</b> เช่น ลูกค้าได้ราคาขั้นถูก ' +
-      'เพราะซื้อจำนวนมาก แล้วคืนของจนจำนวนที่เหลือไม่ถึงขั้นนั้นแล้ว · <b>ขึ้นไม่ได้</b> เพราะคืนเงินเกินกว่าที่เก็บมาไม่ได้</p>'
+      '<p class="form-hint" id="cn-fault"></p>'
       : '<p class="form-hint">ใบแจ้งหนี้นี้ไม่ได้ผูกกับบิลขาย — ระบุยอดเอง</p>' +
         plField('ยอดที่จะ'+K.verb+' (รวม VAT)', '<input id="cn-manual" type="number" min="0" step="0.01" value="'+(K.capped ? d.invoice.creditable : 0)+'" oninput="cnRecalc()">')) +
     '<div class="toggle-row" style="margin-top:10px"><input type="checkbox" id="cn-stock" onchange="cnStockToggled()">' +
@@ -9999,6 +10009,7 @@ async function openAdjustNoteForm(invoiceId, kind){
       : '') +
     '<div id="cn-total" class="form-hint" style="margin-top:8px"></div>' +
     plModalActions('plBusy(cnSave)', '✓ ออก'+K.label));
+  cnFaultChanged();
   cnRecalc();
 }
 function cnStockToggled(){
@@ -10013,6 +10024,38 @@ function cnUnitPrice(i, l){
   const v = parseFloat(inp.value);
   if (!(v >= 0)) return 0;
   return Math.min(v, l.unitPrice);
+}
+/* ★★ เหตุผลเป็นตัวตัดสินว่าแก้ราคาได้ไหม (เจ้าของระบบสั่ง 23 ต.ค. 2026)
+   ความผิดฝั่งเรา = ลูกค้าไม่ได้เลือกลดจำนวนเอง จะไปเรียกคืนส่วนลดขั้นไม่ได้ → ล็อกราคาไว้ที่ที่ขายไป
+   ลูกค้าคืนเอง = ของที่เหลือไม่ถึงขั้นราคาเดิมแล้ว → ปรับลงได้
+   ★ ปลดล็อกได้ แต่ถูกบันทึกลงในเหตุผลของใบ (backend เติมให้) — ข้อยกเว้นมีจริง แต่ต้องมีร่องรอย */
+const FAULT_NOTE = {
+  seller: ['lock', 'ของคืนเพราะความผิดฝั่งเรา — ต้องคืนเต็มราคาที่ขายไป ลูกค้าไม่ได้เลือกลดจำนวนเอง'],
+  buyer:  ['open', 'ลูกค้าเลือกคืนเอง — ของที่เหลืออาจไม่ถึงขั้นราคาเดิมแล้ว ปรับราคาลงได้ตามขั้นที่ถึงจริง'],
+  none:   ['open', '']
+};
+function faultApply(fault, priceSel, boxId, overrideId){
+  const f = FAULT_NOTE[fault] || FAULT_NOTE.none;
+  const ov = document.getElementById(overrideId);
+  const locked = f[0] === 'lock' && !(ov && ov.checked);
+  document.querySelectorAll(priceSel).forEach(inp => {
+    if (locked) inp.value = inp.max;             // คืนเป็นราคาที่ขายจริงเสมอตอนล็อก
+    inp.readOnly = locked;
+    inp.style.background = locked ? 'var(--bg,#F6F8FC)' : '';
+  });
+  const box = document.getElementById(boxId);
+  if (box) box.innerHTML = f[1] ? ('★ ' + esc(f[1]) +
+    (f[0] === 'lock' ? ' <label style="white-space:nowrap"><input type="checkbox" id="' + overrideId +
+      '" style="width:auto" ' + (ov && ov.checked ? 'checked' : '') + '> ปรับราคาเอง</label>' : '')) : '';
+  return locked;
+}
+function cnFaultChanged(){
+  if (!CN_DRAFT || CN_KIND !== 'credit') return;
+  const sel = document.getElementById('cn-reason');
+  faultApply((CN_DRAFT.reasonFault || {})[sel ? sel.value : ''] || 'none', '.cn-price', 'cn-fault', 'cn-ovr');
+  const ov = document.getElementById('cn-ovr');
+  if (ov && !ov.onchange) ov.onchange = () => { cnFaultChanged(); cnRecalc(); };
+  cnRecalc();
 }
 function cnRecalc(){
   if (!CN_DRAFT) return;
@@ -10063,6 +10106,7 @@ async function cnSave(){
     creditDate: document.getElementById('cn-date').value, vatRate: CN_DRAFT.vatRate,
     moveStock: document.getElementById('cn-stock').checked, returnStock: document.getElementById('cn-stock').checked,
     warehouseId: (document.getElementById('cn-wh') || {}).value || '',
+    priceOverride: !!(document.getElementById('cn-ovr') || {}).checked,
     lines: lines });
   if (!r.success) { plModalErr(r.message); return; }
   plModalClose();

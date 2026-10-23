@@ -28,6 +28,29 @@ var CN_REASONS = {
   discount: 'ให้ส่วนลดเพิ่มหลังออกใบกำกับภาษี',
   cancel: 'ยกเลิกการขาย'
 };
+/* ═══════ ★★ ใครเป็นต้นเหตุที่ของถูกคืน — ตัวตัดสินว่า "เรียกคืนส่วนลดขั้น" ได้หรือไม่ ═══════
+ * (เจ้าของระบบสั่ง 23 ต.ค. 2026)
+ * ปัญหา: ลูกค้าซื้อ 50 ลังจึงได้ราคาขั้นถูก คืน 40 ลัง เหลือถือ 10 ลังในราคาที่ 10 ลังไม่เคยได้
+ *   → ต้องลดหนี้ **ต่ำกว่า** ราคาที่ขายไป เพื่อดึงของที่เหลือกลับไปอยู่ขั้นที่มันถึงจริง
+ * ★★ แต่ **ทำแบบนี้กับทุกใบไม่ได้** — ถ้าของคืนเพราะความผิดของเรา (ส่งไม่ครบ · ส่งของเสียหาย)
+ *   ลูกค้าไม่ได้เลือกลดจำนวนเอง การไปเก็บส่วนต่างคืนคือลงโทษลูกค้าสำหรับความผิดของเรา
+ *   ร้านจะเถียง และเถียงถูกด้วย
+ * `seller` = ความผิดของเรา → ราคาต้องเท่าที่ขายไป ห้ามเรียกคืน
+ * `buyer`  = ลูกค้าเลือกเอง → ปรับราคาลงได้ตามขั้นที่เหลือจริง
+ * `none`   = ไม่ใช่เรื่องของที่คืน (คิดราคาผิด/ให้ส่วนลดเพิ่ม) → ปรับได้อิสระ ไม่มีเรื่องขั้นราคามาเกี่ยว
+ * ★ ปลดล็อกได้ด้วย `payload.priceOverride` แต่ **ถูกบันทึกลงในเหตุผลของใบ** เสมอ —
+ *   ข้อยกเว้นมีจริง (ตกลงกับร้านไว้แล้ว) แต่ต้องมีร่องรอยว่าใครเป็นคนตัดสินใจ
+ */
+var CN_FAULT = {
+  shortage: 'seller',    // ส่งของไม่ครบ — เราส่งขาดเอง
+  damaged:  'seller',    // ของเสียหาย — เสียมาตั้งแต่ก่อนถึงมือลูกค้า
+  return:   'buyer',     // ลูกค้าคืนสินค้า — เลือกเอง
+  cancel:   'buyer',     // ยกเลิกการขาย — เลือกเอง
+  overcharge: 'none',    // คิดราคาผิด — ไม่มีของคืน
+  discount:   'none'     // ให้ส่วนลดเพิ่ม — ไม่มีของคืน
+};
+function cnFaultOf(reasonCode) { return CN_FAULT[String(reasonCode || '')] || 'none'; }
+
 var DN_REASONS = {
   extra: 'ส่งของเพิ่มจากที่ระบุในใบกำกับภาษี',
   undercharge: 'คิดราคาต่ำไป / คิดเงินขาด',
@@ -81,7 +104,9 @@ function getArCreditNoteDraft(session, payload) {
 
   var credited = _arAdjSumOf(AR_ADJ.credit, iv.record_id);
   var debited = _arAdjSumOf(AR_ADJ.debit, iv.record_id);
-  var out = { success: true, kind: K.kind, label: K.label, reasons: K.reasons, invoice: {
+  var out = { success: true, kind: K.kind, label: K.label, reasons: K.reasons,
+    // หน้าจอใช้ตัวนี้ตัดสินว่าช่องราคาแก้ได้ไหม เมื่อเลือกเหตุผลแต่ละข้อ
+    reasonFault: K.kind === 'credit' ? CN_FAULT : {}, invoice: {
     id: iv.record_id, invoiceNo: iv.invoice_no, invoiceDate: _dOnly(iv.invoice_date), customerId: iv.customer_id,
     tenantId: iv.tenant_id || '', salesOrderId: iv.sales_order_id || '', deliveryRoundId: iv.delivery_round_id || '',
     subtotalExVat: Number(iv.subtotal_ex_vat) || 0, vatAmount: Number(iv.vat_amount) || 0,
@@ -170,6 +195,8 @@ function _arAdjustNote(session, payload, K) {
     if (!_validDate(date)) return { success: false, message: 'วันที่' + K.label + 'ต้องเป็น yyyy-MM-dd' };
     var reasonCode = String(payload.reasonCode || '');
     var reason = String(payload.reason || K.reasons[reasonCode] || '').trim();
+    // ★ ปลดล็อกราคาแล้วต้องเห็นบนใบ ไม่ใช่รู้กันเองสองคน
+    if (payload.priceOverride) reason += ' · ปรับราคาเอง (' + (session.displayName || session.adminUserId) + ')';
     if (!reason) return { success: false, message: 'ต้องระบุเหตุผล (กฎหมายบังคับให้แสดงบน' + K.label + ')' };
 
     var rate = Number(payload.vatRate);
@@ -194,12 +221,16 @@ function _arAdjustNote(session, payload, K) {
       }
     }
 
-    var lines = [], taxable = 0, exempt = 0, overPriced = '';
+    var lines = [], taxable = 0, exempt = 0, overPriced = '', underPriced = '';
     (payload.lines || []).forEach(function(l) {
       var qty = parseFloat(l.qty) || 0, price = parseFloat(l.unitPrice) || 0;
       if (!(qty > 0)) return;
-      if (soldCap && l.itemId && soldCap[String(l.itemId)] !== undefined &&
-          price > soldCap[String(l.itemId)] + 0.009) overPriced = String(soldCap[String(l.itemId)]);
+      if (soldCap && l.itemId && soldCap[String(l.itemId)] !== undefined) {
+        var cap = soldCap[String(l.itemId)];
+        if (price > cap + 0.009) overPriced = String(cap);
+        /* ★ ความผิดของเรา = ห้ามลดราคาลงเพื่อเรียกคืนส่วนลดขั้น (ดู CN_FAULT ด้านบน) */
+        if (!payload.priceOverride && cnFaultOf(reasonCode) === 'seller' && price < cap - 0.009) underPriced = String(cap);
+      }
       var amount = _money(qty * price);
       var taxStatus = String(l.taxStatus || '') || TAX_VAT;
       if (taxStatus === TAX_VAT) taxable += amount; else exempt += amount;
@@ -209,6 +240,9 @@ function _arAdjustNote(session, payload, K) {
     if (!lines.length) return { success: false, message: 'ต้องมีรายการอย่างน้อย 1 รายการ' };
     if (overPriced) return { success: false, message: 'ราคาที่ลดหนี้สูงกว่าราคาที่ขายไปจริง (สูงสุด ' +
       Number(overPriced).toLocaleString() + ' ต่อหน่วย) — ลดหนี้เกินกว่าที่เก็บเงินมาไม่ได้' };
+    if (underPriced) return { success: false, message: 'เหตุผลนี้เป็นความผิดฝั่งเรา — ต้องลดหนี้เต็มราคาที่ขายไป (' +
+      Number(underPriced).toLocaleString() + ' ต่อหน่วย) ลูกค้าไม่ได้เลือกลดจำนวนเอง · ' +
+      'ถ้าตกลงกับร้านไว้แล้วจริง ให้ติ๊ก "ปรับราคาเอง" เพื่อบันทึกไว้ในใบ' };
 
     var sv = splitVat(_money(taxable), rate);
     var total = _money(taxable + exempt);

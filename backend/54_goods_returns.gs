@@ -34,6 +34,18 @@ var GRN_CONDITIONS = {
   expired: { label: 'หมดอายุ',         restock: false }
 };
 
+/* ใครเป็นต้นเหตุ — กติกาเดียวกับ CN_FAULT ใน 49_credit_notes.gs (อ่านเหตุผลเต็มที่นั่น)
+   ★ สองลิสต์นี้ต้องสอดคล้องกัน ใบรับคืนกับใบลดหนี้ของเหตุการณ์เดียวกันจะได้ไม่ตัดสินคนละอย่าง */
+var GRN_FAULT = {
+  damaged:       'seller',   // ของเสียหายมาตั้งแต่ก่อนถึงร้าน
+  expired:       'seller',   // ส่งของใกล้หมดอายุไปให้
+  wrong_item:    'seller',   // ส่งผิดรายการ
+  over_delivery: 'seller',   // ส่งเกินจำนวน
+  not_ordered:   'seller',   // ร้านไม่ได้สั่ง แต่ของไปถึง
+  other:         'none'
+};
+function grnFaultOf(reasonCode) { return GRN_FAULT[String(reasonCode || '')] || 'none'; }
+
 var GRN_STATUS = { received: 'รับของแล้ว', cancelled: 'ยกเลิก' };
 
 /** รายการของบิลขายใบหนึ่งที่ยังรับคืนได้ (ขายไปเท่าไร − รับคืนไปแล้วเท่าไร) */
@@ -104,7 +116,7 @@ function _goodsReturnDraftCore(tenantId, orderId) {
     });
   dests.sort(function(a, b) { return (ORDER[a.purpose] - ORDER[b.purpose]) || (a.id - b.id); });
 
-  return { success: true, reasons: GRN_REASONS,
+  return { success: true, reasons: GRN_REASONS, reasonFault: GRN_FAULT,
     conditions: Object.keys(GRN_CONDITIONS).map(function(k) {
       return { code: k, label: GRN_CONDITIONS[k].label, restock: GRN_CONDITIONS[k].restock };
     }),
@@ -146,7 +158,7 @@ function _goodsReturnCore(session, tenantId, payload) {
     var whById = {}, defaultDest = draft.defaultWarehouseId;
     _scoped('warehouses', scope).forEach(function(w) { if (_isTrue(w.is_active)) whById[String(w.record_id)] = w; });
 
-    var picked = [], amount = 0;
+    var picked = [], amount = 0, underPriced = false;
     (payload.lines || []).forEach(function(l) {
       var src = byItem[String(l.itemId)];
       if (!src) return;
@@ -168,12 +180,18 @@ function _goodsReturnCore(session, tenantId, payload) {
       var unitPrice = (l.unitPrice === '' || l.unitPrice === null || l.unitPrice === undefined)
         ? src.unitPrice : _money(parseFloat(l.unitPrice) || 0);
       if (unitPrice > src.unitPrice + 0.009 || unitPrice < 0) { picked = null; return; }
+      /* ★ ความผิดของเรา = รับคืนเต็มราคาที่ขายไป ห้ามกดลงเพื่อเรียกคืนส่วนลดขั้น (ดู GRN_FAULT) */
+      if (!payload.priceOverride && grnFaultOf(reasonCode) === 'seller' && unitPrice < src.unitPrice - 0.009) {
+        underPriced = true; return;
+      }
       picked.push({ src: src, qty: qty, condition: cond, baseQty: qty * (src.unitFactor || 1),
         warehouseId: destId, sellable: _isSellableWarehouse(whById[destId]), unitPrice: unitPrice,
         amount: _money(qty * unitPrice) });
       amount += qty * unitPrice;
     });
     if (picked === null) return { success: false, message: 'รับคืนเกินจำนวนที่ส่งไปแล้ว · เลือกคลังปลายทางที่ใช้ไม่ได้ · หรือใส่ราคาสูงกว่าที่ขายไปจริง' };
+    if (underPriced) return { success: false, message: 'เหตุผลนี้เป็นความผิดฝั่งเรา — ต้องรับคืนเต็มราคาที่ขายไป ' +
+      'ลูกค้าไม่ได้เลือกลดจำนวนเอง · ถ้าตกลงกับร้านไว้แล้วจริง ให้ติ๊ก "ปรับราคาเอง"' };
     if (!picked.length) return { success: false, message: 'ต้องมีรายการอย่างน้อย 1 รายการ' };
 
     var returnId = centralNextId('goods_returns');
