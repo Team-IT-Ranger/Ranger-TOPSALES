@@ -117,6 +117,23 @@ function getArCreditNoteDraft(session, payload) {
       roundQty[String(ri.item_id)] = (roundQty[String(ri.item_id)] || 0) + (parseFloat(ri.qty) || 0);
     });
   }
+  /* ★ คลังปลายทางของ "ของที่คืนกลับมา" — ส่งไปพร้อมร่าง จะได้เลือกได้ในฟอร์มเดียวกับที่ออกใบลดหนี้
+     (เจ้าของระบบสั่ง 23 ต.ค. 2026) · สร้างคลังรับคืน/ของเสียให้ครั้งแรกที่ใช้ เหมือนฝั่งใบรับคืน */
+  if (K.kind === 'credit') {
+    var cnScope = _saleStockScope(iv.tenant_id);
+    var cnSale = _ensureScopeWarehouse(cnScope);
+    var cnQuar = _ensureWarehouseByPurpose(cnScope, 'quarantine');
+    var cnScrap = _ensureWarehouseByPurpose(cnScope, 'scrap');
+    var ORD = { sale: 0, quarantine: 1, scrap: 2 };
+    out.warehouses = _scoped('warehouses', cnScope).filter(function(w) { return _isTrue(w.is_active); })
+      .map(function(w) {
+        return { id: w.record_id, name: w.name, purpose: _whPurpose(w),
+          purposeLabel: WH_PURPOSES[_whPurpose(w)], sellable: _isSellableWarehouse(w) };
+      });
+    out.warehouses.sort(function(a, b) { return (ORD[a.purpose] - ORD[b.purpose]) || (a.id - b.id); });
+    out.defaultWarehouseId = { good: cnSale, quarantine: cnQuar, scrap: cnScrap, damaged: cnScrap, expired: cnScrap };
+  }
+
   var ov = _orderVat(order);
   items.forEach(function(it) {
     var ordered = parseFloat(it.qty) || 0;
@@ -237,31 +254,66 @@ function _arAdjustNote(session, payload, K) {
     patch.status = left <= 0.009 ? (recv > 0.009 ? 'paid' : 'credited') : (recv > 0.009 ? 'partial' : 'open');
     centralUpdate('ar_invoices', iv.record_id, patch);
 
-    // ของขยับตามไหม — เฉพาะเมื่อคนออกใบสั่ง และเฉพาะใบที่รู้ว่าคลังไหน
-    var moved = 0;
+    /* ของขยับตามไหม — เฉพาะเมื่อคนออกใบสั่ง และเฉพาะใบที่รู้ว่าคลังไหน
+       ★★ ใบลดหนี้ที่มีของคืนจริง **ออกใบรับคืนสินค้าให้ด้วยเสมอ** (เจ้าของระบบสั่ง 23 ต.ค. 2026)
+         ลูกค้าได้ใบลดหนี้ไว้ลดหนี้ · คลังได้ใบรับคืนไว้เป็นหลักฐานว่าของเข้ามาจริงกี่ชิ้น เข้าคลังไหน
+         เดิมของเข้าคลังด้วย `_applyStockIn` ดิบๆ ไม่มีเอกสารอะไรเลย ของงอกขึ้นมาในคลังโดยไม่มีใบรองรับ
+       ★ ใบรับคืนเป็นตัวขยับสต็อก ใบลดหนี้จึง**ไม่ขยับซ้ำ** (หลักเดียวกับทางกลับด้าน
+         `createCreditNoteFromReturn` ที่บังคับ moveStock=false) */
+    var moved = 0, returnId = '', returnNo = '';
     if ((payload.moveStock || payload.returnStock) && iv.tenant_id) {
-      var scope = _saleStockScope(iv.tenant_id), warehouseId = _ensureScopeWarehouse(scope);
-      var cost = {};
-      _scoped('warehouse_stock', scope).forEach(function(r) {
-        if (String(r.warehouse_id) === String(warehouseId)) cost[String(r.product_id)] = Number(r.avg_cost) || 0;
-      });
-      lines.forEach(function(l) {
-        if (!l.productId || !(l.qty > 0)) return;
-        _applyStockIn(scope, warehouseId, l.productId, K.stockDir * l.qty * (l.unitFactor || 1),
-          cost[String(l.productId)] || 0, K.moveType, K.refType, noteId,
-          K.label + ' ' + noteNo + ': ' + reason, session.adminUserId);
-        moved++;
-      });
+      var scope = _saleStockScope(iv.tenant_id);
+      if (K.kind === 'credit' && iv.sales_order_id) {
+        var destWh = String(payload.warehouseId || '') || _ensureScopeWarehouse(scope);
+        var grLines = [];
+        lines.forEach(function(l) {
+          if (!l.itemId || !l.productId || !(l.qty > 0)) return;
+          grLines.push({ itemId: l.itemId, qty: l.qty, condition: payload.condition || 'good', warehouseId: destWh });
+        });
+        if (grLines.length) {
+          var gr = _goodsReturnCore(session, iv.tenant_id || '', { orderId: iv.sales_order_id,
+            returnDate: date, reasonCode: _grReasonFor(payload.reasonCode), reason: reason,
+            note: 'ออกอัตโนมัติพร้อม' + K.label + ' ' + noteNo, creditNoteId: noteId, lines: grLines });
+          /* ★ ออกใบรับคืนไม่ได้ = **ล้มทั้งรายการ** ไม่ใช่ออกใบลดหนี้แล้วปล่อยของลอย
+             เหตุผลที่พบจริง: ของจำนวนนั้นถูกรับคืนไปแล้วตามใบอื่น (คนจะได้รู้ว่าซ้ำ) */
+          if (!gr.success) return { success: false, message: 'ออกใบลดหนี้ไม่ได้ — ' + gr.message +
+            ' (ถ้าของคืนถูกบันทึกไปแล้ว ให้เอาเครื่องหมายถูก "รับของคืนเข้าคลัง" ออก)' };
+          moved = gr.restocked || 0; returnId = gr.returnId; returnNo = gr.returnNo;
+        }
+      } else {
+        // ใบเพิ่มหนี้ (ของออกไปเพิ่ม) และใบลดหนี้ที่ไม่ผูกบิลขาย — ไม่มีใบรับคืนให้ออก ขยับสต็อกตรงๆ ตามเดิม
+        var warehouseId = String(payload.warehouseId || '') || _ensureScopeWarehouse(scope);
+        var cost = {};
+        _scoped('warehouse_stock', scope).forEach(function(r) {
+          if (String(r.warehouse_id) === String(warehouseId)) cost[String(r.product_id)] = Number(r.avg_cost) || 0;
+        });
+        lines.forEach(function(l) {
+          if (!l.productId || !(l.qty > 0)) return;
+          _applyStockIn(scope, warehouseId, l.productId, K.stockDir * l.qty * (l.unitFactor || 1),
+            cost[String(l.productId)] || 0, K.moveType, K.refType, noteId,
+            K.label + ' ' + noteNo + ': ' + reason, session.adminUserId);
+          moved++;
+        });
+      }
     }
 
     var out = { success: true, noteId: noteId, noteNo: noteNo, kind: K.kind, total: total,
-      journalNo: jr.journalNo, stockMoved: moved,
+      journalNo: jr.journalNo, stockMoved: moved, returnId: returnId, returnNo: returnNo,
       message: 'ออก' + K.label + ' ' + noteNo + ' ยอด ' + total.toLocaleString() + ' บาท' +
-        (moved ? ' · ' + (K.kind === 'credit' ? 'คืนของเข้าคลัง ' : 'ตัดของออกจากคลัง ') + moved + ' รายการ' : '') };
+        (returnNo ? ' · และใบรับคืนสินค้า ' + returnNo
+                  : (moved ? ' · ' + (K.kind === 'credit' ? 'คืนของเข้าคลัง ' : 'ตัดของออกจากคลัง ') + moved + ' รายการ' : '')) };
     // ชื่อเดิมของใบลดหนี้ — หน้าเว็บรุ่นที่ปล่อยไปก่อนหน้านี้อ่านคีย์นี้อยู่ ไม่ตัดทิ้ง
     if (K.kind === 'credit') { out.creditNoteId = noteId; out.creditNoteNo = noteNo; }
     return out;
   });
+}
+
+/* เหตุผลสองชุดนี้ไม่ตรงกันทุกตัว (ใบลดหนี้มี "คิดราคาผิด" ซึ่งไม่ใช่เหตุผลของการรับของคืน)
+   ★ แปลงไม่ได้ = `other` ไม่ใช่ปล่อยค่าดิบไป ไม่งั้นใบรับคืนจะมี reason_code ที่ไม่มีในรายการ
+     แล้วหน้าจอแสดงเป็นรหัสดิบให้คนอ่าน */
+function _grReasonFor(cnReason) {
+  var map = { return: 'other', damaged: 'damaged', shortage: 'over_delivery', cancel: 'not_ordered' };
+  return map[String(cnReason || '')] || 'other';
 }
 
 function createArCreditNote(session, payload) {

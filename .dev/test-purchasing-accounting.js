@@ -1366,6 +1366,55 @@ console.log('\n── ใบรับคืนสินค้า ──');
   eq('★ ยอด "เข้าคลัง/ของเสีย" นับจากคลังที่ของเข้าไปจริง ไม่ใช่จากสภาพของ',
     [r.restockQty, r.scrapQty], [0, 20]);
 
+  /* ══ ★★ ใบลดหนี้ที่มีของคืน → ออกใบรับคืนสินค้าให้อัตโนมัติ (23 ต.ค. 2026) ══
+     เจ้าของระบบสั่ง: ยืนยันใบลดหนี้แล้วต้องได้ทั้งเอกสารแจ้งลูกค้า และหลักฐานของเข้าคลัง */
+  {
+    const dft = ctx.getArCreditNoteDraft(FIN, { tenantId: 'T1', invoiceId: cr.invoiceId || cr.id, kind: 'credit' });
+    /* ★ ใช้ id คลังที่ "ร่างใบลดหนี้" บอกมา — เส้นทางใบลดหนี้คิด scope จาก `iv.tenant_id`
+       ส่วนร่างใบรับคืนคิดจาก `_effectiveTenantId` ซึ่งในกล่องทดสอบไม่ตรงกัน (ดูหมายเหตุที่ stockOf) */
+    const CSALE = dft.defaultWarehouseId.good, CQUAR = dft.defaultWarehouseId.quarantine;
+    eq('★ ร่างใบลดหนี้ส่งรายการคลังปลายทางมาให้เลือกด้วย',
+      [dft.success, (dft.warehouses || []).length >= 3, dft.warehouses[0].sellable,
+        CSALE !== CQUAR, dft.defaultWarehouseId.scrap !== CSALE],
+      [true, true, true, true, true]);
+
+    const qB = stockOf('80', CQUAR), sB = stockOf('80', CSALE);
+    /* ★ นับจากชีตตรงๆ ไม่ผ่าน listGoodsReturns — ตัวนั้นกรองด้วย `_effectiveTenantId` ซึ่งในกล่องนี้
+       คืนค่าคนละ scope กับที่ใบลดหนี้เขียนลงไป (ดูหมายเหตุที่ stockOf) */
+    const grnRows = () => ctx.centralObjects('goods_returns');
+    const grnBefore = grnRows().length;
+    const cn = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'return', creditDate: '2026-10-21', moveStock: true, warehouseId: CQUAR,
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 1070, taxStatus: 'vat' }] });
+    eq('★★ ออกใบลดหนี้แล้วได้ใบรับคืนสินค้ามาด้วยใบหนึ่ง',
+      [cn.success, /^GRN-/.test(cn.returnNo || ''), grnRows().length - grnBefore], [true, true, 1], cn.message);
+    eq('★★ ของเข้าคลังที่เลือกไว้ (คลังรอตรวจ) ไม่ใช่คลังขาย',
+      [stockOf('80', CQUAR) - qB, stockOf('80', CSALE) - sB], [10, 0]);
+
+    const grnNew = grnRows().filter(g => String(g.return_no) === String(cn.returnNo))[0];
+    eq('★ ใบรับคืนผูกกลับไปหาใบลดหนี้ จึงยกเลิกเดี่ยวๆ ไม่ได้ (ต้องไปจัดการที่ใบลดหนี้)',
+      [String(grnNew.credit_note_id), ctx.cancelGoodsReturn(FIN, { tenantId: 'T1', id: grnNew.record_id }).success],
+      [String(cn.noteId), false]);
+
+    /* ★ ของก้อนเดิมถูกบันทึกไปแล้ว — ลดหนี้ซ้ำพร้อมรับของอีกรอบต้องไม่ผ่าน ไม่ใช่ของงอกเงียบๆ */
+    const d2 = ctx._goodsReturnDraftCore('T1', 180);
+    const leftNow = d2.success ? d2.lines[0].returnable : 0;
+    const nRows = grnRows().length, qq = stockOf('80', CSALE);
+    const over = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'return', creditDate: '2026-10-21', moveStock: true, warehouseId: CSALE,
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: leftNow + 5,
+        unitPrice: 1070, taxStatus: 'vat' }] });
+    eq('★★★ ลดหนี้พร้อมรับของเกินที่คืนได้ → ล้มทั้งรายการ ไม่มีเอกสารค้างและของไม่ขยับ',
+      [over.success, grnRows().length - nRows, stockOf('80', CSALE) - qq], [false, 0, 0]);
+
+    const sB2 = stockOf('80', CSALE);
+    const noStock = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'overcharge', creditDate: '2026-10-21',
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 1070, taxStatus: 'vat' }] });
+    eq('★ ไม่ติ๊กรับของคืน = ไม่มีใบรับคืน และสต็อกไม่ขยับ (คิดราคาผิด ของไม่ได้กลับมา)',
+      [noStock.success, noStock.returnNo || '', stockOf('80', CSALE) - sB2], [true, '', 0]);
+  }
+
   /* ── ยกเลิกต้องหักจากคลังที่ของเข้าไปจริง ไม่ใช่คลังหลักเสมอไป ── */
   r = ctx.cancelGoodsReturn(FIN, { tenantId: 'T1', id: r.returnId, reason: 'คีย์ผิดคลัง' });
   eq('★★★ ยกเลิกแล้วหักออกจากคลังรอตรวจ — คลังขายต้องไม่ติดลบ',

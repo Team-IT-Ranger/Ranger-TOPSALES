@@ -40,7 +40,12 @@ var GRN_STATUS = { received: 'รับของแล้ว', cancelled: 'ย�
 function getGoodsReturnDraft(session, payload) {
   var err = _requirePermission(session, 'sales', 'view'); if (err) return err;
   payload = payload || {};
-  var tenantId = _effectiveTenantId(session, payload);
+  return _goodsReturnDraftCore(_effectiveTenantId(session, payload), payload.orderId);
+}
+/* ★ แกนกลาง — ไม่ตรวจสิทธิ์ เพราะฝั่งใบลดหนี้เรียกตัวนี้ด้วย และคนทำบัญชีอาจไม่มีสิทธิ์ "งานขาย"
+   สิทธิ์ถูกตรวจที่ action ปลายทางไปแล้ว (`accounting` ของใบลดหนี้ · `sales` ของใบรับคืน) */
+function _goodsReturnDraftCore(tenantId, orderId) {
+  var payload = { orderId: orderId };
   var order = tenantRowById(tenantId, 'sales_orders', payload.orderId);
   if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
 
@@ -114,7 +119,14 @@ function createGoodsReturn(session, payload) {
   var err = _requirePermission(session, 'sales', 'edit'); if (err) return err;
   payload = payload || {};
   return _withDocLock(function() {
-    var tenantId = _effectiveTenantId(session, payload);
+    return _goodsReturnCore(session, _effectiveTenantId(session, payload), payload);
+  });
+}
+/* ★★ แกนกลาง — **ไม่จับ `_withDocLock` เอง** เพราะฝั่งใบลดหนี้เรียกตัวนี้ตอนที่ถือ lock อยู่แล้ว
+   จับซ้ำซ้อนกันในการรันเดียวคือทางที่จะได้ deadlock แบบหาสาเหตุยาก · ตัวเรียกต้องถือ lock มาเอง
+   ★ `payload.creditNoteId` = ใบนี้ถูกสร้างอัตโนมัติจากใบลดหนี้ (ผูกกลับไปหาใบนั้น และทำให้ยกเลิกเดี่ยวๆ ไม่ได้) */
+function _goodsReturnCore(session, tenantId, payload) {
+  {
     var order = tenantRowById(tenantId, 'sales_orders', payload.orderId);
     if (!order) return { success: false, message: 'ไม่พบบิลขายนี้' };
 
@@ -124,7 +136,7 @@ function createGoodsReturn(session, payload) {
     var reason = String(payload.reason || GRN_REASONS[reasonCode] || '').trim();
     if (!reason) return { success: false, message: 'ต้องระบุเหตุผลที่รับคืน' };
 
-    var draft = getGoodsReturnDraft(session, { orderId: payload.orderId, tenantId: tenantId });
+    var draft = _goodsReturnDraftCore(tenantId, payload.orderId);
     if (!draft.success) return draft;
     var byItem = {};
     draft.lines.forEach(function(l) { byItem[String(l.itemId)] = l; });
@@ -168,7 +180,7 @@ function createGoodsReturn(session, payload) {
       sales_order_id: order.record_id, order_code: order.order_code, customer_id: order.customer_id,
       return_date: date, reason_code: reasonCode, reason: reason, item_count: picked.length,
       amount: _money(amount), restock_qty: restockQty, scrap_qty: scrapQty,
-      credit_note_id: '', status: 'received', note: String(payload.note || ''),
+      credit_note_id: String(payload.creditNoteId || ''), status: 'received', note: String(payload.note || ''),
       received_by: session.adminUserId, created_at: nowStr() });
     var itemId = centralNextId('goods_return_items');
     centralAppendMany('goods_return_items', picked.map(function(p, i) {
@@ -203,7 +215,7 @@ function createGoodsReturn(session, payload) {
       message: 'รับคืนสินค้า ' + returnNo + ' · ' + Object.keys(byWh).map(function(k) {
         return k + ' ' + byWh[k] + ' หน่วย';
       }).join(' · ') };
-  });
+  }
 }
 
 function listGoodsReturns(session, payload) {

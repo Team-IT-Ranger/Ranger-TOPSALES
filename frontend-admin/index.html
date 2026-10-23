@@ -9929,12 +9929,27 @@ async function openAdjustNoteForm(invoiceId, kind){
       '<th>จำนวนที่'+K.verb+'</th><th>ราคา/หน่วย</th><th>เป็นเงิน</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       : '<p class="form-hint">ใบแจ้งหนี้นี้ไม่ได้ผูกกับบิลขาย — ระบุยอดเอง</p>' +
         plField('ยอดที่จะ'+K.verb+' (รวม VAT)', '<input id="cn-manual" type="number" min="0" step="0.01" value="'+(K.capped ? d.invoice.creditable : 0)+'" oninput="cnRecalc()">')) +
-    '<div class="toggle-row" style="margin-top:10px"><input type="checkbox" id="cn-stock">' +
+    '<div class="toggle-row" style="margin-top:10px"><input type="checkbox" id="cn-stock" onchange="cnStockToggled()">' +
       '<label for="cn-stock">'+esc(K.stockLabel)+'</label></div>' +
     '<p class="form-hint" style="margin-top:4px">'+esc(K.stockHint)+'</p>' +
+    /* ★ ติ๊กว่าของกลับมาแล้วต้องบอกด้วยว่า "เข้าคลังไหน" — ของคืนไม่ได้กลับไปขายต่อทุกชิ้น
+       (เจ้าของระบบสั่ง 23 ต.ค. 2026) · ยืนยันแล้วระบบออก **ใบรับคืนสินค้า** ให้อีกใบเป็นหลักฐานของเข้าคลัง
+       เดิมของเข้าคลังโดยไม่มีเอกสารอะไรรองรับเลย */
+    (kind === 'credit' && (d.warehouses || []).length
+      ? '<div id="cn-wh-box" style="display:none">' +
+        plField('รับของคืนเข้าคลัง', '<select id="cn-wh">' + d.warehouses.map(w =>
+          '<option value="'+w.id+'"' + (String(w.id) === String((d.defaultWarehouseId || {}).good) ? ' selected' : '') +
+          '>' + esc(w.name) + (w.sellable ? '' : ' — ไม่นับเป็นของขายได้') + '</option>').join('') + '</select>') +
+        '<p class="form-hint">ยืนยันแล้วจะได้ <b>ใบลดหนี้</b> ไว้ส่งลูกค้า และ <b>ใบรับคืนสินค้า</b> ' +
+        'อีกใบเป็นหลักฐานของเข้าคลัง (ระบบออกให้เอง)</p></div>'
+      : '') +
     '<div id="cn-total" class="form-hint" style="margin-top:8px"></div>' +
     plModalActions('plBusy(cnSave)', '✓ ออก'+K.label));
   cnRecalc();
+}
+function cnStockToggled(){
+  const box = document.getElementById('cn-wh-box'), cb = document.getElementById('cn-stock');
+  if (box && cb) box.style.display = cb.checked ? '' : 'none';
 }
 function cnRecalc(){
   if (!CN_DRAFT) return;
@@ -9983,6 +9998,7 @@ async function cnSave(){
     reason: note ? (CN_DRAFT.reasons[reasonCode] + ' — ' + note) : CN_DRAFT.reasons[reasonCode],
     creditDate: document.getElementById('cn-date').value, vatRate: CN_DRAFT.vatRate,
     moveStock: document.getElementById('cn-stock').checked, returnStock: document.getElementById('cn-stock').checked,
+    warehouseId: (document.getElementById('cn-wh') || {}).value || '',
     lines: lines });
   if (!r.success) { plModalErr(r.message); return; }
   plModalClose();
