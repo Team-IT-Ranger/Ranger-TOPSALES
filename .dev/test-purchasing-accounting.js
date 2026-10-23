@@ -1848,6 +1848,33 @@ r = ctx.salesReportBills(MGR, { dateFrom: '2026-09-05', dateTo: '2026-09-09', in
 eq('ส่งทั้งสองเกณฑ์พร้อมกัน = ต้องเข้าทั้งคู่ (ชุดนี้ไม่มีใบไหนเข้า)', r.totalBills, 0);
 
 console.log('\n── ตั้งลูกหนี้รายรอบจัดส่ง ──');
+
+/* ★★★ ขายสดที่แยกรอบจัดส่งต้องลงบัญชีด้วย (แก้ 23 ต.ค. 2026)
+   ตัวลงบัญชีเดิมดูเลขใบกำกับที่ "หัวบิล" แต่บิลแยกรอบเก็บไว้ที่รอบ → ไม่เคยลงให้เลย */
+{
+  ctx.saveAccountingSettings(FIN, { tenantId: 'T1', costMethod: 'none', cashSales: 'on' });
+  append(tenantSheets.sales_orders, { record_id: 83, order_code: 'SO-CASH-RD', customer_id: 500, total: 0,
+    payment_method: 'cash', fulfillment_type: 'office_delivery', status: 'ready_to_ship',
+    created_at: '2026-10-20 09:00:00', apply_vat: 'TRUE', vat_rate: 0.07 });
+  const rd1 = { record_id: 9101, order_id: 83, round_no: 1, status: 'shipped',
+    tax_invoice_no: 'TAX-CRD-1', tax_invoice_at: '2026-10-20 09:00:00',
+    subtotal_ex_vat: 1000, vat_amount: 70, total: 1070 };
+  append(tenantSheets.delivery_rounds, rd1);
+  const o83 = ctx.tenantRowById('T1', 'sales_orders', 83);
+
+  eq('★★ หัวบิลไม่มีเลขใบกำกับ → ลงทั้งใบไม่ได้ (ของเดิมจบตรงนี้แล้วเงียบ)',
+    ctx.postCashSaleGl('T1', o83, 'tester').posted, false);
+  const p = ctx.postCashSaleGl('T1', o83, 'tester', rd1);
+  eq('★★★ ลงรายรอบได้ ด้วยยอดของรอบนั้น', [p.posted, p.amount, p.vat], [true, 1070, 70]);
+  eq('★ ลงรอบเดิมซ้ำไม่ได้', ctx.postCashSaleGl('T1', o83, 'tester', rd1).posted, false);
+
+  const rd2 = { record_id: 9102, order_id: 83, round_no: 2, status: 'shipped',
+    tax_invoice_no: 'TAX-CRD-2', tax_invoice_at: '2026-10-21 09:00:00',
+    subtotal_ex_vat: 2000, vat_amount: 140, total: 2140 };
+  append(tenantSheets.delivery_rounds, rd2);
+  eq('★ รอบถัดไปลงได้ เป็นคนละใบสำคัญ', ctx.postCashSaleGl('T1', o83, 'tester', rd2).amount, 2140);
+}
+
 /* ★★★ ตั้งลูกหนี้ "รายรอบจัดส่ง" ด้วยมือต้องทำได้ (แก้ 23 ต.ค. 2026)
    เดิมอ่านยอดจาก payload ทางเดียว ซึ่งมีแต่ `issueRoundInvoices` ที่ส่งให้ —
    ปุ่ม "ตั้งหนี้" กับบิลที่แยกรอบจึงตอบ "ยอดเป็นศูนย์" เสมอ ตามเก็บด้วยมือไม่ได้เลย */

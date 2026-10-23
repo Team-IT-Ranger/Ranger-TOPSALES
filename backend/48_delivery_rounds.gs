@@ -395,6 +395,18 @@ function issueRoundInvoices(session, tenantId, order, plan, round) {
     fields.subtotal_ex_vat = amt.exVat; fields.vat_amount = amt.vat; fields.exempt_amount = amt.exempt;
     fields.invoiced_at = nowStr();
   }
+  /* ★★ ขายสด: ไม่มีลูกหนี้ให้ตั้ง แต่ **ต้องลงบัญชี** (Dr เงินสด / Cr รายได้ + ภาษีขาย)
+     ลงรายรอบ เพราะใบกำกับของรอบออกตามของที่ส่งจริงรอบนั้น (52_cash_sales_gl.gs)
+     ★ เดิมไม่มีบรรทัดนี้ ตัวลงบัญชีไปดูเลขใบกำกับที่ "หัวบิล" ซึ่งบิลแยกรอบไม่มี
+       → ขายสดที่แยกรอบจึงไม่เคยถูกลงบัญชีเลย (เจอจริงบน UAT 23 ต.ค. 2026) */
+  if (!isCreditPayment(order.payment_method) && String(fields.tax_invoice_no || round.tax_invoice_no || '').trim()) {
+    var rdForGl = {};
+    Object.keys(round).forEach(function(k) { rdForGl[k] = round[k]; });
+    Object.keys(fields).forEach(function(k) { rdForGl[k] = fields[k]; });   // ยอด/เลขที่เพิ่งออกในรอบนี้
+    var cashGl = postCashSaleGl(tenantId, order, session.adminUserId, rdForGl);
+    if (cashGl && cashGl.posted) out.changes.push('ลงบัญชีขายสด ' + cashGl.journalNo);
+  }
+
   /* ใบแจ้งหนี้ลูกหนี้: ขายเชื่อเท่านั้น (ขายสดเก็บเงินแล้ว ไม่มีหนี้ให้แจ้ง — กติกาเดิมทั้งระบบ) */
   if (isCreditPayment(order.payment_method) && !String(round.ar_invoice_no || '').trim()) {
     var ar = _createArInvoiceCore(session, {

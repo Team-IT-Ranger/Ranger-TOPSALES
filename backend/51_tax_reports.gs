@@ -90,7 +90,11 @@ function getVatSalesReport(session, payload) {
     if (String(j.ref_type) !== 'SALES_CASH') return;
     if (String(j.status) === 'voided') return;
     if (!_inBook(j, book)) return;
-    invoicedOrders[String(j.ref_id) + '#'] = true;          // ขายสดลงทั้งใบ ไม่แยกรอบ
+    /* ★ คีย์ของใบสำคัญขายสดมีสองแบบ (_cashSaleRefId ใน 52_cash_sales_gl.gs):
+         `<บิล>` = ลงทั้งใบ · `<บิล>#<รอบ>` = ลงรายรอบ — ต้องรับทั้งคู่
+       เดิมเติม '#' ต่อท้ายเสมอ ของที่ลงรายรอบจึงไม่เคยจับคู่ติด แล้วรายงานบอกว่า "ยังไม่ลงบัญชี" ตลอดไป */
+    var ref = String(j.ref_id);
+    invoicedOrders[ref.indexOf('#') !== -1 ? ref : (ref + '#')] = true;
   });
 
   tenantObjectsIfExists(tenantId, 'sales_orders').forEach(function(o) {

@@ -21,21 +21,31 @@
  */
 
 /** บัญชีที่เดบิตตอนรับเงิน — โอน/บัตรเข้าแบงก์ · นอกนั้นถือเป็นเงินสดในมือ */
+function _roundSuffix(round) { return round ? (' รอบ ' + (round.round_no || round.record_id)) : ''; }
+
 function _cashSaleDebitAccount(order) {
   var m = String((order && order.payment_method) || '').toLowerCase();
   return (m.indexOf('transfer') !== -1 || m.indexOf('bank') !== -1 || m.indexOf('card') !== -1)
     ? GL_ACCT.BANK : GL_ACCT.CASH;
 }
 
-/** บิลใบนี้เป็นขายสดที่ควรลงบัญชีไหม */
-function _isCashSaleForGl(order) {
+/* ★★ บิลใบนี้ (หรือรอบนี้) เป็นขายสดที่ควรลงบัญชีไหม
+   ★ `round` มีค่า = ดูเลขใบกำกับของรอบนั้น · ไม่มี = ดูของทั้งใบ
+     **บิลที่แยกรอบจัดส่งเก็บเลขใบกำกับไว้ที่รอบ ไม่ใช่ที่หัวบิล** ดูผิดที่แล้วจะเห็นเป็น
+     "ยังไม่ออกใบกำกับ" ตลอดไป แล้วไม่ลงบัญชีให้เลย (เจอจริงบน UAT 23 ต.ค. 2026) */
+function _isCashSaleForGl(order, round) {
   if (!order) return false;
   if (String(order.status) === 'cancelled') return false;
   if (isCreditPayment(order.payment_method)) return false;       // เครดิตลงผ่านใบแจ้งหนี้ลูกหนี้อยู่แล้ว
-  return !!String(order.tax_invoice_no || '').trim();            // ยังไม่ออกใบกำกับ = ภาระภาษียังไม่เกิด
+  var src = round || order;
+  return !!String(src.tax_invoice_no || '').trim();              // ยังไม่ออกใบกำกับ = ภาระภาษียังไม่เกิด
 }
 
-function _cashSaleRefId(order) { return String(order.record_id); }
+/* ★ คีย์กันลงซ้ำ — บิลที่แยกรอบลงทีละรอบ จึงต้องมีมิติรอบอยู่ในคีย์ด้วย
+   ★★ รูปแบบ `<บิล>#<รอบ>` ถูกอ่านโดย `51_tax_reports.gs` ด้วย แก้ที่นี่ต้องตามไปแก้ที่นั่น */
+function _cashSaleRefId(order, round) {
+  return round ? (String(order.record_id) + '#' + String(round.record_id)) : String(order.record_id);
+}
 
 function _findCashSaleJournal(book, refId) {
   var found = null;
@@ -54,23 +64,26 @@ function _findCashSaleJournal(book, refId) {
  * @return { posted, amount, skipped }  ★ ไม่โยน error ออกไป: ของส่งให้ลูกค้าไปแล้ว
  *   การลงบัญชีล้มต้องไม่ทำให้การบันทึกบิลหรือการเปลี่ยนสถานะล้มตาม
  */
-function postCashSaleGl(tenantId, order, userId) {
+function postCashSaleGl(tenantId, order, userId, round) {
   try {
-    if (!_isCashSaleForGl(order)) return { posted: false, skipped: 'ไม่ใช่บิลขายสดที่ออกใบกำกับแล้ว' };
+    if (!_isCashSaleForGl(order, round)) return { posted: false, skipped: 'ไม่ใช่บิลขายสดที่ออกใบกำกับแล้ว' };
 
     var book = _cogsBook(_saleStockScope(tenantId));
     var st = _acctSettings(book);
     if (st.cashSales !== 'on') return { posted: false, skipped: 'ยังไม่ได้เปิดการลงบัญชีขายสด' };
 
-    var when = _dOnly(order.tax_invoice_at || order.created_at) || _todayStr();
+    /* ★ ยอดและวันที่มาจาก "รอบ" เมื่อลงรายรอบ — ใบกำกับของรอบออกตามของที่ส่งจริงรอบนั้น
+       ใช้ยอดทั้งใบกับรอบใดรอบหนึ่ง = ลงเกินทันที และรอบถัดไปจะลงซ้ำอีก */
+    var src = round || order;
+    var when = _dOnly(src.tax_invoice_at || order.tax_invoice_at || order.created_at) || _todayStr();
     if (st.cashFrom && when < st.cashFrom) return { posted: false, skipped: 'บิลลงวันที่ก่อนวันเริ่มลงบัญชีขายสด' };
 
-    var refId = _cashSaleRefId(order);
+    var refId = _cashSaleRefId(order, round);
     if (_findCashSaleJournal(book, refId)) return { posted: false, skipped: 'ลงบัญชีบิลนี้ไปแล้ว' };
 
     var v = _orderVat(order);
-    var vat = _money(Number(order.vat_amount) || v.vat || 0);
-    var total = _money(Number(order.total) || 0);
+    var vat = _money(Number(src.vat_amount) || (round ? 0 : v.vat) || 0);
+    var total = _money(Number(src.total) || 0);
     /* ★ รายได้ = ยอดสุทธิ − ภาษี (รวมของยกเว้นภาษีด้วย เพราะมันก็คือรายได้ แค่ไม่มี VAT)
        คิดแบบ "หักภาษีออกจากยอดจริง" ไม่ใช่บวก subtotal_ex_vat + exempt_amount เพราะสองช่องนั้น
        เป็นภาพนิ่งที่บิลเก่าบางใบยังไม่มี — วิธีนี้ให้ เดบิต = เครดิต เป๊ะเสมอทุกใบ */
@@ -81,15 +94,15 @@ function postCashSaleGl(tenantId, order, userId) {
     centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(order.customer_id)) cust = c; });
 
     var lines = [
-      { accountCode: _cashSaleDebitAccount(order), description: 'รับเงินขายสด ' + (order.order_code || ''),
+      { accountCode: _cashSaleDebitAccount(order), description: 'รับเงินขายสด ' + (order.order_code || '') + _roundSuffix(round),
         debit: total, credit: 0 },
-      { accountCode: GL_ACCT.SALES, description: 'ขายสด ' + (order.order_code || ''), debit: 0, credit: revenue }
+      { accountCode: GL_ACCT.SALES, description: 'ขายสด ' + (order.order_code || '') + _roundSuffix(round), debit: 0, credit: revenue }
     ];
     // ไม่มีภาษี (ลูกค้า/สินค้ายกเว้น) อย่าใส่บรรทัดภาษี 0 ให้รกสมุด
     if (vat > 0) lines.push({ accountCode: GL_ACCT.VAT_OUTPUT, description: 'ภาษีขาย', debit: 0, credit: vat });
 
     var jr = _postJournal({ date: when, source: 'SALES', refType: 'SALES_CASH', refId: refId, tenantId: book,
-      memo: 'ขายสด ' + (order.order_code || '') + ' ' + (order.tax_invoice_no || '') +
+      memo: 'ขายสด ' + (order.order_code || '') + _roundSuffix(round) + ' ' + (src.tax_invoice_no || order.tax_invoice_no || '') +
             (cust ? ' ' + customerFullName(cust) : ''),
       createdBy: userId, lines: lines });
     if (!jr.success) return { posted: false, skipped: jr.message || 'ลงบัญชีไม่สำเร็จ' };
@@ -155,17 +168,33 @@ function backfillCashSaleGl(session, payload) {
   if (st.cashSales !== 'on') return { success: false, message: 'ยังปิดการลงบัญชีขายสดอยู่ — เปิดที่ ตั้งค่าบัญชี ก่อน' };
 
   var pending = [], amount = 0, vatSum = 0;
-  tenantObjectsIfExists(tenantId, 'sales_orders').forEach(function(o) {
-    if (!_isCashSaleForGl(o)) return;
-    var when = _dOnly(o.tax_invoice_at || o.created_at) || '';
+  var orders = {};
+  tenantObjectsIfExists(tenantId, 'sales_orders').forEach(function(o) { orders[String(o.record_id)] = o; });
+  var add = function(o, round) {
+    if (!_isCashSaleForGl(o, round)) return;
+    var src = round || o;
+    var when = _dOnly(src.tax_invoice_at || o.tax_invoice_at || o.created_at) || '';
     if (from && when < from) return;
     if (to && when > to) return;
-    if (_findCashSaleJournal(book, _cashSaleRefId(o))) return;      // ลงไปแล้ว
+    if (_findCashSaleJournal(book, _cashSaleRefId(o, round))) return;      // ลงไปแล้ว
     var v = _orderVat(o);
-    pending.push({ orderId: o.record_id, orderCode: o.order_code || '', taxInvoiceNo: o.tax_invoice_no || '',
-      date: when, total: _money(Number(o.total) || 0), vat: _money(Number(o.vat_amount) || v.vat || 0) });
-    amount += Number(o.total) || 0;
-    vatSum += Number(o.vat_amount) || v.vat || 0;
+    var vat = _money(Number(src.vat_amount) || (round ? 0 : v.vat) || 0);
+    var total = _money(Number(src.total) || 0);
+    if (!(total > 0)) return;
+    pending.push({ orderId: o.record_id, orderCode: o.order_code || '', roundId: round ? round.record_id : '',
+      roundNo: round ? _int(round.round_no) : 0, taxInvoiceNo: String(src.tax_invoice_no || ''),
+      date: when, total: total, vat: vat });
+    amount += total; vatSum += vat;
+  };
+  /* ★ บิลที่แยกรอบ ยอดอยู่ที่รอบ ไม่ใช่ที่หัวบิล — เดินทั้งสองทาง แต่ข้ามหัวบิลของใบที่มีรอบ
+     ไม่งั้นลงทั้งใบหนึ่งครั้ง และลงรายรอบอีกครั้ง = ซ้ำ */
+  tenantObjectsIfExists(tenantId, 'sales_orders').forEach(function(o) {
+    if (saleOrderHasRounds(o)) return;
+    add(o, null);
+  });
+  tenantObjectsIfExists(tenantId, 'delivery_rounds').forEach(function(rd) {
+    var o = orders[String(rd.order_id)];
+    if (o) add(o, rd);
   });
   pending.sort(function(a, b) { return String(a.date).localeCompare(String(b.date)); });
 
@@ -181,9 +210,11 @@ function backfillCashSaleGl(session, payload) {
   /* ★ ลงทีละใบผ่าน postCashSaleGl ตัวเดิม ไม่เขียน journal เองซ้ำอีกชุด —
      ชุดที่สองเมื่อไหร่ วันหนึ่งจะมีคนแก้คู่บัญชีข้างเดียวแล้วสองทางลงไม่ตรงกัน */
   var done = 0, failedRows = [];
+  var roundRows = {};
+  tenantObjectsIfExists(tenantId, 'delivery_rounds').forEach(function(rd) { roundRows[String(rd.record_id)] = rd; });
   pending.forEach(function(p) {
     var o = tenantRowById(tenantId, 'sales_orders', p.orderId);
-    var r = postCashSaleGl(tenantId, o, session.adminUserId);
+    var r = postCashSaleGl(tenantId, o, session.adminUserId, p.roundId ? roundRows[String(p.roundId)] : null);
     if (r && r.posted) done++; else failedRows.push({ orderCode: p.orderCode, reason: (r && (r.skipped || r.error)) || 'ไม่ทราบสาเหตุ' });
   });
   return { success: true, dryRun: false, count: pending.length, posted: done, failed: failedRows.slice(0, 50),
