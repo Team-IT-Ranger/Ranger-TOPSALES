@@ -281,7 +281,8 @@ const po5 = ctx.getPurchaseOrder(MGR, { id: PO5 }).po;
 r = ctx.receiveGoods(MGR, { poId: PO5, receiveDate: '2026-09-27', items: [{ poItemId: po5.items[0].id, qty: 40 }] });
 ok('รับของก่อนทดสอบยกเลิก (40 กล่อง × 5 = 200 ห่อ ต้นทุน/ห่อ = 100/5 = 20)', r);
 eq('  เข้าสต็อกและลงบัญชีถูกต้อง', [ctx.listWarehouseStock(MGR, {}).data.find(s => String(s.productId) === '20'), r.po.status],
-   [{ warehouseId: 1, warehouseName: 'คลังกลาง', productId: '20', productCode: 'P-400', productName: 'ถุงพลาสติก', unit: 'ห่อ', category: 'PACK', subCategory: 'ถุง',
+   /* ★ หน้าคลังบอกหน้าที่ของคลังด้วยตั้งแต่ 23 ต.ค. 2026 — แถวของคลังรอตรวจ/ของเสียจะได้ไม่ถูกอ่านว่าขายได้ */
+   [{ warehouseId: 1, warehouseName: 'คลังกลาง', warehousePurpose: 'sale', warehousePurposeLabel: 'คลังขาย', sellable: true, productId: '20', productCode: 'P-400', productName: 'ถุงพลาสติก', unit: 'ห่อ', category: 'PACK', subCategory: 'ถุง',
       qty: 200, reserved: 0, available: 200, avgCost: 20, value: 4000, updatedAt: '2026-09-23 10:00:00' }, 'received']);
 const GR5 = r.grId, JV5 = r.journalId;
 
@@ -1248,11 +1249,12 @@ console.log('\n── ใบวางบิล ──');
         สองที่ขยับของชิ้นเดียวกัน = สต็อกงอกเป็นสองเท่าโดยไม่มีใครเห็น */
 console.log('\n── ใบรับคืนสินค้า ──');
 {
-  /* ★ นับสต็อกรวมทุกคลังของสินค้านั้น ไม่ผูกกับ scope — กล่องทดสอบกับโค้ดคิด scope ไม่ตรงกัน
-     (`_effectiveTenantId` ในกล่องนี้ไม่คืน 'T1' ตาม payload) และสิ่งที่เทสต์นี้อยากพิสูจน์คือ
-     **ของขยับกี่ชิ้น** ไม่ใช่ขยับที่คลังไหน ซึ่งมีเทสต์ของมันเองอยู่แล้วในหมวดแยกข้อมูลตัวแทน */
-  const stockOf = pid => ctx.centralObjects('warehouse_stock')
-    .filter(r => String(r.product_id) === String(pid))
+  /* ★ นับสต็อกของสินค้านั้น ไม่ผูกกับ scope — กล่องทดสอบกับโค้ดคิด scope ไม่ตรงกัน
+     (`_effectiveTenantId` ในกล่องนี้ไม่คืน 'T1' ตาม payload)
+     ★ ใส่ `wh` ได้ตั้งแต่ 23 ต.ค. 2026 — พอของเสียเข้าคลังของเสียจริง ยอดรวมทุกคลังจะไม่ขยับ
+       เลยพิสูจน์อะไรไม่ได้อีก ต้องดูรายคลังว่าของไปลงถูกที่ */
+  const stockOf = (pid, wh) => ctx.centralObjects('warehouse_stock')
+    .filter(r => String(r.product_id) === String(pid) && (wh === undefined || String(r.warehouse_id) === String(wh)))
     .reduce((s, r) => s + (Number(r.qty) || 0), 0);
 
   const SC2 = ctx._saleStockScope('T1'), WH2 = ctx._ensureScopeWarehouse(SC2);
@@ -1274,13 +1276,48 @@ console.log('\n── ใบรับคืนสินค้า ──');
     ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'damaged',
       lines: [{ itemId: 18001, qty: 99, condition: 'good' }] }).success, false);
 
-  const before = stockOf('80');
+  /* ── คลังปลายทาง (23 ต.ค. 2026) ── */
+  const WH_SCRAP = ctx._ensureWarehouseByPurpose(SC2, 'scrap');
+  const WH_QUAR = ctx._ensureWarehouseByPurpose(SC2, 'quarantine');
+  eq('★ คลังรับคืน/ของเสียถูกสร้างให้เอง และไม่ใช่คลังขาย',
+    [WH_SCRAP !== WH2, WH_QUAR !== WH2, WH_SCRAP !== WH_QUAR,
+      ctx._isSellableWarehouse(ctx._findById('warehouses', WH_SCRAP)),
+      ctx._isSellableWarehouse(ctx._findById('warehouses', WH2))],
+    [true, true, true, false, true]);
+  eq('  เรียกซ้ำได้ ไม่สร้างคลังซ้ำ', ctx._ensureWarehouseByPurpose(SC2, 'scrap'), WH_SCRAP);
+  eq('★★ คลังหลักต้องเป็นคลังขาย — ตั้งคลังของเสียเป็นคลังหลักไม่ได้',
+    ctx.saveWarehouse(FIN, { tenantId: 'T1', id: WH_SCRAP, name: 'คลังของเสีย', purpose: 'scrap', isDefault: true }).success, false);
+  eq('★ คลังตั้งต้นของการขายต้องไม่ใช่คลังของเสีย แม้จะสร้างทีหลัง',
+    ctx._ensureScopeWarehouse(SC2), WH2);
+
+  /* ★ id คลังที่ใช้ในเส้นทางจริงต้องเอามาจาก "ร่างใบรับคืน" ไม่ใช่คำนวณจาก SC2 —
+     กล่องทดสอบนี้คิด scope ไม่ตรงกับโค้ด (ดูหมายเหตุที่ stockOf) คนละ scope คนละคลัง
+     เทสต์ที่คำนวณเองจะพังโดยที่โค้ดจริงถูกต้อง */
+  const d2 = ctx.getGoodsReturnDraft(FIN, { tenantId: 'T1', orderId: 180 });
+  const WSALE = d2.defaultWarehouseId.good, WSCRAP = d2.defaultWarehouseId.damaged,
+        WQUAR = d2.defaultWarehouseId.quarantine;
+  eq('★ ร่างส่งรายการคลังปลายทางมาให้เลือก เรียงคลังขายขึ้นก่อน',
+    [d2.warehouses.length >= 3, d2.warehouses[0].purpose, d2.warehouses[0].sellable,
+      d2.warehouses.map(w => w.purpose).join(',')],
+    [true, 'sale', true, 'sale,quarantine,scrap']);
+  eq('  และบอกค่าตั้งต้นตามสภาพของ (ดี → คลังขาย · ชำรุด/หมดอายุ → คลังของเสีย)',
+    [WSALE === d2.warehouses.filter(w => w.sellable)[0].id,
+      d2.defaultWarehouseId.expired === WSCRAP, WSCRAP !== WSALE, WQUAR !== WSALE],
+    [true, true, true, true]);
+
+  eq('★★ เลือกคลังที่ไม่มีอยู่จริง → ปฏิเสธทั้งใบ (ไม่เงียบๆ ลงคลังตั้งต้นแทน)',
+    ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'damaged',
+      lines: [{ itemId: 18001, qty: 1, condition: 'good', warehouseId: 99999 }] }).success, false);
+
+  const before = stockOf('80', WSALE), beforeScrap = stockOf('80', WSCRAP);
   let r = ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'damaged',
     returnDate: '2026-10-18', note: 'ลูกค้าแจ้งกล่องบุบ',
     lines: [{ itemId: 18001, qty: 2, condition: 'good' }, { itemId: 18001, qty: 1, condition: 'damaged' }] });
   eq('★ รับคืน 2 ลังสภาพดี + 1 ลังชำรุด', [r.success, /^GRN-/.test(r.returnNo || '')], [true, true]);
-  eq('★★ เข้าคลังเฉพาะของสภาพดี (2 ลัง × 10 = 20 ชิ้น) ของเสียไม่เข้า',
-    [stockOf('80') - before, r.restocked, r.scrapQty], [20, 1, 10]);
+  eq('★★ ของดีเข้าคลังขาย 20 ชิ้น · ของเสียเข้าคลังของเสีย 10 ชิ้น (เดิมหายไปจากระบบเลย)',
+    [stockOf('80', WSALE) - before, stockOf('80', WSCRAP) - beforeScrap, r.restockQty, r.scrapQty],
+    [20, 10, 20, 10]);
+  ok('  ข้อความบอกว่าของไปคลังไหนบ้าง', /คลังของเสีย 10 หน่วย/.test(r.message || ''), r.message);
 
   // ── รับคืนซ้ำต้องนับของที่คืนไปแล้ว ──
   d = ctx.getGoodsReturnDraft(FIN, { tenantId: 'T1', orderId: 180 });
@@ -1316,6 +1353,23 @@ console.log('\n── ใบรับคืนสินค้า ──');
   const g = ctx.getGoodsReturn(FIN, { tenantId: 'T1', id: grn.id });
   eq('รายละเอียดใบรับคืน: มีสภาพของแต่ละรายการและธงเข้าคลัง',
     [g.success, g.items.length, g.items[0].restock, g.items[1].restock], [true, 2, true, false]);
+  eq('★ และบอกคลังปลายทางของแต่ละบรรทัด (คนไปตามของต้องรู้ว่าไปหยิบที่ไหน)',
+    [String(g.items[0].warehouseId), String(g.items[1].warehouseId)], [String(WSALE), String(WSCRAP)]);
+
+  /* ── ★★ ของสภาพดีที่ยังไม่ได้ตรวจ → เข้าคลังรอตรวจ: ต้องไม่ถูกนับเป็นของขายได้ ── */
+  const qBefore = stockOf('80', WQUAR), sBefore = stockOf('80', WSALE);
+  r = ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'over_delivery',
+    returnDate: '2026-10-20',
+    lines: [{ itemId: 18001, qty: 2, condition: 'good', warehouseId: WQUAR }] });
+  eq('★★ สภาพดีแต่ส่งเข้าคลังรอตรวจได้ — คลังปลายทางมาจากคนรับ ไม่ได้เดาจากสภาพของ',
+    [r.success, stockOf('80', WQUAR) - qBefore, stockOf('80', WSALE) - sBefore], [true, 20, 0]);
+  eq('★ ยอด "เข้าคลัง/ของเสีย" นับจากคลังที่ของเข้าไปจริง ไม่ใช่จากสภาพของ',
+    [r.restockQty, r.scrapQty], [0, 20]);
+
+  /* ── ยกเลิกต้องหักจากคลังที่ของเข้าไปจริง ไม่ใช่คลังหลักเสมอไป ── */
+  r = ctx.cancelGoodsReturn(FIN, { tenantId: 'T1', id: r.returnId, reason: 'คีย์ผิดคลัง' });
+  eq('★★★ ยกเลิกแล้วหักออกจากคลังรอตรวจ — คลังขายต้องไม่ติดลบ',
+    [r.success, stockOf('80', WQUAR) - qBefore, stockOf('80', WSALE) - sBefore], [true, 0, 0]);
 }
 
 /* ══════════ ยกเลิกใบลดหนี้ / ใบเพิ่มหนี้ (49_credit_notes.gs · 16 ต.ค. 2026) ══════════

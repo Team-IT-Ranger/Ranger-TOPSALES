@@ -74,6 +74,13 @@ const resetData = () => {
         { record_id: 7, product_id: 2, unit_code: 'CT', unit_label: 'ลังเก่า', unit_factor: 999, is_active: 'FALSE' },
         { record_id: 8, product_id: 6, unit_code: 'CT', unit_label: 'ลัง', unit_factor: 6, is_active: 'TRUE' }
       ]),
+      /* ★ คลัง 2 เป็น "คลังของเสีย" — ของในนั้นต้องไม่ถูกนับว่าขายได้ (23 ต.ค. 2026)
+         purpose ว่าง = คลังขาย จึงเขียนแค่ใบที่ไม่ใช่คลังขาย */
+      warehouses: sheet(['record_id', 'tenant_id', 'code', 'name', 'is_active', 'is_default', 'purpose'], [
+        { record_id: 1, tenant_id: '', code: 'MAIN', name: 'คลังกลาง', is_active: 'TRUE', is_default: 'TRUE', purpose: '' },
+        { record_id: 2, tenant_id: '', code: 'SCRAP', name: 'คลังของเสีย', is_active: 'TRUE', is_default: 'FALSE', purpose: 'scrap' },
+        { record_id: 9, tenant_id: 'BDC', code: 'MAIN', name: 'คลังตัวแทน', is_active: 'TRUE', is_default: 'TRUE', purpose: 'sale' }
+      ]),
       warehouse_stock: sheet(['record_id', 'tenant_id', 'warehouse_id', 'product_id', 'qty'], [
         { record_id: 1, tenant_id: '', warehouse_id: 1, product_id: 1, qty: 120 },
         { record_id: 2, tenant_id: '', warehouse_id: 2, product_id: 1, qty: 6 },
@@ -236,8 +243,9 @@ post([msg('U7', 'ยอดขายวันนี้')]);
 ok('ยอดขายวันนี้: รวมทุกตัวแทนของวันนี้เท่านั้น (4 ใบ / 14,840.50)',
   /จำนวนบิล: 4 ใบ/.test(lastText()) && /14,840\.50/.test(lastText()), lastText());
 post([msg('U7', 'สต็อก 10143')]);
-ok('สต็อก: คงเหลือ 126 · จอง 12 · ขายได้จริง 114',
-  /คงเหลือ: 126/.test(lastText()) && /ถูกจอง: 12/.test(lastText()) && /ขายได้จริง: 114/.test(lastText()), lastText());
+/* ★ 120 ไม่ใช่ 126 — คลัง 2 (ของเสีย 6 ชิ้น) ไม่ถูกนับ · เทสต์นี้คือตัวจับว่าตัวกรองคลังยังทำงาน */
+ok('สต็อก: คงเหลือ 120 (ของเสียในคลัง 2 ไม่ถูกนับ) · จอง 12 · ขายได้จริง 108',
+  /คงเหลือ: 120/.test(lastText()) && /ถูกจอง: 12/.test(lastText()) && /ขายได้จริง: 108/.test(lastText()), lastText());
 post([msg('U7', 'ยอดค้างชำระ C1001')]);
 ok('ยอดค้างชำระ: นับเฉพาะ open/partial และหักที่รับมาแล้ว (1,300.00)', /รวมค้างชำระ: 1,300\.00/.test(lastText()), lastText());
 ok('ใบที่เลยกำหนดถูกทำเครื่องหมาย', /INV-1.*เลยกำหนด/.test(lastText()), lastText());
@@ -459,14 +467,14 @@ post([msg('U1', 'ของคงเหลือ TNKI')]);
 m = lastMsgs()[0];
 const rowsOf = flex => flex.contents.body.contents.filter(c => c.type === 'box').slice(1).map(rowOf);
 const own = rowsOf(m);
-eq('★ คลัง = แถว tenant_id ว่าง (126 ชิ้น = 10.5 ลัง) · แถว TNKI 999999 ไม่ถูกนับ',
-  own[0], ['10143 น้ำยาถูพื้น 900ml', '10.5 + 3 = 13.5']);
+eq('★ คลัง = แถว tenant_id ว่าง และ**เฉพาะคลังขาย** (120 ชิ้น = 10 ลัง) · TNKI 999999 กับของเสีย 6 ชิ้นไม่ถูกนับ',
+  own[0], ['10143 น้ำยาถูพื้น 900ml', '10 + 3 = 13']);
 ok('★ สเปรย์กันยุง 90 ชิ้น ÷ 60 = 1.5 (หน่วยที่ปิดใช้งาน factor 999 ไม่ถูกหยิบ)',
   own.some(r => /^10185 /.test(r[0]) && r[1] === '1.5 + 0 = 1.5'), own);
 ok('★ สินค้ายังไม่ยืนยันขนาดบรรจุ: ดอกจันนำหน้ารหัส และไม่หาร (7 ชิ้น)',
   own.some(r => /^\*10999 /.test(r[0]) && r[1] === '7 + 0 = 7'), own);
-eq('★ ยอดรวมลังไม่บวกชิ้นเข้าไป (10.5 + 1.5 = 12)',
-  rowOf(m.contents.footer.contents[1]), ['รวมทั้งหมด (ลัง)', '12 + 3.5 = 15.5']);
+eq('★ ยอดรวมลังไม่บวกชิ้นเข้าไป (10 + 1.5 = 11.5)',
+  rowOf(m.contents.footer.contents[1]), ['รวมทั้งหมด (ลัง)', '11.5 + 3.5 = 15']);
 ok('ยอดรวมท้ายการ์ดตัดบรรทัดได้ (ยาวกว่าแถวข้อมูล ไม่ควรถูกตัดท้ายทิ้ง)',
   m.contents.footer.contents[1].contents[1].wrap === true, m.contents.footer.contents[1].contents[1]);
 ok('เชิงอรรถบอกเรื่องขนาดบรรจุ', JSON.stringify(m.contents.footer).includes('ยังไม่ยืนยันขนาดบรรจุ'), m.contents.footer);
@@ -628,8 +636,8 @@ eq('ยอดรวมห้าบรรทัด', spec.totals.map(t => t[0]),
   ['รวมในคลัง (ลัง)', 'จองให้บิลที่รอจัดส่ง (ลัง)', 'รวมบนรถ (ลัง)',
    'รวมทั้งหมด — ของคงเหลือจริง (ลัง)', 'ขายได้จริง หลังหักที่จองไว้ (ลัง)']);
 eq('★ บรรทัดใหญ่สุดท้ายคือ "ขายได้จริง" ไม่ใช่ของคงเหลือ', spec.totals[4][2], 'grand');
-eq('ของคงเหลือจริงตรงกับที่การ์ดบอก', spec.totals[3][1], '15.5');
-eq('★ ขายได้จริง = คงเหลือ − จอง (15.5 − 1 = 14.5)', spec.totals[4][1], '14.5');
+eq('ของคงเหลือจริงตรงกับที่การ์ดบอก', spec.totals[3][1], '15');
+eq('★ ขายได้จริง = คงเหลือ − จอง (15 − 1 = 14)', spec.totals[4][1], '14');
 ok('ดอกจันนำหน้ารหัสของแถวที่ยังไม่ยืนยันขนาดบรรจุ และหน่วยเป็นชิ้น',
   spec.rows.some(r => r.code === '*10999' && r.unit === 'ชิ้น'), spec.rows);
 ok('เชิงอรรถอธิบายคอลัมน์คลัง/บนรถ', /คลัง = ของในคลัง/.test(spec.note), spec.note);

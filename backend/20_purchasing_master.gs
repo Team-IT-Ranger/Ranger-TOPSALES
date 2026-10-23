@@ -147,8 +147,42 @@ function saveVendor(session, payload) {
 
 /* ═══════════════ คลังสินค้ากลาง (warehouses) ═══════════════ */
 
+/* ═══════ หน้าที่ของคลัง (23 ต.ค. 2026) ═══════
+ * ★★ ของที่รับคืนจากร้านไม่ได้กลับไปขายต่อทุกชิ้น — บางชิ้นต้องรอตรวจ บางชิ้นเป็นของเสียแน่นอน
+ *   เดิมมีคลังเดียว ของดีเข้าคลังขาย ส่วนของเสีย**หายไปจากระบบเลย** (มีแค่ตัวเลข scrap_qty ในใบ)
+ *   ของจริงยังกองอยู่หลังร้าน แต่ไม่มีใบไหนบอกว่าอยู่ที่ไหนเท่าไร
+ * ★ `purpose` ว่าง = `sale` → คลังเดิมทุกใบยังเป็นคลังขายเหมือนเดิม ไม่ต้องแปลงข้อมูลอะไรเลย
+ * ★★★ **คลังที่ไม่ใช่ `sale` ต้องไม่ถูกนับเป็นของขายได้** — ที่ไหนที่รวมยอดข้ามคลังต้องกรองด้วย
+ *   `_isSellableWarehouse()` เสมอ (หน้าคลัง · บอท · ทุกที่ที่จะเพิ่มทีหลัง) ลืมที่เดียว = ของเสีย
+ *   โผล่เป็นของขายได้โดยไม่มีอะไรฟ้อง */
+var WH_PURPOSES = {
+  sale:       'คลังขาย',
+  quarantine: 'คลังรับคืน (รอตรวจ)',
+  scrap:      'คลังของเสีย'
+};
+function _whPurpose(w) {
+  var p = String((w && w.purpose) || '').trim();
+  return WH_PURPOSES[p] ? p : 'sale';
+}
+/** คลังนี้เอาของไปขายได้ไหม — ตัวเดียวที่ทุกที่ต้องถาม ห้ามเทียบ purpose เป็นสตริงเอง */
+function _isSellableWarehouse(w) { return _whPurpose(w) === 'sale'; }
+
+/** คลังรับคืน/ของเสียของ scope นี้ สร้างให้ครั้งแรกที่ใช้ (แบบเดียวกับ _ensureScopeWarehouse) */
+function _ensureWarehouseByPurpose(scope, purpose) {
+  var ws = _scoped('warehouses', scope), hit = null;
+  ws.forEach(function(w) { if (!hit && _whPurpose(w) === purpose && _isTrue(w.is_active)) hit = w; });
+  if (hit) return hit.record_id;
+  var id = centralNextId('warehouses');
+  centralAppend('warehouses', { record_id: id, tenant_id: scope || '',
+    code: purpose === 'scrap' ? 'SCRAP' : 'RETURN', name: WH_PURPOSES[purpose],
+    address: '', is_active: 'TRUE', is_default: 'FALSE', purpose: purpose, created_at: nowStr() });
+  return id;
+}
+
 function _warehouseDto(w) {
-  return { id: w.record_id, code: w.code || '', name: w.name, address: w.address || '', isActive: _isTrue(w.is_active), isDefault: _isTrue(w.is_default) };
+  return { id: w.record_id, code: w.code || '', name: w.name, address: w.address || '',
+    isActive: _isTrue(w.is_active), isDefault: _isTrue(w.is_default),
+    purpose: _whPurpose(w), purposeLabel: WH_PURPOSES[_whPurpose(w)], sellable: _isSellableWarehouse(w) };
 }
 function listWarehouses(session, payload) {
   var err = _requirePermission(session, 'inventory', 'view'); if (err) return err;
@@ -162,7 +196,13 @@ function saveWarehouse(session, payload) {
   if (!name) return { success: false, message: 'กรุณาระบุชื่อคลัง' };
   var scope = _purchaseScope(session, payload);
   return _withDocLock(function() {
+    var purpose = WH_PURPOSES[String(payload.purpose || '')] ? String(payload.purpose) : 'sale';
+    /* ★ คลังหลัก = คลังที่ระบบตัดของตอนขาย จึงต้องเป็นคลังขายเสมอ
+       ตั้งคลังของเสียเป็นคลังหลักได้เมื่อไหร่ บิลถัดไปจะไปตัดของจากกองของเสีย */
+    if (payload.isDefault && purpose !== 'sale')
+      return { success: false, message: 'คลังหลักต้องเป็นคลังขาย — ' + WH_PURPOSES[purpose] + 'ตั้งเป็นคลังหลักไม่ได้' };
     var fields = { code: String(payload.code || '').trim(), name: name, address: String(payload.address || '').trim(),
+      purpose: purpose,
       is_active: payload.isActive === false ? 'FALSE' : 'TRUE', is_default: payload.isDefault ? 'TRUE' : 'FALSE' };
     // คลังหลักมีได้แห่งเดียวต่อบริษัท
     if (payload.isDefault) _scoped('warehouses', scope).forEach(function(w) {
@@ -180,8 +220,16 @@ function saveWarehouse(session, payload) {
     return { success: true, warehouse: _warehouseDto(fields) };
   });
 }
+/** คลังที่ขายของได้ทั้งหมดของ scope นี้ (ชุด id) — ใช้กรองตอนรวมยอดข้ามคลัง */
+function _sellableWarehouseIds(scope) {
+  var set = {};
+  _scoped('warehouses', scope).forEach(function(w) { if (_isSellableWarehouse(w)) set[String(w.record_id)] = true; });
+  return set;
+}
 function _defaultWarehouseId(scope) {
-  var ws = _scoped('warehouses', scope);
+  /* ★ คลังที่ไม่ใช่คลังขายต้องไม่ถูกหยิบมาเป็นคลังตั้งต้น แม้จะเป็นใบแรกในระบบ —
+     ไม่งั้นตัวแทนที่เพิ่งสร้างคลังของเสียก่อนจะได้คลังนั้นเป็นที่ตัดของตอนขาย */
+  var ws = _scoped('warehouses', scope).filter(_isSellableWarehouse);
   for (var i = 0; i < ws.length; i++) if (_isTrue(ws[i].is_default)) return ws[i].record_id;
   return ws.length ? ws[0].record_id : null;
 }

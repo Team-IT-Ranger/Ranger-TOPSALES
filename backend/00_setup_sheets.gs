@@ -176,7 +176,8 @@ var CENTRAL_SHEETS = {
   // tenant_id ในกลุ่มตารางงานซื้อ/คลัง: ว่าง = ของบริษัทเจ้าของสินค้า · มีค่า = ของตัวแทนรายนั้น (ข้อมูลไม่ปนกัน)
   vendors: ['record_id','tenant_id','vendor_code','name','tax_id','branch_code','contact_name','phone','email','address',
     'payment_terms_days','credit_limit','bank_name','bank_account_no','is_active','note','created_at'],
-  warehouses: ['record_id','tenant_id','code','name','address','is_active','is_default','created_at'],
+  /* purpose = หน้าที่ของคลัง · ว่าง = 'sale' (ของเดิมทุกคลังจึงเป็นคลังขายเหมือนเดิม ไม่ต้อง migrate) */
+  warehouses: ['record_id','tenant_id','code','name','address','is_active','is_default','created_at','purpose'],
   // ยอดคงเหลือต่อคลัง+สินค้า (หน่วยฐาน) · avg_cost = ต้นทุนเฉลี่ยถ่วงน้ำหนัก อัปเดตตอนรับของ
   warehouse_stock: ['record_id','tenant_id','warehouse_id','product_id','qty','avg_cost','updated_at'],
   // บัญชีคุมการเคลื่อนไหวสต็อกคลัง (ledger) — 1 แถว = 1 การเคลื่อนไหว ย้อนรอยได้เสมอ
@@ -270,8 +271,9 @@ var CENTRAL_SHEETS = {
   goods_returns: ['record_id','tenant_id','return_no','sales_order_id','order_code','customer_id',
     'return_date','reason_code','reason','item_count','amount','restock_qty','scrap_qty',
     'credit_note_id','status','note','received_by','created_at'],
+  /* warehouse_id = คลังปลายทางที่ของบรรทัดนี้เข้าไปจริง (ว่าง = แถวเก่าก่อน 23 ต.ค. 2026) */
   goods_return_items: ['record_id','return_id','order_item_id','product_id','unit_code','unit_factor',
-    'qty','base_qty','condition','restock','unit_price','amount','tax_status'],
+    'qty','base_qty','condition','restock','unit_price','amount','tax_status','warehouse_id'],
   billing_notes: ['record_id','tenant_id','note_no','customer_id','note_date','due_date',
     'invoice_count','total','status','note','created_by','created_at'],
   billing_note_items: ['record_id','note_id','invoice_id','invoice_no','invoice_date','due_date','amount'],

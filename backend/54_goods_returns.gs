@@ -23,8 +23,11 @@ var GRN_REASONS = {
   not_ordered: 'ร้านไม่ได้สั่ง',
   other: 'อื่นๆ'
 };
-/* สภาพของที่รับคืน — **ตัวที่ตัดสินว่าของกลับเข้าคลังขายได้หรือไม่**
-   ★ ของเสียที่รับคืนมาต้องไม่เข้าคลังขาย ไม่งั้นมันจะถูกขายออกไปอีกรอบ */
+/* สภาพของที่รับคืน — **บันทึกคุณภาพ** ของที่คนรับหน้างานเห็น
+   ★★ ตั้งแต่ 23 ต.ค. 2026 สภาพของ **ไม่ใช่** ตัวตัดสินว่าของไปอยู่คลังไหนอีกแล้ว — คนรับเลือก
+     "คลังปลายทาง" เองรายบรรทัด (คลังขาย / คลังรับคืนรอตรวจ / คลังของเสีย) เพราะของสภาพดีที่ยัง
+     ไม่ได้ตรวจก็มี และของที่ดูชำรุดแต่ซ่อมแล้วขายได้ก็มี · `restock` ที่นี่เหลือเป็นแค่ **ค่าตั้งต้น**
+     ว่าหน้าจอควรเลือกคลังไหนให้ก่อน */
 var GRN_CONDITIONS = {
   good:    { label: 'สภาพดี ขายต่อได้', restock: true },
   damaged: { label: 'ชำรุด/เสียหาย',   restock: false },
@@ -80,16 +83,33 @@ function getGoodsReturnDraft(session, payload) {
       taxStatus: String(it.tax_status || '') || TAX_VAT, isFree: String(it.is_free) === '1' });
   });
 
+  /* ★ คลังปลายทางที่เลือกได้ — สร้างคลังรับคืน/ของเสียให้ครั้งแรกที่เปิดฟอร์ม จะได้ไม่ต้องไปตั้งค่าก่อน
+     เรียงคลังขายขึ้นก่อนเสมอ เพราะเป็นตัวที่เลือกบ่อยที่สุด */
+  var scope = _saleStockScope(tenantId);
+  var saleWhId = _ensureScopeWarehouse(scope);
+  var quarantineId = _ensureWarehouseByPurpose(scope, 'quarantine');
+  var scrapId = _ensureWarehouseByPurpose(scope, 'scrap');
+  var ORDER = { sale: 0, quarantine: 1, scrap: 2 };
+  var dests = _scoped('warehouses', scope).filter(function(w) { return _isTrue(w.is_active); })
+    .map(function(w) {
+      return { id: w.record_id, name: w.name, code: w.code || '', purpose: _whPurpose(w),
+        purposeLabel: WH_PURPOSES[_whPurpose(w)], sellable: _isSellableWarehouse(w) };
+    });
+  dests.sort(function(a, b) { return (ORDER[a.purpose] - ORDER[b.purpose]) || (a.id - b.id); });
+
   return { success: true, reasons: GRN_REASONS,
     conditions: Object.keys(GRN_CONDITIONS).map(function(k) {
       return { code: k, label: GRN_CONDITIONS[k].label, restock: GRN_CONDITIONS[k].restock };
     }),
+    warehouses: dests,
+    defaultWarehouseId: { good: saleWhId, damaged: scrapId, expired: scrapId, quarantine: quarantineId },
     order: { id: order.record_id, orderCode: order.order_code, customerId: order.customer_id,
       status: order.status, taxInvoiceNo: order.tax_invoice_no || '' },
     lines: lines };
 }
 
-/** payload: { orderId, returnDate?, reasonCode, reason?, note?, lines:[{itemId, qty, condition}] } */
+/** payload: { orderId, returnDate?, reasonCode, reason?, note?, lines:[{itemId, qty, condition, warehouseId}] }
+ *  ★ `warehouseId` ว่าง = ใช้ค่าตั้งต้นตามสภาพของ (ของเดิมที่ยังไม่ส่งค่ามาจึงทำงานเหมือนเดิม) */
 function createGoodsReturn(session, payload) {
   var err = _requirePermission(session, 'sales', 'edit'); if (err) return err;
   payload = payload || {};
@@ -108,6 +128,9 @@ function createGoodsReturn(session, payload) {
     if (!draft.success) return draft;
     var byItem = {};
     draft.lines.forEach(function(l) { byItem[String(l.itemId)] = l; });
+    var scope = _saleStockScope(tenantId);
+    var whById = {}, defaultDest = draft.defaultWarehouseId;
+    _scoped('warehouses', scope).forEach(function(w) { if (_isTrue(w.is_active)) whById[String(w.record_id)] = w; });
 
     var picked = [], amount = 0;
     (payload.lines || []).forEach(function(l) {
@@ -122,19 +145,24 @@ function createGoodsReturn(session, payload) {
         return;
       }
       var cond = GRN_CONDITIONS[String(l.condition)] ? String(l.condition) : 'good';
+      /* ★ คลังปลายทางมาจากคนรับ ไม่ได้เดาจากสภาพของ · ส่งมาเป็นคลังนอก scope หรือคลังที่ปิดใช้งานแล้ว
+         = ปฏิเสธทั้งใบ ไม่เงียบๆ ไปลงคลังตั้งต้นแทน (ของจะไปกองผิดที่โดยไม่มีใครรู้) */
+      var destId = String(l.warehouseId || '') || String(defaultDest[cond] || defaultDest.good);
+      if (!whById[destId]) { picked = null; return; }
       picked.push({ src: src, qty: qty, condition: cond, baseQty: qty * (src.unitFactor || 1),
+        warehouseId: destId, sellable: _isSellableWarehouse(whById[destId]),
         amount: _money(qty * src.unitPrice) });
       amount += qty * src.unitPrice;
     });
-    if (picked === null) return { success: false, message: 'รับคืนเกินจำนวนที่ส่งไปแล้ว' };
+    if (picked === null) return { success: false, message: 'รับคืนเกินจำนวนที่ส่งไปแล้ว หรือเลือกคลังปลายทางที่ใช้ไม่ได้' };
     if (!picked.length) return { success: false, message: 'ต้องมีรายการอย่างน้อย 1 รายการ' };
 
     var returnId = centralNextId('goods_returns');
     var returnNo = _nextCentralDocNo('GRN', _normBook(tenantId) || undefined);
+    /* ★ นับจาก "คลังที่ของเข้าไปจริง" ไม่ใช่จากสภาพของ — คนรับอาจส่งของสภาพดีเข้าคลังรอตรวจ
+       ตัวเลขสองตัวนี้ไปโผล่ในรายการและบนเอกสาร ต้องตรงกับของที่ขายได้จริง */
     var restockQty = 0, scrapQty = 0;
-    picked.forEach(function(p) {
-      if (GRN_CONDITIONS[p.condition].restock) restockQty += p.baseQty; else scrapQty += p.baseQty;
-    });
+    picked.forEach(function(p) { if (p.sellable) restockQty += p.baseQty; else scrapQty += p.baseQty; });
 
     centralAppend('goods_returns', { record_id: returnId, tenant_id: tenantId || '', return_no: returnNo,
       sales_order_id: order.record_id, order_code: order.order_code, customer_id: order.customer_id,
@@ -146,30 +174,35 @@ function createGoodsReturn(session, payload) {
     centralAppendMany('goods_return_items', picked.map(function(p, i) {
       return { record_id: itemId + i, return_id: returnId, order_item_id: p.src.itemId,
         product_id: p.src.productId, unit_code: p.src.unitCode, unit_factor: p.src.unitFactor,
-        qty: p.qty, base_qty: p.baseQty, condition: p.condition,
-        restock: GRN_CONDITIONS[p.condition].restock ? 'TRUE' : 'FALSE',
+        qty: p.qty, base_qty: p.baseQty, condition: p.condition, warehouse_id: p.warehouseId,
+        restock: p.sellable ? 'TRUE' : 'FALSE',
         unit_price: p.src.unitPrice, amount: p.amount, tax_status: p.src.taxStatus };
     }));
 
-    /* ★★ ของกลับเข้าคลัง **เฉพาะตัวที่สภาพดี** — ของเสีย/หมดอายุเข้าคลังขายไม่ได้
-       ไม่งั้นมันจะถูกหยิบไปขายอีกรอบ · ของเสียบันทึกไว้ในใบ (scrap_qty) ให้ตามไปทำลายต่อ */
-    var moved = 0;
-    var scope = _saleStockScope(tenantId), warehouseId = _ensureScopeWarehouse(scope);
+    /* ★★ ของเข้าคลัง **ทุกบรรทัด** ตามคลังที่คนรับเลือก (23 ต.ค. 2026)
+       เดิมของเสียไม่ถูกบันทึกเข้าคลังไหนเลย เหลือแค่ตัวเลข scrap_qty ในใบ — ของจริงยังกองอยู่หลังร้าน
+       แต่ไม่มีใบไหนบอกว่าอยู่ที่ไหนเท่าไร ตรวจนับทีก็อธิบายไม่ได้ว่าของส่วนเกินมาจากไหน
+       ★ ของที่เข้าคลังที่ไม่ใช่คลังขาย **ไม่ถูกนับเป็นของขายได้** เพราะการขายตัดจากคลังหลักเท่านั้น
+         (`_ensureScopeWarehouse`) และทุกที่ที่รวมยอดข้ามคลังกรองด้วย `_isSellableWarehouse()` */
+    var moved = 0, byWh = {};
     var cost = {};
     _scoped('warehouse_stock', scope).forEach(function(r) {
-      if (String(r.warehouse_id) === String(warehouseId)) cost[String(r.product_id)] = Number(r.avg_cost) || 0;
+      // ต้นทุนอ้างจากคลังขายเสมอ — ของที่เข้าคลังรอตรวจ/ของเสียต้องตีมูลค่าเท่าของเดิม ไม่ใช่ศูนย์
+      if (String(r.warehouse_id) === String(defaultDest.good)) cost[String(r.product_id)] = Number(r.avg_cost) || 0;
     });
     picked.forEach(function(p) {
-      if (!GRN_CONDITIONS[p.condition].restock) return;
-      _applyStockIn(scope, warehouseId, p.src.productId, p.baseQty, cost[String(p.src.productId)] || 0,
+      _applyStockIn(scope, p.warehouseId, p.src.productId, p.baseQty, cost[String(p.src.productId)] || 0,
         'sale_return', 'GOODS_RETURN', returnId, returnNo + ': ' + reason, session.adminUserId);
       moved++;
+      var nm = (whById[String(p.warehouseId)] || {}).name || '';
+      byWh[nm] = (byWh[nm] || 0) + p.baseQty;
     });
 
     return { success: true, returnId: returnId, returnNo: returnNo, amount: _money(amount),
-      restocked: moved, scrapQty: scrapQty,
-      message: 'รับคืนสินค้า ' + returnNo + ' · เข้าคลัง ' + moved + ' รายการ' +
-        (scrapQty ? ' · ของเสีย ' + scrapQty + ' หน่วย (ไม่เข้าคลัง)' : '') };
+      restocked: moved, restockQty: restockQty, scrapQty: scrapQty,
+      message: 'รับคืนสินค้า ' + returnNo + ' · ' + Object.keys(byWh).map(function(k) {
+        return k + ' ' + byWh[k] + ' หน่วย';
+      }).join(' · ') };
   });
 }
 
@@ -206,6 +239,9 @@ function getGoodsReturn(session, payload) {
 
   var products = {};
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
+  // ★ ชื่อคลังปลายทางต้องอยู่บนเอกสาร — เป็นสิ่งที่คนไปตามของต้องรู้ว่าไปหยิบที่ไหน
+  var whName = {};
+  centralObjects('warehouses').forEach(function(w) { whName[String(w.record_id)] = w.name; });
   var customer = null;
   centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(g.customer_id)) customer = c; });
   var items = centralObjects('goods_return_items').filter(function(it) {
@@ -215,7 +251,9 @@ function getGoodsReturn(session, payload) {
     return { productId: it.product_id, productCode: p.product_code || '', productName: p.name || '',
       unitCode: it.unit_code || '', qty: Number(it.qty) || 0, condition: it.condition || 'good',
       conditionLabel: (GRN_CONDITIONS[String(it.condition)] || {}).label || it.condition,
-      restock: isFlagOn(it.restock), unitPrice: _money(Number(it.unit_price) || 0),
+      restock: isFlagOn(it.restock), warehouseId: it.warehouse_id || '',
+      warehouseName: whName[String(it.warehouse_id)] || (isFlagOn(it.restock) ? 'คลังขาย' : '—'),
+      unitPrice: _money(Number(it.unit_price) || 0),
       amount: _money(Number(it.amount) || 0), taxStatus: it.tax_status || TAX_VAT, itemId: it.order_item_id };
   });
   return { success: true,
@@ -290,8 +328,13 @@ function cancelGoodsReturn(session, payload) {
     });
     centralObjects('goods_return_items').forEach(function(it) {
       if (String(it.return_id) !== String(g.record_id)) return;
-      if (!isFlagOn(it.restock)) return;                  // ของเสียไม่เคยเข้าคลัง ไม่ต้องหักออก
-      _applyStockIn(scope, warehouseId, it.product_id, -(Number(it.base_qty) || 0),
+      /* ★★ หักออกจาก **คลังที่ของเข้าไปจริง** ไม่ใช่คลังหลักเสมอไป — หักผิดคลังคือสร้างของขึ้นมา
+         จากอากาศในคลังหนึ่งและทำให้อีกคลังติดลบ สองแผลพร้อมกันโดยตัวเลขรวมยังดูถูก
+         ★ แถวเก่าก่อน 23 ต.ค. 2026 ไม่มี `warehouse_id` — ตอนนั้นมีแต่ของสภาพดีที่เข้าคลังหลัก
+           จึงหักจากคลังหลักตามเดิม ส่วนของเสียไม่เคยเข้าคลัง ข้ามไป */
+      var wh = String(it.warehouse_id || '');
+      if (!wh) { if (!isFlagOn(it.restock)) return; wh = warehouseId; }
+      _applyStockIn(scope, wh, it.product_id, -(Number(it.base_qty) || 0),
         cost[String(it.product_id)] || 0, 'sale_out', 'GOODS_RETURN', g.record_id,
         'ยกเลิกใบรับคืน ' + g.return_no, session.adminUserId);
     });

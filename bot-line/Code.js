@@ -236,8 +236,11 @@ function answerStock_(query) {
   if (!product) return 'ไม่พบสินค้ารหัสหรือชื่อ "' + query + '" ในระบบครับ';
 
   var onHand = 0;
+  var sellableWh = sellableWarehouses_('');
   sheetObjects_(prodSheet_('warehouse_stock')).forEach(function(s) {
-    if (String(s.tenant_id || '') === '' && String(s.product_id) === String(product.record_id)) onHand += Number(s.qty) || 0;
+    if (String(s.tenant_id || '') !== '' || String(s.product_id) !== String(product.record_id)) return;
+    if (sellableWh && !sellableWh[String(s.warehouse_id)]) return;   // ของรอตรวจ/ของเสีย ไม่ใช่ของที่ขายได้
+    onHand += Number(s.qty) || 0;
   });
 
   var reserved = 0;
@@ -556,8 +559,10 @@ function botInventorySnapshot_(tenantId, limit) {
     if (!acc[k]) acc[k] = { wh: 0, van: 0, res: 0 };
     return acc[k];
   }
+  var sellableWh = sellableWarehouses_(whScope);
   sheetObjects_(prodSheet_('warehouse_stock')).forEach(function(r) {
     if (String(r.tenant_id || '') !== whScope) return;
+    if (sellableWh && !sellableWh[String(r.warehouse_id)]) return;   // ของรอตรวจ/ของเสีย ไม่ใช่ของที่ขายได้
     bucket(r.product_id).wh += Number(r.qty) || 0;
   });
 
@@ -1532,6 +1537,25 @@ function sheetObjects_(sh) {
 
 // ── การเข้าถึง Central Sheet ──
 function prodSheet_(sheetName) { return sheetByName_(prodFileId_(), sheetName); }
+
+/* ★★ คลังที่ขายของได้เท่านั้น (23 ต.ค. 2026) — ตั้งแต่มีคลังรับคืนรอตรวจกับคลังของเสีย
+   (`warehouses.purpose` · backend/20_purchasing_master.gs) การรวม `warehouse_stock` ทุกแถว
+   จะนับของเสียเป็นของขายได้ แล้วบอทจะตอบว่ามีของ ทั้งที่ของกองนั้นรอทำลายอยู่
+   ★ `purpose` ว่าง = คลังขาย — คลังเดิมทุกใบจึงยังถูกนับเหมือนเดิม ไม่ต้องแปลงข้อมูล */
+function sellableWarehouses_(tenantScope) {
+  /* ★ อ่านชีต warehouses ไม่ได้ = ไม่รู้ จึง **ไม่กรองเลย** (คืน null) ดีกว่ากรองทิ้งหมดแล้วบอทตอบว่า
+     ของเป็นศูนย์ทั้งระบบ · `sheetByName_` โยน error เมื่อไม่พบชีต จึงต้องดักไว้ ไม่ใช่เช็ค null
+     · ตัวเรียกทุกตัวต้องเช็ค null ก่อนใช้ */
+  var rows;
+  try { rows = sheetObjects_(prodSheet_('warehouses')); } catch (e) { return null; }
+  var set = {};
+  rows.forEach(function(w) {
+    if (String(w.tenant_id || '') !== String(tenantScope || '')) return;
+    var p = String(w.purpose || '').trim();
+    if (p === '' || p === 'sale') set[String(w.record_id)] = true;
+  });
+  return set;
+}
 function uatSheet_(sheetName) { return sheetByName_(uatFileId_(), sheetName); }
 
 function sheetByName_(fileId, sheetName) {

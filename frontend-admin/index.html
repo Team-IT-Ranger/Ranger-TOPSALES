@@ -9164,51 +9164,78 @@ async function openGoodsReturnForm(orderId){
   GRN_DRAFT = d;
   const today = new Date().toISOString().slice(0, 10);
   plModal('<h3>รับคืนสินค้า — บิล ' + esc(d.order.orderCode) + '</h3>' +
-    '<p class="form-hint">ใส่จำนวนที่รับคืนจริงและ<b>สภาพของ</b> — ' +
-      '<b>ของสภาพดีเข้าคลังขายต่อได้ · ของเสีย/หมดอายุไม่เข้าคลัง</b> (จะได้ไม่ถูกหยิบไปขายอีกรอบ)</p>' +
+    '<p class="form-hint">ใส่จำนวนที่รับคืนจริง · <b>สภาพของ</b> (บันทึกไว้บนเอกสาร) · และ<b>คลังปลายทาง</b> ' +
+      'ที่ของเข้าไปจริง — เลือกคลังให้แล้วตามสภาพของ แต่เปลี่ยนเองได้ทุกบรรทัด ' +
+      '(ของสภาพดีที่ยังไม่ได้ตรวจ ใส่คลังรับคืนรอตรวจไว้ก่อนได้) · ' +
+      '<b>เฉพาะของในคลังขายเท่านั้นที่ถูกนับว่าขายได้</b></p>' +
     '<div class="form-grid g2">' +
       plField('เหตุผลที่รับคืน', '<select id="grn-reason">' +
         Object.keys(d.reasons).map(k => '<option value="'+k+'">'+esc(d.reasons[k])+'</option>').join('') + '</select>') +
       plField('วันที่รับคืน', '<input type="date" id="grn-date" value="'+today+'">') +
     '</div>' +
     '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
-      '<th>ส่งไป</th><th>คืนแล้ว</th><th>รับคืนครั้งนี้</th><th>สภาพ</th></tr></thead><tbody>' +
+      '<th>ส่งไป</th><th>คืนแล้ว</th><th>รับคืนครั้งนี้</th><th>สภาพ</th><th>เข้าคลัง</th></tr></thead><tbody>' +
       d.lines.map((l, i) =>
         '<tr><td class="mono-data">'+esc(l.productCode || '-')+'</td><td class="wrap">'+esc(l.productName)+'</td>' +
         '<td class="mono-data">'+esc(l.unitCode)+'</td><td class="mono-data">'+l.shipped+'</td>' +
         '<td class="mono-data">'+(l.returned || '—')+'</td>' +
         '<td><input type="number" class="grn-qty" data-i="'+i+'" min="0" max="'+l.returnable+'" step="1" value="0" ' +
           'style="width:80px" oninput="grnRecalc()"></td>' +
-        '<td><select class="grn-cond" data-i="'+i+'" onchange="grnRecalc()">' +
-          d.conditions.map(c => '<option value="'+c.code+'">'+esc(c.label)+'</option>').join('') + '</select></td></tr>').join('') +
+        /* ★ เปลี่ยนสภาพของแล้วคลังปลายทางขยับตามให้ (grnCondChanged) แต่ไม่ทับถ้าคนตั้งใจเลือกเอง —
+           ของสภาพดีที่ต้องรอตรวจ กับของชำรุดที่ซ่อมแล้วขายได้ มีจริงทั้งคู่ */
+        '<td><select class="grn-cond" data-i="'+i+'" onchange="grnCondChanged('+i+')">' +
+          d.conditions.map(c => '<option value="'+c.code+'">'+esc(c.label)+'</option>').join('') + '</select></td>' +
+        '<td><select class="grn-wh" data-i="'+i+'" onchange="grnWhPicked('+i+')">' +
+          (d.warehouses || []).map(w => '<option value="'+w.id+'"' +
+            (String(w.id) === String((d.defaultWarehouseId || {}).good) ? ' selected' : '') + '>' +
+            esc(w.name) + (w.sellable ? '' : ' — ไม่นับเป็นของขายได้') + '</option>').join('') +
+          '</select></td></tr>').join('') +
       '</tbody></table></div>' +
     plField('หมายเหตุ', '<input id="grn-note" placeholder="เช่น ลูกค้าแจ้งกล่องบุบตอนรับของ">') +
     '<div id="grn-total" class="form-hint" style="margin-top:8px"></div>' +
     plModalActions('plBusy(grnSave)', '✓ รับคืนสินค้า'));
   grnRecalc();
 }
+/* บรรทัดที่คนเลือกคลังเองแล้ว — เปลี่ยนสภาพของทีหลังจะไม่ไปทับที่เขาเลือกไว้ */
+const GRN_WH_TOUCHED = {};
+function grnWhPicked(i){ GRN_WH_TOUCHED[i] = true; grnRecalc(); }
+function grnCondChanged(i){
+  const sel = document.querySelector('.grn-wh[data-i="'+i+'"]');
+  const cond = document.querySelector('.grn-cond[data-i="'+i+'"]');
+  const def = (GRN_DRAFT && GRN_DRAFT.defaultWarehouseId) || {};
+  if (sel && cond && !GRN_WH_TOUCHED[i] && def[cond.value]) sel.value = String(def[cond.value]);
+  grnRecalc();
+}
 function grnRecalc(){
   if (!GRN_DRAFT) return;
-  let amount = 0, restock = 0, scrap = 0;
+  const whById = {};
+  (GRN_DRAFT.warehouses || []).forEach(w => { whById[String(w.id)] = w; });
+  let amount = 0, byWh = {}, scrap = 0;
   document.querySelectorAll('.grn-qty').forEach(inp => {
     const i = Number(inp.dataset.i), l = GRN_DRAFT.lines[i];
     const qty = Math.min(Math.max(0, parseFloat(inp.value) || 0), l.returnable);
-    const cond = document.querySelector('.grn-cond[data-i="'+i+'"]').value;
-    const c = GRN_DRAFT.conditions.find(x => x.code === cond) || {};
+    if (!(qty > 0)) return;
     amount += qty * l.unitPrice;
-    if (c.restock) restock += qty * (l.unitFactor || 1); else scrap += qty * (l.unitFactor || 1);
+    /* ★ สรุปตาม "คลังที่ของเข้าไปจริง" ไม่ใช่ตามสภาพของ — ต้องตรงกับที่ backend บันทึก
+       ไม่งั้นหน้าจอบอกอย่าง ใบที่ออกมาบอกอีกอย่าง */
+    const sel = document.querySelector('.grn-wh[data-i="'+i+'"]');
+    const w = whById[String(sel && sel.value)] || {};
+    const base = qty * (l.unitFactor || 1);
+    byWh[w.name || '—'] = (byWh[w.name || '—'] || 0) + base;
+    if (!w.sellable) scrap += base;
   });
   const box = document.getElementById('grn-total');
   if (box) box.innerHTML = 'มูลค่าที่รับคืน <b>฿' + bahtPlain(amount) + '</b>' +
-    ' · เข้าคลัง <b>' + restock + '</b> หน่วย' +
-    (scrap ? ' · <span style="color:var(--orange)">ของเสีย <b>' + scrap + '</b> หน่วย (ไม่เข้าคลัง)</span>' : '');
+    (Object.keys(byWh).length ? ' · ' + Object.keys(byWh).map(k => esc(k) + ' <b>' + byWh[k] + '</b> หน่วย').join(' · ') : '') +
+    (scrap ? ' · <span style="color:var(--orange)">ไม่นับเป็นของขายได้ <b>' + scrap + '</b> หน่วย</span>' : '');
 }
 async function grnSave(){
   if (!GRN_DRAFT) return;
   const lines = [...document.querySelectorAll('.grn-qty')].map(inp => {
     const i = Number(inp.dataset.i), l = GRN_DRAFT.lines[i];
     return { itemId: l.itemId, qty: Math.min(Math.max(0, parseFloat(inp.value) || 0), l.returnable),
-      condition: document.querySelector('.grn-cond[data-i="'+i+'"]').value };
+      condition: document.querySelector('.grn-cond[data-i="'+i+'"]').value,
+      warehouseId: (document.querySelector('.grn-wh[data-i="'+i+'"]') || {}).value || '' };
   }).filter(l => l.qty > 0);
   if (!lines.length) { plModalErr('ใส่จำนวนที่รับคืนอย่างน้อย 1 รายการ'); return; }
   const r = await callApi('createGoodsReturn', { orderId: GRN_DRAFT.order.id,
@@ -9255,16 +9282,18 @@ async function printGoodsReturn(id){
       { label: 'หน่วย', align: 'c', width: '10%', value: l => l.unitCode || '-' },
       { label: 'จำนวน', align: 'r', width: '10%', value: l => String(l.qty) },
       /* ★ สภาพของต้องอยู่บนเอกสาร — เป็นสิ่งที่ลูกค้าเซ็นรับรองว่าตรงกับของที่ส่งคืนจริง */
-      { label: 'สภาพ', width: '18%', value: l => l.conditionLabel + (l.restock ? '' : ' (ไม่เข้าคลัง)') }
+      { label: 'สภาพ', width: '14%', value: l => l.conditionLabel },
+      /* ★ คลังปลายทางต้องอยู่บนเอกสาร — คนที่ไปตามของต้องรู้ว่าของกองนี้อยู่ที่ไหน */
+      { label: 'เข้าคลัง', width: '16%', value: l => l.warehouseName || '—' }
     ],
     lines: r.items,
     totals: [['มูลค่าสินค้าที่รับคืน', DocPrint.money(n.amount), 'grand']],
     note: 'เหตุผล: ' + n.reason + (n.note ? ' · ' + n.note : '') +
-      (n.scrapQty ? ' · ของเสีย ' + n.scrapQty + ' หน่วยไม่นำเข้าคลัง' : '') +
+      (n.scrapQty ? ' · ของที่ไม่นับเป็นของขายได้ ' + n.scrapQty + ' หน่วย (อยู่ในคลังรับคืน/ของเสีย)' : '') +
       '\n★ ใบนี้เป็นหลักฐานการรับคืนสินค้า ไม่ใช่เอกสารลดหนี้ — ใบลดหนี้ออกแยกต่างหาก',
     signers: ['ผู้ส่งคืน', 'ผู้รับคืน', 'ผู้ตรวจสภาพ'], showBank: false, carry: true,
-    xlsx: { filename: n.returnNo, headers: ['รหัส', 'รายการ', 'หน่วย', 'จำนวน', 'สภาพ'],
-      rows: r.items.map(l => [l.productCode, l.productName, l.unitCode, String(l.qty), l.conditionLabel]) }
+    xlsx: { filename: n.returnNo, headers: ['รหัส', 'รายการ', 'หน่วย', 'จำนวน', 'สภาพ', 'เข้าคลัง'],
+      rows: r.items.map(l => [l.productCode, l.productName, l.unitCode, String(l.qty), l.conditionLabel, l.warehouseName || '']) }
   });
 }
 
