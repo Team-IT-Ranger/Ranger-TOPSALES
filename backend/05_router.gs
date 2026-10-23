@@ -291,6 +291,7 @@ var ADMIN_ACTION_MAP = {
   getArCreditNoteDraft:   getArCreditNoteDraft,    // รายการที่ลดหนี้ได้ของใบแจ้งหนี้ใบหนึ่ง
   listArCreditNotes:      listArCreditNotes,
   getArCreditNote:        getArCreditNote,         // ใบเดียวพร้อมรายการ — ใช้ตอนพิมพ์
+  listTaxInvoices:        listTaxInvoices,
   createArInvoice:        createArInvoice,
   receiveArPayment:       receiveArPayment,
   getArAging:             getArAging,

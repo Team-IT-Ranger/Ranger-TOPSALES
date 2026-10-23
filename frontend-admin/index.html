@@ -1834,6 +1834,28 @@
           </div>
         </section>
 
+        <!-- ═══ ทะเบียนใบกำกับภาษี (23 ต.ค. 2026) ═══
+             ★ รวมทุกใบที่ออกไปแล้ว ทั้งขายสดและเครดิต — ฐานคือเลขใบกำกับที่อยู่บนบิล/รอบจัดส่ง
+               ไม่ใช่ใบแจ้งหนี้ลูกหนี้ (ดู backend/58_tax_invoices.gs) -->
+        <section class="view" id="view-taxinvoices">
+          <div class="view-head"><div><h1>รายการใบกำกับภาษี</h1>
+            <p>ใบกำกับภาษีขายที่ออกไปแล้วทุกใบ <b>ทั้งเงินสดและเครดิต</b> — เล่มเดียวกับที่ใช้ยื่น ภ.พ.30</p></div></div>
+          <div class="filter-bar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <div class="field" style="max-width:170px"><label>เดือน</label>
+              <input type="month" id="ti-month" onchange="loadTaxInvoices()"></div>
+            <div class="field" style="max-width:170px"><label>วิธีชำระ</label>
+              <select id="ti-pay" onchange="loadTaxInvoices()">
+                <option value="">ทั้งหมด</option><option value="cash">เงินสด</option><option value="credit">เครดิต</option>
+              </select></div>
+            <div id="ti-sum" class="form-hint" style="flex:1;min-width:220px"></div>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขที่ใบกำกับ</th><th>วันที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>วิธีชำระ</th>
+              <th>มูลค่าก่อนภาษี</th><th>ภาษี</th><th>รวม</th><th></th></tr></thead>
+            <tbody id="ti-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+          </table></div>
+        </section>
+
         <!-- ═══ ทะเบียนคลังสินค้า (23 ต.ค. 2026) ═══
              ★ ก่อนหน้านี้ไม่มีหน้านี้เลย — คลังถูกสร้างอัตโนมัติอย่างเดียว (`_ensureScopeWarehouse`
                และ `_ensureWarehouseByPurpose`) จึงแก้ชื่อ ปิดใช้งาน หรือเพิ่มคลังเองไม่ได้ -->
@@ -2990,8 +3012,11 @@ const NAV_GROUPS = [
     { n:'5.2', label:'เจ้าหนี้', items:[
       {n:'5.2.1', label:'ใบแจ้งหนี้และการจ่าย', view:'apbills', mod:'accounting', ready:true, scope:'both'} ]},
     { n:'5.3', label:'ลูกหนี้', items:[
-      {n:'5.3.1', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'both'},
-      {n:'5.3.2', label:'ใบวางบิล', view:'billingnotes', mod:'accounting', ready:true, scope:'both'} ]},
+      /* ★ 5.3.1 = ทะเบียนใบกำกับภาษี **ทุกใบ** (เจ้าของระบบสั่ง 23 ต.ค. 2026) — เดิมหน้านี้เป็น
+         ใบแจ้งหนี้ลูกหนี้ซึ่งมีแต่บิลเครดิต คนจึงหาใบกำกับของบิลเงินสดไม่เจอทั้งที่ระบบออกให้แล้ว */
+      {n:'5.3.1', label:'รายการใบกำกับภาษี', view:'taxinvoices', mod:'accounting', ready:true, scope:'both'},
+      {n:'5.3.2', label:'ใบแจ้งหนี้และการรับชำระ', view:'arinvoices', mod:'accounting', ready:true, scope:'both'},
+      {n:'5.3.3', label:'ใบวางบิล', view:'billingnotes', mod:'accounting', ready:true, scope:'both'} ]},
     /* ★ ตั้งค่าของ "สมุด" ที่เปิดอยู่ ไม่ใช่ของทั้งระบบ — ตัวแทนเป็นคนละนิติบุคคล
        จะใช้วิธีคิดต้นทุนคนละแบบกับบริษัทก็ได้ จึงอยู่ในกลุ่มบัญชี ไม่ใช่กลุ่มตั้งค่าระบบ */
     /* ★ เจ้าของระบบจัดเลขเอง 16 ต.ค. 2026 — รายงานเป็น 5.8 · ตั้งค่าเป็น 5.9
@@ -3505,6 +3530,7 @@ const LOADERS = {
   custrequests: loadCustRequests,
   products: loadProducts, promotions: loadPromotions, tenants: loadTenants,
   companyprofile: loadCompanyProfile, adminusers: loadUserDirectory, pricelists: loadPriceLists,
+  taxinvoices: loadTaxInvoices,
   warehouses: loadWarehousesView,
   custgroups: loadCustomerGroupsView, distchannels: loadDistributionChannels, paytypes: loadPaymentTypes,
   salesorders: loadSalesOrders,
@@ -3888,6 +3914,48 @@ async function ensureCustomerGroups(){
 }
 
 /* ══════════════ ข้อมูลกลาง: กลุ่มลูกค้า / ช่องทางการจัดจำหน่าย / ประเภทการชำระเงิน ══════════════ */
+/* ══════════ ทะเบียนใบกำกับภาษี (5.3.1) ══════════
+   ★ หน้านี้ตอบคำถาม "ใบกำกับใบนั้นอยู่ไหน" ซึ่งหน้าลูกหนี้ตอบไม่ได้เพราะขายสดไม่มีใบแจ้งหนี้ */
+let tiCache = [];
+async function loadTaxInvoices(){
+  const body = document.getElementById('ti-body'); if (!body) return;
+  tblLoading(body, 9);
+  const r = await callApi('listTaxInvoices', {
+    month: (document.getElementById('ti-month') || {}).value || '',
+    paymentType: (document.getElementById('ti-pay') || {}).value || '' });
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+  tiCache = r.data || [];
+  renderTaxInvoices(r.summary || {}, r.truncated);
+}
+function renderTaxInvoices(sum, truncated){
+  const box = document.getElementById('ti-sum');
+  if (box) box.innerHTML = sum.docs
+    ? 'ใบกำกับ <b>' + sum.docs + '</b> ใบ (เงินสด ' + (sum.cash||0) + ' · เครดิต ' + (sum.credit||0) + ')' +
+      ' · มูลค่าก่อนภาษี <b>฿' + bahtPlain(sum.exVat) + '</b> · ภาษี <b>฿' + bahtPlain(sum.vat) + '</b>' +
+      (truncated ? ' · แสดงบางส่วน เลือกเดือนเพื่อดูให้ครบ' : '')
+    : '';
+  document.getElementById('ti-body').innerHTML = rowsOrEmpty(tiCache.map(t =>
+    '<tr'+(t.cancelled ? ' style="opacity:.55"' : '')+'>' +
+    '<td class="mono-data">'+esc(t.docNo)+(t.roundNo ? ' <span class="tag">รอบ '+t.roundNo+'</span>' : '')+'</td>' +
+    '<td class="mono-data">'+esc(t.docDate)+'</td>' +
+    '<td class="wrap">'+esc(t.customerName || '-')+(t.customerCode ? ' <span class="form-hint">'+esc(t.customerCode)+'</span>' : '')+'</td>' +
+    '<td class="mono-data">'+dash(t.orderCode)+'</td>' +
+    /* ★ เงินสด/เครดิตต้องแยกด้วยสี — เป็นตัวที่บอกว่าใบนี้มีหนี้ให้ตามเก็บหรือจบไปแล้ว */
+    '<td>'+(t.paymentType === 'cash' ? '<span class="tag tag-ok">เงินสด</span>' : '<span class="tag">เครดิต</span>')+
+      (t.cancelled ? ' <span class="tag tag-warn">บิลยกเลิก</span>' : '')+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(t.subtotalExVat)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(t.vatAmount)+'</td>' +
+    '<td class="mono-data">฿'+bahtPlain(t.total)+'</td>' +
+    '<td style="white-space:nowrap">' +
+      '<button class="btn btn-sm" onclick="openSaleOrderDetail('+t.orderId+')">เปิดบิล</button>' +
+      /* ★ ออกใบลดหนี้ได้เฉพาะใบที่มีใบแจ้งหนี้ลูกหนี้รองรับ — ขายสดยังทำไม่ได้ทั้งระบบ
+         (ใบลดหนี้ผูกกับ ar_invoices) บอกเหตุผลไว้ใน title แทนที่จะยื่นปุ่มที่กดแล้วพัง */
+      (t.arInvoiceId
+        ? ' <button class="btn btn-sm" onclick="openCreditNoteForm('+t.arInvoiceId+')">ใบลดหนี้</button>'
+        : (t.cancelled ? '' : ' <span class="form-hint" title="ใบลดหนี้ยังผูกกับใบแจ้งหนี้ลูกหนี้เท่านั้น บิลเงินสดจึงยังออกไม่ได้">—</span>')) +
+    '</td></tr>'), 9, 'ยังไม่มีใบกำกับภาษีในช่วงที่เลือก');
+}
+
 /* ══════════ ทะเบียนคลังสินค้า ══════════
    ★ หน้าที่ของคลัง (`purpose`) ไม่ใช่แค่ป้าย — ของในคลังที่ไม่ใช่ "คลังขาย" ไม่ถูกนับเป็นของที่ขายได้
      ทั้งในหน้าคลัง หน้าขาย และบอท (ดู CLAUDE.md "คลังมีหน้าที่") */
