@@ -197,6 +197,7 @@ var ADMIN_ACTION_MAP = {
   saveVendor:             saveVendor,
   listWarehouses:         listWarehouses,
   saveWarehouse:          saveWarehouse,
+  mergeDuplicateWarehouses: mergeDuplicateWarehouses,
   listApprovalFlows:      listApprovalFlows,
   saveApprovalFlow:       saveApprovalFlow,
   deleteApprovalFlow:     deleteApprovalFlow,

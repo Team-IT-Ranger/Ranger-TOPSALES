@@ -167,16 +167,73 @@ function _whPurpose(w) {
 /** คลังนี้เอาของไปขายได้ไหม — ตัวเดียวที่ทุกที่ต้องถาม ห้ามเทียบ purpose เป็นสตริงเอง */
 function _isSellableWarehouse(w) { return _whPurpose(w) === 'sale'; }
 
+var WH_PURPOSE_CODE = { quarantine: 'RETURN', scrap: 'SCRAP' };
+
 /** คลังรับคืน/ของเสียของ scope นี้ สร้างให้ครั้งแรกที่ใช้ (แบบเดียวกับ _ensureScopeWarehouse) */
 function _ensureWarehouseByPurpose(scope, purpose) {
+  /* ★ ต้องมีคอลัมน์ purpose ในชีตก่อน ไม่งั้นค่าที่เขียนลงไปหายเงียบๆ แล้วรอบหน้าหาไม่เจอ
+     สร้างใหม่ซ้ำไปเรื่อยๆ (เจอจริง 23 ต.ค. 2026 — รายการคลังยาวเป็นสิบบรรทัด) */
+  centralEnsureColumns('warehouses');
   var ws = _scoped('warehouses', scope), hit = null;
-  ws.forEach(function(w) { if (!hit && _whPurpose(w) === purpose && _isTrue(w.is_active)) hit = w; });
-  if (hit) return hit.record_id;
+  /* ★★ หาด้วย purpose **หรือ** รหัสคลัง — กันซ้ำอีกชั้นเผื่อ purpose เขียนไม่ติดด้วยเหตุใดก็ตาม
+     คลังพวกนี้ระบบเป็นคนตั้งรหัสเอง (RETURN/SCRAP) จึงใช้เป็นตัวระบุได้ */
+  var code = WH_PURPOSE_CODE[purpose];
+  ws.forEach(function(w) {
+    if (hit || !_isTrue(w.is_active)) return;
+    if (_whPurpose(w) === purpose || String(w.code || '').toUpperCase() === code) hit = w;
+  });
+  if (hit) {
+    // แถวที่สร้างไว้ก่อนมีคอลัมน์ purpose — เติมย้อนหลังให้ จะได้ถูกกรองออกจากของที่ขายได้จริง
+    if (_whPurpose(hit) !== purpose) centralUpdate('warehouses', hit.record_id, { purpose: purpose });
+    return hit.record_id;
+  }
   var id = centralNextId('warehouses');
   centralAppend('warehouses', { record_id: id, tenant_id: scope || '',
-    code: purpose === 'scrap' ? 'SCRAP' : 'RETURN', name: WH_PURPOSES[purpose],
+    code: code, name: WH_PURPOSES[purpose],
     address: '', is_active: 'TRUE', is_default: 'FALSE', purpose: purpose, created_at: nowStr() });
   return id;
+}
+
+/* ═══ ซ่อมคลังที่งอกซ้ำ (super_admin · รันซ้ำได้) ═══
+ * เก็บใบที่เลขน้อยที่สุดของแต่ละ (บริษัท/ตัวแทน × หน้าที่) ไว้เป็นตัวจริง · ที่เหลือ:
+ *   มีของค้างอยู่ → **ย้ายของมารวมที่ตัวจริงก่อน** แล้วค่อยปิด (ของหายไม่ได้)
+ *   ไม่มีของ      → ปิดใช้งานเฉยๆ (ไม่ลบแถว เผื่อมีเอกสารเก่าอ้างถึง)
+ */
+function mergeDuplicateWarehouses(session, payload) {
+  if (!session || session.role_code !== 'super_admin') return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
+  centralEnsureColumns('warehouses');
+  var keep = {}, dups = [];
+  centralObjects('warehouses').forEach(function(w) {
+    var p = _whPurpose(w);
+    if (p === 'sale') return;                       // คลังขายมีได้หลายใบตามปกติ ไม่ใช่ของที่ระบบสร้าง
+    if (!_isTrue(w.is_active)) return;              // ใบที่ปิดไปแล้วไม่ใช่ของซ้ำอีกต่อไป (รันซ้ำได้)
+    var k = String(w.tenant_id || '') + '|' + p;
+    if (!keep[k] || Number(w.record_id) < Number(keep[k].record_id)) {
+      if (keep[k]) dups.push(keep[k]);
+      keep[k] = w;
+    } else dups.push(w);
+  });
+
+  var moved = 0, closed = 0;
+  dups.forEach(function(w) {
+    var k = String(w.tenant_id || '') + '|' + _whPurpose(w);
+    var target = keep[k];
+    _scoped('warehouse_stock', String(w.tenant_id || '')).forEach(function(r) {
+      if (String(r.warehouse_id) !== String(w.record_id)) return;
+      var qty = Number(r.qty) || 0;
+      if (!qty) return;
+      _applyStockIn(String(w.tenant_id || ''), target.record_id, r.product_id, qty, Number(r.avg_cost) || 0,
+        'adjust', 'WH_MERGE', w.record_id, 'รวมคลังซ้ำ ' + w.name, session.adminUserId);
+      _applyStockIn(String(w.tenant_id || ''), w.record_id, r.product_id, -qty, Number(r.avg_cost) || 0,
+        'adjust', 'WH_MERGE', w.record_id, 'รวมคลังซ้ำ ' + w.name, session.adminUserId);
+      moved++;
+    });
+    centralUpdate('warehouses', w.record_id, { is_active: 'FALSE', name: w.name + ' (ซ้ำ-ปิดแล้ว)' });
+    closed++;
+  });
+  return { success: true, closed: closed, movedLines: moved,
+    message: closed ? ('ปิดคลังซ้ำ ' + closed + ' ใบ' + (moved ? ' · ย้ายของมารวม ' + moved + ' รายการ' : ''))
+                    : 'ไม่พบคลังซ้ำ' };
 }
 
 function _warehouseDto(w) {

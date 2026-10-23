@@ -148,6 +148,32 @@ function centralObjects(name) {
   _objMemo[name] = rows;
   return rows;
 }
+/* ★★ เติมคอลัมน์ที่ขาดให้ชีตกลาง — **ต้องเรียกก่อนเขียนค่าลงคอลัมน์ที่เพิ่งเพิ่มใน CENTRAL_SHEETS**
+   เพราะ `appendRowToSheet` เขียนตามชื่อหัวคอลัมน์ที่มีอยู่จริง ไม่มีคอลัมน์ = **ค่าถูกทิ้งเงียบๆ**
+   (เจอจริง 23 ต.ค. 2026: `warehouses.purpose` ยังไม่มีในชีต ตัวหาคลังรับคืนจึงหาไม่เจอทุกครั้ง
+    แล้วสร้างคลังใหม่ซ้ำทุกครั้งที่เปิดฟอร์ม จนรายการคลังยาวเป็นสิบบรรทัด)
+   ★ `setupSheets()` ทำให้อยู่แล้วแต่ต้องรันเอง — ตัวนี้ไว้ให้โค้ดเรียกเองตอนจะใช้จริง
+   ★ ตรวจครั้งเดียวต่อ execution ก็พอ (อ่านแถวหัวตารางชีตเดียว) */
+var _centralColsChecked = {};
+function centralEnsureColumns(name) {
+  if (_centralColsChecked[name]) return;
+  _centralColsChecked[name] = true;
+  var want = (typeof CENTRAL_SHEETS !== 'undefined') ? CENTRAL_SHEETS[name] : null;
+  if (!want) return;
+  /* ★ อ่านหัวตารางไม่ได้ = ไม่ต้องทำอะไร ห้ามทำให้ทางเขียนข้อมูลล้มตาม — ตัวนี้เป็นตัวช่วย
+     ไม่ใช่เงื่อนไขของงาน (และชีตจำลองในชุดทดสอบก็ไม่มี getLastColumn) */
+  try {
+    var sh = centralSheet(name);
+    var lastCol = sh.getLastColumn();
+    var have = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+    var missing = want.filter(function(h) { return have.indexOf(h) === -1; });
+    if (!missing.length) return;
+    sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing])
+      .setFontWeight('bold').setBackground('#1741C6').setFontColor('#ffffff');
+    centralInvalidate(name);
+  } catch (e) {}
+}
+
 function centralAppend(name, obj) { centralInvalidate(name); return appendRowToSheet(centralSheet(name), obj); }
 function centralUpdate(name, recordId, obj) { centralInvalidate(name); return updateRowInSheet(centralSheet(name), recordId, obj); }
 /** เขียนแถวโดย **ไม่ล้างแคช** — ใช้กับค่าที่ "ช้าไปไม่เกิน TTL ก็ไม่เป็นไร" และถูกเขียนถี่มาก (เช่น last_sale_at ทุกบิล)

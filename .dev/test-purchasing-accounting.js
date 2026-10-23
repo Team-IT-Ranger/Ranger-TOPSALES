@@ -1285,6 +1285,30 @@ console.log('\n── ใบรับคืนสินค้า ──');
       ctx._isSellableWarehouse(ctx._findById('warehouses', WH2))],
     [true, true, true, false, true]);
   eq('  เรียกซ้ำได้ ไม่สร้างคลังซ้ำ', ctx._ensureWarehouseByPurpose(SC2, 'scrap'), WH_SCRAP);
+  /* ★★★ กันซ้ำแม้ค่า purpose จะเขียนไม่ติด — ของจริงบน UAT ชีตยังไม่มีคอลัมน์ purpose
+     ค่าจึงถูกทิ้งเงียบๆ แล้วคลังงอกใหม่ทุกครั้งที่เปิดฟอร์ม จนรายการยาวเป็นสิบบรรทัด (23 ต.ค. 2026) */
+  ctx.centralUpdate('warehouses', WH_SCRAP, { purpose: '' });
+  eq('★★★ purpose หายไป (คอลัมน์ยังไม่มีในชีต) → ยังหาเจอจากรหัสคลัง ไม่สร้างใบใหม่',
+    ctx._ensureWarehouseByPurpose(SC2, 'scrap'), WH_SCRAP);
+  eq('  และเติม purpose ย้อนหลังให้ด้วย จะได้ถูกกรองออกจากของที่ขายได้',
+    ctx._whPurpose(ctx._findById('warehouses', WH_SCRAP)), 'scrap');
+
+  {
+    // ของที่งอกไปแล้วบน UAT/prod — ต้องรวมกลับได้โดยของไม่หาย
+    const dupId = ctx.centralNextId('warehouses');
+    ctx.centralAppend('warehouses', { record_id: dupId, tenant_id: SC2 || '', code: 'SCRAP',
+      name: 'คลังของเสีย', is_active: 'TRUE', is_default: 'FALSE', purpose: 'scrap', created_at: '2026-10-23 10:00:00' });
+    ctx._applyStockIn(SC2, dupId, '80', 25, 5, 'receipt', 'TEST', 'DUP', 'ของค้างในคลังซ้ำ', 'tester');
+    const before = stockOf('80', WH_SCRAP);
+    const m = ctx.mergeDuplicateWarehouses({ role_code: 'super_admin', adminUserId: '1' }, {});
+    eq('★★ รวมคลังซ้ำ: ของถูกย้ายมาที่ตัวจริง ไม่หาย และใบซ้ำถูกปิด',
+      [m.success, stockOf('80', WH_SCRAP) - before, stockOf('80', dupId),
+        ctx._isTrue(ctx._findById('warehouses', dupId).is_active)], [true, 25, 0, false]);
+    eq('  รันซ้ำแล้วไม่มีอะไรให้ทำอีก',
+      ctx.mergeDuplicateWarehouses({ role_code: 'super_admin', adminUserId: '1' }, {}).closed, 0);
+    eq('  ไม่ใช่ Ultra Admin เรียกไม่ได้',
+      ctx.mergeDuplicateWarehouses({ role_code: 'owner_admin', adminUserId: '2' }, {}).success, false);
+  }
   eq('★★ คลังหลักต้องเป็นคลังขาย — ตั้งคลังของเสียเป็นคลังหลักไม่ได้',
     ctx.saveWarehouse(FIN, { tenantId: 'T1', id: WH_SCRAP, name: 'คลังของเสีย', purpose: 'scrap', isDefault: true }).success, false);
   eq('★ คลังตั้งต้นของการขายต้องไม่ใช่คลังของเสีย แม้จะสร้างทีหลัง',
