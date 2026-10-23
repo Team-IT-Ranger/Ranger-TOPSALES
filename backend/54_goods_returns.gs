@@ -163,12 +163,17 @@ function _goodsReturnCore(session, tenantId, payload) {
          = ปฏิเสธทั้งใบ ไม่เงียบๆ ไปลงคลังตั้งต้นแทน (ของจะไปกองผิดที่โดยไม่มีใครรู้) */
       var destId = String(l.warehouseId || '') || String(defaultDest[cond] || defaultDest.good);
       if (!whById[destId]) { picked = null; return; }
+      /* ★ ราคารับคืนแก้ได้ แต่เกินราคาที่ขายไปจริงไม่ได้ (เหตุผลเดียวกับใบลดหนี้ — ดู 49_credit_notes.gs)
+         ไม่ส่งมา = ใช้ราคาที่ขายจริง */
+      var unitPrice = (l.unitPrice === '' || l.unitPrice === null || l.unitPrice === undefined)
+        ? src.unitPrice : _money(parseFloat(l.unitPrice) || 0);
+      if (unitPrice > src.unitPrice + 0.009 || unitPrice < 0) { picked = null; return; }
       picked.push({ src: src, qty: qty, condition: cond, baseQty: qty * (src.unitFactor || 1),
-        warehouseId: destId, sellable: _isSellableWarehouse(whById[destId]),
-        amount: _money(qty * src.unitPrice) });
-      amount += qty * src.unitPrice;
+        warehouseId: destId, sellable: _isSellableWarehouse(whById[destId]), unitPrice: unitPrice,
+        amount: _money(qty * unitPrice) });
+      amount += qty * unitPrice;
     });
-    if (picked === null) return { success: false, message: 'รับคืนเกินจำนวนที่ส่งไปแล้ว หรือเลือกคลังปลายทางที่ใช้ไม่ได้' };
+    if (picked === null) return { success: false, message: 'รับคืนเกินจำนวนที่ส่งไปแล้ว · เลือกคลังปลายทางที่ใช้ไม่ได้ · หรือใส่ราคาสูงกว่าที่ขายไปจริง' };
     if (!picked.length) return { success: false, message: 'ต้องมีรายการอย่างน้อย 1 รายการ' };
 
     var returnId = centralNextId('goods_returns');
@@ -190,7 +195,7 @@ function _goodsReturnCore(session, tenantId, payload) {
         product_id: p.src.productId, unit_code: p.src.unitCode, unit_factor: p.src.unitFactor,
         qty: p.qty, base_qty: p.baseQty, condition: p.condition, warehouse_id: p.warehouseId,
         restock: p.sellable ? 'TRUE' : 'FALSE',
-        unit_price: p.src.unitPrice, amount: p.amount, tax_status: p.src.taxStatus };
+        unit_price: p.unitPrice, amount: p.amount, tax_status: p.src.taxStatus };
     }));
 
     /* ★★ ของเข้าคลัง **ทุกบรรทัด** ตามคลังที่คนรับเลือก (23 ต.ค. 2026)

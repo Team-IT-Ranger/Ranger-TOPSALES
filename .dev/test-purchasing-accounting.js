@@ -1407,6 +1407,23 @@ console.log('\n── ใบรับคืนสินค้า ──');
     eq('★★★ ลดหนี้พร้อมรับของเกินที่คืนได้ → ล้มทั้งรายการ ไม่มีเอกสารค้างและของไม่ขยับ',
       [over.success, grnRows().length - nRows, stockOf('80', CSALE) - qq], [false, 0, 0]);
 
+    /* ★★ แก้ราคาต่อหน่วยได้ แต่สูงกว่าที่ขายไปจริงไม่ได้ (23 ต.ค. 2026)
+       ซื้อเยอะได้ราคาขั้นถูก คืนบางส่วนแล้วของที่เหลือไม่ถึงขั้นนั้น → ลดหนี้ต่ำกว่าราคาที่ขายไปได้ */
+    const low = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'return', creditDate: '2026-10-21',
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 900, taxStatus: 'vat' }] });
+    eq('★ ลดราคาต่อหน่วยลงได้ (ยอดคิดตามราคาที่ใส่)', [low.success, low.total], [true, 900]);
+
+    const high = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
+      reasonCode: 'return', creditDate: '2026-10-21',
+      lines: [{ itemId: 18001, productId: '80', unitCode: 'CT', unitFactor: 10, qty: 1, unitPrice: 5000, taxStatus: 'vat' }] });
+    eq('★★★ ใส่ราคาสูงกว่าที่ขายไปจริง → ปฏิเสธ (คืนเงินเกินกว่าที่เก็บมาไม่ได้)',
+      [high.success, /สูงกว่าราคาที่ขายไปจริง/.test(high.message || '')], [false, true]);
+
+    const grnHigh = ctx.createGoodsReturn(FIN, { tenantId: 'T1', orderId: 180, reasonCode: 'damaged',
+      lines: [{ itemId: 18001, qty: 1, condition: 'good', unitPrice: 99999 }] });
+    eq('★ ใบรับคืนก็กั้นราคาเดียวกัน', grnHigh.success, false);
+
     const sB2 = stockOf('80', CSALE);
     const noStock = ctx.createArCreditNote(FIN, { tenantId: 'T1', invoiceId: dft.invoice.id,
       reasonCode: 'overcharge', creditDate: '2026-10-21',

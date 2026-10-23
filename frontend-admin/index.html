@@ -9201,14 +9201,17 @@ async function openGoodsReturnForm(orderId){
     '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
       /* ★ ราคาต้องเห็นบนจอ — เป็นราคาที่ขายไปจริงตามบิลใบนั้น (หักส่วนลดทุกชั้นแล้ว) คนรับคืนจะได้
          ทานกับใบกำกับในมือลูกค้าได้ทันที ไม่ต้องเชื่อยอดรวมท้ายฟอร์มอย่างเดียว */
-      '<th>ส่งไป</th><th>คืนแล้ว</th><th>รับคืนครั้งนี้</th><th>ราคาที่ขายจริง</th><th>สภาพ</th><th>เข้าคลัง</th></tr></thead><tbody>' +
+      '<th>ส่งไป</th><th>คืนแล้ว</th><th>รับคืนครั้งนี้</th>' +
+      '<th>ราคารับคืน/หน่วย<br><span class="form-hint">ตั้งต้น = ที่ขายจริง · แก้ลงได้</span></th>' +
+      '<th>สภาพ</th><th>เข้าคลัง</th></tr></thead><tbody>' +
       d.lines.map((l, i) =>
         '<tr><td class="mono-data">'+esc(l.productCode || '-')+'</td><td class="wrap">'+esc(l.productName)+'</td>' +
         '<td class="mono-data">'+esc(l.unitCode)+'</td><td class="mono-data">'+l.shipped+'</td>' +
         '<td class="mono-data">'+(l.returned || '—')+'</td>' +
         '<td><input type="number" class="grn-qty" data-i="'+i+'" min="0" max="'+l.returnable+'" step="1" value="0" ' +
           'style="width:80px" oninput="grnRecalc()"></td>' +
-        '<td class="mono-data">฿'+bahtPlain(l.unitPrice)+'</td>' +
+        '<td><input type="number" class="grn-price" data-i="'+i+'" min="0" max="'+l.unitPrice+'" step="0.01" ' +
+          'value="'+l.unitPrice+'" style="width:96px" oninput="grnRecalc()"></td>' +
         /* ★ เปลี่ยนสภาพของแล้วคลังปลายทางขยับตามให้ (grnCondChanged) แต่ไม่ทับถ้าคนตั้งใจเลือกเอง —
            ของสภาพดีที่ต้องรอตรวจ กับของชำรุดที่ซ่อมแล้วขายได้ มีจริงทั้งคู่ */
         '<td><select class="grn-cond" data-i="'+i+'" onchange="grnCondChanged('+i+')">' +
@@ -9234,6 +9237,14 @@ function grnCondChanged(i){
   if (sel && cond && !GRN_WH_TOUCHED[i] && def[cond.value]) sel.value = String(def[cond.value]);
   grnRecalc();
 }
+/* ราคารับคืนต่อหน่วย — ตัดไม่ให้เกินราคาที่ขายจริง (หลักเดียวกับ cnUnitPrice) */
+function grnUnitPrice(i, l){
+  const inp = document.querySelector('.grn-price[data-i="'+i+'"]');
+  if (!inp) return l.unitPrice;
+  const v = parseFloat(inp.value);
+  if (!(v >= 0)) return 0;
+  return Math.min(v, l.unitPrice);
+}
 function grnRecalc(){
   if (!GRN_DRAFT) return;
   const whById = {};
@@ -9243,7 +9254,7 @@ function grnRecalc(){
     const i = Number(inp.dataset.i), l = GRN_DRAFT.lines[i];
     const qty = Math.min(Math.max(0, parseFloat(inp.value) || 0), l.returnable);
     if (!(qty > 0)) return;
-    amount += qty * l.unitPrice;
+    amount += qty * grnUnitPrice(i, l);
     /* ★ สรุปตาม "คลังที่ของเข้าไปจริง" ไม่ใช่ตามสภาพของ — ต้องตรงกับที่ backend บันทึก
        ไม่งั้นหน้าจอบอกอย่าง ใบที่ออกมาบอกอีกอย่าง */
     const sel = document.querySelector('.grn-wh[data-i="'+i+'"]');
@@ -9263,7 +9274,8 @@ async function grnSave(){
     const i = Number(inp.dataset.i), l = GRN_DRAFT.lines[i];
     return { itemId: l.itemId, qty: Math.min(Math.max(0, parseFloat(inp.value) || 0), l.returnable),
       condition: document.querySelector('.grn-cond[data-i="'+i+'"]').value,
-      warehouseId: (document.querySelector('.grn-wh[data-i="'+i+'"]') || {}).value || '' };
+      warehouseId: (document.querySelector('.grn-wh[data-i="'+i+'"]') || {}).value || '',
+      unitPrice: grnUnitPrice(i, l) };
   }).filter(l => l.qty > 0);
   if (!lines.length) { plModalErr('ใส่จำนวนที่รับคืนอย่างน้อย 1 รายการ'); return; }
   const r = await callApi('createGoodsReturn', { orderId: GRN_DRAFT.order.id,
@@ -9945,7 +9957,11 @@ async function openAdjustNoteForm(invoiceId, kind){
     '<td class="mono-data">'+esc(l.unitCode)+'</td>' +
     '<td><input type="number" class="cn-qty" data-i="'+i+'" min="0" step="1" value="'+l.qty+'" ' +
       (K.capped ? 'max="'+l.qty+'" ' : '') + 'style="width:80px" oninput="cnRecalc()"></td>' +
-    '<td class="mono-data">฿'+bahtPlain(l.unitPrice)+'</td>' +
+    /* ★ ราคาแก้ได้ (เจ้าของระบบสั่ง 23 ต.ค. 2026) — ซื้อเยอะได้ราคาขั้นถูก แล้วคืนบางส่วน
+       ของที่เหลือไม่ควรอยู่ในราคาขั้นที่ลูกค้าไม่ถึงแล้ว จึงลดหนี้ต่ำกว่าราคาที่ขายไปได้
+       ★ ขึ้นเกินราคาที่ขายจริงไม่ได้ (max) — backend กั้นซ้ำอีกชั้น */
+    '<td><input type="number" class="cn-price" data-i="'+i+'" min="0" max="'+l.unitPrice+'" step="0.01" ' +
+      'value="'+l.unitPrice+'" style="width:96px" oninput="cnRecalc()"></td>' +
     '<td class="mono-data cn-amt" data-i="'+i+'">฿'+bahtPlain(l.amount)+'</td></tr>').join('');
   plModal('<h3>ออก'+K.label+' — อ้างใบแจ้งหนี้ ' + esc(d.invoice.invoiceNo) + '</h3>' +
     '<p class="form-hint">' +
@@ -9961,7 +9977,10 @@ async function openAdjustNoteForm(invoiceId, kind){
     '</div>' +
     plField('รายละเอียดเพิ่มเติม (ถ้ามี)', '<input id="cn-note" placeholder="เช่น อ้างใบรับคืนเลขที่… / ส่งเพิ่มตามที่ตกลง">') +
     (d.lines.length ? '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>หน่วย</th>' +
-      '<th>จำนวนที่'+K.verb+'</th><th>ราคา/หน่วย</th><th>เป็นเงิน</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      '<th>จำนวนที่'+K.verb+'</th><th>ราคา/หน่วย ที่ขายจริง<br><span class="form-hint">แก้ลงได้</span></th>' +
+      '<th>เป็นเงิน</th></tr></thead><tbody>'+rows+'</tbody></table></div>' +
+      '<p class="form-hint">★ ราคาตั้งต้นคือราคาที่บิลใบนี้ขายไปจริง · <b>ลดลงได้</b> เช่น ลูกค้าได้ราคาขั้นถูก ' +
+      'เพราะซื้อจำนวนมาก แล้วคืนของจนจำนวนที่เหลือไม่ถึงขั้นนั้นแล้ว · <b>ขึ้นไม่ได้</b> เพราะคืนเงินเกินกว่าที่เก็บมาไม่ได้</p>'
       : '<p class="form-hint">ใบแจ้งหนี้นี้ไม่ได้ผูกกับบิลขาย — ระบุยอดเอง</p>' +
         plField('ยอดที่จะ'+K.verb+' (รวม VAT)', '<input id="cn-manual" type="number" min="0" step="0.01" value="'+(K.capped ? d.invoice.creditable : 0)+'" oninput="cnRecalc()">')) +
     '<div class="toggle-row" style="margin-top:10px"><input type="checkbox" id="cn-stock" onchange="cnStockToggled()">' +
@@ -9986,6 +10005,15 @@ function cnStockToggled(){
   const box = document.getElementById('cn-wh-box'), cb = document.getElementById('cn-stock');
   if (box && cb) box.style.display = cb.checked ? '' : 'none';
 }
+/* ราคาต่อหน่วยที่จะใช้คิด — จากช่องที่แก้ได้ ถ้าไม่มีช่อง (ใบเพิ่มหนี้) ใช้ของเดิม
+   ★ ตัดไม่ให้เกินราคาที่ขายจริงตั้งแต่บนจอ ไม่ปล่อยให้ไปโดนปฏิเสธที่เซิร์ฟเวอร์ */
+function cnUnitPrice(i, l){
+  const inp = document.querySelector('.cn-price[data-i="'+i+'"]');
+  if (!inp) return l.unitPrice;
+  const v = parseFloat(inp.value);
+  if (!(v >= 0)) return 0;
+  return Math.min(v, l.unitPrice);
+}
 function cnRecalc(){
   if (!CN_DRAFT) return;
   const K = ADJ_UI[CN_KIND] || ADJ_UI.credit;
@@ -9994,7 +10022,7 @@ function cnRecalc(){
     const l = CN_DRAFT.lines[Number(inp.dataset.i)];
     const want = Math.max(0, parseFloat(inp.value) || 0);
     const qty = K.capped ? Math.min(want, l.qty) : want;
-    const amt = Math.round(qty * l.unitPrice * 100) / 100;
+    const amt = Math.round(qty * cnUnitPrice(Number(inp.dataset.i), l) * 100) / 100;
     total += amt;
     const cell = document.querySelector('.cn-amt[data-i="'+inp.dataset.i+'"]');
     if (cell) cell.textContent = '฿' + bahtPlain(amt);
@@ -10025,7 +10053,8 @@ async function cnSave(){
       const l = CN_DRAFT.lines[Number(inp.dataset.i)];
       const want = Math.max(0, parseFloat(inp.value) || 0);
       return { itemId: l.itemId, productId: l.productId, unitCode: l.unitCode, unitFactor: l.unitFactor,
-        qty: K.capped ? Math.min(want, l.qty) : want, unitPrice: l.unitPrice, taxStatus: l.taxStatus };
+        qty: K.capped ? Math.min(want, l.qty) : want, unitPrice: cnUnitPrice(Number(inp.dataset.i), l),
+        taxStatus: l.taxStatus };
     }).filter(l => l.qty > 0);
     if (!lines.length) { plModalErr('ต้องมีรายการอย่างน้อย 1 รายการ'); return; }
   }

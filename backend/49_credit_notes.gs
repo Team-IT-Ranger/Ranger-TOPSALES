@@ -178,10 +178,28 @@ function _arAdjustNote(session, payload, K) {
       rate = ivEx > 0 ? _round2((ivTotal - ivEx) / ivEx * 100) / 100 : currentVatRate();
     }
 
-    var lines = [], taxable = 0, exempt = 0;
+    /* ★★ ราคาต่อหน่วยแก้ได้ (เจ้าของระบบสั่ง 23 ต.ค. 2026) — ลูกค้าที่ซื้อเยอะจนได้ราคาขั้นถูก
+       แล้วคืนของบางส่วน ไม่ควรได้ถือของที่เหลือไว้ในราคาขั้นที่ตัวเองไม่ถึงแล้ว จึงต้องลดหนี้
+       **ต่ำกว่า** ราคาที่ขายไป · แต่ **สูงกว่าราคาที่ขายจริงไม่ได้เด็ดขาด** = คืนเงินเกินกว่าที่เก็บมา
+       ซึ่งไม่ใช่การลดหนี้แล้ว และใบลดหนี้จะขัดกับใบกำกับเดิมทันที (เพดานทั้งใบไม่จับกรณีนี้ เพราะ
+       ลดบางรายการแพงไปแต่ยอดรวมยังไม่ถึงเพดาน ก็ผ่านได้สบาย) */
+    var soldCap = null;
+    if (K.kind === 'credit' && iv.sales_order_id && iv.tenant_id) {
+      var capOrder = tenantRowById(iv.tenant_id, 'sales_orders', iv.sales_order_id);
+      if (capOrder) {
+        var capItems = tenantRowsWhere(iv.tenant_id, 'order_items', 'order_id', capOrder.record_id);
+        var capNet = soldNetByItem(capOrder, capItems);
+        soldCap = {};
+        capItems.forEach(function(it) { soldCap[String(it.record_id)] = soldUnitNet(capNet[String(it.record_id)], it); });
+      }
+    }
+
+    var lines = [], taxable = 0, exempt = 0, overPriced = '';
     (payload.lines || []).forEach(function(l) {
       var qty = parseFloat(l.qty) || 0, price = parseFloat(l.unitPrice) || 0;
       if (!(qty > 0)) return;
+      if (soldCap && l.itemId && soldCap[String(l.itemId)] !== undefined &&
+          price > soldCap[String(l.itemId)] + 0.009) overPriced = String(soldCap[String(l.itemId)]);
       var amount = _money(qty * price);
       var taxStatus = String(l.taxStatus || '') || TAX_VAT;
       if (taxStatus === TAX_VAT) taxable += amount; else exempt += amount;
@@ -189,6 +207,8 @@ function _arAdjustNote(session, payload, K) {
         unitFactor: parseFloat(l.unitFactor) || 1, qty: qty, unitPrice: _money(price), amount: amount, taxStatus: taxStatus });
     });
     if (!lines.length) return { success: false, message: 'ต้องมีรายการอย่างน้อย 1 รายการ' };
+    if (overPriced) return { success: false, message: 'ราคาที่ลดหนี้สูงกว่าราคาที่ขายไปจริง (สูงสุด ' +
+      Number(overPriced).toLocaleString() + ' ต่อหน่วย) — ลดหนี้เกินกว่าที่เก็บเงินมาไม่ได้' };
 
     var sv = splitVat(_money(taxable), rate);
     var total = _money(taxable + exempt);
