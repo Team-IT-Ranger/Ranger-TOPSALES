@@ -35,8 +35,13 @@ var DASH_HEADERS = [
   'รหัสลูกค้า', 'ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'สาขา', 'พนักงานขาย', 'วิธีชำระ',
   'รหัสสินค้า', 'ชื่อสินค้า', 'จำนวนที่ขาย', 'หน่วยขาย', 'ราคาขายต่อหน่วย',
   'ยอดเงินตามราคาขาย', 'ส่วนลดรายบรรทัด', 'ส่วนลดท้ายบิล (เฉลี่ย)',
-  'ยอดขายลบส่วนลดแล้ว', 'ยอดขายก่อนภาษี', 'ของแถม'
+  'ยอดขายลบส่วนลดแล้ว', 'ยอดขายก่อนภาษี', 'ของแถม',
+  /* ★★ ใบลดหนี้/ใบเพิ่มหนี้อยู่ชีตเดียวกันเป็น **แถวติดลบ/บวก** (เจ้าของระบบสั่ง 24 ต.ค. 2026)
+     Dashboard บวกคอลัมน์เดียวได้ยอดสุทธิเลย ไม่ต้องไปลบจากอีกชีต (ซึ่งมีวันลืม)
+     ★ `ประเภทรายการ` ไว้ให้กรองแยกเมื่ออยากดูเฉพาะยอดขายดิบ · `เอกสารอ้างอิง` = ใบกำกับที่ถูกปรับ */
+  'ประเภทรายการ', 'เอกสารอ้างอิง'
 ];
+var DASH_KIND_SALE = 'ขาย', DASH_KIND_CREDIT = 'ลดหนี้', DASH_KIND_DEBIT = 'เพิ่มหนี้';
 
 /** แถวของตัวแทนรายหนึ่ง — คืน array of array พร้อมเขียนลงชีต (1 แถว = 1 บรรทัดบิล) */
 function _dashRowsFor(tenantId, opts) {
@@ -118,11 +123,87 @@ function _dashRowsFor(tenantId, opts) {
         gross, lineDisc, billDisc, net,
         // ยอดขายก่อนภาษีของบรรทัด — ใช้ภาพนิ่งภาษีรายบรรทัด (กติกา 24 ต.ค. 2026)
         lineExVat(order, { line_total: net, tax_status: it.tax_status }),
-        free ? 'ใช่' : ''
+        free ? 'ใช่' : '', DASH_KIND_SALE, ''
       ]);
     });
   });
+
+  _dashAppendNotes(out, tenantId, book, salesTenant, opts, products, orderById);
+  /* เรียงตามวันที่แล้วเลขเอกสาร — แถวใบลดหนี้ถูกต่อท้ายมา ถ้าไม่เรียง คนเปิดไฟล์จะเห็นมันกองอยู่ท้ายสุด
+     (Dashboard ไม่สน แต่คนที่เปิดไฟล์ดูด้วยตาสนแน่ๆ) */
+  out.sort(function(a, b) {
+    var da = a[0] instanceof Date ? a[0].getTime() : 0, db = b[0] instanceof Date ? b[0].getTime() : 0;
+    return da - db || String(a[1]).localeCompare(String(b[1]));
+  });
   return { success: true, rows: out, truncated: !!docs.truncated };
+}
+
+/**
+ * ต่อท้ายด้วยแถวของ **ใบลดหนี้ (ติดลบ)** และ **ใบเพิ่มหนี้ (เป็นบวก)**
+ *
+ * ★★★ ทำไมต้องมีทั้งสองใบ ไม่ใช่เฉพาะใบลดหนี้: ทั้งคู่คือการปรับยอดหลังออกใบกำกับไปแล้ว
+ *   (ม.86/10 กับ ม.86/9) · ใส่แต่ใบลดหนี้ = ยอดขายในไฟล์ **ต่ำกว่าความจริง** เท่าใบเพิ่มหนี้
+ *   ซึ่งผิดคนละทางกับที่กลัวตอนแรก และเงียบเหมือนกัน
+ *
+ * ★★ ผูกกับ **พนักงานขายของบิลต้นทาง** ไม่ใช่คนที่กดออกใบลดหนี้ (ซึ่งเป็นแอดมินบัญชี) —
+ *   ไม่งั้นยอดที่หักออกไปตกไปอยู่กับคนทำบัญชี แล้วยอดรายคนของพนักงานขายไม่เคยถูกหักเลย
+ */
+function _dashAppendNotes(out, tenantId, book, salesTenant, opts, products, orderById) {
+  var cust = {};
+  centralObjects('customers').forEach(function(c) { cust[String(c.record_id)] = c; });
+  var roundNo = {};
+  tenantObjectsIfExists(salesTenant, 'delivery_rounds').forEach(function(rd) {
+    roundNo[String(rd.record_id)] = _int(rd.round_no);
+  });
+
+  var dFrom = String(opts.dateFrom || '').trim(), dTo = String(opts.dateTo || '').trim();
+
+  [{ table: 'ar_credit_notes', items: 'ar_credit_note_items', noField: 'credit_note_no',
+     kind: DASH_KIND_CREDIT, sign: -1 },
+   { table: 'ar_debit_notes', items: 'ar_debit_note_items', noField: 'debit_note_no',
+     kind: DASH_KIND_DEBIT, sign: 1 }].forEach(function(K) {
+
+    var linesByNote = {};
+    centralObjects(K.items).forEach(function(l) {
+      (linesByNote[String(l.note_id)] = linesByNote[String(l.note_id)] || []).push(l);
+    });
+
+    centralObjects(K.table).forEach(function(n) {
+      if (!_inBook(n, book)) return;
+      var st = String(n.status || '');
+      if (st === 'void' || st === 'voided') return;        // ใบที่ถูกยกเลิกแล้ว ไม่ปรับยอดอะไรทั้งนั้น
+      var date = _dOnly(n.credit_date);
+      if (dFrom && date < dFrom) return;
+      if (dTo && date > dTo) return;
+
+      var c = cust[String(n.customer_id)] || {};
+      var order = orderById[String(n.sales_order_id)] || null;
+      /* ภาพนิ่งภาษีของใบนี้เอง — ใบลดหนี้เก็บอัตราไว้ในตัว ใช้อัตราปัจจุบันไม่ได้
+         (ลดหนี้ใบเก่าหลังรัฐเปลี่ยนอัตรา จะถอดภาษีผิดทันที) */
+      var noteVat = { apply_vat: 'TRUE', vat_rate: n.vat_rate,
+        subtotal_ex_vat: n.subtotal_ex_vat, vat_amount: n.vat_amount, exempt_amount: 0 };
+
+      (linesByNote[String(n.record_id)] || []).forEach(function(l) {
+        var qty = (parseFloat(l.qty) || 0) * K.sign;
+        var amt = _round2((parseFloat(l.amount) || 0) * K.sign);
+        var p = products[String(l.product_id)] || {};
+        out.push([
+          _dashDate(date), n[K.noField] || '', order ? (order.order_code || '') : '',
+          n.delivery_round_id ? (roundNo[String(n.delivery_round_id)] || '') : '', tenantId,
+          c.customer_code || '', customerFullName(c), c.tax_id || '', c.tax_branch_code || '',
+          order ? _saleByLabel(order.sale_by) : '',
+          order ? (isCreditPayment(order.payment_method) ? 'เครดิต' : 'เงินสด') : '',
+          p.product_code || String(l.product_id || ''), p.name || '(สินค้าถูกลบ)',
+          qty, l.unit_code || '', _round2(parseFloat(l.unit_price) || 0),
+          /* ★ ราคาที่ลดหนี้คือ "ราคาที่ขายไปจริง" อยู่แล้ว (49_credit_notes.gs กันไม่ให้เกิน)
+             จึงไม่มีส่วนลดให้แยกอีกชั้น — ยอดตามราคาขายกับยอดหลังหักส่วนลดเท่ากัน */
+          amt, 0, 0, amt,
+          lineExVat(noteVat, { line_total: amt, tax_status: l.tax_status }),
+          '', K.kind, n.invoice_no || ''
+        ]);
+      });
+    });
+  });
 }
 
 /** 'yyyy-mm-dd' → Date จริง เพื่อให้ Excel ได้คอลัมน์วันที่ ไม่ใช่ข้อความ (กราฟแกนเวลาถึงจะทำงาน) */
@@ -288,7 +369,6 @@ function exportSalesDashboard(session, payload) {
 }
 
 /* ═══════════════ ยังไม่ได้ทำ (ตั้งใจ) ═══════════════
- * - **ใบลดหนี้ยังไม่ถูกหักออกจากไฟล์นี้** — ลูกค้าคืนของหลังออกใบกำกับแล้ว ยอดขายในไฟล์จะสูงกว่าจริง
- *   เท่ามูลค่าที่ลดหนี้ไป · ต้องตกลงกับเจ้าของระบบก่อนว่าจะหักในไฟล์นี้เลย (คอลัมน์ติดลบอีกแถว)
- *   หรือให้ Dashboard ไปอ่านใบลดหนี้เองอีกชีต
+ * - ยังไม่รวม "ของที่รับคืนโดยยังไม่ออกใบลดหนี้" — ตราบใดที่ยังไม่ออกใบลดหนี้ ยอดขายยังไม่ถูกปรับ
+ *   ซึ่งถูกตามหลักภาษี แต่ถ้าคลังรับของคืนไว้นานก่อนออกใบ ยอดในไฟล์จะสูงกว่าของจริงชั่วคราว
  */

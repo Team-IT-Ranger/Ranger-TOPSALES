@@ -135,6 +135,33 @@ so('HOUSE', { record_id: 7, order_code: 'BD-H-0001', customer_id: 1, payment_met
 item('HOUSE', { record_id: 701, order_id: 7, product_id: 10, qty: 1, unit_code: 'CT', price: 535,
   line_total: 535, line_discount: 0, is_free: 0, tax_status: 'vat' });
 
+/* ⑧ ใบลดหนี้ของ TAX-001 — ลูกค้าคืนกล่องกระดาษ 1 ลัง (ราคาที่ขายจริง 321)
+   ⑨ ใบลดหนี้ที่ถูกยกเลิก — ต้องไม่ปรับยอดอะไรเลย
+   ⑩ ใบเพิ่มหนี้ของ TAX-002 — คิดเงินขาดไป 100 */
+central.ar_credit_notes = [
+  { record_id: 1, credit_note_no: 'CN-001', ar_invoice_id: 11, invoice_no: 'TAX-001', customer_id: 1,
+    tenant_id: 'BDC', sales_order_id: 1, delivery_round_id: '', credit_date: '2026-10-12',
+    vat_rate: 0.07, subtotal_ex_vat: 300, vat_amount: 21, total: 321, status: 'posted' },
+  { record_id: 2, credit_note_no: 'CN-VOID', ar_invoice_id: 11, invoice_no: 'TAX-001', customer_id: 1,
+    tenant_id: 'BDC', sales_order_id: 1, credit_date: '2026-10-13',
+    vat_rate: 0.07, subtotal_ex_vat: 1000, vat_amount: 70, total: 1070, status: 'void' }
+];
+central.ar_credit_note_items = [
+  { record_id: 1, note_id: 1, credit_note_id: 1, order_item_id: 101, product_id: 10,
+    unit_code: 'CT', unit_factor: 1, qty: 1, unit_price: 321, amount: 321, tax_status: 'vat' },
+  { record_id: 2, note_id: 2, credit_note_id: 2, order_item_id: 101, product_id: 10,
+    unit_code: 'CT', unit_factor: 1, qty: 10, unit_price: 107, amount: 1070, tax_status: 'vat' }
+];
+central.ar_debit_notes = [
+  { record_id: 5, debit_note_no: 'DN-001', ar_invoice_id: 12, invoice_no: 'TAX-002', customer_id: 2,
+    tenant_id: 'BDC', sales_order_id: 2, credit_date: '2026-10-14',
+    vat_rate: 0.07, subtotal_ex_vat: 93.46, vat_amount: 6.54, total: 100, status: 'posted' }
+];
+central.ar_debit_note_items = [
+  { record_id: 5, note_id: 5, debit_note_id: 5, order_item_id: 201, product_id: 10,
+    unit_code: 'CT', unit_factor: 1, qty: 1, unit_price: 100, amount: 100, tax_status: 'vat' }
+];
+
 /* ══════════ เทสต์ ══════════ */
 const C = {};   // ชื่อคอลัมน์ -> index (อ้างด้วยชื่อ ไม่ใช่เลข จะได้ไม่พังเงียบเวลาสลับคอลัมน์)
 ctx.DASH_HEADERS.forEach((h, i) => { C[h] = i; });
@@ -146,7 +173,9 @@ eq('★★ ตัวแทนที่ใช้งานอยู่ + สมุ
 eq('   ระบุเองได้เมื่อต้องการส่งออกเฉพาะบางราย', ctx._dashTargets({ tenantIds: ['BDC'] }), ['BDC']);
 
 const r = ctx._dashRowsFor('BDC', {});
-const docsIn = [...new Set(r.rows.map(x => col(x, 'เลขที่ใบกำกับภาษี')))].sort();
+// เฉพาะแถวขาย — แถวใบลดหนี้/เพิ่มหนี้ตรวจแยกในหมวดของมันเอง
+const docsIn = [...new Set(r.rows.filter(x => col(x, 'ประเภทรายการ') === 'ขาย')
+  .map(x => col(x, 'เลขที่ใบกำกับภาษี')))].sort();
 
 console.log('\n── อะไรเข้าไฟล์ ──');
 eq('★★★ เข้าเฉพาะใบที่ออกใบกำกับภาษีแล้ว · บิลยังไม่ออกใบและบิลที่ยกเลิกไม่เข้า',
@@ -206,6 +235,41 @@ eq('   รวมสองบรรทัด = ยอดขายก่อนภ�
   r.rows.filter(x => col(x, 'เลขที่ใบกำกับภาษี') === 'TAX-006')
     .reduce((s, x) => s + col(x, 'ยอดขายก่อนภาษี'), 0), 1500);
 
+console.log('\n── ใบลดหนี้ / ใบเพิ่มหนี้ เป็นแถวในชีตเดียวกัน ──');
+const cn = r.rows.find(x => col(x, 'ประเภทรายการ') === 'ลดหนี้');
+/* ★★★ ติดลบทุกช่องที่เป็นจำนวนและเงิน — Dashboard บวกคอลัมน์เดียวแล้วได้ยอดสุทธิเลย
+   ถ้าเก็บเป็นบวกแล้วหวังให้ Dashboard ไปลบเอง วันหนึ่งจะมีคนลืมลบ แล้วยอดเกินโดยไม่มีอะไรฟ้อง */
+eq('★★★ ใบลดหนี้ = แถวติดลบ (จำนวนและเงิน)',
+  [col(cn, 'จำนวนที่ขาย'), col(cn, 'ยอดเงินตามราคาขาย'), col(cn, 'ยอดขายลบส่วนลดแล้ว'), col(cn, 'ยอดขายก่อนภาษี')],
+  [-1, -321, -321, -300]);
+eq('   ราคาต่อหน่วยยังเป็นบวก (เป็นราคา ไม่ใช่ยอดเงิน)', col(cn, 'ราคาขายต่อหน่วย'), 321);
+eq('   บอกเลขใบลดหนี้ของตัวเอง และอ้างใบกำกับที่ถูกปรับ',
+  [col(cn, 'เลขที่ใบกำกับภาษี'), col(cn, 'เอกสารอ้างอิง'), col(cn, 'เลขที่บิล')],
+  ['CN-001', 'TAX-001', 'BD-2610-0001']);
+/* ★★ ต้องผูกกับพนักงานขายของบิลต้นทาง ไม่ใช่แอดมินบัญชีที่กดออกใบลดหนี้ —
+   ไม่งั้นยอดที่หักออกไม่เคยไปถึงยอดรายคนของคนขายเลย */
+eq('★★ พนักงานขาย = คนขายบิลต้นทาง (ไม่ใช่คนออกใบลดหนี้)', col(cn, 'พนักงานขาย'), 'พนักงาน A');
+
+eq('★ ใบลดหนี้ที่ถูกยกเลิก (void) ต้องไม่เข้าไฟล์',
+  r.rows.some(x => col(x, 'เลขที่ใบกำกับภาษี') === 'CN-VOID'), false);
+
+const dn = r.rows.find(x => col(x, 'ประเภทรายการ') === 'เพิ่มหนี้');
+/* ★★ ใส่แต่ใบลดหนี้ = ยอดขายต่ำกว่าจริงเท่าใบเพิ่มหนี้ ซึ่งเงียบพอๆ กัน */
+eq('★★ ใบเพิ่มหนี้ = แถวเป็นบวก (คิดเงินขาดไป เก็บเพิ่ม)',
+  [col(dn, 'จำนวนที่ขาย'), col(dn, 'ยอดขายลบส่วนลดแล้ว'), col(dn, 'ยอดขายก่อนภาษี'), col(dn, 'เอกสารอ้างอิง')],
+  [1, 100, 93.46, 'TAX-002']);
+
+eq('★★★ บวกคอลัมน์เดียวได้ยอดสุทธิ: ขายทั้งหมด − ลดหนี้ + เพิ่มหนี้',
+  Math.round(r.rows.reduce((s, x) => s + col(x, 'ยอดขายก่อนภาษี'), 0) * 100) / 100,
+  Math.round((600 + 400 + 794.39 + 373.83 + 1500 - 300 + 93.46) * 100) / 100);
+
+eq('ช่วงวันที่ใช้กับใบลดหนี้ด้วย (ลงวันที่ 12 ต.ค.)',
+  ctx._dashRowsFor('BDC', { dateFrom: '2026-10-12', dateTo: '2026-10-12' })
+    .rows.map(x => col(x, 'เลขที่ใบกำกับภาษี')), ['CN-001']);
+
+eq('แถวเรียงตามวันที่ ไม่ใช่กองใบลดหนี้ไว้ท้ายสุด',
+  r.rows.map(x => col(x, 'วันที่').getTime()).every((t, i, a) => i === 0 || a[i - 1] <= t), true);
+
 console.log('\n── ช่วงวันที่ · สมุดบริษัท · หัวคอลัมน์ ──');
 eq('กรองจากวันที่บนใบกำกับ ไม่ใช่วันเปิดบิล',
   [...new Set(ctx._dashRowsFor('BDC', { dateFrom: '2026-10-06', dateTo: '2026-10-08' })
@@ -214,7 +278,7 @@ const h = ctx._dashRowsFor('', {});
 eq('★★ ยอดขายตรงในนามบริษัทต้องอยู่ในไฟล์ด้วย และไม่ปนกับของตัวแทน',
   h.rows.map(x => [col(x, 'เลขที่ใบกำกับภาษี'), col(x, 'ยอดขายก่อนภาษี')]), [['TAX-H-1', 500]]);
 eq('จำนวนคอลัมน์ในหัวตรงกับจำนวนช่องในแถวข้อมูล',
-  [ctx.DASH_HEADERS.length, r.rows[0].length], [22, 22]);
+  [ctx.DASH_HEADERS.length, r.rows[0].length], [24, 24]);
 eq('คอลัมน์ยอดขายเขียนชัดว่า "ก่อนภาษี" (กติกา 24 ต.ค. 2026)',
   ctx.DASH_HEADERS.indexOf('ยอดขายก่อนภาษี') > -1, true);
 eq('   วันที่เป็น Date จริง ไม่ใช่ข้อความ (Excel ต้องใช้ทำแกนเวลา)',
