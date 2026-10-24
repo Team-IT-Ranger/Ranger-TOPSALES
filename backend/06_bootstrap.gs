@@ -83,7 +83,12 @@ function getDashboard(user) {
     .filter(function(o) { return String(o.sale_by) === String(user.lineUserId) && String(o.created_at).indexOf(today) === 0; });
 
   var bills = orders.length;
-  var revenue = orders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0);
+  /* ★★★ `revenue` = **ยอดขายก่อน VAT** (กติกาเจ้าของระบบ 24 ต.ค. 2026) — พนักงานขายดูเป้าจาก
+     ยอดไม่รวมภาษี ตัวเลขบนหน้าแรกของแอปจึงต้องเป็นตัวเดียวกับที่หัวหน้าใช้วัดผลงาน
+     ไม่งั้นเซลส์เห็น 107 แต่รายงานของศูนย์เห็น 100 แล้วเถียงกันทุกสิ้นเดือน
+     ★ ยอดที่เก็บเงินมาจริงอยู่ที่ `revenueInclVat` (แอปโชว์เป็นบรรทัดรอง) */
+  var revenue = _round2(orders.reduce(function(s, o) { return s + orderExVat(o); }, 0));
+  var revenueInclVat = _round2(orders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0));
 
   var visits = tenantObjects(user.tenantId, 'visits')
     .filter(function(v) { return String(v.line_user_id) === String(user.lineUserId) && String(v.check_in_at).indexOf(today) === 0; }).length;
@@ -109,7 +114,8 @@ function getDashboard(user) {
       return { name: p ? p.name : e[0], sold: e[1] };
     });
 
-  var result = { success: true, bills: bills, revenue: revenue, visits: visits, topProducts: topProducts };
+  var result = { success: true, bills: bills, revenue: revenue, revenueInclVat: revenueInclVat,
+    visits: visits, topProducts: topProducts };
   cachePut('dashboard', user.lineUserId, result, CACHE_TTL_DASHBOARD);
   return result;
 }
@@ -181,11 +187,15 @@ function getAdminDashboard(session, payload) {
     return {
       success: true, scope: 'tenant',
       bills: orders.length,
-      revenue: orders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0),
+      /* ★★★ `revenue` = **ยอดขายก่อน VAT** (กติกาเจ้าของระบบ 24 ต.ค. 2026 — พนักงานขายดูเป้า
+         จากยอดไม่รวมภาษี) · ยอดที่ต้องไปเก็บเงินจริงคือ `revenueInclVat` ซึ่งเป็นเรื่องของ
+         รายงานการเก็บเงิน/ภาษี · ตัวแปลงเดียวคือ orderExVat (18_pricing_engine.gs) ห้ามหาร 1.07 เอง */
+      revenue: orders.reduce(function(s, o) { return s + orderExVat(o); }, 0),
+      revenueInclVat: orders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0),
       activeStaff: staff.filter(function(u) { return String(u.status) === 'Yes'; }).length,
       pendingStaff: staff.filter(function(u) { return String(u.status) !== 'Yes'; }).length,
       pendingDeliveryCount: pendingSO.length,
-      pendingDeliveryValue: pendingSO.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0),
+      pendingDeliveryValue: pendingSO.reduce(function(s, o) { return s + orderExVat(o); }, 0),
       pendingCustomerRequests: _dashPendingCustomerRequests(effTenantId),
       pendingGoodsReceipts: _dashPendingGoodsReceipts(effTenantId),
       recentOrders: recentOrders
@@ -196,17 +206,19 @@ function getAdminDashboard(session, payload) {
   // อ่านจากยอดสรุปรายวัน (sales_daily) ชีตเดียว — เดิมเปิดไฟล์ของทุกตัวแทน ใช้เวลา 16–18 วิ (ดู 31_sales_rollup.gs)
   var tenants = centralObjects('tenants').filter(function(t) { return isFlagOn(t.is_active); });
   var daily = salesDailyMap(today);
-  var totalBills = 0, totalRevenue = 0, perTenant = [];
+  var totalBills = 0, totalRevenue = 0, totalInclVat = 0, perTenant = [];
   tenants.forEach(function(t) {
-    var d = daily[String(t.tenant_id)] || { bills: 0, revenue: 0 };
-    totalBills += d.bills; totalRevenue += d.revenue;
-    perTenant.push({ tenantId: t.tenant_id, name: t.name, bills: d.bills, revenue: d.revenue });
+    // salesDailyMap คืน revenue เป็นยอดก่อนภาษีแล้ว (31_sales_rollup.gs) — ความหมายเดียวกับฝั่งตัวแทน
+    var d = daily[String(t.tenant_id)] || { bills: 0, revenue: 0, revenueInclVat: 0 };
+    totalBills += d.bills; totalRevenue += d.revenue; totalInclVat += (d.revenueInclVat || 0);
+    perTenant.push({ tenantId: t.tenant_id, name: t.name, bills: d.bills, revenue: d.revenue,
+      revenueInclVat: d.revenueInclVat || 0 });
   });
 
   return {
     success: true, scope: 'owner',
     tenantCount: tenants.length,
-    bills: totalBills, revenue: totalRevenue,
+    bills: totalBills, revenue: totalRevenue, revenueInclVat: _round2(totalInclVat),
     productCount: centralObjects('products').filter(function(p) { return isNotOff(p.is_active); }).length,
     activePromoCount: centralObjects('discount_rules').filter(function(r) { return isFlagOn(r.is_active); }).length,
     pendingCustomerRequests: _dashPendingCustomerRequests(null),

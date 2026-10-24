@@ -1377,8 +1377,8 @@
                ติดแค่คลาส `kpi-chips` — ธีมคลาสสิกยังเป็นการ์ดปกติเพราะกฎชิปอยู่ใต้ body.theme-premium -->
           <div class="kpi-row kpi-chips" id="srp-sum" style="margin:12px 0"></div>
           <div class="table-wrap sheet-bot"><table>
-            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ใบแจ้งหนี้/ใบกำกับภาษี</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th></tr></thead>
-            <tbody id="srp-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ใบแจ้งหนี้/ใบกำกับภาษี</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th title="ยอดขายก่อนภาษี — ตัวเลขที่นับเป็นผลงานการขาย">ยอดขายก่อนภาษี</th><th title="ยอดรวมภาษีบนใบกำกับภาษี — เงินที่ต้องเก็บจากลูกค้าจริง">ยอดเก็บเงิน (รวมภาษี)</th><th>ชำระเงิน</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th></tr></thead>
+            <tbody id="srp-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -1922,7 +1922,7 @@
 
         <!-- ═══ TENANTS ═══ -->
         <section class="view" id="view-v-rep-staff">
-          <div class="view-head"><div><h1>รายงานการขายแยกพนักงาน</h1><p>ยอดขายรายคน เทียบช่วงเวลา · ไม่นับบิลที่ยกเลิกแล้ว</p></div></div>
+          <div class="view-head"><div><h1>รายงานการขายแยกพนักงาน</h1><p>ยอดขายรายคน <b>ก่อนภาษี</b> เทียบช่วงเวลา · ไม่นับบิลที่ยกเลิกแล้ว</p></div></div>
             <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
               <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rs-from"></div>
               <div class="field"><label>ถึงวันที่</label><input type="date" id="rs-to"></div>
@@ -1932,13 +1932,13 @@
             </div>
           <p class="form-hint">กรอกช่วง "เทียบกับ" ทั้งสองช่องเพื่อเทียบสองช่วงเวลา เว้นว่างไว้ = ดูช่วงเดียว</p>
           <div class="table-wrap"><table>
-            <thead><tr><th>พนักงาน</th><th>จำนวนบิล</th><th>ยอดขาย</th><th>บิล (ช่วงเทียบ)</th><th>ยอดขาย (ช่วงเทียบ)</th><th>เปลี่ยนแปลง</th></tr></thead>
+            <thead><tr><th>พนักงาน</th><th>จำนวนบิล</th><th title="ยอดขายก่อนภาษี = ยอดขายที่ยังไม่รวมภาษีมูลค่าเพิ่ม เป็นตัวเลขที่ใช้วัดเป้าการขาย · ยอดที่ต้องเก็บจากลูกค้าจริง (ยอดรวมภาษี) ดูที่รายงานยอดขายรายใบ หรือเมนูบัญชี">ยอดขายก่อนภาษี</th><th>บิล (ช่วงเทียบ)</th><th>ยอดขาย (ช่วงเทียบ)</th><th>เปลี่ยนแปลง</th></tr></thead>
             <tbody id="rs-body"><tr class="empty-row"><td colspan="6">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
           </table></div>
         </section>
 
         <section class="view" id="view-v-rep-cust">
-          <div class="view-head"><div><h1>รายงานการขายแยกลูกค้า</h1><p>ยอดซื้อรายร้าน จัดอันดับ และร้านที่หายไป</p></div></div>
+          <div class="view-head"><div><h1>รายงานการขายแยกลูกค้า</h1><p>ยอดซื้อรายร้าน <b>ก่อนภาษี</b> จัดอันดับ และร้านที่หายไป</p></div></div>
             <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
               <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rc-from"></div>
               <div class="field"><label>ถึงวันที่</label><input type="date" id="rc-to"></div>
@@ -1946,7 +1946,7 @@
               <button class="btn btn-primary" onclick="loadRepCust()">ดูรายงาน</button>
             </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>อันดับ</th><th>รหัสร้าน</th><th>ชื่อร้าน</th><th>จำนวนบิล</th><th>ยอดซื้อ</th></tr></thead>
+            <thead><tr><th>อันดับ</th><th>รหัสร้าน</th><th>ชื่อร้าน</th><th>จำนวนบิล</th><th title="ยอดขายก่อนภาษี = ยอดขายที่ยังไม่รวมภาษีมูลค่าเพิ่ม เป็นตัวเลขที่ใช้วัดเป้าการขาย · ยอดที่ต้องเก็บจากลูกค้าจริง (ยอดรวมภาษี) ดูที่รายงานยอดขายรายใบ หรือเมนูบัญชี">ยอดซื้อก่อนภาษี</th></tr></thead>
             <tbody id="rc-body"><tr class="empty-row"><td colspan="5">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
           </table></div>
           <div class="form-card">
@@ -1960,7 +1960,7 @@
         </section>
 
         <section class="view" id="view-v-rep-prod">
-          <div class="view-head"><div><h1>รายงานการขายแยกสินค้า</h1><p>ยอดขายรายสินค้าและรายกลุ่มสินค้า · จำนวนนับเป็นหน่วยฐาน</p></div></div>
+          <div class="view-head"><div><h1>รายงานการขายแยกสินค้า</h1><p>ยอดขายรายสินค้าและรายกลุ่มสินค้า <b>ก่อนภาษี</b> · จำนวนนับเป็นหน่วยฐาน</p></div></div>
             <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
               <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rp-from"></div>
               <div class="field"><label>ถึงวันที่</label><input type="date" id="rp-to"></div>
@@ -1968,20 +1968,20 @@
             </div>
           <div class="cat-filter" id="ws-cat-filter"></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>รหัส</th><th>สินค้า</th><th>หมวด</th><th>หมวดย่อย</th><th>กลุ่ม</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>จำนวนบิล</th><th>ยอดขาย</th></tr></thead>
+            <thead><tr><th>รหัส</th><th>สินค้า</th><th>หมวด</th><th>หมวดย่อย</th><th>กลุ่ม</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>จำนวนบิล</th><th title="ยอดขายก่อนภาษี = ยอดขายที่ยังไม่รวมภาษีมูลค่าเพิ่ม เป็นตัวเลขที่ใช้วัดเป้าการขาย · ยอดที่ต้องเก็บจากลูกค้าจริง (ยอดรวมภาษี) ดูที่รายงานยอดขายรายใบ หรือเมนูบัญชี">ยอดขายก่อนภาษี</th></tr></thead>
             <tbody id="rp-body"><tr class="empty-row"><td colspan="9">เลือกช่วงวันที่แล้วกด "ดูรายงาน"</td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>สรุปตามหมวดสินค้า (Category / subCategory)</h3>
             <div class="table-wrap"><table>
-              <thead><tr><th>หมวด</th><th>หมวดย่อย</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>ยอดขาย</th></tr></thead>
+              <thead><tr><th>หมวด</th><th>หมวดย่อย</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th title="ยอดขายก่อนภาษี = ยอดขายที่ยังไม่รวมภาษีมูลค่าเพิ่ม เป็นตัวเลขที่ใช้วัดเป้าการขาย · ยอดที่ต้องเก็บจากลูกค้าจริง (ยอดรวมภาษี) ดูที่รายงานยอดขายรายใบ หรือเมนูบัญชี">ยอดขายก่อนภาษี</th></tr></thead>
               <tbody id="rp-cat-body"><tr class="empty-row"><td colspan="5">—</td></tr></tbody>
             </table></div>
           </div>
           <div class="form-card">
             <h3>สรุปรายกลุ่มสินค้า</h3>
             <div class="table-wrap"><table>
-              <thead><tr><th>กลุ่มสินค้า</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th>ยอดขาย</th></tr></thead>
+              <thead><tr><th>กลุ่มสินค้า</th><th>จำนวน (หน่วยฐาน)</th><th>ของแถม</th><th title="ยอดขายก่อนภาษี = ยอดขายที่ยังไม่รวมภาษีมูลค่าเพิ่ม เป็นตัวเลขที่ใช้วัดเป้าการขาย · ยอดที่ต้องเก็บจากลูกค้าจริง (ยอดรวมภาษี) ดูที่รายงานยอดขายรายใบ หรือเมนูบัญชี">ยอดขายก่อนภาษี</th></tr></thead>
               <tbody id="rp-group-body"><tr class="empty-row"><td colspan="4">—</td></tr></tbody>
             </table></div>
           </div>
@@ -2978,11 +2978,11 @@ const NAV_GROUPS = [
     ]},
     { n:'1.8', label:'รายงานขาย', items:[
       {n:'1.8.1', label:'รายงานการขายแยกพนักงาน', view:'v-rep-staff', mod:'sales_report', ready:true, scope:'both',
-        soon:'รายงานการขายแยกพนักงาน', desc:'ยอดขายรายคน เทียบช่วงเวลา'},
+        soon:'รายงานการขายแยกพนักงาน', desc:'ยอดขายรายคนก่อนภาษี เทียบช่วงเวลา'},
       {n:'1.8.2', label:'รายงานการขายแยกลูกค้า', view:'v-rep-cust', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกลูกค้า', desc:'ยอดซื้อรายร้าน จัดอันดับ ร้านที่หายไป'},
       {n:'1.8.3', label:'รายงานการขายแยกสินค้า', view:'v-rep-prod', mod:'sales_report', ready:true, scope:'both',
-        soon:'รายงานการขายแยกสินค้า', desc:'ยอดขายรายสินค้า/กลุ่มสินค้า'}
+        soon:'รายงานการขายแยกสินค้า', desc:'ยอดขายรายสินค้า/กลุ่มสินค้า ก่อนภาษี'}
     ]}
   ]},
   { n:'2', icon:'cart', label:'งานซื้อ', subs:[
@@ -3638,12 +3638,18 @@ function renderDashboard(r, fromSnapshot){
 
   if (r.scope === 'tenant'){
     document.getElementById('dash-kpis').innerHTML =
-      kpiLink('ยอดขายวันนี้', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
+      /* ★★★ ตัวเลขยอดขายทุกที่เป็น "ก่อน VAT" (กติกาเจ้าของระบบ 24 ต.ค. 2026) — เป้าของพนักงานขาย
+         วัดด้วยยอดไม่รวมภาษี · **ต้องเขียนกำกับไว้บนการ์ดเสมอ** ตัวเลขเปล่าๆ ที่ไม่บอกว่ารวมภาษีหรือยัง
+         คือต้นเหตุที่คนเอาไปเทียบกับยอดในใบกำกับแล้วคิดว่าระบบคิดเลขผิด
+         ★ ยอดที่ต้องไปเก็บเงินจริงบอกไว้ในบรรทัดย่อย — คนละคำถามกัน แต่คนเดียวกันมักอยากรู้ทั้งคู่ */
+      kpiLink('ยอดขายก่อนภาษี วันนี้', '฿' + baht(r.revenue),
+        r.bills + ' บิล · ยอดรวมภาษี ฿' + baht(r.revenueInclVat) + ' — กดเพื่อดูรายการ',
+        'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
       kpiPendingGr(r.pendingGoodsReceipts) +
       kpiCustReq(r.pendingCustomerRequests) +
       kpi('พนักงานอนุมัติแล้ว', r.activeStaff, '', 'k-people') +
       kpi('รออนุมัติ', r.pendingStaff, 'พนักงานลงทะเบียนใหม่', r.pendingStaff ? 'k-pending' : '') +
-      kpi('SO รอจัดส่ง', r.pendingDeliveryCount, 'มูลค่า ฿' + baht(r.pendingDeliveryValue), 'k-doc');
+      kpi('SO รอจัดส่ง', r.pendingDeliveryCount, 'มูลค่าก่อนภาษี ฿' + baht(r.pendingDeliveryValue), 'k-doc');
     document.getElementById('dash-panel1-title').textContent = 'รายการขายล่าสุด';
     document.getElementById('dash-panel1').innerHTML = r.recentOrders.length
       ? r.recentOrders.map(saleActivityRow).join('')
@@ -3653,13 +3659,15 @@ function renderDashboard(r, fromSnapshot){
       activityRow('อนุมัติแล้ว', r.activeStaff) + activityRow('รออนุมัติ', r.pendingStaff);
   } else {
     document.getElementById('dash-kpis').innerHTML =
-      kpiLink('ยอดขายวันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue), r.bills + ' บิล — กดเพื่อดูรายการ', 'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
+      kpiLink('ยอดขายก่อนภาษี วันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue),
+        r.bills + ' บิล · ยอดรวมภาษี ฿' + baht(r.revenueInclVat) + ' — กดเพื่อดูรายการ',
+        'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
       kpiPendingGr(r.pendingGoodsReceipts) +
       kpiCustReq(r.pendingCustomerRequests) +
       kpi('ตัวแทนที่ใช้งาน', r.tenantCount, '', 'k-people') +
       kpi('สินค้าทั้งหมด', r.productCount, '', 'k-stock') +
       kpi('โปรโมชั่นที่ใช้งาน', r.activePromoCount, '', 'k-promo');
-    document.getElementById('dash-panel1-title').textContent = 'ยอดขายวันนี้ต่อตัวแทน';
+    document.getElementById('dash-panel1-title').textContent = 'ยอดขายก่อนภาษี วันนี้ต่อตัวแทน';
     document.getElementById('dash-panel1').innerHTML = r.perTenant.length
       ? r.perTenant.map(t => activityRow(t.tenantId + ' · ' + esc(t.name), '฿' + baht(t.revenue) + ' (' + t.bills + ')')).join('')
       : '<p style="color:var(--ink-soft);font-size:12.5px">ยังไม่มีตัวแทนที่ active</p>';
@@ -4790,12 +4798,13 @@ async function loadSoMonthCards(){
   box.innerHTML =
     /* ★ เกณฑ์อยู่บนหัวการ์ดในวงเล็บ ไม่ใช่บรรทัดล่าง (เจ้าของระบบสั่ง 17 ต.ค. 2026)
        — คนอ่านต้องรู้ว่า "ยอดขาย" ก้อนนี้นับจากอะไรตั้งแต่บรรทัดแรก ก่อนจะอ่านตัวเลข */
-    card('k-sales kpi-total', 'ยอดขาย ' + mLabel + ' (ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว)',
-      r.totalRevenue, r.totalBills + ' ใบ',
+    /* ★ ยอดก่อน VAT เป็นตัวเลขหลักของการ์ด · ยอดรวมภาษีไปอยู่บรรทัดย่อย (กติกา 24 ต.ค. 2026) */
+    card('k-sales kpi-total', 'ยอดขายก่อนภาษี ' + mLabel + ' (ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว)',
+      r.totalRevenue, r.totalBills + ' ใบ · ยอดรวมภาษี ฿' + baht(r.totalRevenueInclVat),
       "openSalesReport('')") +
     /* ★ ใบรายคนใช้ชุดสีลำดับ (k-s1..k-s6) — สีตรงนี้มีหน้าที่ "แยกคน" ไม่ได้บอกประเภทข้อมูล
        วนซ้ำเมื่อเกิน 6 คน · เรียงตามยอดขายเสมอ คนเดิมจึงมักได้สีเดิมตราบที่อันดับไม่สลับ */
-    (r.data || []).map((x, i) => card('k-s' + (i % 6 + 1), x.label, x.revenue, x.bills + ' ใบ',
+    (r.data || []).map((x, i) => card('k-s' + (i % 6 + 1), x.label + ' — ยอดขายก่อนภาษี', x.revenue, x.bills + ' ใบ',
       "openSalesReport('" + plVal(x.saleBy).replace(/'/g, "\\'") + "')")).join('') +
     (!(r.data || []).length ? '<div class="form-hint" style="padding:6px 2px">เดือนนี้ยังไม่มีบิลที่ออกใบแจ้งหนี้/ใบกำกับภาษี</div>' : '');
 }
@@ -4833,10 +4842,10 @@ async function loadSalesReport(){
     : stSel === 'completed' ? { statuses: ['completed'] } : {};
   const saleBy = SRP_PENDING ? SRP_PENDING.saleBy : document.getElementById('srp-staff').value;
   const custId = SRP_PENDING ? SRP_PENDING.customerId : document.getElementById('srp-cust').value;
-  tblLoading(body, 10);
+  tblLoading(body, 11);
   const r = await callApi('salesReportBills', Object.assign({ saleBy: saleBy, customerId: custId },
     basis, monthRange(month)));
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="11">'+esc(r.message)+'</td></tr>'; return; }
   SRP_DATA = Object.assign({ month: month }, r);
   SRP_PENDING = null;
 
@@ -4857,10 +4866,16 @@ async function loadSalesReport(){
   document.getElementById('srp-sub').textContent =
     basisText + ' · ' + r.dateFrom + ' ถึง ' + r.dateTo + (who ? ' · ' + who.label : '');
 
+  /* ★★ รายงานนี้เป็น "รายใบ" จึงมีทั้งสองก้อนคู่กัน: **ยอดขาย = ก่อน VAT** (ตัวที่วัดผลงาน)
+     กับ **ยอดที่ต้องเก็บเงิน = รวม VAT** (ตัวที่ตรงกับใบกำกับที่ลูกค้าถืออยู่)
+     เอาอันใดอันหนึ่งออกไม่ได้ — คนเปิดหน้านี้มีทั้งคนดูเป้าและคนตามเก็บเงิน */
   document.getElementById('srp-sum').innerHTML =
-    '<div class="kpi k-sales kpi-total"><div class="lbl">ยอดขายรวม</div>' +
+    '<div class="kpi k-sales kpi-total"><div class="lbl">ยอดขายรวมก่อนภาษี</div>' +
       '<div class="val">฿' + baht(r.totalRevenue) + '</div><div class="sub">' + r.totalBills + ' ใบ</div></div>' +
-    '<div class="kpi k-doc"><div class="lbl">เฉลี่ยต่อใบ</div>' +
+    '<div class="kpi k-money"><div class="lbl">ยอดที่ต้องเก็บเงิน (รวมภาษีแล้ว)</div>' +
+      '<div class="val">฿' + baht(r.totalRevenueInclVat) + '</div>' +
+      '<div class="sub">ภาษีมูลค่าเพิ่ม ฿' + baht((r.totalRevenueInclVat || 0) - (r.totalRevenue || 0)) + '</div></div>' +
+    '<div class="kpi k-doc"><div class="lbl">เฉลี่ยต่อใบ ก่อนภาษี</div>' +
       '<div class="val">฿' + baht(r.totalBills ? r.totalRevenue / r.totalBills : 0) + '</div>' +
       '<div class="sub">' + (r.customerOptions || []).length + ' ร้าน · ' + (r.staffOptions || []).length + ' พนักงาน</div></div>';
 
@@ -4872,29 +4887,32 @@ async function loadSalesReport(){
       '<td class="mono-data">'+esc(o.taxInvoiceNo || o.invoiceNo || '-')+'</td>' +
       '<td>'+esc(o.customer)+'</td>' +
       '<td class="mono-data">'+esc(o.customerCode || '-')+'</td>' +
+      '<td class="num">฿'+baht(o.revenue)+'</td>' +
       '<td class="num">฿'+baht(o.total)+'</td>' +
       '<td>'+esc(payLabel(o.paymentMethod))+'</td>' +
       '<td><span class="pill '+(SO_PILL[o.status]||'off')+'">'+esc(SO_LABELS[o.status]||o.status)+'</span></td>' +
       '<td><span class="pill '+(PAY_PILL[o.paymentStatus]||'off')+'">'+esc(PAY_LABELS[o.paymentStatus]||'-')+'</span></td>' +
       '<td>'+esc(o.saleByName || '-')+'</td>' +
-    '</tr>').join('') : '<tr class="empty-row"><td colspan="10">ไม่มีบิลตามเงื่อนไขนี้</td></tr>';
+    '</tr>').join('') : '<tr class="empty-row"><td colspan="11">ไม่มีบิลตามเงื่อนไขนี้</td></tr>';
 }
 
 const srpRows = () => (SRP_DATA ? SRP_DATA.data : []).map(o => [o.date, o.code,
   o.taxInvoiceNo || o.invoiceNo || '-', o.customer, o.customerCode || '-',
-  baht(o.total), payLabel(o.paymentMethod), SO_LABELS[o.status] || o.status,
+  baht(o.revenue), baht(o.total), payLabel(o.paymentMethod), SO_LABELS[o.status] || o.status,
   PAY_LABELS[o.paymentStatus] || '-', o.saleByName || '-']);
-const SRP_HEADERS = ['วันที่','เลขที่บิล','ใบแจ้งหนี้/ใบกำกับภาษี','ลูกค้า','รหัสลูกค้า','ยอดสุทธิ','ชำระเงิน','สถานะ','การเงิน','พนักงานขาย'];
+const SRP_HEADERS = ['วันที่','เลขที่บิล','ใบแจ้งหนี้/ใบกำกับภาษี','ลูกค้า','รหัสลูกค้า','ยอดขายก่อนภาษี','ยอดเก็บเงิน (รวมภาษี)','ชำระเงิน','สถานะ','การเงิน','พนักงานขาย'];
 
 function printSalesReport(){
   if (!SRP_DATA || !SRP_DATA.data.length) { toast('ไม่มีรายการให้พิมพ์', true); return; }
   ensureDocPrint().then(() => DocPrint.table({
     title: 'รายงานยอดขาย', subtitle: scopeLabelForPrint() + ' · ' + document.getElementById('srp-sub').textContent,
     issuerName: (SESSION && SESSION.displayName) || '',
-    headers: SRP_HEADERS, weights: [1.1,1.5,1.6,2.4,1.1,1.2,1.1,1.4,1.2,1.8],
-    align: ['c','','','','c','r','c','c','c',''],
+    // น้ำหนัก/การจัดชิดต้องมีเท่าจำนวนคอลัมน์เสมอ — เพิ่มคอลัมน์แล้วลืมตรงนี้ ตารางที่พิมพ์จะเพี้ยนทั้งใบ
+    headers: SRP_HEADERS, weights: [1.1,1.5,1.6,2.4,1.1,1.3,1.3,1.1,1.4,1.2,1.8],
+    align: ['c','','','','c','r','r','c','c','c',''],
     rows: srpRows(),
-    note: 'ยอดขายรวม ฿' + baht(SRP_DATA.totalRevenue) + ' บาท · ' + SRP_DATA.totalBills + ' ใบ',
+    note: 'ยอดขายรวมก่อนภาษี ฿' + baht(SRP_DATA.totalRevenue) + ' บาท · ยอดรวมภาษี ฿' +
+      baht(SRP_DATA.totalRevenueInclVat) + ' บาท · ' + SRP_DATA.totalBills + ' ใบ',
     filename: 'รายงานยอดขาย-' + SRP_DATA.month
   }));
 }
@@ -4902,7 +4920,8 @@ function exportSalesReport(){
   if (!SRP_DATA || !SRP_DATA.data.length) { toast('ไม่มีรายการให้ส่งออก', true); return; }
   ensureDocPrint().then(() => DocPrint.xlsx({ filename: 'ยอดขาย-' + SRP_DATA.month,
     headers: SRP_HEADERS, rows: srpRows(),
-    note: 'ยอดขายรวม ' + baht(SRP_DATA.totalRevenue) + ' บาท · ' + SRP_DATA.totalBills + ' ใบ' }));
+    note: 'ยอดขายรวมก่อนภาษี ' + baht(SRP_DATA.totalRevenue) + ' บาท · ยอดรวมภาษี ' +
+      baht(SRP_DATA.totalRevenueInclVat) + ' บาท · ' + SRP_DATA.totalBills + ' ใบ' }));
 }
 
 /* ── รายละเอียดบิล ── */

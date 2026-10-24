@@ -349,7 +349,8 @@ function recordSaleAdmin(session, payload) {
     '', initialPaymentStatus(payload.paymentType, fulfillmentType), 'เปิดบิลจากแอดมิน',
     session.displayName || session.username, _adminRoleLabel(session));
 
-  bumpSalesDaily(tenantId, createdAt.substring(0, 10), 1, calc.total);   // ยอดสรุปรายวันของแดชบอร์ด
+  // ★ ส่งยอดก่อนภาษีไปด้วย — แดชบอร์ดแสดง "ยอดขาย" เป็นยอดก่อน VAT (31_sales_rollup.gs)
+  bumpSalesDaily(tenantId, createdAt.substring(0, 10), 1, calc.total, vatSplit.exVat);
 
   /* ★ ขายสดลงบัญชีตรงนี้ เพราะใบกำกับภาษีเพิ่งออกไปพร้อมบิล (52_cash_sales_gl.gs)
      บิลพวกนี้ไม่เคยเดินผ่าน "พร้อมจัดส่ง" ซึ่งเป็นจุดลงบัญชีของฝั่งสำนักงาน
@@ -493,7 +494,8 @@ function _cancelSalesOrderCore(session, payload, tenantId) {
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][idCol]) === String(order.record_id)) { sh.getRange(i + 1, statusCol + 1).setValue('cancelled'); break; }
   }
-  bumpSalesDaily(tenantId, _dOnly(order.created_at), -1, -(parseFloat(order.total) || 0));   // หักออกจากยอดสรุปรายวัน
+  // หักออกจากยอดสรุปรายวันทั้งสองยอด — ยอดก่อนภาษีอ่านจากภาพนิ่งที่บิลเก็บไว้
+  bumpSalesDaily(tenantId, _dOnly(order.created_at), -1, -(parseFloat(order.total) || 0), -orderExVat(order));
   logOrderStatus(tenantId, order.record_id, String(order.status || ''), 'cancelled', orderPaymentStatus(order), orderPaymentStatus(order),
     String(payload.note || 'ยกเลิกบิล') + (shippedWarn ? ' · ' + shippedWarn : ''),
     session.displayName || session.username, _adminRoleLabel(session));

@@ -65,6 +65,9 @@ const ctx = {
   _orderVat: o => { const total = Number(o.total) || 0, ex = Math.round(total / 1.07 * 100) / 100;
     return { rate: 0.07, exVat: ex, vat: Math.round((total - ex) * 100) / 100, applyVat: true,
       vatType: 'inclusive', exemptAmount: 0, taxableExVat: ex, mixed: false }; },
+  /* ★ ยอดขายก่อนภาษีของบิล — ของจริงอยู่ใน 18_pricing_engine.gs (อ่านภาพนิ่งภาษีที่บิลเก็บไว้)
+     ที่นี่ต้องมีเพราะยอดสรุปรายวันเก็บทั้งยอดก่อนภาษีและยอดรวมภาษี (31_sales_rollup.gs) */
+  orderExVat: o => Math.round((Number(o.total) || 0) / 1.07 * 100) / 100,
   tenantObjects: (tid, n) => sheetOf(n).map(o => Object.assign({}, o)),
   /* ★ 15 ต.ค. 2026 — ของจริงเลิกอ่านทั้งแท็บมาหาใบเดียวแล้ว (tenantRowById/tenantRowsWhere ใน 02_helpers.gs)
      ตัวจำลองต้องให้ผลเหมือนกันเป๊ะ: หน้าตาแถวเดียวกัน ลำดับเดียวกัน และเป็นสำเนา ไม่ใช่ตัวจริงในชีต */

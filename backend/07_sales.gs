@@ -292,7 +292,7 @@ function recordSale(user, payload) {
      ขายจากรถนับทันทีเหมือนเดิม เพราะของถึงมือลูกค้าไปแล้วตั้งแต่กดบันทึก
      แก้ใบร่าง = ไม่ต้องขยับอะไร เพราะยังไม่เคยถูกนับ */
   if (!editing && fulfillmentType === 'immediate') {
-    bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total);
+    bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total, vatSplit.exVat);
   }
   touchCustomerLastSale(payload.customerId, createdAt);                       // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)
 

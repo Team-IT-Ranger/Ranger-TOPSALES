@@ -64,7 +64,10 @@ const ctx = {
   cacheClearUser: () => {},
   saleOrderHasRounds: () => false,
   saleDeliveryPlan: () => ({ lines: [] }),
-  bumpSalesDaily: (t, d, b, amt) => log.push('daily:' + b + ':' + amt),
+  /* ★ ยอดสรุปรายวันเก็บทั้งยอดรวมภาษีและยอดก่อนภาษี (31_sales_rollup.gs) — ยกเลิกบิลต้องหักคืนทั้งคู่
+     บันทึกทั้งสองค่าไว้ใน log เพื่อให้เทสต์จับได้ถ้าวันหนึ่งมีใครลืมส่งตัวที่สอง */
+  bumpSalesDaily: (t, d, b, amt, ex) => log.push('daily:' + b + ':' + amt + ':' + ex),
+  orderExVat: o => Math.round((Number(o.total) || 0) / 1.07 * 100) / 100,
   logOrderStatus: (t, id, from, to, p1, p2, note) => log.push('log:' + id + ':' + to),
   orderPaymentStatus: () => 'unpaid',
   _dOnly: v => String(v).substring(0, 10),
@@ -107,6 +110,11 @@ console.log('\n-- ใบแจ้งหนี้ที่ถูกยกเล�
 r = cancel(8);
 eq("status 'void' → ยกเลิกบิลได้", r.success, true);
 ok('และทำงานครบ (หักยอดขาย + เขียนประวัติ)', log.some(x => x.startsWith('daily:')) && log.some(x => x.startsWith('log:')), log);
+/* ★★ ต้องหักคืน **ทั้งสองยอด**: ยอดรวมภาษี (ยอดบนเอกสาร) และยอดขายก่อนภาษี (ตัวที่แดชบอร์ดโชว์)
+   ลืมตัวที่สอง = ยอดขายก่อนภาษีบนแดชบอร์ดค้างสูงกว่าความจริงไปเรื่อยๆ ทุกครั้งที่มีคนยกเลิกบิล
+   และไม่มีอะไรฟ้อง เพราะยอดรวมภาษียังถูก */
+ok('★★ หักคืนทั้งยอดรวมภาษีและยอดก่อนภาษี',
+  log.some(x => /^daily:-1:-\d/.test(x) && x.split(':')[3] && Number(x.split(':')[3]) < 0), log);
 eq("status 'voided' (อีกสะกดหนึ่งที่ปนอยู่ในระบบ) → ยกเลิกได้เหมือนกัน", cancel(9).success, true);
 
 console.log('\n-- ★ เทียบตัวแทนด้วย ไม่ใช่เทียบแค่เลขบิล --');

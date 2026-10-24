@@ -262,9 +262,13 @@
     <h2>ยอดวันนี้</h2>
     <div class="kpis">
       <div class="kpi"><div class="v" id="k-bills">-</div><div class="l">บิล</div></div>
-      <div class="kpi"><div class="v" id="k-rev">-</div><div class="l">ยอดขาย (บาท)</div></div>
+      <!-- ★★★ เขียนให้ชัดว่าเป็น "ยอดขายก่อนภาษี" (เจ้าของระบบสั่ง 24 ต.ค. 2026) — เป้าการขายวัดด้วยยอดนี้
+           ★ ตัวเลขเปล่าๆ ที่ไม่บอกว่ารวมภาษีหรือยัง คือต้นเหตุที่เซลส์เอาไปเทียบกับยอดบนใบกำกับ
+             แล้วคิดว่าระบบคิดเงินผิด · ยอดที่เก็บเงินมาจริงบอกไว้ใต้การ์ด -->
+      <div class="kpi"><div class="v" id="k-rev">-</div><div class="l">ยอดขายก่อนภาษี (บาท)</div></div>
       <div class="kpi"><div class="v" id="k-visits">-</div><div class="l">เยี่ยมร้าน</div></div>
     </div>
+    <div class="muted" id="k-rev-incl" style="margin:-4px 0 10px;font-size:12px"></div>
     <!-- ★ 2026-09-30 เจ้าของระบบสั่ง: "บิลที่บันทึกแล้วไปดูที่ไหน ในแอพไม่มีให้ดูเลย" — getRecentSales มีอยู่แล้ว
          ใน backend (06_bootstrap.gs) แต่ไม่เคยถูกเรียกจากหน้าจอไหนของแอปมือถือเลยสักที่ ต่อเข้ากับที่นี่ -->
     <div class="card" style="margin-bottom:12px"><h3>บิลล่าสุดของฉัน</h3><div id="h-recent"><div class="empty">-</div></div></div>
@@ -655,6 +659,8 @@ async function loadDashboard(){
     const [r, rs] = await Promise.all([api('getDashboard', {}), api('getRecentSales', { limit: 15 })]);
     if (r.success) {
       $('k-bills').textContent = r.bills || 0; $('k-rev').textContent = baht(r.revenue); $('k-visits').textContent = r.visits || 0;
+      // ยอดเก็บเงินจริง (รวมภาษี) — คนละตัวกับยอดขายก่อนภาษีด้านบน เซลส์ต้องเห็นทั้งคู่
+      $('k-rev-incl').textContent = r.revenueInclVat ? 'เก็บเงินรวมภาษี ฿' + baht(r.revenueInclVat) : '';
       $('h-top').innerHTML = (r.topProducts || []).length
         ? r.topProducts.map((t, i) => '<div class="row"><span>'+(i+1)+'. '+esc(t.name)+'</span><b>'+esc(t.sold)+'</b></div>').join('')
         : '<div class="empty">ยังไม่มียอดขายวันนี้</div>';
