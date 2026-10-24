@@ -1,5 +1,5 @@
 /**
- * ============ ส่งยอดขายออกเป็นไฟล์กลางของ Dashboard บริษัท (rangertopsales.xlsx) ============
+ * ============ ส่งยอดขายออกเป็นไฟล์กลางของ Dashboard บริษัท (CSV ต่อตัวแทน) ============
  * เจ้าของระบบสั่ง 24 ต.ค. 2026 · ให้ GAS trigger เป็นตัวรัน
  *
  * ★★★ นิยาม "ยอดขาย" ของไฟล์นี้ = **ใบที่ออกใบกำกับภาษีไปแล้วเท่านั้น** (เจ้าของระบบสั่ง)
@@ -10,18 +10,24 @@
  * ★★ ตัวเลขยอดขายในไฟล์เป็น **ยอดก่อนภาษี** ตามกติกา 24 ต.ค. 2026 (ดู orderExVat ใน 18_pricing_engine.gs)
  *   และมียอดรวมภาษีอยู่คนละคอลัมน์ให้ฝั่งเก็บเงิน/ภาษีใช้ — อย่าเอาสองตัวนี้ไปรวมกัน
  *
- * โครงไฟล์: 1 ชีต = 1 ตัวแทน ตั้งชื่อชีตด้วย **รหัสย่อของตัวแทน** (เช่น `BDC`)
+ * โครงไฟล์: **1 ตัวแทน = 1 ไฟล์ `<รหัสย่อ>.csv`** (เช่น `BDC.csv` · ขายตรงในนามบริษัท = `HOUSE.csv`)
  *   · **1 แถว = 1 บรรทัดบิล (transaction line)** — เจ้าของระบบใช้ถึงระดับสินค้า
  *   · คอลัมน์เอกสารซ้ำทุกบรรทัดของใบเดียวกัน Dashboard จึง group เอายอดระดับใบได้เอง
  *
- * ★ ทำไมต้องมีชีต Google คั่นกลาง: Apps Script เขียนไฟล์ .xlsx ตรงๆ ไม่ได้ จึงเขียนลงชีต Google ก่อน
- *   แล้ว "ส่งออกเป็น .xlsx" ทับไฟล์เดิม **โดยคง file id เดิมไว้** ลิงก์ที่ Dashboard ใช้จึงไม่เปลี่ยน
- *   (สร้างไฟล์ใหม่ทุกครั้ง = ลิงก์ตายทุกครั้ง)
+ * ★★★ เปลี่ยนจาก .xlsx มาเป็น .csv (เจ้าของระบบสั่ง 24 ต.ค. 2026) — ที่เร็วขึ้นไม่ใช่เพราะรูปแบบไฟล์
+ *   แต่เพราะ **ไม่ต้องแตะ Google Sheets เลย**: เดิมต้องเขียนลงชีต → สั่ง export → อัปโหลดทับ
+ *   (ยิงเน็ต 2 รอบ + เขียนชีตทั้งก้อน) · ตอนนี้ต่อสตริงในหน่วยความจำแล้วอัปโหลดรอบเดียวจบ
+ *   และไม่ชนเพดาน 10 ล้านเซลล์ของชีต Google เมื่อข้อมูลโตขึ้น
+ *
+ * ★★ ราคาที่จ่ายไปกับการใช้ CSV — **รู้ตัวตั้งแต่ต้น ไม่ใช่เจอทีหลัง**:
+ *   1. **CSV ไม่มีชีต** จึงต้องแยกไฟล์ต่อตัวแทน (ซึ่งคือสิ่งที่สั่งมา)
+ *   2. **เลขที่มีศูนย์นำหน้าไม่มีอะไรปกป้อง** — `เลขผู้เสียภาษี` 0105... และ `สาขา` 00000
+ *      ถ้าเปิดด้วย Excel ด้วยการดับเบิลคลิก ศูนย์หน้าจะหาย · ฝั่งที่อ่านไฟล์ต้องกำหนดชนิดคอลัมน์
+ *      เป็นข้อความเอง (ปลายทางเป็นโปรแกรมอ่าน จึงยอมรับข้อนี้ได้)
+ *   3. วันที่/ตัวเลขเป็นข้อความล้วน — เขียนวันที่เป็น `yyyy-mm-dd` (ISO) ซึ่งไม่กำกวมทุกภาษา
  */
 
-var DASH_WORKBOOK_NAME = 'rangertopsales';          // ชื่อไฟล์ (ไม่มีนามสกุล — .xlsx ต่อท้ายตอนส่งออก)
-var DASH_PROP_SHEET    = 'DASHBOARD_SHEET_FILEID';  // ชีต Google ที่ใช้ทำงาน
-var DASH_PROP_XLSX     = 'DASHBOARD_XLSX_FILEID';   // ไฟล์ .xlsx ที่ Dashboard อ่าน
+var DASH_PROP_FILE_IDS = 'DASHBOARD_CSV_FILEIDS';   // {รหัสตัวแทน: fileId} — คงไฟล์เดิมไว้ ลิงก์จะได้ไม่ตาย
 var DASH_PROP_FOLDER   = 'DASHBOARD_FOLDER_ID';     // โฟลเดอร์ปลายทาง (ไม่ตั้ง = โฟลเดอร์ db ของ env)
 
 /* กันไฟล์บวมจนรันไม่จบใน 6 นาที — เกินเท่านี้ให้ไปตั้งช่วงวันที่แทนการดึงทั้งหมด */
@@ -213,22 +219,7 @@ function _dashDate(s) {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
 
-/** ชีต Google ที่ใช้ทำงาน — สร้างครั้งแรกแล้วจำ id ไว้ใน Script Property */
-function _dashWorkbook() {
-  var props = PropertiesService.getScriptProperties();
-  var id = props.getProperty(DASH_PROP_SHEET);
-  if (id) {
-    try { return SpreadsheetApp.openById(id); } catch (e) { /* ไฟล์ถูกลบ/ย้ายสิทธิ์ — สร้างใหม่ข้างล่าง */ }
-  }
-  var ss = SpreadsheetApp.create(DASH_WORKBOOK_NAME);
-  var file = DriveApp.getFileById(ss.getId());
-  _dashFolder().addFile(file);
-  // ไฟล์ที่ Apps Script สร้างจะไปอยู่ My Drive ของเจ้าของสคริปต์ด้วย — เอาออกให้เหลือที่เดียว
-  try { DriveApp.getRootFolder().removeFile(file); } catch (e) {}
-  props.setProperty(DASH_PROP_SHEET, ss.getId());
-  return ss;
-}
-
+/** โฟลเดอร์ปลายทาง — ไม่ตั้ง `DASHBOARD_FOLDER_ID` = โฟลเดอร์ฐานข้อมูลของ env นั้น */
 function _dashFolder() {
   var fid = PropertiesService.getScriptProperties().getProperty(DASH_PROP_FOLDER);
   if (fid) return DriveApp.getFolderById(fid);
@@ -236,33 +227,65 @@ function _dashFolder() {
 }
 
 /**
- * ส่งออกชีตทั้งเล่มเป็น .xlsx ทับไฟล์เดิม (คง file id เดิมไว้)
- * ★ ต้องใส่ `supportsAllDrives=true` ทุกคำขอ — ไฟล์อยู่บน Shared Drive ไม่งั้น Drive API ตอบ 404
+ * แถวข้อมูล → ข้อความ CSV
+ * ★ ตามมาตรฐาน RFC 4180: คั่นด้วย `,` · ขึ้นบรรทัดใหม่ด้วย CRLF · ค่าที่มี `,` `"` หรือขึ้นบรรทัด
+ *   ต้องครอบด้วย `"` และ `"` ข้างในต้องเขียนซ้อนสองตัว
+ * ★★ **เว้นวรรคหน้า/หลังก็ต้องครอบด้วย** ไม่งั้นตัวอ่านบางตัวตัดทิ้งเงียบๆ (ชื่อร้านที่มีเว้นวรรคท้าย
+ *   เป็นเรื่องปกติในข้อมูลที่ย้ายมาจากระบบเดิม)
  */
-function _dashWriteXlsx(ss) {
-  var token = ScriptApp.getOAuthToken();
-  var exportUrl = 'https://www.googleapis.com/drive/v3/files/' + ss.getId() +
-    '/export?mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  var res = UrlFetchApp.fetch(exportUrl, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
-  if (res.getResponseCode() !== 200) {
-    throw new Error('ส่งออก .xlsx ไม่สำเร็จ (' + res.getResponseCode() + '): ' + res.getContentText().substring(0, 200));
-  }
-  var blob = res.getBlob().setName(DASH_WORKBOOK_NAME + '.xlsx');
+function _dashCsvText(rows) {
+  var esc = function(v) {
+    if (v === null || v === undefined) return '';
+    if (Object.prototype.toString.call(v) === '[object Date]') return _dashIsoDate(v);
+    if (typeof v === 'number') return String(v);
+    var t = String(v);
+    if (/[",\r\n]/.test(t) || t !== t.trim()) return '"' + t.replace(/"/g, '""') + '"';
+    return t;
+  };
+  var lines = [DASH_HEADERS.map(esc).join(',')];
+  rows.forEach(function(r) { lines.push(r.map(esc).join(',')); });
+  return lines.join('\r\n') + '\r\n';
+}
 
+/** Date → 'yyyy-mm-dd' (ISO) — รูปแบบเดียวที่ไม่กำกวมว่าวันหรือเดือนมาก่อน */
+function _dashIsoDate(d) {
+  var p = function(n) { return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+/**
+ * เขียนไฟล์ CSV หนึ่งไฟล์ **ทับไฟล์เดิม โดยคง file id เดิมไว้** ลิงก์ที่ Dashboard ใช้จึงไม่ตายทุกวัน
+ *
+ * ★★ ใส่ BOM (\uFEFF) นำหน้า — ถ้าไม่ใส่ Excel บน Windows เปิดไฟล์แล้วภาษาไทยเพี้ยนทั้งไฟล์
+ *   ตัวอ่านฝั่งโปรแกรมข้าม BOM ให้เองอยู่แล้ว (Python ใช้ `utf-8-sig`, Power BI/pandas จัดการให้)
+ * ★ หา id ตามลำดับ: property → ชื่อไฟล์ในโฟลเดอร์ → สร้างใหม่ · ลำดับนี้ทำให้ย้าย/ลบไฟล์ด้วยมือแล้ว
+ *   รอบถัดไปยังทำงานต่อได้เอง ไม่ต้องมาแก้ property
+ */
+function _dashWriteCsv(name, text) {
   var props = PropertiesService.getScriptProperties();
-  var xlsxId = props.getProperty(DASH_PROP_XLSX);
-  if (xlsxId) {
+  var map = {};
+  try { map = JSON.parse(props.getProperty(DASH_PROP_FILE_IDS) || '{}'); } catch (e) { map = {}; }
+  var fileName = name + '.csv';
+  var blob = Utilities.newBlob('\uFEFF' + text, 'text/csv', fileName);
+
+  var id = map[name];
+  if (!id) {                                   // ยังไม่เคยจำ — ดูว่ามีไฟล์ชื่อนี้อยู่ก่อนแล้วไหม
+    var it = _dashFolder().getFilesByName(fileName);
+    if (it.hasNext()) id = it.next().getId();
+  }
+  if (id) {
     try {
       var up = UrlFetchApp.fetch(
-        'https://www.googleapis.com/upload/drive/v3/files/' + xlsxId + '?uploadType=media&supportsAllDrives=true',
-        { method: 'patch', contentType: blob.getContentType(), payload: blob.getBytes(),
-          headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
-      if (up.getResponseCode() === 200) return xlsxId;
-      // ไฟล์หาย/ถูกลบ → ตกลงไปสร้างใหม่ข้างล่าง
+        'https://www.googleapis.com/upload/drive/v3/files/' + id + '?uploadType=media&supportsAllDrives=true',
+        { method: 'patch', contentType: 'text/csv', payload: blob.getBytes(),
+          headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+      if (up.getResponseCode() === 200) { map[name] = id; props.setProperty(DASH_PROP_FILE_IDS, JSON.stringify(map)); return id; }
+      // ไฟล์ถูกลบไปแล้ว → ตกลงไปสร้างใหม่ข้างล่าง
     } catch (e) { /* เหมือนกัน */ }
   }
   var created = _dashFolder().createFile(blob);
-  props.setProperty(DASH_PROP_XLSX, created.getId());
+  map[name] = created.getId();
+  props.setProperty(DASH_PROP_FILE_IDS, JSON.stringify(map));
   return created.getId();
 }
 
@@ -286,46 +309,26 @@ function _dashTargets(opts) {
 }
 
 /**
- * ตัวจริง — ไล่ทุกตัวแทนที่ใช้งานอยู่ + บริษัท แล้วเขียนทีละชีต
+ * ตัวจริง — ไล่ทุกตัวแทนที่ใช้งานอยู่ + บริษัท แล้วเขียนไฟล์ละตัวแทน
  * opts: { dateFrom?, dateTo?, tenantIds? }  (ไม่ส่ง = ทั้งหมดเท่าที่มี)
  */
-function exportSalesDashboardWorkbook(opts) {
+function exportSalesDashboardFiles(opts) {
   opts = opts || {};
-  var ss = _dashWorkbook();
-
-  var targets = _dashTargets(opts);
-
   var report = [], total = 0;
-  targets.forEach(function(tid) {
-    var name = tid || 'HOUSE';                  // ชีตของบริษัทใช้ชื่อ HOUSE (ชื่อชีตว่างไม่ได้)
+
+  _dashTargets(opts).forEach(function(tid) {
+    var name = tid || 'HOUSE';                  // ขายตรงในนามบริษัท = HOUSE.csv (ชื่อไฟล์ว่างไม่ได้)
     var r = _dashRowsFor(tid, opts);
     if (!r.success) { report.push({ tenantId: name, error: r.message }); return; }
-
-    var sh = ss.getSheetByName(name) || ss.insertSheet(name);
-    sh.clear();
-    sh.getRange(1, 1, 1, DASH_HEADERS.length).setValues([DASH_HEADERS]).setFontWeight('bold');
-    if (r.rows.length) {
-      sh.getRange(2, 1, r.rows.length, DASH_HEADERS.length).setValues(r.rows);
-      sh.getRange(2, 1, r.rows.length, 1).setNumberFormat('yyyy-mm-dd');
-      // คอลัมน์เงิน (16-21) + จำนวน (14) — ตำแหน่งผูกกับ DASH_HEADERS แก้หัวแล้วต้องตามมาแก้ที่นี่
-      sh.getRange(2, 14, r.rows.length, 1).setNumberFormat('#,##0.###');
-      sh.getRange(2, 16, r.rows.length, 6).setNumberFormat('#,##0.00');
-    }
-    sh.setFrozenRows(1);
-    report.push({ tenantId: name, rows: r.rows.length, truncated: r.truncated });
+    /* ★ ไม่มีแถวก็ยังเขียนไฟล์ (เหลือแต่หัวคอลัมน์) — ไฟล์ค้างของเก่าไว้เฉยๆ อันตรายกว่า
+       เพราะ Dashboard จะอ่านยอดเดือนที่แล้วมาแสดงเป็นเดือนนี้โดยไม่มีอะไรฟ้อง */
+    var fileId = _dashWriteCsv(name, _dashCsvText(r.rows));
+    report.push({ tenantId: name, rows: r.rows.length, truncated: r.truncated,
+      fileId: fileId, url: 'https://drive.google.com/file/d/' + fileId + '/view' });
     total += r.rows.length;
   });
 
-  /* ชีตเปล่าที่ Google แถมมาตอนสร้างไฟล์ใหม่ — ลบทิ้งเมื่อมีชีตจริงแล้ว */
-  var blank = ss.getSheetByName('Sheet1') || ss.getSheetByName('ชีต1');
-  if (blank && ss.getSheets().length > 1) { ss.deleteSheet(blank); }
-
-  SpreadsheetApp.flush();
-  var xlsxId = _dashWriteXlsx(ss);
-
-  return { success: true, rows: total, tenants: report,
-    xlsxFileId: xlsxId, xlsxUrl: 'https://drive.google.com/file/d/' + xlsxId + '/view',
-    sheetUrl: ss.getUrl(), at: nowStr() };
+  return { success: true, rows: total, files: report, at: nowStr() };
 }
 
 /* ═══════════════ ตัวที่ trigger เรียก ═══════════════
@@ -333,8 +336,9 @@ function exportSalesDashboardWorkbook(opts) {
      ไม่งั้น Apps Script ส่งอีเมลแจ้ง error ทุกชั่วโมงจนคนเลิกอ่าน แล้วของพังจริงก็ไม่มีใครเห็น */
 function runDashboardExport() {
   try {
-    var r = exportSalesDashboardWorkbook({});
-    Logger.log('ส่งออก Dashboard สำเร็จ: ' + r.rows + ' แถว · ' + r.xlsxUrl);
+    var r = exportSalesDashboardFiles({});
+    Logger.log('ส่งออก Dashboard สำเร็จ: ' + r.rows + ' แถว · ' +
+      r.files.map(function(f) { return f.tenantId + '=' + (f.error || f.rows); }).join(' · '));
     return r;
   } catch (e) {
     Logger.log('ส่งออก Dashboard ล้มเหลว: ' + e.message);
@@ -362,7 +366,7 @@ function exportSalesDashboard(session, payload) {
   if (!session || !session.isSuperAdmin) return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
   payload = payload || {};
   try {
-    return exportSalesDashboardWorkbook({ dateFrom: payload.dateFrom, dateTo: payload.dateTo });
+    return exportSalesDashboardFiles({ dateFrom: payload.dateFrom, dateTo: payload.dateTo });
   } catch (e) {
     return { success: false, message: 'ส่งออกไม่สำเร็จ: ' + e.message };
   }
