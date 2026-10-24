@@ -42,9 +42,14 @@ var DASH_HEADERS = [
      (เจ้าของระบบกำหนดเอง 24 ต.ค. 2026) — **ห้ามเดาเป็นชื่อย่ออย่างอื่น** ต้องตรงกับที่ปลายทางตั้งไว้ */
   'datasource', 'วันที่', 'เลขที่ใบกำกับภาษี', 'เลขที่บิล', 'รอบจัดส่ง', 'รหัสตัวแทน',
   'รหัสลูกค้า', 'ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'สาขา', 'พนักงานขาย', 'วิธีชำระ',
-  'รหัสสินค้า', 'ชื่อสินค้า', 'จำนวนที่ขาย', 'หน่วยขาย', 'ราคาขายต่อหน่วย',
-  'ยอดเงินตามราคาขาย', 'ส่วนลดรายบรรทัด', 'ส่วนลดท้ายบิล (เฉลี่ย)',
-  'ยอดขายลบส่วนลดแล้ว', 'ยอดขายก่อนภาษี', 'ของแถม',
+  /* ★★★ **ตัวเลขเงินทุกคอลัมน์เป็นยอดก่อนภาษีทั้งหมด** (เจ้าของระบบสั่ง 25 ต.ค. 2026:
+     "รายงานการขายของเราไม่ดู VAT") — ราคาต่อหน่วย ยอดตามราคาขาย ส่วนลดทั้งสองชั้น และยอดสุทธิ
+     ถอด VAT ออกหมดแล้วตั้งแต่ต้นทาง Dashboard จึงบวกได้ตรงๆ ไม่ต้องรู้เรื่องภาษีเลย
+     ★ เลิกมีคอลัมน์ "ยอดขายก่อนภาษี" แยกต่างหาก เพราะกลายเป็นเลขเดียวกับ "ยอดขายลบส่วนลดแล้ว"
+       — ส่งเลขเดียวกันสองคอลัมน์มีแต่ทำให้คนรวมซ้ำ (กติกาเดียวกับข้อ 8 ใน CLAUDE.md) */
+  'รหัสสินค้า', 'ชื่อสินค้า', 'จำนวนที่ขาย', 'หน่วยขาย', 'ราคาขายต่อหน่วย (ก่อนภาษี)',
+  'ยอดเงินตามราคาขาย (ก่อนภาษี)', 'ส่วนลดรายบรรทัด (ก่อนภาษี)', 'ส่วนลดท้ายบิล เฉลี่ย (ก่อนภาษี)',
+  'ยอดขายลบส่วนลดแล้ว (ก่อนภาษี)', 'ของแถม',
   /* ★★ ใบลดหนี้/ใบเพิ่มหนี้อยู่ชีตเดียวกันเป็น **แถวติดลบ/บวก** (เจ้าของระบบสั่ง 24 ต.ค. 2026)
      Dashboard บวกคอลัมน์เดียวได้ยอดสุทธิเลย ไม่ต้องไปลบจากอีกชีต (ซึ่งมีวันลืม)
      ★ `ประเภทรายการ` ไว้ให้กรองแยกเมื่ออยากดูเฉพาะยอดขายดิบ · `เอกสารอ้างอิง` = ใบกำกับที่ถูกปรับ */
@@ -119,7 +124,12 @@ function _dashRowsFor(tenantId, opts) {
          ★ คิดเป็น "ส่วนที่เหลือ" จาก gross − net แทนที่จะคำนวณการเฉลี่ยซ้ำเองอีกชุด —
            ตัวเลขจึงบวกกลับได้เท่ากับยอดสุทธิเสมอ ไม่ว่าสูตรเฉลี่ยจะเปลี่ยนไปอย่างไรในอนาคต */
       var lineDisc = _round2((parseFloat(it.line_discount) || 0) * share);
-      var billDisc = _round2(gross - net - lineDisc);
+      /* ★★★ ถอด VAT ออกทุกช่องเงิน (เจ้าของระบบสั่ง 25 ต.ค. 2026) — บรรทัดที่ยกเว้นภาษีจะไม่ถูกถอด
+         เพราะ `lineExVat` ดูภาพนิ่งภาษีรายบรรทัด · ★ `billDiscEx` คิดเป็น **ส่วนที่เหลือ** ไม่ใช่ถอดเอง
+         ไม่งั้นปัดเศษคนละช่องแล้ว กขค − ส่วนลด ≠ ยอดสุทธิ ทีละสตางค์ ซึ่งคนกระทบยอดจะหาไม่เจอ */
+      var exOf = function(v) { return lineExVat(order, { line_total: v, tax_status: it.tax_status }); };
+      var grossEx = exOf(gross), netEx = exOf(net), lineDiscEx = exOf(lineDisc);
+      var billDiscEx = _round2(grossEx - lineDiscEx - netEx);
       var p = products[String(it.product_id)] || {};
       var free = isFlagOn(it.is_free) || String(it.is_free) === '1';
 
@@ -128,11 +138,9 @@ function _dashRowsFor(tenantId, opts) {
         r.customerCode || '', r.customerName || '', r.taxId || '', r.branchCode || '',
         r.saleByName || '', r.paymentLabel || '',
         p.product_code || String(it.product_id || ''), p.name || '(สินค้าถูกลบ)',
-        qty, it.unit_code || '', _round2(parseFloat(it.price) || 0),
-        // ยอดขายลบส่วนลดแล้ว = ยอดตามราคาขาย − ส่วนลดรายบรรทัด − ส่วนลดท้ายบิลที่เฉลี่ยมา
-        gross, lineDisc, billDisc, net,
-        // ยอดขายก่อนภาษีของบรรทัด — ใช้ภาพนิ่งภาษีรายบรรทัด (กติกา 24 ต.ค. 2026)
-        lineExVat(order, { line_total: net, tax_status: it.tax_status }),
+        qty, it.unit_code || '', exOf(_round2(parseFloat(it.price) || 0)),
+        // ยอดขายลบส่วนลดแล้ว = ยอดตามราคาขาย − ส่วนลดรายบรรทัด − ส่วนลดท้ายบิลที่เฉลี่ยมา (ก่อนภาษีทุกช่อง)
+        grossEx, lineDiscEx, billDiscEx, netEx,
         free ? 'ใช่' : '', DASH_KIND_SALE, ''
       ]);
     });
@@ -198,6 +206,7 @@ function _dashAppendNotes(out, tenantId, book, salesTenant, opts, products, orde
         var qty = (parseFloat(l.qty) || 0) * K.sign;
         var amt = _round2((parseFloat(l.amount) || 0) * K.sign);
         var p = products[String(l.product_id)] || {};
+        var exOf = function(v) { return lineExVat(noteVat, { line_total: v, tax_status: l.tax_status }); };
         out.push([
           DASH_SOURCE, _dashDate(date), n[K.noField] || '', order ? (order.order_code || '') : '',
           n.delivery_round_id ? (roundNo[String(n.delivery_round_id)] || '') : '', tenantId,
@@ -205,11 +214,11 @@ function _dashAppendNotes(out, tenantId, book, salesTenant, opts, products, orde
           order ? _saleByLabel(order.sale_by) : '',
           order ? (isCreditPayment(order.payment_method) ? 'เครดิต' : 'เงินสด') : '',
           p.product_code || String(l.product_id || ''), p.name || '(สินค้าถูกลบ)',
-          qty, l.unit_code || '', _round2(parseFloat(l.unit_price) || 0),
+          qty, l.unit_code || '', exOf(_round2(parseFloat(l.unit_price) || 0)),
           /* ★ ราคาที่ลดหนี้คือ "ราคาที่ขายไปจริง" อยู่แล้ว (49_credit_notes.gs กันไม่ให้เกิน)
-             จึงไม่มีส่วนลดให้แยกอีกชั้น — ยอดตามราคาขายกับยอดหลังหักส่วนลดเท่ากัน */
-          amt, 0, 0, amt,
-          lineExVat(noteVat, { line_total: amt, tax_status: l.tax_status }),
+             จึงไม่มีส่วนลดให้แยกอีกชั้น — ยอดตามราคาขายกับยอดหลังหักส่วนลดเท่ากัน
+             ★ ก่อนภาษีทุกช่องเหมือนแถวขาย และใช้อัตราที่ "ใบลดหนี้ใบนั้น" เก็บไว้ ไม่ใช่อัตราปัจจุบัน */
+          exOf(amt), 0, 0, exOf(amt),
           '', K.kind, n.invoice_no || ''
         ]);
       });
