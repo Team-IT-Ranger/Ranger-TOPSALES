@@ -1847,12 +1847,19 @@
               <select id="ti-pay" onchange="loadTaxInvoices()">
                 <option value="">ทั้งหมด</option><option value="cash">เงินสด</option><option value="credit">เครดิต</option>
               </select></div>
+            <!-- ★ คำถามแรกของคนทำบัญชีคือ "เหลืออะไรต้องทำ" — ต้องกรองให้ได้ในคลิกเดียว -->
+            <div class="field" style="max-width:190px"><label>การลงบัญชี</label>
+              <select id="ti-posted" onchange="loadTaxInvoices()">
+                <option value="">ทั้งหมด</option>
+                <option value="unposted">เฉพาะที่ยังไม่ลงบัญชี</option>
+                <option value="posted">เฉพาะที่ลงบัญชีแล้ว</option>
+              </select></div>
             <div id="ti-sum" class="form-hint" style="flex:1;min-width:220px"></div>
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่ใบกำกับ</th><th>วันที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>วิธีชำระ</th>
-              <th>มูลค่าก่อนภาษี</th><th>ภาษี</th><th>รวม</th><th></th></tr></thead>
-            <tbody id="ti-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+              <th>มูลค่าก่อนภาษี</th><th>ภาษี</th><th>รวม</th><th>ลงบัญชี</th><th></th></tr></thead>
+            <tbody id="ti-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -2450,7 +2457,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
   'createArInvoice','createArCreditNote','createArDebitNote','receiveArPayment','voidJournal','saveAccountingSettings',
   'createBillingNote','cancelBillingNote','createGoodsReturn','cancelGoodsReturn','createCreditNoteFromReturn',
   'voidArAdjustNote','repairDraftOrderCodes','organizeDatabaseFiles','syncTenantSheets','saveCreditSettings',
-  'mergeDuplicateWarehouses','backfillCashSaleGl',
+  'mergeDuplicateWarehouses','backfillCashSaleGl','createArInvoice',
   'migrateUnitCodes','rebuildSalesDaily',
   'savePriceListRule','deletePriceListRule','applyCustomerBulkAssign',
   'savePackageTenants','migratePackageAssignments',
@@ -3919,11 +3926,12 @@ async function ensureCustomerGroups(){
 let tiCache = [];
 async function loadTaxInvoices(){
   const body = document.getElementById('ti-body'); if (!body) return;
-  tblLoading(body, 9);
+  tblLoading(body, 10);
   const r = await callApi('listTaxInvoices', {
     month: (document.getElementById('ti-month') || {}).value || '',
-    paymentType: (document.getElementById('ti-pay') || {}).value || '' });
-  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="9">'+esc(r.message)+'</td></tr>'; return; }
+    paymentType: (document.getElementById('ti-pay') || {}).value || '',
+    postedState: (document.getElementById('ti-posted') || {}).value || '' });
+  if (!r.success) { body.innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>'; return; }
   tiCache = r.data || [];
   renderTaxInvoices(r.summary || {}, r.truncated);
 }
@@ -3932,6 +3940,9 @@ function renderTaxInvoices(sum, truncated){
   if (box) box.innerHTML = sum.docs
     ? 'ใบกำกับ <b>' + sum.docs + '</b> ใบ (เงินสด ' + (sum.cash||0) + ' · เครดิต ' + (sum.credit||0) + ')' +
       ' · มูลค่าก่อนภาษี <b>฿' + bahtPlain(sum.exVat) + '</b> · ภาษี <b>฿' + bahtPlain(sum.vat) + '</b>' +
+      /* ★ ตัวเลขที่ค้างต้องเด้งออกมาเป็นสีส้ม ไม่ใช่ซ่อนอยู่ในรายงานภาษีอีกหน้าหนึ่ง */
+      (sum.unposted ? ' · <span style="color:var(--orange)"><b>ยังไม่ลงบัญชี ' + sum.unposted +
+        ' ใบ</b> (ภาษี ฿' + bahtPlain(sum.unpostedVat) + ')</span>' : '') +
       (truncated ? ' · แสดงบางส่วน เลือกเดือนเพื่อดูให้ครบ' : '')
     : '';
   document.getElementById('ti-body').innerHTML = rowsOrEmpty(tiCache.map(t =>
@@ -3946,6 +3957,10 @@ function renderTaxInvoices(sum, truncated){
     '<td class="mono-data">฿'+bahtPlain(t.subtotalExVat)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(t.vatAmount)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(t.total)+'</td>' +
+    /* ★ สามสถานะ ไม่ใช่สอง — บิลที่ยกเลิกไม่มีอะไรต้องลง อย่าให้ไปปนกับที่ค้างจริง */
+    '<td>'+(t.cancelled ? '<span class="tag">—</span>'
+      : t.posted ? '<span class="tag tag-ok">ลงแล้ว</span>' + (t.journalNo ? ' <span class="form-hint mono-data">'+esc(t.journalNo)+'</span>' : '')
+      : '<span class="tag tag-warn">ยังไม่ลง</span>')+'</td>' +
     '<td style="white-space:nowrap">' +
       '<button class="btn btn-sm" onclick="openSaleOrderDetail('+t.orderId+')">ดูใบขาย</button>' +
       /* ★ ออกใบลดหนี้ได้เฉพาะใบที่มีใบแจ้งหนี้ลูกหนี้รองรับ — ขายสดยังทำไม่ได้ทั้งระบบ
@@ -3953,9 +3968,35 @@ function renderTaxInvoices(sum, truncated){
       (t.cancelled ? ''
         : t.arInvoiceId
           ? ' <button class="btn btn-sm" onclick="openCreditNoteForm('+t.arInvoiceId+')">ใบลดหนี้</button>'
-          /* ขายสด: อ้างบิล/รอบตรงๆ — ใบลดหนี้จะลงบัญชีเป็นการคืนเงิน */
-          : ' <button class="btn btn-sm" onclick="openCreditNoteForSale('+t.orderId+',\''+(t.roundId||'')+'\')">ใบลดหนี้</button>') +
-    '</td></tr>').join(''), 9, 'ยังไม่มีใบกำกับภาษีในช่วงที่เลือก');
+          /* ★ ขายสดเท่านั้นที่อ้างบิลตรงๆ ได้ — ใบลดหนี้ทางนั้นลงบัญชีเป็น "คืนเงิน" (Cr เงินสด)
+             บิลเครดิตที่ยังไม่มีใบแจ้งหนี้ต้องตั้งหนี้ก่อน ไม่งั้นจะได้คู่บัญชีผิดชนิด */
+          : t.postRoute === 'cash'
+            ? ' <button class="btn btn-sm" onclick="openCreditNoteForSale('+t.orderId+',\''+(t.roundId||'')+'\')">ใบลดหนี้</button>'
+            : '') +
+      /* ★★ ยังไม่ลงบัญชี = ให้กดลงได้จากตรงนี้เลย ไม่ต้องไปหาเมนูตั้งค่าบัญชี
+         ขายสด → ลงใบสำคัญให้ · เครดิต → ต้องตั้งลูกหนี้ก่อน ซึ่งเป็นตัวที่ลงบัญชีให้เอง */
+      (t.cancelled || t.posted ? ''
+        : t.postRoute === 'cash'
+          ? ' <button class="btn btn-sm btn-primary" onclick="tiPostCash('+t.orderId+',\''+(t.roundId||'')+'\')">ลงบัญชี</button>'
+          : ' <button class="btn btn-sm btn-primary" onclick="tiMakeArInvoice('+t.orderId+',\''+(t.roundId||'')+'\')">ตั้งหนี้</button>') +
+    '</td></tr>').join(''), 10, 'ยังไม่มีใบกำกับภาษีในช่วงที่เลือก');
+}
+
+/* ลงบัญชีขายสดใบเดียวจากหน้าทะเบียน (backend: backfillCashSaleGl เจาะจง orderId/roundId) */
+async function tiPostCash(orderId, roundId){
+  if (!confirm('ลงบัญชีใบกำกับภาษีใบนี้?\nDr เงินสด/ธนาคาร · Cr รายได้ + ภาษีขาย')) return;
+  const r = await callApi('backfillCashSaleGl', { orderId, roundId: roundId || '', commit: true });
+  toast(r.success ? r.message : r.message, !r.success);
+  if (r.success) loadTaxInvoices();
+}
+/* เครดิตที่ยังไม่ลงบัญชี = ยังไม่มีใบแจ้งหนี้ลูกหนี้ — ตั้งหนี้แล้วระบบลงบัญชีให้เอง */
+async function tiMakeArInvoice(orderId, roundId){
+  if (!confirm('ตั้งลูกหนี้ของใบนี้?\nระบบจะออกใบแจ้งหนี้และลงบัญชีให้')) return;
+  const p = { salesOrderId: orderId };
+  if (roundId) p.deliveryRoundId = roundId;
+  const r = await callApi('createArInvoice', p);
+  toast(r.message, !r.success);
+  if (r.success) loadTaxInvoices();
 }
 
 /* ══════════ ทะเบียนคลังสินค้า ══════════

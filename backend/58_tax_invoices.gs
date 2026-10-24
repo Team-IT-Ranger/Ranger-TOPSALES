@@ -39,11 +39,25 @@ function listTaxInvoices(session, payload) {
     creditedOf[String(n.ar_invoice_id)] = (creditedOf[String(n.ar_invoice_id)] || 0) + (Number(n.total) || 0);
   });
 
+  /* ★★ ใบไหน "ลงบัญชีแล้ว" — คนทำงานต้องเห็นเป็นรายใบ ไม่ใช่เห็นแค่ยอดรวมในรายงานภาษี
+     (ผู้ใช้ถาม 24 ต.ค. 2026: "ใบกำกับใบไหนยังไม่ลงบัญชี จะดูรู้ได้ยังไง")
+     ★ ขายสด → ใบสำคัญ SALES_CASH ที่ ref_id = `<บิล>` หรือ `<บิล>#<รอบ>` (52_cash_sales_gl.gs)
+     ★ เครดิต → ลงผ่านใบแจ้งหนี้ลูกหนี้ ซึ่งลงบัญชีให้ตั้งแต่ตอนออกใบ มีใบแจ้งหนี้ = ลงแล้ว */
+  var cashJournal = {};
+  centralObjects('gl_journals').forEach(function(j) {
+    if (String(j.ref_type) !== 'SALES_CASH') return;
+    if (String(j.status) === 'voided') return;
+    if (!_inBook(j, book)) return;
+    cashJournal[String(j.ref_id)] = j.journal_no || '';
+  });
+
   var out = [];
   var push = function(o, round, docNo, docAt, exVat, vat, exempt) {
     var c = customers[String(o.customer_id)] || {};
     var ar = arOf[String(o.record_id) + '#' + String(round ? round.record_id : '')];
     var cash = !isCreditPayment(o.payment_method);
+    // คีย์ใบสำคัญขายสด ต้องตรงกับ _cashSaleRefId เป๊ะ (แก้ที่นั่นต้องตามมาแก้ที่นี่)
+    var cashRef = round ? (String(o.record_id) + '#' + String(round.record_id)) : String(o.record_id);
     out.push({
       docNo: docNo, docDate: _dOnly(docAt), orderId: o.record_id, orderCode: o.order_code || '',
       roundId: round ? round.record_id : '', roundNo: round ? _int(round.round_no) : 0,
@@ -58,7 +72,12 @@ function listTaxInvoices(session, payload) {
       status: String(o.status || ''), cancelled: String(o.status) === 'cancelled',
       /* ออกใบลดหนี้ได้เฉพาะใบที่มีใบแจ้งหนี้ลูกหนี้รองรับ — ขายสดยังไม่มีทาง (ดูหมายเหตุท้ายไฟล์) */
       arInvoiceId: ar ? ar.record_id : '', arInvoiceNo: ar ? ar.invoice_no : '',
-      creditedAmount: ar ? _money(creditedOf[String(ar.record_id)] || 0) : 0
+      creditedAmount: ar ? _money(creditedOf[String(ar.record_id)] || 0) : 0,
+      /* posted = มีรายการในสมุดบัญชีแล้วหรือยัง · journalNo ไว้ให้คนตามไปดูใบสำคัญ
+         ★ บิลที่ยกเลิกไม่ถือว่า "ค้างลงบัญชี" — ไม่มีอะไรต้องลงแล้ว */
+      posted: cash ? !!cashJournal[cashRef] : !!ar,
+      journalNo: cash ? (cashJournal[cashRef] || '') : '',   // ใบแจ้งหนี้เก็บแค่ journal_id ไม่ได้เก็บเลขที่
+      postRoute: cash ? 'cash' : 'ar'
     });
   };
 
@@ -85,6 +104,10 @@ function listTaxInvoices(session, payload) {
   if (payload.paymentType === 'cash' || payload.paymentType === 'credit') {
     out = out.filter(function(r) { return r.paymentType === payload.paymentType; });
   }
+  /* ★ ตัวกรอง "เฉพาะที่ยังไม่ลงบัญชี" — คำถามแรกของคนทำบัญชีคือ "เหลืออะไรต้องทำ"
+     บิลที่ยกเลิกไม่นับว่าค้าง จึงไม่โผล่ในตัวกรองนี้ */
+  if (payload.postedState === 'unposted') out = out.filter(function(r) { return !r.posted && !r.cancelled; });
+  else if (payload.postedState === 'posted') out = out.filter(function(r) { return r.posted; });
   var q = String(payload.q || '').trim().toLowerCase();
   if (q) out = out.filter(function(r) {
     return [r.docNo, r.orderCode, r.customerName, r.customerCode].join(' ').toLowerCase().indexOf(q) !== -1;
@@ -93,12 +116,14 @@ function listTaxInvoices(session, payload) {
   // ใหม่สุดขึ้นก่อน — คนเปิดหน้านี้มาหาใบที่เพิ่งออก
   out.sort(function(a, b) { return String(b.docDate).localeCompare(String(a.docDate)) || String(b.docNo).localeCompare(String(a.docNo)); });
 
-  var sum = { docs: out.length, exVat: 0, vat: 0, total: 0, cash: 0, credit: 0 };
+  var sum = { docs: out.length, exVat: 0, vat: 0, total: 0, cash: 0, credit: 0, unposted: 0, unpostedVat: 0 };
   out.forEach(function(r) {
     if (r.cancelled) return;                                // บิลที่ยกเลิกไม่นับเข้ายอดรวม แต่ยังแสดงให้เห็น
     sum.exVat += r.subtotalExVat; sum.vat += r.vatAmount; sum.total += r.total;
     sum[r.paymentType]++;
+    if (!r.posted) { sum.unposted++; sum.unpostedVat += r.vatAmount; }
   });
+  sum.unpostedVat = _money(sum.unpostedVat);
   sum.exVat = _money(sum.exVat); sum.vat = _money(sum.vat); sum.total = _money(sum.total);
 
   var limit = _int(payload.limit) || 500;

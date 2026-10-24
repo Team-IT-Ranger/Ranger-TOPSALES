@@ -170,7 +170,12 @@ function backfillCashSaleGl(session, payload) {
   var pending = [], amount = 0, vatSum = 0;
   var orders = {};
   tenantObjectsIfExists(tenantId, 'sales_orders').forEach(function(o) { orders[String(o.record_id)] = o; });
+  /* ★ เจาะจงใบเดียวได้ — หน้าทะเบียนใบกำกับมีปุ่ม "ลงบัญชี" รายแถว ไม่ต้องให้คนไล่ทั้งเดือน */
+  var onlyOrder = String(payload.orderId || '');
+  var onlyRound = payload.roundId === undefined ? null : String(payload.roundId || '');
   var add = function(o, round) {
+    if (onlyOrder && String(o.record_id) !== onlyOrder) return;
+    if (onlyRound !== null && String(round ? round.record_id : '') !== onlyRound) return;
     if (!_isCashSaleForGl(o, round)) return;
     var src = round || o;
     var when = _dOnly(src.tax_invoice_at || o.tax_invoice_at || o.created_at) || '';

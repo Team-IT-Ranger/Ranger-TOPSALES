@@ -92,6 +92,10 @@ function _cashAdjSource(session, payload, book) {
   var tenantId = _bookSalesTenant(book);
   var order = tenantRowById(tenantId, 'sales_orders', payload.salesOrderId);
   if (!order) return null;
+  /* ★★ ทางนี้ลงบัญชีเป็น "คืนเงิน" (Cr เงินสด) จึงใช้ได้กับบิลขายสดเท่านั้น
+     บิลเครดิตต้องอ้างใบแจ้งหนี้ลูกหนี้เสมอ — ปล่อยเข้ามาได้เมื่อไหร่ จะได้ใบลดหนี้ที่ลดเงินสด
+     ทั้งที่ยังไม่เคยเก็บเงิน และลูกหนี้ก้อนนั้นก็ไม่ถูกลดด้วย (เจอตอนทำปุ่มในทะเบียนใบกำกับ) */
+  if (isCreditPayment(order.payment_method)) return null;
   var round = null;
   if (payload.deliveryRoundId) {
     tenantObjectsIfExists(tenantId, 'delivery_rounds').forEach(function(r) {
