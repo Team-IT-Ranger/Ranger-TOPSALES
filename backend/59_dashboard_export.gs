@@ -10,7 +10,9 @@
  * ★★ ตัวเลขยอดขายในไฟล์เป็น **ยอดก่อนภาษี** ตามกติกา 24 ต.ค. 2026 (ดู orderExVat ใน 18_pricing_engine.gs)
  *   และมียอดรวมภาษีอยู่คนละคอลัมน์ให้ฝั่งเก็บเงิน/ภาษีใช้ — อย่าเอาสองตัวนี้ไปรวมกัน
  *
- * โครงไฟล์: 1 ชีต = 1 ตัวแทน ตั้งชื่อชีตด้วย **รหัสย่อของตัวแทน** (เช่น `BDC`) · 1 แถว = 1 ใบกำกับภาษี
+ * โครงไฟล์: 1 ชีต = 1 ตัวแทน ตั้งชื่อชีตด้วย **รหัสย่อของตัวแทน** (เช่น `BDC`)
+ *   · **1 แถว = 1 บรรทัดบิล (transaction line)** — เจ้าของระบบใช้ถึงระดับสินค้า
+ *   · คอลัมน์เอกสารซ้ำทุกบรรทัดของใบเดียวกัน Dashboard จึง group เอายอดระดับใบได้เอง
  *
  * ★ ทำไมต้องมีชีต Google คั่นกลาง: Apps Script เขียนไฟล์ .xlsx ตรงๆ ไม่ได้ จึงเขียนลงชีต Google ก่อน
  *   แล้ว "ส่งออกเป็น .xlsx" ทับไฟล์เดิม **โดยคง file id เดิมไว้** ลิงก์ที่ Dashboard ใช้จึงไม่เปลี่ยน
@@ -25,32 +27,91 @@ var DASH_PROP_FOLDER   = 'DASHBOARD_FOLDER_ID';     // โฟลเดอร์�
 /* กันไฟล์บวมจนรันไม่จบใน 6 นาที — เกินเท่านี้ให้ไปตั้งช่วงวันที่แทนการดึงทั้งหมด */
 var DASH_MAX_ROWS = 20000;
 
+/* ★★ ระดับ **บรรทัดบิล** (transaction line) ตามที่เจ้าของระบบสั่ง 24 ต.ค. 2026
+   คอลัมน์เอกสาร (วันที่/เลขที่ใบกำกับ/ลูกค้า/…) ซ้ำอยู่ทุกบรรทัดของใบเดียวกัน เพื่อให้ Dashboard
+   **group เอายอดระดับใบได้เอง** — จึงมีชีตเดียวต่อตัวแทน ไม่ต้องมีชีตระดับใบให้รวมผิดชีต */
 var DASH_HEADERS = [
   'วันที่', 'เลขที่ใบกำกับภาษี', 'เลขที่บิล', 'รอบจัดส่ง', 'รหัสตัวแทน',
   'รหัสลูกค้า', 'ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'สาขา', 'พนักงานขาย', 'วิธีชำระ',
-  'ยอดขายก่อนภาษี', 'ภาษีมูลค่าเพิ่ม', 'มูลค่ายกเว้นภาษี', 'ยอดรวมภาษี'
+  'รหัสสินค้า', 'ชื่อสินค้า', 'จำนวนที่ขาย', 'หน่วยขาย', 'ราคาขายต่อหน่วย',
+  'ยอดเงินตามราคาขาย', 'ส่วนลด', 'ยอดขายลบส่วนลดแล้ว', 'ยอดขายก่อนภาษี', 'ของแถม'
 ];
 
-/** แถวของตัวแทนรายหนึ่ง — คืน array of array พร้อมเขียนลงชีต */
+/** แถวของตัวแทนรายหนึ่ง — คืน array of array พร้อมเขียนลงชีต (1 แถว = 1 บรรทัดบิล) */
 function _dashRowsFor(tenantId, opts) {
   opts = opts || {};
   var book = _normBook(tenantId);
-  var rows = taxInvoiceRows(book, { dateFrom: opts.dateFrom, dateTo: opts.dateTo, limit: DASH_MAX_ROWS + 1 });
-  if (!rows.success) return { success: false, message: rows.message || 'อ่านใบกำกับภาษีไม่สำเร็จ' };
+  var docs = taxInvoiceRows(book, { dateFrom: opts.dateFrom, dateTo: opts.dateTo, limit: DASH_MAX_ROWS + 1 });
+  if (!docs.success) return { success: false, message: docs.message || 'อ่านใบกำกับภาษีไม่สำเร็จ' };
+
+  var salesTenant = _bookSalesTenant(book);
+  var products = {};
+  centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
+
+  // บรรทัดบิลทั้งหมดของตัวแทนนี้ จัดกลุ่มตามใบ — อ่านทีเดียว ไม่เปิดชีตซ้ำต่อใบ
+  var itemsByOrder = {};
+  tenantObjectsIfExists(salesTenant, 'order_items').forEach(function(it) {
+    (itemsByOrder[String(it.order_id)] = itemsByOrder[String(it.order_id)] || []).push(it);
+  });
+  // ของที่ส่งจริงในแต่ละรอบ (บิลที่แยกรอบ ใบกำกับออกตามของที่ส่งรอบนั้น)
+  var roundItems = {};
+  tenantObjectsIfExists(salesTenant, 'delivery_round_items').forEach(function(ri) {
+    (roundItems[String(ri.round_id)] = roundItems[String(ri.round_id)] || []).push(ri);
+  });
+  var orderById = {};
+  tenantObjectsIfExists(salesTenant, 'sales_orders').forEach(function(o) { orderById[String(o.record_id)] = o; });
 
   var out = [];
-  (rows.data || []).forEach(function(r) {
+  (docs.data || []).forEach(function(r) {
     /* ★ บิลที่ยกเลิกไม่เข้าไฟล์ — Dashboard บวกคอลัมน์ยอดขายตรงๆ ใส่ไปแล้วยอดจะเกิน
        (ของจริงที่ขายแล้วคืนของ ต้องเป็น "ใบลดหนี้" ไม่ใช่การยกเลิกบิล — ดูหมายเหตุท้ายไฟล์) */
     if (r.cancelled) return;
-    out.push([
-      _dashDate(r.docDate), r.docNo, r.orderCode || '', r.roundNo || '', tenantId,
-      r.customerCode || '', r.customerName || '', r.taxId || '', r.branchCode || '',
-      r.saleByName || '', r.paymentLabel || '',
-      r.subtotalExVat, r.vatAmount, r.exemptAmount, r.total
-    ]);
+    var order = orderById[String(r.orderId)];
+    if (!order) return;
+    var items = itemsByOrder[String(r.orderId)] || [];
+    /* ★★ "ขายได้เท่าไรจริง" ต่อบรรทัด ใช้ `soldNetByItem` ตัวเดียวกับใบลดหนี้ (18_pricing_engine.gs)
+       ซึ่งเฉลี่ยส่วนลดท้ายบิลลงบรรทัดให้แล้ว — คิดเองที่นี่อีกชุดเมื่อไหร่ ยอดในไฟล์กับยอดที่ลดหนี้
+       จะคนละตัวทันที */
+    var netOf = soldNetByItem(order, items);
+
+    /* รอบจัดส่ง: คิดตามสัดส่วนของที่ส่งจริงในรอบ (share = จำนวนในรอบ ÷ จำนวนที่สั่ง)
+       ★ สูตรเดียวกับ `deliveryRoundAmounts` ใน 48_delivery_rounds.gs ที่ใช้ออกใบกำกับของรอบ
+         ผลรวมรายบรรทัดจึงตรงกับยอดบนใบกำกับใบนั้น */
+    var qtyInRound = null;
+    if (r.roundId) {
+      qtyInRound = {};
+      (roundItems[String(r.roundId)] || []).forEach(function(ri) {
+        qtyInRound[String(ri.item_id)] = (qtyInRound[String(ri.item_id)] || 0) + (parseFloat(ri.qty) || 0);
+      });
+    }
+
+    items.forEach(function(it) {
+      var ordered = parseFloat(it.qty) || 0;
+      var qty = ordered, share = 1;
+      if (qtyInRound) {
+        qty = qtyInRound[String(it.record_id)] || 0;
+        if (!qty || !ordered) return;                       // บรรทัดนี้ไม่ได้ส่งในรอบนี้
+        share = qty / ordered;
+      }
+      var gross = _round2((parseFloat(it.line_total) || 0) * share);
+      var net   = _round2((netOf[String(it.record_id)] || 0) * share);
+      var p = products[String(it.product_id)] || {};
+      var free = isFlagOn(it.is_free) || String(it.is_free) === '1';
+
+      out.push([
+        _dashDate(r.docDate), r.docNo, r.orderCode || '', r.roundNo || '', tenantId,
+        r.customerCode || '', r.customerName || '', r.taxId || '', r.branchCode || '',
+        r.saleByName || '', r.paymentLabel || '',
+        p.product_code || String(it.product_id || ''), p.name || '(สินค้าถูกลบ)',
+        qty, it.unit_code || '', _round2(parseFloat(it.price) || 0),
+        gross, _round2(gross - net), net,
+        // ยอดขายก่อนภาษีของบรรทัด — ใช้ภาพนิ่งภาษีรายบรรทัด (กติกา 24 ต.ค. 2026)
+        lineExVat(order, { line_total: net, tax_status: it.tax_status }),
+        free ? 'ใช่' : ''
+      ]);
+    });
   });
-  return { success: true, rows: out, truncated: !!rows.truncated };
+  return { success: true, rows: out, truncated: !!docs.truncated };
 }
 
 /** 'yyyy-mm-dd' → Date จริง เพื่อให้ Excel ได้คอลัมน์วันที่ ไม่ใช่ข้อความ (กราฟแกนเวลาถึงจะทำงาน) */
@@ -154,7 +215,9 @@ function exportSalesDashboardWorkbook(opts) {
     if (r.rows.length) {
       sh.getRange(2, 1, r.rows.length, DASH_HEADERS.length).setValues(r.rows);
       sh.getRange(2, 1, r.rows.length, 1).setNumberFormat('yyyy-mm-dd');
-      sh.getRange(2, 12, r.rows.length, 4).setNumberFormat('#,##0.00');
+      // คอลัมน์เงินสี่ช่องสุดท้าย (16-20) + จำนวน (14) — ตำแหน่งผูกกับ DASH_HEADERS แก้หัวแล้วต้องตามมาแก้ที่นี่
+      sh.getRange(2, 14, r.rows.length, 1).setNumberFormat('#,##0.###');
+      sh.getRange(2, 16, r.rows.length, 5).setNumberFormat('#,##0.00');
     }
     sh.setFrozenRows(1);
     report.push({ tenantId: name, rows: r.rows.length, truncated: r.truncated });
@@ -217,5 +280,4 @@ function exportSalesDashboard(session, payload) {
  * - **ใบลดหนี้ยังไม่ถูกหักออกจากไฟล์นี้** — ลูกค้าคืนของหลังออกใบกำกับแล้ว ยอดขายในไฟล์จะสูงกว่าจริง
  *   เท่ามูลค่าที่ลดหนี้ไป · ต้องตกลงกับเจ้าของระบบก่อนว่าจะหักในไฟล์นี้เลย (คอลัมน์ติดลบอีกแถว)
  *   หรือให้ Dashboard ไปอ่านใบลดหนี้เองอีกชีต
- * - 1 แถว = 1 ใบกำกับภาษี · ยังไม่มีระดับ "รายการสินค้า" (ถ้า Dashboard ต้องดูยอดตามสินค้า ต้องเพิ่มชีตที่สอง)
  */
