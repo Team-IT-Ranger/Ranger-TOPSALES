@@ -1897,5 +1897,32 @@ console.log('\n── ตั้งลูกหนี้รายรอบจั�
     [rd0.success, /ออกใบกำกับภาษีของรอบนี้ก่อน/.test(rd0.message || '')], [false, true]);
 }
 
+/* ★★ หน้าลูกหนี้ต้องบอก "บิลขายใบไหน" ด้วยเลขที่คนอ่านออก และ "มีใบกำกับภาษีรองรับหรือยัง"
+   เดิมส่งแค่ `salesOrderId` (เลขแถวภายใน) หน้าจอจึงพิมพ์เลขอย่าง "23" ซึ่งไม่ตรงกับเอกสารใบไหน
+   (ผู้ใช้ถาม 24 ต.ค. 2026: "บิล 23 คืออะไร") · และใบที่ไม่มีใบกำกับคือต้นเหตุที่ภาษีขาย
+   ตามบัญชีเกินกว่าตามเอกสาร — ต้องรู้เป็นรายใบ */
+{
+  const arOf = no => ctx.listArInvoices(FIN, {}).data.find(x => x.invoiceNo === no);
+
+  // บิลที่แยกรอบ — เลขใบกำกับอยู่ที่แถวรอบ ไม่ใช่แถวบิล
+  const rdRow = arOf(ctx.listArInvoices(FIN, {}).data.find(x => String(x.salesOrderId) === '81').invoiceNo);
+  eq('★★ ใบแจ้งหนี้รายรอบ: บอกเลขบิลขายที่คนอ่านออก + เลขใบกำกับของรอบนั้น',
+    [rdRow.orderCode, rdRow.taxInvoiceNo], ['SO-ROUND-1', 'TAX-RD-1']);
+
+  append(tenantSheets.sales_orders, { record_id: 84, order_code: 'SO-NOTAX', customer_id: 500, total: 1070,
+    payment_method: 'credit_term', status: 'ready_to_ship', created_at: '2026-10-22 09:00:00' });
+  const nt = ctx.createArInvoice(FIN, { tenantId: 'T1', salesOrderId: 84, subtotalExVat: 1000, vatAmount: 70,
+    invoiceDate: '2026-10-22', dueDays: 30 });
+  const ntRow = arOf(nt.invoiceNo);
+  eq('★★★ ตั้งหนี้ได้แต่ยังไม่ออกใบกำกับ → เลขใบกำกับว่าง (หน้าจอขึ้นป้ายเตือนรายแถว)',
+    [ntRow.orderCode, ntRow.taxInvoiceNo], ['SO-NOTAX', '']);
+
+  const mn = ctx.createArInvoice(FIN, { tenantId: 'T1', customerId: 500, subtotalExVat: 100, vatAmount: 7,
+    invoiceDate: '2026-10-22', dueDays: 7, note: 'กรอกเอง' });
+  const mnRow = arOf(mn.invoiceNo);
+  eq('★ ใบที่กรอกเองไม่ได้อ้างบิลขาย → ไม่มีเลขบิล (ห้ามโชว์เลขแถวภายในแทน)',
+    [mnRow.salesOrderId, mnRow.orderCode], ['', '']);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

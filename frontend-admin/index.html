@@ -2246,8 +2246,8 @@
             </div>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>รับแล้ว</th><th>คงค้าง</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="ar-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>เลขใบกำกับ</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>รับแล้ว</th><th>คงค้าง</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody id="ar-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
           </table></div>
           <div class="form-card" id="ar-aging-card" style="display:none"><h3>อายุหนี้ลูกหนี้</h3><div id="ar-aging"></div></div>
         </section>
@@ -9499,7 +9499,17 @@ async function loadArInvoices(){
 }
 function renderArInvoices(){
   document.getElementById('ar-body').innerHTML = rowsOrEmpty(arCache.map(iv =>
-    '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td>'+esc(iv.customerName)+'</td><td class="mono-data">'+dash(iv.salesOrderId)+'</td>' +
+    /* ★★ "บิลขาย" ต้องเป็นเลขบิลที่คนอ่านออก + กดเปิดดูได้ — ของเดิมพิมพ์เลขแถวภายใน
+       ออกมาเฉยๆ (ผู้ใช้ถาม 24 ต.ค. 2026: "บิล 23 คืออะไร") ซึ่งไม่ตรงกับเอกสารใบไหนเลย
+       ★ ไม่มีเลขบิล (ใบแจ้งหนี้ที่กรอกเอง ไม่ได้อ้างบิลขาย) = ขีด ไม่ใช่โชว์เลขแถว */
+    '<tr><td class="mono-data">'+esc(iv.invoiceNo)+'</td><td>'+esc(iv.customerName)+'</td>' +
+    '<td class="mono-data">'+(iv.orderCode
+      ? '<button class="btn btn-sm" onclick="openSaleOrderDetail('+iv.salesOrderId+')">'+esc(iv.orderCode)+'</button>'
+      : '—')+'</td>' +
+    /* ★★★ ใบแจ้งหนี้ที่ไม่มีใบกำกับภาษี = ภาษีขายในบัญชีเกินกว่าในเอกสาร ยื่น ภ.พ.30 แล้วไม่ตรง
+       เตือนตรงแถวนั้นเลย ไม่ให้ไปรู้ตอนเทียบยอดรวมปลายเดือน */
+    '<td class="mono-data">'+(iv.taxInvoiceNo ? esc(iv.taxInvoiceNo)
+      : (iv.status === 'void' ? '—' : '<span class="tag tag-warn">ยังไม่ออกใบกำกับ</span>'))+'</td>' +
     '<td class="mono-data">'+esc(iv.invoiceDate)+'</td><td class="mono-data">'+dash(iv.dueDate)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(iv.total)+'</td><td class="mono-data">฿'+bahtPlain(iv.receivedAmount)+'</td>' +
     '<td class="mono-data">฿'+bahtPlain(iv.outstanding)+'</td><td>'+pill2(DOC_ST, iv.status)+'</td>' +
@@ -9509,7 +9519,7 @@ function renderArInvoices(){
       ((Number(iv.total) + Number(iv.debitedAmount || 0) - Number(iv.creditedAmount || 0)) > 0.009 && iv.status !== 'void'
         ? '<button class="btn btn-sm" onclick="openCreditNoteForm('+iv.id+')">ใบลดหนี้</button> ' : '') +
       (iv.status !== 'void' ? '<button class="btn btn-sm" onclick="openDebitNoteForm('+iv.id+')">ใบเพิ่มหนี้</button>' : '') +
-    '</td></tr>').join(''), 10, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
+    '</td></tr>').join(''), 11, 'ยังไม่มีใบแจ้งหนี้ลูกหนี้');
 }
 /* ══════════ ใบรับคืนสินค้า — 16 ต.ค. 2026 ══════════
    ★★ ลำดับงานจริงคือ **รับของก่อน แล้วค่อยลดหนี้** — ของกลับถึงคลังและตรวจสภาพแล้ว

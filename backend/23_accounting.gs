@@ -500,11 +500,29 @@ function listArInvoices(session, payload) {
   var rows = centralObjects('ar_invoices').filter(function(iv) { return _inBook(iv, _scope); });
   if (payload.customerId) rows = rows.filter(function(iv) { return String(iv.customer_id) === String(payload.customerId); });
   if (payload.openOnly) rows = rows.filter(function(iv) { return iv.status === 'open' || iv.status === 'partial'; });
+
+  /* ★★ คอลัมน์ "บิลขาย" เคยส่งแค่ `sales_order_id` ซึ่งเป็น **เลขแถวภายใน** ของชีต
+     หน้าจอจึงพิมพ์เลขอย่าง "23" ออกมาโดยที่ไม่มีเอกสารใบไหนในมือคนทำงานเขียนเลขนั้นไว้เลย
+     (ผู้ใช้ถาม 24 ต.ค. 2026: "บิล 23 คืออะไร") → ส่ง `orderCode` ที่คนอ่านออกไปด้วย
+     ★★★ `taxInvoiceNo` ว่าง = ใบแจ้งหนี้ใบนี้ **ยังไม่มีใบกำกับภาษีรองรับ** ซึ่งเป็นสาเหตุที่
+       ภาษีขายตามบัญชีมากกว่าตามเอกสาร (เจอบน prod: ใบแจ้งหนี้ 11 ใบ ใบกำกับ 10 ใบ
+       ต่างกัน ฿7,985.69) — ต้องเห็นเป็นรายใบ ไม่ใช่ให้คนไปนั่งลบยอดรวมหาว่าใบไหนหาย */
+  var _soTenant = _bookSalesTenant(_scope);
+  var _orders = {}, _roundTax = {};
+  tenantObjectsIfExists(_soTenant, 'sales_orders').forEach(function(o) { _orders[String(o.record_id)] = o; });
+  tenantObjectsIfExists(_soTenant, 'delivery_rounds').forEach(function(rd) { _roundTax[String(rd.record_id)] = rd.tax_invoice_no || ''; });
+
   var out = rows.map(function(iv) {
     var total = Number(iv.total) || 0, recv = Number(iv.received_amount) || 0,
         cred = Number(iv.credited_amount) || 0, deb = Number(iv.debited_amount) || 0;
+    var so = _orders[String(iv.sales_order_id)] || null;
+    /* บิลที่แยกรอบจัดส่ง เลขใบกำกับอยู่ที่แถวรอบ ไม่ใช่แถวบิล (48_delivery_rounds.gs) */
+    var taxNo = iv.delivery_round_id ? String(_roundTax[String(iv.delivery_round_id)] || '')
+                                     : (so ? String(so.tax_invoice_no || '') : '');
     return { id: iv.record_id, invoiceNo: iv.invoice_no, customerId: iv.customer_id, customerName: customers[String(iv.customer_id)] || '',
-      tenantId: iv.tenant_id || '', salesOrderId: iv.sales_order_id || '', invoiceDate: _dOnly(iv.invoice_date), dueDate: _dOnly(iv.due_date),
+      tenantId: iv.tenant_id || '', salesOrderId: iv.sales_order_id || '',
+      orderCode: so ? String(so.order_code || '') : '', orderStatus: so ? String(so.status || '') : '',
+      taxInvoiceNo: taxNo, invoiceDate: _dOnly(iv.invoice_date), dueDate: _dOnly(iv.due_date),
       subtotalExVat: Number(iv.subtotal_ex_vat) || 0, vatAmount: Number(iv.vat_amount) || 0, total: total, receivedAmount: recv,
       /* ★ ยอดค้าง = ยอดใบ + เพิ่มหนี้ − รับชำระ − ลดหนี้ (arInvoiceOutstanding ใน 49_credit_notes.gs)
          หักลดหนี้ไม่ครบ = ไปตามเก็บเงินที่ลดให้ลูกค้าไปแล้ว · ลืมบวกเพิ่มหนี้ = เก็บเงินขาด */
