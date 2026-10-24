@@ -37,7 +37,9 @@ var DASH_MAX_ROWS = 20000;
    คอลัมน์เอกสาร (วันที่/เลขที่ใบกำกับ/ลูกค้า/…) ซ้ำอยู่ทุกบรรทัดของใบเดียวกัน เพื่อให้ Dashboard
    **group เอายอดระดับใบได้เอง** — จึงมีชีตเดียวต่อตัวแทน ไม่ต้องมีชีตระดับใบให้รวมผิดชีต */
 var DASH_HEADERS = [
-  'วันที่', 'เลขที่ใบกำกับภาษี', 'เลขที่บิล', 'รอบจัดส่ง', 'รหัสตัวแทน',
+  /* ★ `datasource` = ระบบต้นทางของแถวนี้ — Dashboard รวมข้อมูลจากหลายระบบไว้ด้วยกัน
+     ต้องแยกออกได้ว่าแถวไหนมาจากที่ไหน · ค่าคงที่ `RTS` = Ranger TOPSALES */
+  'datasource', 'วันที่', 'เลขที่ใบกำกับภาษี', 'เลขที่บิล', 'รอบจัดส่ง', 'รหัสตัวแทน',
   'รหัสลูกค้า', 'ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'สาขา', 'พนักงานขาย', 'วิธีชำระ',
   'รหัสสินค้า', 'ชื่อสินค้า', 'จำนวนที่ขาย', 'หน่วยขาย', 'ราคาขายต่อหน่วย',
   'ยอดเงินตามราคาขาย', 'ส่วนลดรายบรรทัด', 'ส่วนลดท้ายบิล (เฉลี่ย)',
@@ -47,6 +49,7 @@ var DASH_HEADERS = [
      ★ `ประเภทรายการ` ไว้ให้กรองแยกเมื่ออยากดูเฉพาะยอดขายดิบ · `เอกสารอ้างอิง` = ใบกำกับที่ถูกปรับ */
   'ประเภทรายการ', 'เอกสารอ้างอิง'
 ];
+var DASH_SOURCE = 'RTS';        // ระบบต้นทาง — ค่าคงที่ของทุกแถวที่ออกจากที่นี่
 var DASH_KIND_SALE = 'ขาย', DASH_KIND_CREDIT = 'ลดหนี้', DASH_KIND_DEBIT = 'เพิ่มหนี้';
 
 /** แถวของตัวแทนรายหนึ่ง — คืน array of array พร้อมเขียนลงชีต (1 แถว = 1 บรรทัดบิล) */
@@ -120,7 +123,7 @@ function _dashRowsFor(tenantId, opts) {
       var free = isFlagOn(it.is_free) || String(it.is_free) === '1';
 
       out.push([
-        _dashDate(r.docDate), r.docNo, r.orderCode || '', r.roundNo || '', tenantId,
+        DASH_SOURCE, _dashDate(r.docDate), r.docNo, r.orderCode || '', r.roundNo || '', tenantId,
         r.customerCode || '', r.customerName || '', r.taxId || '', r.branchCode || '',
         r.saleByName || '', r.paymentLabel || '',
         p.product_code || String(it.product_id || ''), p.name || '(สินค้าถูกลบ)',
@@ -138,8 +141,9 @@ function _dashRowsFor(tenantId, opts) {
   /* เรียงตามวันที่แล้วเลขเอกสาร — แถวใบลดหนี้ถูกต่อท้ายมา ถ้าไม่เรียง คนเปิดไฟล์จะเห็นมันกองอยู่ท้ายสุด
      (Dashboard ไม่สน แต่คนที่เปิดไฟล์ดูด้วยตาสนแน่ๆ) */
   out.sort(function(a, b) {
-    var da = a[0] instanceof Date ? a[0].getTime() : 0, db = b[0] instanceof Date ? b[0].getTime() : 0;
-    return da - db || String(a[1]).localeCompare(String(b[1]));
+    // ★ ตำแหน่งผูกกับ DASH_HEADERS: [0]=datasource · [1]=วันที่ · [2]=เลขที่เอกสาร
+    var da = a[1] instanceof Date ? a[1].getTime() : 0, db = b[1] instanceof Date ? b[1].getTime() : 0;
+    return da - db || String(a[2]).localeCompare(String(b[2]));
   });
   return { success: true, rows: out, truncated: !!docs.truncated };
 }
@@ -194,7 +198,7 @@ function _dashAppendNotes(out, tenantId, book, salesTenant, opts, products, orde
         var amt = _round2((parseFloat(l.amount) || 0) * K.sign);
         var p = products[String(l.product_id)] || {};
         out.push([
-          _dashDate(date), n[K.noField] || '', order ? (order.order_code || '') : '',
+          DASH_SOURCE, _dashDate(date), n[K.noField] || '', order ? (order.order_code || '') : '',
           n.delivery_round_id ? (roundNo[String(n.delivery_round_id)] || '') : '', tenantId,
           c.customer_code || '', customerFullName(c), c.tax_id || '', c.tax_branch_code || '',
           order ? _saleByLabel(order.sale_by) : '',
