@@ -2281,7 +2281,8 @@
         <section class="view" id="view-goodsreturns">
           <div class="view-head">
             <div><h1>ใบรับคืนสินค้า</h1>
-              <p>รับของคืนจากลูกค้า — <b>ของสภาพดีเข้าคลัง ของเสียไม่เข้า</b> · ออกใบลดหนี้ต่อจากใบนี้ได้</p></div>
+              <p>รับของคืนจากลูกค้า — เลือก<b>ใบกำกับภาษี</b>ที่ลูกค้านำมาคืน แล้วระบุคลังปลายทางรายบรรทัด ·
+                ออกใบลดหนี้ต่อจากใบนี้ได้</p></div>
             <div><button class="btn btn-ghost" onclick="openHelpArticle('sales-credit-note')" title="เปิดคู่มือ: ใบลดหนี้ — เริ่มจากใบรับคืนสินค้าเมื่อลูกค้าคืนของจริง">คู่มือใบลดหนี้</button>
               <button class="btn btn-primary" onclick="openGoodsReturnForm()">+ รับคืนสินค้า</button></div>
           </div>
@@ -9542,14 +9543,12 @@ function renderGoodsReturns(){
 
 let GRN_DRAFT = null;
 async function openGoodsReturnForm(orderId){
-  if (!orderId) {
-    orderId = prompt('รับคืนจากบิลขายเลขที่ใด? (ใส่เลขบิล เช่น BD-2610-0009)');
-    if (!orderId) return;
-    /* หาบิลจากรายการที่โหลดไว้ — ไม่ยิงคำขอเพิ่มถ้าหาเจอแล้ว */
-    const hit = (salesOrdersCache || []).find(o => String(o.code).toLowerCase() === String(orderId).trim().toLowerCase());
-    if (!hit) { toast('ไม่พบบิลขายเลขนี้ในรายการที่เปิดอยู่ — เปิดหน้าใบสั่งขายแล้วกดรับคืนจากในบิล', true); return; }
-    orderId = hit.id;
-  }
+  /* ★★ ไม่ได้ระบุบิลมา = เปิด **ตารางใบกำกับภาษี** ให้เลือก (เจ้าของระบบสั่ง 24 ต.ค. 2026)
+     เดิมเป็น `prompt()` ให้พิมพ์เลขบิลขายเอง ซึ่งผิดสองชั้น:
+       1. คนรับคืนถือ **ใบกำกับภาษี** ที่ลูกค้าเอามาคืน ไม่ได้ถือเลขบิลขาย (เป็นเลขภายใน)
+       2. ต้องพิมพ์เป๊ะ และหาจากแคชที่โหลดไว้เท่านั้น — บิลที่ไม่ได้อยู่ในหน้าแรกๆ หาไม่เจอเลย
+          แล้วขึ้นข้อความไล่ให้ไปเปิดหน้าอื่น ซึ่งเป็นทางตันสำหรับคนที่กำลังยืนรับของอยู่ */
+  if (!orderId) { adjPickTaxInvoiceForReturn('close'); return; }
   const tok = plModalWait('รับคืนสินค้า', 'กำลังดึงรายการและราคาที่ขายจริงจากบิล…');
   const d = await callApi('getGoodsReturnDraft', { orderId });
   if (plModalStale(tok)) return;
@@ -10299,7 +10298,7 @@ async function adjPickReturn(){
     /* ★★ เปิดใบรับคืนใหม่ได้จากตรงนี้เลย (ผู้ใช้สั่ง 24 ต.ค. 2026) — เดิมบอกให้ไปเมนูอื่น
        ซึ่งพอไปถึงก็ต้องกรอกเลขบิลขายเองอีก ทั้งที่คนทำงานถือ **ใบกำกับภาษี** อยู่ในมือ ไม่ใช่เลขบิล */
     '<div class="form-actions"><button class="btn" onclick="openAdjNotePicker(\'credit\')">← ย้อนกลับ</button>' +
-      '<button class="btn btn-primary" onclick="adjPickTaxInvoiceForReturn()">+ เปิดใบรับคืนใหม่ (เลือกจากใบกำกับภาษี)</button>' +
+      '<button class="btn btn-primary" onclick="adjPickTaxInvoiceForReturn(\'adj\')">+ เปิดใบรับคืนใหม่ (เลือกจากใบกำกับภาษี)</button>' +
       '<button class="btn" onclick="plModalClose()">ปิด</button></div>');
 }
 async function adjFromReturn(id){ plModalClose(); await grnMakeCreditNote(id); }
@@ -10308,7 +10307,9 @@ async function adjFromReturn(id){ plModalClose(); await grnMakeCreditNote(id); }
    ★ ทำไมเลือกจากใบกำกับ ไม่ใช่จากบิลขาย: ลูกค้าคืนของพร้อมใบกำกับที่อยู่ในมือ คนรับคืนจึงมี
      "เลขใบกำกับ" เป็นตัวตั้งต้นเสมอ ส่วนเลขบิลขายเป็นของภายใน ต้องไปเปิดหาอีกทอด
    ★ แสดงเฉพาะใบที่ยังไม่ถูกยกเลิก — บิลที่ยกเลิกแล้วไม่มีของให้คืน */
-async function adjPickTaxInvoiceForReturn(){
+/* backTo: 'adj' = มาจากขั้นเลือกที่มาของใบลดหนี้ (1.1.2) · 'close' = มาจากหน้าใบรับคืน (1.1.3)
+   ★ ปุ่มย้อนกลับต้องพากลับไปที่เดิม ไม่ใช่โยนไปหน้าอื่นที่ผู้ใช้ไม่ได้มาจากตรงนั้น */
+async function adjPickTaxInvoiceForReturn(backTo){
   const tok = plModalWait('เปิดใบรับคืนสินค้า — เลือกใบกำกับภาษี');
   const r = await callApi('listTaxInvoices', { limit: 300 });
   if (plModalStale(tok)) return;
@@ -10327,7 +10328,8 @@ async function adjPickTaxInvoiceForReturn(){
         '<td><button class="btn btn-sm" onclick="adjOpenReturnForm('+t.orderId+')">รับคืนของบิลนี้</button></td></tr>').join('') +
       '</tbody></table></div>'
       : '<p class="form-hint">ยังไม่มีใบกำกับภาษีในระบบ</p>') +
-    '<div class="form-actions"><button class="btn" onclick="adjPickReturn()">← ย้อนกลับ</button>' +
+    '<div class="form-actions">' +
+      (backTo === 'adj' ? '<button class="btn" onclick="adjPickReturn()">← ย้อนกลับ</button>' : '') +
       '<button class="btn" onclick="plModalClose()">ปิด</button></div>');
 }
 /* ★ เปิดฟอร์มรับคืนของบิลนั้น — ฟอร์มตัวเดียวกับเมนูใบรับคืนสินค้า ไม่ได้ทำฟอร์มที่สอง
