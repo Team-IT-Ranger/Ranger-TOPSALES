@@ -34,7 +34,8 @@ var DASH_HEADERS = [
   'วันที่', 'เลขที่ใบกำกับภาษี', 'เลขที่บิล', 'รอบจัดส่ง', 'รหัสตัวแทน',
   'รหัสลูกค้า', 'ชื่อลูกค้า', 'เลขผู้เสียภาษี', 'สาขา', 'พนักงานขาย', 'วิธีชำระ',
   'รหัสสินค้า', 'ชื่อสินค้า', 'จำนวนที่ขาย', 'หน่วยขาย', 'ราคาขายต่อหน่วย',
-  'ยอดเงินตามราคาขาย', 'ส่วนลด', 'ยอดขายลบส่วนลดแล้ว', 'ยอดขายก่อนภาษี', 'ของแถม'
+  'ยอดเงินตามราคาขาย', 'ส่วนลดรายบรรทัด', 'ส่วนลดท้ายบิล (เฉลี่ย)',
+  'ยอดขายลบส่วนลดแล้ว', 'ยอดขายก่อนภาษี', 'ของแถม'
 ];
 
 /** แถวของตัวแทนรายหนึ่ง — คืน array of array พร้อมเขียนลงชีต (1 แถว = 1 บรรทัดบิล) */
@@ -95,6 +96,15 @@ function _dashRowsFor(tenantId, opts) {
       }
       var gross = _round2((parseFloat(it.line_total) || 0) * share);
       var net   = _round2((netOf[String(it.record_id)] || 0) * share);
+      /* ★★ แยกส่วนลดสองชั้นให้เห็นคนละคอลัมน์ (เจ้าของระบบสั่ง 24 ต.ค. 2026)
+         - `ส่วนลดรายบรรทัด` = ส่วนลดที่ผูกกับบรรทัดนั้นตั้งแต่ตอนขาย
+         - `ส่วนลดท้ายบิล (เฉลี่ย)` = ส่วนลดที่ให้ทั้งบิล **กระจายลงบรรทัดตามน้ำหนักยอดขาย**
+           (soldNetByItem เฉลี่ยตามสัดส่วน `line_total` และให้บรรทัดสุดท้ายรับเศษ
+            ผลรวมจึงเท่ากับส่วนลดท้ายบิลเป๊ะ ไม่ขาดไม่เกินทีละสตางค์)
+         ★ คิดเป็น "ส่วนที่เหลือ" จาก gross − net แทนที่จะคำนวณการเฉลี่ยซ้ำเองอีกชุด —
+           ตัวเลขจึงบวกกลับได้เท่ากับยอดสุทธิเสมอ ไม่ว่าสูตรเฉลี่ยจะเปลี่ยนไปอย่างไรในอนาคต */
+      var lineDisc = _round2((parseFloat(it.line_discount) || 0) * share);
+      var billDisc = _round2(gross - net - lineDisc);
       var p = products[String(it.product_id)] || {};
       var free = isFlagOn(it.is_free) || String(it.is_free) === '1';
 
@@ -104,7 +114,8 @@ function _dashRowsFor(tenantId, opts) {
         r.saleByName || '', r.paymentLabel || '',
         p.product_code || String(it.product_id || ''), p.name || '(สินค้าถูกลบ)',
         qty, it.unit_code || '', _round2(parseFloat(it.price) || 0),
-        gross, _round2(gross - net), net,
+        // ยอดขายลบส่วนลดแล้ว = ยอดตามราคาขาย − ส่วนลดรายบรรทัด − ส่วนลดท้ายบิลที่เฉลี่ยมา
+        gross, lineDisc, billDisc, net,
         // ยอดขายก่อนภาษีของบรรทัด — ใช้ภาพนิ่งภาษีรายบรรทัด (กติกา 24 ต.ค. 2026)
         lineExVat(order, { line_total: net, tax_status: it.tax_status }),
         free ? 'ใช่' : ''
@@ -215,9 +226,9 @@ function exportSalesDashboardWorkbook(opts) {
     if (r.rows.length) {
       sh.getRange(2, 1, r.rows.length, DASH_HEADERS.length).setValues(r.rows);
       sh.getRange(2, 1, r.rows.length, 1).setNumberFormat('yyyy-mm-dd');
-      // คอลัมน์เงินสี่ช่องสุดท้าย (16-20) + จำนวน (14) — ตำแหน่งผูกกับ DASH_HEADERS แก้หัวแล้วต้องตามมาแก้ที่นี่
+      // คอลัมน์เงิน (16-21) + จำนวน (14) — ตำแหน่งผูกกับ DASH_HEADERS แก้หัวแล้วต้องตามมาแก้ที่นี่
       sh.getRange(2, 14, r.rows.length, 1).setNumberFormat('#,##0.###');
-      sh.getRange(2, 16, r.rows.length, 5).setNumberFormat('#,##0.00');
+      sh.getRange(2, 16, r.rows.length, 6).setNumberFormat('#,##0.00');
     }
     sh.setFrozenRows(1);
     report.push({ tenantId: name, rows: r.rows.length, truncated: r.truncated });
