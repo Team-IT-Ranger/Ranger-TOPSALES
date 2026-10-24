@@ -292,6 +292,8 @@ var ADMIN_ACTION_MAP = {
   listArCreditNotes:      listArCreditNotes,
   getArCreditNote:        getArCreditNote,         // ใบเดียวพร้อมรายการ — ใช้ตอนพิมพ์
   listTaxInvoices:        listTaxInvoices,
+  // ส่งยอดขายออกเป็นไฟล์กลางของ Dashboard (59_dashboard_export.gs) — ปกติ trigger รันเอง ตัวนี้ไว้สั่งเดี๋ยวนี้
+  exportSalesDashboard:   exportSalesDashboard,
   backfillCashSaleGl:     backfillCashSaleGl,
   createArInvoice:        createArInvoice,
   receiveArPayment:       receiveArPayment,

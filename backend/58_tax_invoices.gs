@@ -20,6 +20,18 @@ function listTaxInvoices(session, payload) {
   var err = _requirePermission(session, 'accounting', 'view'); if (err) return err;
   payload = payload || {};
   var book = _bookScope(session, payload);
+  return taxInvoiceRows(book, payload);
+}
+
+/**
+ * แกนกลางของ "ใบกำกับภาษีที่ออกไปแล้วมีใบไหนบ้าง" — ไม่ตรวจสิทธิ์ ไม่มี session
+ *
+ * ★★ แยกออกมาเพื่อให้ **ตัวส่งออกยอดขายเข้า Dashboard (59_dashboard_export.gs) ใช้เกณฑ์ตัวเดียวกัน
+ *   เป๊ะๆ** — เกณฑ์ "นับเป็นยอดขายเมื่อออกใบกำกับภาษีแล้ว" ถ้ามีสองชุดในระบบ วันหนึ่งมันจะไม่ตรงกัน
+ *   แล้วไม่มีใครรู้ว่าหน้าจอถูกหรือไฟล์ที่ส่งให้ผู้บริหารถูก (หลักเดียวกับ computePromoDiscount/splitVat)
+ */
+function taxInvoiceRows(book, payload) {
+  payload = payload || {};
   var tenantId = _bookSalesTenant(book);
   var month = String(payload.month || '').trim();          // ว่าง = ทุกเดือน
 
@@ -62,13 +74,20 @@ function listTaxInvoices(session, payload) {
       docNo: docNo, docDate: _dOnly(docAt), orderId: o.record_id, orderCode: o.order_code || '',
       roundId: round ? round.record_id : '', roundNo: round ? _int(round.round_no) : 0,
       customerId: o.customer_id, customerName: customerFullName(c), customerCode: c.customer_code || '',
+      // ใครขาย — ป้ายชื่อใช้ตัวแปลงเดียวกับรายงาน (41_sales_reports.gs) ไม่ตั้งชุดที่สอง
+      saleBy: o.sale_by || '', saleByName: (typeof _saleByLabel === 'function' ? _saleByLabel(o.sale_by) : ''),
       taxId: c.tax_id || '', branchCode: c.tax_branch_code || '',
       /* ★ "เงินสด/เครดิต" ตัดสินจากวิธีชำระของบิล ไม่ใช่จาก "มีใบแจ้งหนี้ไหม" —
          บิลเครดิตที่ยังไม่ได้ตั้งลูกหนี้ก็มี ถ้าดูจากใบแจ้งหนี้จะกลายเป็นขายสดไปเฉยๆ */
       paymentType: cash ? 'cash' : 'credit',
       paymentLabel: cash ? 'เงินสด' : 'เครดิต',
+      /* ★★★ `subtotal_ex_vat` ที่บิลเก็บไว้ **รวมมูลค่าสินค้ายกเว้นภาษีอยู่แล้ว**
+         (ดู saleVatBreakdown ใน 18_pricing_engine.gs: `exVat = taxableExVat + exemptAmount`)
+         ยอดรวมจึงเป็น ก่อนภาษี + ภาษี เท่านั้น — เคยบวก `exempt` ซ้ำอีกรอบ ทำให้บิลที่มีของยกเว้นภาษี
+         ปนอยู่ มียอดรวมเกินความจริงเท่ามูลค่าของยกเว้น (เจอ 24 ต.ค. 2026 ตอนเขียนเทสต์ตัวส่งออก
+         Dashboard) · `exemptAmount` ส่งไปด้วยเป็นข้อมูลประกอบ ไม่ใช่ตัวที่เอาไปบวก */
       subtotalExVat: _money(exVat), vatAmount: _money(vat), exemptAmount: _money(exempt),
-      total: _money(exVat + vat + exempt),
+      total: _money(exVat + vat),
       status: String(o.status || ''), cancelled: String(o.status) === 'cancelled',
       /* ออกใบลดหนี้ได้เฉพาะใบที่มีใบแจ้งหนี้ลูกหนี้รองรับ — ขายสดยังไม่มีทาง (ดูหมายเหตุท้ายไฟล์) */
       arInvoiceId: ar ? ar.record_id : '', arInvoiceNo: ar ? ar.invoice_no : '',
@@ -101,6 +120,11 @@ function listTaxInvoices(session, payload) {
       Number(rd.subtotal_ex_vat) || 0, Number(rd.vat_amount) || 0, Number(rd.exempt_amount) || 0);
   });
 
+  /* ★ ช่วงวันที่ (ไม่ใช่ทีละเดือน) — ตัวส่งออก Dashboard ขอเป็นช่วง · เทียบกับ docDate ซึ่งเป็น
+     วันที่บนใบกำกับ ไม่ใช่วันเปิดบิล เพราะไฟล์นี้นับยอดขายจาก "เอกสารที่ออกไปแล้ว" */
+  var dFrom = String(payload.dateFrom || '').trim(), dTo = String(payload.dateTo || '').trim();
+  if (dFrom) out = out.filter(function(r) { return String(r.docDate) >= dFrom; });
+  if (dTo)   out = out.filter(function(r) { return String(r.docDate) <= dTo; });
   if (payload.paymentType === 'cash' || payload.paymentType === 'credit') {
     out = out.filter(function(r) { return r.paymentType === payload.paymentType; });
   }

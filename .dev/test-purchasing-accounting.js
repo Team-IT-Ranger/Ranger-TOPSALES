@@ -2011,5 +2011,20 @@ console.log('\n── ยอดขายก่อนภาษี ──');
   eq('   ยอดรวมภาษีของรายงานรายสินค้ายังเป็นราคาบนเอกสาร', rp.totalRevenueInclVat, 1535);
 }
 
+/* ★★★ บิลที่มี "ของยกเว้นภาษี" ปนอยู่ — ยอดรวมในรายงานภาษีขายต้องไม่บวกมูลค่ายกเว้นซ้ำ
+   `subtotal_ex_vat` ของบิลรวมมูลค่ายกเว้นไว้ในตัวแล้ว (saleVatBreakdown ใน 18_pricing_engine.gs)
+   บวกซ้ำแล้วยอดรวมเกินจริง · เคยผิดจริงจนถึง 24 ต.ค. 2026 — ตัวเลขที่ใช้ยื่น ภ.พ.30 (ก่อนภาษี/ภาษี)
+   ไม่เคยผิด ผิดเฉพาะคอลัมน์ยอดรวมที่คนเอาไปกวาดตาเทียบ ซึ่งไม่มีอะไรฟ้อง */
+{
+  append(tenantSheets.sales_orders, { record_id: 9301, order_code: 'SO-VAT-MIX', customer_id: 500,
+    payment_method: 'cash', status: 'completed', created_at: '2026-12-02 09:00:00',
+    tax_invoice_no: 'TAX-MIX-1', tax_invoice_at: '2026-12-02 09:00:00',
+    apply_vat: 'TRUE', vat_rate: 0.07, subtotal_ex_vat: 1500, vat_amount: 35, exempt_amount: 1000, total: 1535 });
+  const vr = ctx.getVatSalesReport(FIN, { tenantId: 'T1', month: '2026-12' });
+  const row = (vr.rows || []).find(x => x.docNo === 'TAX-MIX-1');
+  eq('★★★ รายงานภาษีขาย: ยอดรวมของบิลผสม = ก่อนภาษี + ภาษี (ไม่บวกมูลค่ายกเว้นซ้ำ)',
+    [row.exVat, row.vat, row.exempt, row.total], [1500, 35, 1000, 1535]);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

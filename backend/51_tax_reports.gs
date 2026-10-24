@@ -70,7 +70,11 @@ function getVatSalesReport(session, payload) {
     rows.push({ docNo: docNo, date: _dOnly(when), kind: kind,
       customer: c.name || '(ไม่พบลูกค้า)', customerCode: c.code || '', taxId: c.taxId || '', branch: c.branch || '',
       orderCode: o.order_code || '', exVat: _money(exVat), vat: _money(vat), exempt: _money(exempt),
-      total: _money(exVat + vat + exempt), note: note || '' });
+      /* ★★★ `exVat` (= `subtotal_ex_vat` ของบิล) **รวมมูลค่าสินค้ายกเว้นภาษีอยู่ในตัวแล้ว**
+         (saleVatBreakdown ใน 18_pricing_engine.gs) · บวก `exempt` ซ้ำ = ยอดรวมของบิลที่มีของ
+         ยกเว้นภาษีปนอยู่สูงเกินจริง · ตัวเลขที่ใช้ยื่น ภ.พ.30 (exVat/vat) ไม่เคยผิด ผิดเฉพาะคอลัมน์
+         ยอดรวมที่คนเอาไปกวาดตาเทียบ (เจอ 24 ต.ค. 2026) */
+      total: _money(exVat + vat), note: note || '' });
   };
 
   /* ── ใบกำกับภาษีของบิลขาย ──
