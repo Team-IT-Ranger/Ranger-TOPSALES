@@ -2847,7 +2847,7 @@ function listSnapSave(name, rows){
    fromSnapshot = true → เป็นข้อมูลของเมื่อครู่ ให้ขึ้นป้าย "กำลังอัปเดต…" ไว้ */
 function applyBootstrap(b, fromSnapshot){
   if (!b) return;
-  if (b.permissions) MY_PERMS = { isSuper: !!b.isSuperAdmin, permissions: b.permissions };
+  if (b.permissions) MY_PERMS = { isSuper: !!b.isSuperAdmin, permissions: b.permissions, loaded: true };
   if (b.roleLabel) { const el = document.getElementById('who-role'); if (el) el.textContent = b.roleLabel; }
   if (b.company) { COMPANY = b.company; applyCompanyName(); }
   if (b.tenants) tenantsCache = b.tenants;
@@ -3181,7 +3181,13 @@ function applyCompanyName(){
 
 /* สิทธิ์ของผู้ใช้ที่ล็อกอินอยู่ (มาจาก getMyPermissions) — ใช้ซ่อนเมนูที่ไม่มีสิทธิ์
    ฝั่ง backend ยังตรวจสิทธิ์ซ้ำทุก action อยู่ดี การซ่อนเมนูเป็นแค่เรื่องความสะอาดของหน้าจอ ไม่ใช่การกันจริง */
-let MY_PERMS = { isSuper: false, permissions: {} };
+/* ★★★ `loaded` = สิทธิ์มาถึงแล้วหรือยัง — **ตัวที่ขาดไปแล้วทำให้ปุ่มหาย**
+   ด่าน "ดูอย่างเดียว" (applyViewOnlyGuards) ถูกปลุกด้วย MutationObserver ทุกครั้งที่ DOM ขยับ
+   ซึ่งเกิดตั้งแต่ตอนแอปกำลังบูต **ก่อน** `MY_PERMS` จะถูกเติม · ตอนนั้น `isSuper=false`
+   และ `permissions={}` ด่านจึงเห็นว่า "ไม่มีสิทธิ์แก้" แล้วซ่อนปุ่มทิ้ง — และเพราะมันลบ `onclick`
+   ออกไปเลย ปุ่มจึงหายถาวรทั้ง session แม้สิทธิ์จะมาถึงทีหลังว่าเป็น super_admin ก็ตาม
+   ★ อาการที่เห็น: หน้าบัญชีไม่มีปุ่ม "+ ออกใบลดหนี้" เลย ทั้งที่สิทธิ์ครบ (ผู้ใช้แจ้ง 24 ต.ค. 2026) */
+let MY_PERMS = { isSuper: false, permissions: {}, loaded: false };
 const canView = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].view);
 const canEdit = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].edit);
 
@@ -3200,19 +3206,36 @@ const RO_GUARDS = [
 ];
 const RO_WRITE_FN = /^(add|save|delete|deactivate|create|void|openClone|openCreate|openPriceListImport|openRuleModal|openFgSetModal|openFgItemModal|openPromote|openPromoDistribution|openLineModal|openAdjNotePicker|pli|plmAdd|plmToggle|pkgToggleAll|toggleTenantStatus)/;
 function applyViewOnlyGuards(){
+  /* ★★★ ยังไม่รู้สิทธิ์ = **อย่าเพิ่งทำอะไร** — เดาว่า "ไม่มีสิทธิ์" ไว้ก่อนแล้วซ่อนปุ่มทิ้ง
+     คือสาเหตุที่ปุ่มหายถาวร (ดูหมายเหตุที่ MY_PERMS) · ปล่อยปุ่มไว้ก่อนไม่อันตราย
+     เพราะ backend ตรวจสิทธิ์ทุก action อยู่แล้ว กดไปก็โดนปฏิเสธ */
+  if (!MY_PERMS.loaded) return;
   RO_GUARDS.forEach(g => {
-    if (canEdit(g.mod)) return;
+    const locked = !canEdit(g.mod);
     g.views.forEach(v => {
       const root = document.getElementById('view-' + v); if (!root) return;
-      root.querySelectorAll('[onclick]').forEach(n => {
-        const m = (n.getAttribute('onclick') || '').match(/^\s*([A-Za-z_]+)\(/);
+      /* ★ เก็บ onclick เดิมไว้ใน data-ro-onclick แทนการลบทิ้ง — ต้องคืนได้เมื่อสิทธิ์มาถึง
+         หรือเมื่อสลับบทบาท/สลับบริษัทกลางคัน (ลบทิ้งแล้วต้องรีเฟรชหน้าถึงจะได้ปุ่มคืน) */
+      root.querySelectorAll('[onclick],[data-ro-onclick]').forEach(n => {
+        const code = n.getAttribute('onclick') || n.getAttribute('data-ro-onclick') || '';
+        const m = code.match(/^\s*([A-Za-z_]+)\(/);
         if (!m || !RO_WRITE_FN.test(m[1])) return;
         const card = n.closest('.form-card');
-        n.style.display = 'none'; n.removeAttribute('onclick'); n.classList.remove('clickable-row');
-        if (card) {
-          // การ์ดที่เป็นฟอร์มเพิ่มข้อมูลล้วนๆ (ไม่มีตาราง) ซ่อนทั้งใบ · การ์ดที่แสดงข้อมูลอยู่ด้วยแค่ปิดช่องกรอกไม่ให้แก้
-          if (!card.querySelector('table, .table-wrap')) card.style.display = 'none';
-          else card.querySelectorAll('input,select,textarea').forEach(i => { i.disabled = true; });
+        if (locked) {
+          if (n.hasAttribute('onclick')) { n.setAttribute('data-ro-onclick', code); n.removeAttribute('onclick'); }
+          n.style.display = 'none'; n.classList.remove('clickable-row');
+          if (card) {
+            // การ์ดที่เป็นฟอร์มเพิ่มข้อมูลล้วนๆ (ไม่มีตาราง) ซ่อนทั้งใบ · การ์ดที่แสดงข้อมูลอยู่ด้วยแค่ปิดช่องกรอกไม่ให้แก้
+            if (!card.querySelector('table, .table-wrap')) card.style.display = 'none';
+            else card.querySelectorAll('input,select,textarea').forEach(i => { i.disabled = true; });
+          }
+        } else if (n.hasAttribute('data-ro-onclick')) {
+          n.setAttribute('onclick', code); n.removeAttribute('data-ro-onclick');
+          n.style.display = '';
+          if (card) {
+            card.style.display = '';
+            card.querySelectorAll('input,select,textarea').forEach(i => { i.disabled = false; });
+          }
         }
       });
     });
@@ -10887,7 +10910,7 @@ function submitRole(code){ return plBusy(async () => {
   const r = await callApi('saveRole', { code: code || undefined, label, description: document.getElementById('rf-desc').value.trim(), permissions });
   if (!r.success) return plModalErr(r.message);
   ROLES = r; plModalClose(); renderRoles(); toast(r.message || 'บันทึกแล้ว');
-  if (code && code === MY_PERMS.roleCode) { const p = await callApi('getMyPermissions', {}); if (p.success) { MY_PERMS = { isSuper: !!p.isSuperAdmin, permissions: p.permissions }; renderNav(); } }
+  if (code && code === MY_PERMS.roleCode) { const p = await callApi('getMyPermissions', {}); if (p.success) { MY_PERMS = { isSuper: !!p.isSuperAdmin, permissions: p.permissions, loaded: true }; renderNav(); applyViewOnlyGuards(); } }
 }); }
 async function deleteRoleUI(code){
   const role = ROLES.data.find(r => r.code === code);
