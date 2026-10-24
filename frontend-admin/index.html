@@ -854,6 +854,9 @@
     margin:0; padding:16px 26px; font-size:17px; font-weight:800; letter-spacing:-.01em;
     color:#fff; background:linear-gradient(135deg, var(--blue) 0%, #1E4BB8 100%);
     border-radius:16px 16px 0 0; }
+  /* ป้ายเลขเมนู — บรรทัดบนของหัวเรื่อง ตัวเล็กและจางกว่า เป็นข้อมูลกำกับ ไม่ใช่หัวเรื่องเอง */
+  .modal-menuno{ display:block; font-size:11.5px; font-weight:600; letter-spacing:.04em;
+    opacity:.72; margin-bottom:3px; }
   /* ★ เทาต้องเข้มกว่า --ground (#F6F8FC) ที่ใช้เป็นพื้นแอป ไม่งั้นบนกล่องขาวแทบไม่ต่างกันเลย
      — ดูด้วยตาบนจอจริงแล้วถึงรู้ว่ายังเรียบอยู่ */
   .modal-body{ background:#EEF2F8; padding:20px 26px !important; margin:0 !important;
@@ -6699,10 +6702,35 @@ const plEditable = l => l.status !== 'archived';
 const plLiveEdit = l => l.status === 'active';
 /* ★ ห่อเนื้อโมดัลให้อัตโนมัติ: หัวเรื่อง (h3 ตัวแรก) กับแถวปุ่ม/ข้อความ error อยู่กับที่ ที่เหลือเลื่อน
    ทำที่นี่ที่เดียว โมดัลทุกตัวในแอปจึงได้เหมือนกันโดยไม่ต้องแก้ทีละที่ */
+/* ★★ เลขเมนูของหน้าที่กำลังเปิดอยู่ (ผู้ใช้สั่ง 24 ต.ค. 2026)
+   "add menu number to all opened window let user recognize program name and program menu number"
+   — หน้าต่างแก้ไขข้อมูลกางทับทั้งจอ พอกางแล้วไม่เหลืออะไรบอกว่ากำลังอยู่โปรแกรมไหน
+     เวลาโทรถามกันต้องอธิบายด้วยชื่อหัวเรื่อง ซึ่งซ้ำกันหลายหน้า (เช่น "ออกใบลดหนี้" มีทั้งใน
+     1.1.2 และ 5.3.1) · เลขเมนูเป็นตัวเดียวที่ไม่ซ้ำ
+   ★ อ่านจาก NAV_GROUPS ตัวเดียวกับที่วาดเมนู ไม่ได้เขียนเลขซ้ำไว้ที่หน้าต่าง —
+     ย้ายเมนูเมื่อไหร่ หัวหน้าต่างขยับตามเอง */
+function currentViewMeta(){
+  const el = document.querySelector('.view.active');
+  if (!el) return null;
+  const view = String(el.id || '').replace(/^view-/, '');
+  for (const g of NAV_GROUPS) for (const sg of g.subs) for (const it of sg.items) {
+    if (it.view === view) return { no: it.n, label: it.label, group: g.label };
+  }
+  return null;
+}
+
 function plModal(html){
   const m = document.getElementById('pl-modal'), box = m.querySelector('.modal-box');
   box.innerHTML = html;
   box.classList.toggle('modal-wide', !!box.querySelector('table'));
+  /* ★ เติมป้ายเลขเมนูไว้เหนือหัวเรื่อง ไม่ใช่ต่อท้ายชื่อ — ชื่อหน้าต่างบอกว่า "กำลังทำอะไร"
+     ส่วนเลขเมนูบอกว่า "อยู่ที่ไหน" คนละหน้าที่กัน เอาไปต่อกันแล้วอ่านยากทั้งคู่ */
+  const h3 = box.querySelector(':scope > h3');
+  if (h3 && !h3.querySelector('.modal-menuno')) {
+    const meta = currentViewMeta();
+    if (meta) h3.insertAdjacentHTML('afterbegin',
+      '<span class="modal-menuno">' + esc(meta.no) + ' ' + esc(meta.label) + '</span>');
+  }
   const kids = [...box.children];
   const head = kids.length && kids[0].tagName === 'H3' ? kids[0] : null;
   const foot = kids.filter(el => el.classList.contains('form-actions') || el.classList.contains('err'));
@@ -10202,12 +10230,44 @@ async function adjPickReturn(){
         '<td class="mono-data">'+(g.scrapQty ? '<span class="tag tag-warn">'+g.scrapQty+'</span>' : '—')+'</td>' +
         '<td><button class="btn btn-sm" onclick="adjFromReturn('+g.id+')">เลือก</button></td></tr>').join('') +
       '</tbody></table></div>'
-      : '<p class="form-hint">ไม่มีใบรับคืนที่รออยู่ — ถ้าลูกค้าคืนของมาจริง ให้ไปรับของที่เมนู ' +
-        '<b>งานขาย → ใบรับคืนสินค้า</b> ก่อน แล้วค่อยกลับมาออกใบลดหนี้</p>') +
+      : '<p class="form-hint">ยังไม่มีใบรับคืนที่รออยู่ — ถ้าลูกค้าเพิ่งคืนของมา ให้<b>เปิดใบรับคืนใหม่</b>ที่ปุ่มข้างล่าง</p>') +
+    /* ★★ เปิดใบรับคืนใหม่ได้จากตรงนี้เลย (ผู้ใช้สั่ง 24 ต.ค. 2026) — เดิมบอกให้ไปเมนูอื่น
+       ซึ่งพอไปถึงก็ต้องกรอกเลขบิลขายเองอีก ทั้งที่คนทำงานถือ **ใบกำกับภาษี** อยู่ในมือ ไม่ใช่เลขบิล */
     '<div class="form-actions"><button class="btn" onclick="openAdjNotePicker(\'credit\')">← ย้อนกลับ</button>' +
+      '<button class="btn btn-primary" onclick="adjPickTaxInvoiceForReturn()">+ เปิดใบรับคืนใหม่ (เลือกจากใบกำกับภาษี)</button>' +
       '<button class="btn" onclick="plModalClose()">ปิด</button></div>');
 }
 async function adjFromReturn(id){ plModalClose(); await grnMakeCreditNote(id); }
+
+/* ★★ เลือก "ใบกำกับภาษี" แล้วเปิดใบรับคืนของบิลนั้น (ผู้ใช้สั่ง 24 ต.ค. 2026)
+   ★ ทำไมเลือกจากใบกำกับ ไม่ใช่จากบิลขาย: ลูกค้าคืนของพร้อมใบกำกับที่อยู่ในมือ คนรับคืนจึงมี
+     "เลขใบกำกับ" เป็นตัวตั้งต้นเสมอ ส่วนเลขบิลขายเป็นของภายใน ต้องไปเปิดหาอีกทอด
+   ★ แสดงเฉพาะใบที่ยังไม่ถูกยกเลิก — บิลที่ยกเลิกแล้วไม่มีของให้คืน */
+async function adjPickTaxInvoiceForReturn(){
+  const tok = plModalWait('เปิดใบรับคืนสินค้า — เลือกใบกำกับภาษี');
+  const r = await callApi('listTaxInvoices', { limit: 300 });
+  if (plModalStale(tok)) return;
+  if (!r.success) { plModalClose(); toast(r.message, true); return; }
+  const rows = (r.data || []).filter(t => !t.cancelled);
+  plModal('<h3>เปิดใบรับคืนสินค้า — เลือกใบกำกับภาษี</h3>' +
+    '<p class="form-hint">เลือกใบกำกับภาษีที่ลูกค้านำมาคืนของ · ระบบจะเปิดฟอร์มรับคืนของบิลนั้นให้ ' +
+      'พร้อมรายการและ<b>ราคาที่ขายไปจริง</b> · รับคืนเสร็จแล้วค่อยออกใบลดหนี้ต่อจากใบรับคืน</p>' +
+    (rows.length ? '<div class="table-wrap"><table><thead><tr><th>เลขที่ใบกำกับ</th><th>วันที่</th>' +
+      '<th>ลูกค้า</th><th>บิลขาย</th><th>วิธีชำระ</th><th>ยอด</th><th></th></tr></thead><tbody>' +
+      rows.map(t => '<tr><td class="mono-data">'+esc(t.docNo)+(t.roundNo ? ' <span class="tag">รอบ '+t.roundNo+'</span>' : '')+'</td>' +
+        '<td class="mono-data">'+esc(t.docDate)+'</td><td class="wrap">'+esc(t.customerName || '-')+'</td>' +
+        '<td class="mono-data">'+dash(t.orderCode)+'</td>' +
+        '<td>'+(t.paymentType === 'cash' ? '<span class="tag tag-ok">เงินสด</span>' : '<span class="tag">เครดิต</span>')+'</td>' +
+        '<td class="mono-data">฿'+bahtPlain(t.total)+'</td>' +
+        '<td><button class="btn btn-sm" onclick="adjOpenReturnForm('+t.orderId+')">รับคืนของบิลนี้</button></td></tr>').join('') +
+      '</tbody></table></div>'
+      : '<p class="form-hint">ยังไม่มีใบกำกับภาษีในระบบ</p>') +
+    '<div class="form-actions"><button class="btn" onclick="adjPickReturn()">← ย้อนกลับ</button>' +
+      '<button class="btn" onclick="plModalClose()">ปิด</button></div>');
+}
+/* ★ เปิดฟอร์มรับคืนของบิลนั้น — ฟอร์มตัวเดียวกับเมนูใบรับคืนสินค้า ไม่ได้ทำฟอร์มที่สอง
+   (ทำสองฟอร์มเมื่อไหร่ วันหนึ่งจะมีคนแก้ฟอร์มเดียวแล้วอีกฟอร์มตกขบวน) */
+async function adjOpenReturnForm(orderId){ await openGoodsReturnForm(orderId); }
 
 /** ขั้นเลือกใบแจ้งหนี้ — ใช้ทั้งใบลดหนี้ (ทางที่ไม่มีของคืน) และใบเพิ่มหนี้ */
 async function adjPickInvoice(kind){
