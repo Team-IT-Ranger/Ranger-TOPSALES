@@ -107,7 +107,7 @@ Object.keys(_fakes).forEach(k => { if (_fakes[k]) ctx[k] = _fakes[k]; });
 // (ยอดจอง — guide ข้อ 1.3) ไม่ได้ทดสอบสถานะบิลขายจากไฟล์นี้โดยตรง (ดู .dev/test-sales-status.js)
 // 41_sales_reports.gs โหลดมาเพื่อทดสอบรายงานการขาย 1.8.1/1.8.2/1.8.3 (ต่อท้ายไฟล์นี้ — อ่านอย่างเดียว ไม่แตะสถานะอื่น)
 // 12_docnum.gs ถูกโหลดด้วยเพราะ _nextCentralDocNo อ่านรูปแบบผ่าน _docSeriesConfig/_periodKey ของไฟล์นั้น
-['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs', '53_billing_notes.gs', '54_goods_returns.gs', '55_van_stock_link.gs']
+['00_setup_sheets.gs', '12_docnum.gs', '17_pricing.gs', '18_pricing_engine.gs', '20_purchasing_master.gs', '21_purchase_requisition.gs', '22_purchase_order.gs', '33_customers.gs', '23_accounting.gs', '34_sales_status.gs', '41_sales_reports.gs', '48_delivery_rounds.gs', '49_credit_notes.gs', '50_cogs.gs', '51_tax_reports.gs', '52_cash_sales_gl.gs', '53_billing_notes.gs', '54_goods_returns.gs', '55_van_stock_link.gs', '58_tax_invoices.gs', '60_sales_facts.gs']
   .forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 
 let failed = 0;
@@ -718,10 +718,12 @@ const exVat = x => ({ apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07,
 const inclVat = x => Math.round(x * 1.07 * 100) / 100;   // ราคารายบรรทัดเก็บเป็นราคารวมภาษี
 
 [
-  { record_id: 9001, order_code: 'SO-9001', customer_id: 500, ...exVat(1000), status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-09-01 10:00:00' },
-  { record_id: 9002, order_code: 'SO-9002', customer_id: 500, ...exVat(500), status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-09-15 10:00:00' },
-  { record_id: 9003, order_code: 'SO-9003', customer_id: 501, ...exVat(2000), status: 'completed', sale_by: 'admin:u1', created_at: '2026-09-10 10:00:00' },
-  { record_id: 9004, order_code: 'SO-9004', customer_id: 500, ...exVat(9999), status: 'cancelled', sale_by: 'U_STAFF1', created_at: '2026-09-05 10:00:00' },
+/* ★★★ ตั้งแต่ 25 ต.ค. 2026 รายงาน 1.8.x นับ **เฉพาะใบที่ออกใบกำกับภาษีแล้ว** เหมือนฝั่งการเงิน
+   ฟิกซ์เจอร์จึงต้องติดเลขใบกำกับให้ใบที่ตั้งใจให้นับ · ใบที่ไม่ติดเลข = ยังไม่ใช่ยอดขาย */
+  { record_id: 9001, order_code: 'SO-9001', customer_id: 500, ...exVat(1000), status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-09-01 10:00:00', tax_invoice_no: 'TX-9001' },
+  { record_id: 9002, order_code: 'SO-9002', customer_id: 500, ...exVat(500), status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-09-15 10:00:00', tax_invoice_no: 'TX-9002' },
+  { record_id: 9003, order_code: 'SO-9003', customer_id: 501, ...exVat(2000), status: 'completed', sale_by: 'admin:u1', created_at: '2026-09-10 10:00:00', tax_invoice_no: 'TX-9003' },
+  { record_id: 9004, order_code: 'SO-9004', customer_id: 500, ...exVat(9999), status: 'cancelled', sale_by: 'U_STAFF1', created_at: '2026-09-05 10:00:00', tax_invoice_no: 'TX-9004' },
   { record_id: 9005, order_code: 'SO-9005', customer_id: 500, ...exVat(300), status: 'completed', sale_by: 'U_STAFF1', created_at: '2026-08-01 10:00:00' }   // นอกช่วงวันที่ที่จะดู
 ].forEach(o => append(tenantSheets.sales_orders, o));
 [
@@ -738,14 +740,15 @@ r = ctx.salesReportByStaff(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16' }
    สองตัวนี้ต่างกัน 7% เสมอเมื่อบิลไม่มีสินค้ายกเว้นภาษี — ถ้าวันหนึ่งมันเท่ากัน แปลว่าใครเอา
    ยอดรวมภาษีไปใส่ช่องยอดขาย แล้วเป้าของพนักงานขายทุกคนจะพุ่งขึ้น 7% เงียบๆ */
 eq('รวมยอดของ U_STAFF1 สองบิล ก่อนภาษี (1,000+500=1,500) ไม่รวมบิลที่ยกเลิก/นอกช่วง', r.data.find(x => x.saleBy === 'U_STAFF1'),
-  { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500, revenueInclVat: 1605,
+  { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500,
     compareBills: null, compareRevenue: null, revenueChangePct: null });
 eq('  ป้ายฝั่งแอดมินดึงชื่อจาก admin_users มาแสดง', r.data.find(x => x.saleBy === 'admin:u1').label, '[แอดมิน] ผู้จัดการฝ่ายจัดซื้อ');
 eq('  เรียงจากยอดมากไปน้อย + ยอดรวมถูกต้อง', [r.data.map(x => x.saleBy), r.totalRevenue, r.totalBills], [['admin:u1', 'U_STAFF1'], 3500, 3]);
-eq('  ★ ยอดรวมมีทั้งสองแบบ: ก่อนภาษี 3,500 · รวมภาษี 3,745', [r.totalRevenue, r.totalRevenueInclVat], [3500, 3745]);
+/* ★★ รายงานการขายไม่ดู VAT อีกแล้ว (25 ต.ค. 2026) — มียอดก่อนภาษีตัวเดียว ไม่มียอดรวมภาษีให้สับสน */
+eq('  ★ มียอดก่อนภาษีตัวเดียว ไม่มียอดรวมภาษี', [r.totalRevenue, r.totalRevenueInclVat], [3500, undefined]);
 r = ctx.salesReportByStaff(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16', compareDateFrom: '2026-09-01', compareDateTo: '2026-09-09' });
 eq('เทียบช่วงเวลาได้ (ช่วงก่อน U_STAFF1 มีแค่บิลแรก 1,000 ก่อนภาษี)', r.data.find(x => x.saleBy === 'U_STAFF1'),
-  { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500, revenueInclVat: 1605,
+  { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500,
     compareBills: 1, compareRevenue: 1000, revenueChangePct: 50 });
 fails('ไม่ระบุช่วงวันที่ → ปฏิเสธ', ctx.salesReportByStaff(MGR, {}), /ระบุช่วงวันที่/);
 fails('วันที่กลับด้าน → ปฏิเสธ', ctx.salesReportByStaff(MGR, { dateFrom: '2026-09-30', dateTo: '2026-09-01' }), /ไม่มากกว่า/);
@@ -766,11 +769,11 @@ console.log('\n  -- 1.8.3 แยกสินค้า/กลุ่มสิน�
 r = ctx.salesReportByProduct(MGR, { dateFrom: '2026-09-01', dateTo: '2026-09-16' });
 eq('สินค้า 10 ขายรวม 20+10=30 หน่วยฐาน ยอด 1,500 (ไม่รวมบิลที่ยกเลิก)', r.products.find(x => x.productId === '10'),
   { productId: '10', productCode: 'P-100', productName: 'กล่องกระดาษ', groupId: '', groupName: '(ไม่มีกลุ่ม)', category: '', subCategory: '',
-    qty: 30, freeQty: 0, revenue: 1500, revenueInclVat: 1605, bills: 2 });
+    qty: 30, freeQty: 0, revenue: 1500, bills: 2 });
 eq('สินค้า 22 มีทั้งขายจริง (40, 2,000) และของแถม (5 หน่วย ไม่รวมยอด) พร้อมกลุ่มสินค้า — นับ 2 บิลเพราะแถมอยู่คนละบิลกับที่ขายจริง',
   r.products.find(x => x.productId === '22'),
   { productId: '22', productCode: 'P-500', productName: 'ฟิล์มพันสินค้า', groupId: '900', groupName: 'วัสดุสิ้นเปลือง', category: 'PACK', subCategory: 'ฟิล์ม',
-    qty: 40, freeQty: 5, revenue: 2000, revenueInclVat: 2140, bills: 2 });
+    qty: 40, freeQty: 5, revenue: 2000, bills: 2 });
 eq('สรุปตามกลุ่มสินค้า: วัสดุสิ้นเปลือง 2,000 / ไม่มีกลุ่ม 1,500', r.groups.map(g => [g.groupName, g.revenue]), [['วัสดุสิ้นเปลือง', 2000], ['(ไม่มีกลุ่ม)', 1500]]);
 eq('สรุปตามหมวดหลัก (Category/subCategory): PACK/ฟิล์ม 2,000 · สินค้าที่ยังไม่มีหมวดรวมเป็น (ไม่มีหมวด) 1,500',
   r.categories.map(c => [c.category, c.subCategory, c.qty, c.freeQty, c.revenue]), [['PACK', 'ฟิล์ม', 40, 5, 2000], ['(ไม่มีหมวด)', '', 30, 0, 1500]]);
@@ -1781,17 +1784,21 @@ append(tenantSheets.sales_orders, { record_id: 9008, order_code: 'SO-9008', cust
   status: 'completed', sale_by: 'admin:u1', created_at: '2026-09-14 10:00:00' });
 
 const RNG = { dateFrom: '2026-09-01', dateTo: '2026-09-16' };
-r = ctx.salesReportByStaff(MGR, RNG);
-eq('ไม่ส่ง statuses = เหมือนเดิมทุกประการ (ทุกใบที่ไม่ถูกยกเลิก)', [r.totalBills, r.totalRevenue], [6, 4500]);
-r = ctx.salesReportByStaff(MGR, Object.assign({ statuses: ['completed'] }, RNG));
-eq('★★ นับเฉพาะใบจัดส่งสำเร็จ → 4 ใบ 3,600 (ตัด accepted 777 + pending 123 ออก)', [r.totalBills, r.totalRevenue], [4, 3600]);
-eq('   แยกรายคนก็ตัดด้วย (U_STAFF1 เหลือ 2 ใบ 1,500 ก่อนภาษี)',
-  r.data.find(x => x.saleBy === 'U_STAFF1'), { saleBy: 'U_STAFF1', label: 'พนักงาน เอ', bills: 2, revenue: 1500,
-    revenueInclVat: 1605, compareBills: null, compareRevenue: null, revenueChangePct: null });
-r = ctx.salesReportByStaff(MGR, Object.assign({ statuses: ['confirmed'] }, RNG));
+/* ★★★ ตัวกรองสถานะเป็นเรื่องของ **1.8.4 รายงานรายใบ** ซึ่งเป็นรายงาน "งานค้าง" ไม่ใช่ยอดขาย —
+   1.8.1 ไม่สนสถานะอีกแล้ว เพราะนับจากเอกสารที่ออกไปจริงเหมือนฝั่งการเงิน (25 ต.ค. 2026) */
+r = ctx.salesReportBills(MGR, RNG);
+eq('1.8.4 ไม่ส่ง statuses = ทุกใบที่ไม่ถูกยกเลิก', [r.totalBills, r.totalRevenue], [6, 4500]);
+r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['completed'] }, RNG));
+eq('★★ 1.8.4 นับเฉพาะใบจัดส่งสำเร็จ → 4 ใบ 3,600 (ตัด accepted 777 + pending 123 ออก)', [r.totalBills, r.totalRevenue], [4, 3600]);
+r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['confirmed'] }, RNG));
 eq('★ บิลเก่าสถานะ pending_delivery ต้องถูกนับเป็น "รออนุมัติ" (confirmed) ด้วย', [r.totalBills, r.totalRevenue], [1, 123]);
-r = ctx.salesReportByStaff(MGR, Object.assign({ statuses: ['cancelled'] }, RNG));
+r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['cancelled'] }, RNG));
 eq('★ ขอ statuses=[cancelled] ก็ต้องไม่ได้ยอดขายปลอม (ยกเลิกไม่นับเสมอ)', [r.totalBills, r.totalRevenue], [0, 0]);
+/* ★★ 1.8.1 กับ 1.8.4 ให้เลขคนละตัวโดยตั้งใจ: 1.8.1 = ยอดขายตามเอกสารที่ออกแล้ว (3,500)
+   1.8.4 = บิลที่เดินอยู่ในระบบ (4,500) — ถ้าวันหนึ่งสองตัวนี้เท่ากันโดยไม่ได้ตั้งใจ แปลว่ามีคนเผลอ
+   เอาเกณฑ์เดียวกันไปใส่ทั้งคู่ แล้วรายงาน "งานค้าง" จะหายไปจากระบบเงียบๆ */
+eq('★★ 1.8.1 (ยอดขายตามเอกสาร) ไม่เท่ากับ 1.8.4 (บิลที่เดินอยู่) โดยตั้งใจ',
+  [ctx.salesReportByStaff(MGR, RNG).totalRevenue, ctx.salesReportBills(MGR, RNG).totalRevenue], [3500, 4500]);
 
 r = ctx.salesReportBills(MGR, Object.assign({ statuses: ['completed'] }, RNG));
 eq('รายใบ: 4 ใบ ยอดตรงกับรายงานแยกพนักงาน', [r.data.length, r.totalBills, r.totalRevenue], [4, 4, 3600]);
@@ -1837,7 +1844,14 @@ ctx.centralAppend('ar_invoices', { record_id: 9902, invoice_no: 'INV-9102', cust
 append(tenantSheets.sales_orders, { record_id: 9103, order_code: 'SO-9103', customer_id: 587, ...exVat(3000),
   status: 'accepted', sale_by: 'U_STAFF1', created_at: '2026-09-07 10:00:00' });
 append(tenantSheets.delivery_rounds, { record_id: 7001, order_id: 9103, round_no: 1, status: 'shipped',
-  tax_invoice_no: 'TAX-9103-1', total: 3000 });
+  tax_invoice_no: 'TAX-9103-1', tax_invoice_at: '2026-09-07 10:00:00', ...exVat(3000) });
+/* บรรทัดสินค้าของสองใบนี้ — รายงานยอดขายอ่านถึงระดับบรรทัดแล้ว ไม่มีบรรทัด = ไม่มียอด */
+append(tenantSheets.order_items, { record_id: 71, order_id: 9101, product_id: 10, qty: 10,
+  base_qty: 10, unit_code: 'CT', price: inclVat(100), line_total: inclVat(1000), line_discount: 0, is_free: 0, tax_status: 'vat' });
+append(tenantSheets.order_items, { record_id: 73, order_id: 9103, product_id: 10, qty: 30,
+  base_qty: 30, unit_code: 'CT', price: inclVat(100), line_total: inclVat(3000), line_discount: 0, is_free: 0, tax_status: 'vat' });
+append(tenantSheets.delivery_round_items, { record_id: 7101, round_id: 7001, order_id: 9103,
+  item_id: 73, product_id: 10, unit_code: 'CT', unit_factor: 1, qty: 30, base_qty: 30 });
 // ใบ D: ยังไม่ออกเอกสารใดๆ
 append(tenantSheets.sales_orders, { record_id: 9104, order_code: 'SO-9104', customer_id: 587, ...exVat(4000),
   status: 'accepted', sale_by: 'U_STAFF1', created_at: '2026-09-08 10:00:00' });
@@ -1863,8 +1877,12 @@ r = ctx.salesReportBills(MGR, { dateFrom: '2026-09-05', dateTo: '2026-09-09', in
 eq('★ ด้านกลับ: เฉพาะใบที่ยังไม่ออกเอกสาร (ไว้ไล่ตามงานค้างออกใบ)',
   r.data.map(x => x.code).sort(), ['SO-9104', 'SO-9105']);
 
+/* ★★★ จุดที่ 1.8.1 ต่างจาก 1.8.4 ชัดที่สุด: ใบ SO-9102 มี "ใบแจ้งหนี้ลูกหนี้" แต่ **ยังไม่ออกใบกำกับภาษี**
+   1.8.4 นับ (เกณฑ์ `invoiced`) แต่ 1.8.1 ไม่นับ เพราะยอดขายต้องตรงกับฝั่งการเงินซึ่งยึดใบกำกับ
+   ★ นี่คือสาเหตุหนึ่งที่ผู้ใช้เจอเลขสองตัวไม่ตรงกัน (25 ต.ค. 2026) — ตอนนี้ต่างกันอย่างมีเหตุผลและอธิบายได้ */
 r = ctx.salesReportByStaff(MGR, INV);
-eq('การ์ดแยกพนักงานใช้เกณฑ์เดียวกัน', [r.totalBills, r.totalRevenue], [3, 6000]);
+eq('★★★ 1.8.1 นับเฉพาะใบที่ออกใบกำกับภาษีแล้ว (9101 + 9103 = 4,000) ไม่รวมใบที่มีแต่ใบแจ้งหนี้',
+  [r.totalBills, r.totalRevenue], [2, 4000]);
 
 /* ★ เกณฑ์ "ออกใบแล้ว" กับ "จัดส่งสำเร็จ" เป็นคนละมิติ — ส่งพร้อมกันต้องได้ส่วนร่วม ไม่ใช่ทับกัน */
 r = ctx.salesReportBills(MGR, { dateFrom: '2026-09-05', dateTo: '2026-09-09', invoiced: 'yes', statuses: ['completed'] });
@@ -1956,24 +1974,36 @@ console.log('\n── ตั้งลูกหนี้รายรอบจั�
 console.log('\n── ยอดขายก่อนภาษี ──');
 {
   const T = 'T1';
-  const bill = (id, code, row) => { append(tenantSheets.sales_orders, Object.assign(
-    { record_id: id, order_code: code, customer_id: 587, status: 'completed', sale_by: 'U_STAFF1',
-      created_at: '2026-11-02 10:00:00', tax_invoice_no: 'TAX-' + code }, row)); };
+  /* ★ รายงานยอดขายอ่านถึง **ระดับบรรทัด** แล้ว (25 ต.ค. 2026) — บิลที่ไม่มีบรรทัดสินค้า
+     จะไม่มียอดเลย ฟิกซ์เจอร์จึงต้องแนบบรรทัดมาด้วยเสมอ */
+  let billItemId = 7200;
+  const bill = (id, code, row, lines) => {
+    append(tenantSheets.sales_orders, Object.assign(
+      { record_id: id, order_code: code, customer_id: 587, status: 'completed', sale_by: 'U_STAFF1',
+        created_at: '2026-11-02 10:00:00', tax_invoice_no: 'TAX-' + code }, row));
+    (lines || []).forEach(l => append(tenantSheets.order_items, Object.assign(
+      { record_id: ++billItemId, order_id: id, product_id: 10, qty: 1, base_qty: 1,
+        unit_code: 'CT', line_discount: 0, is_free: 0, tax_status: 'vat' }, l)));
+  };
   const RNG = { dateFrom: '2026-11-01', dateTo: '2026-11-30' };
   const sold = () => ctx.salesReportByStaff(MGR, RNG);
 
   // ① บิลที่มีสินค้ายกเว้นภาษีปนอยู่ — ยอดก่อนภาษี ≠ ยอดรวม ÷ 1.07
   bill(9201, 'SO-EXEMPT', { apply_vat: 'TRUE', vat_type: 'inclusive', vat_rate: 0.07,
-    subtotal_ex_vat: 1500, vat_amount: 35, exempt_amount: 1000, total: 1535 });
+    subtotal: 1535, discount: 0, subtotal_ex_vat: 1500, vat_amount: 35, exempt_amount: 1000, total: 1535 },
+    [{ product_id: 10, price: 535, line_total: 535, tax_status: 'vat' },
+     { product_id: 30, price: 1000, line_total: 1000, tax_status: 'exempt' }]);
   let r1 = sold();
   eq('★★★ บิลมีของยกเว้นภาษีปนอยู่: ยอดขายก่อนภาษี = 1,500 (ไม่ใช่ 1,535÷1.07 = 1,434.58)',
-    [r1.totalRevenue, r1.totalRevenueInclVat], [1500, 1535]);
+    r1.totalRevenue, 1500);
 
   // ② บิลที่ไม่คิดภาษีทั้งใบ — ยอดขายก่อนภาษีเท่ายอดรวมพอดี
-  bill(9202, 'SO-NOVAT', { apply_vat: 'FALSE', vat_rate: 0, subtotal_ex_vat: 500, vat_amount: 0, total: 500 });
+  bill(9202, 'SO-NOVAT', { apply_vat: 'FALSE', vat_rate: 0, subtotal: 500, discount: 0,
+    subtotal_ex_vat: 500, vat_amount: 0, total: 500 },
+    [{ price: 500, line_total: 500 }]);
   let r2 = sold();
   eq('★ บิลที่ไม่อยู่ในระบบภาษี: ยอดก่อนภาษี = ยอดรวม (ห้ามถอดภาษีออกจากบิลที่ไม่เคยคิดภาษี)',
-    [r2.totalRevenue - r1.totalRevenue, r2.totalRevenueInclVat - r1.totalRevenueInclVat], [500, 500]);
+    ctx._round2(r2.totalRevenue - r1.totalRevenue), 500);
 
   /* ★★★ วันที่รัฐเปลี่ยนอัตราภาษี ยอดขายย้อนหลังต้องไม่ขยับ — บิลเก็บอัตราไว้ในตัวเอง
      (หลักเดียวกับที่ guide ข้อ 4 บังคับไว้กับใบกำกับภาษี) ถ้าคิดจากค่าตั้งปัจจุบัน
@@ -1989,26 +2019,26 @@ console.log('\n── ยอดขายก่อนภาษี ──');
      ★★ ข้อจำกัดที่ยอมรับ และเขียนเป็นเทสต์ไว้ไม่ให้ลืม: **บิลกลุ่มนี้เท่านั้น**ที่ยอดก่อนภาษี
        จะขยับถ้าวันหนึ่งอัตราเปลี่ยน · แก้ได้ทางเดียวคือเติมคอลัมน์ภาษีย้อนหลังให้บิลเก่า
        (ตอนนี้มีเฉพาะบิลที่บันทึกก่อนกลางปี 2026) · ถอดสดดีกว่านับเป็นศูนย์แน่นอน */
-  bill(9203, 'SO-LEGACY', { created_at: '2026-11-20 10:00:00', total: 1070 });
+  bill(9203, 'SO-LEGACY', { created_at: '2026-11-20 10:00:00', subtotal: 1070, discount: 0, total: 1070 },
+    [{ price: 1070, line_total: 1070 }]);
   const RNG_ALL = { dateFrom: '2026-11-01', dateTo: '2026-11-30' };
   let r3 = ctx.salesReportByStaff(MGR, RNG_ALL);
   eq('★★ บิลเก่าที่ยังไม่มีคอลัมน์ภาษี: ถอดสดให้ (1,070 → 1,000) ไม่ใช่นับเป็นศูนย์',
-    [r3.totalRevenue - r2.totalRevenue, r3.totalRevenueInclVat - r2.totalRevenueInclVat], [1000, 1070]);
+    ctx._round2(r3.totalRevenue - r2.totalRevenue), 1000);
   ctx.currentVatRate = () => 0.10;
   eq('★ และบิลเก่าคือตัวเดียวที่ขยับตามอัตราใหม่ (1,070 ÷ 1.10 = 972.73) — รู้ไว้ว่าทำไม',
     ctx._round2(ctx.salesReportByStaff(MGR, RNG_ALL).totalRevenue - beforeChange), 972.73);
   ctx.currentVatRate = realRate;
 
   // ④ รายงานแยกสินค้า: ราคารายบรรทัดเก็บเป็นราคารวมภาษี ต้องถอดด้วยสถานะภาษีของบรรทัดนั้น
-  append(tenantSheets.order_items, { record_id: 701, order_id: 9201, product_id: 10,
-    base_qty: 10, line_total: 535, is_free: 0, tax_status: 'vat' });
-  append(tenantSheets.order_items, { record_id: 702, order_id: 9201, product_id: 22,
-    base_qty: 10, line_total: 1000, is_free: 0, tax_status: 'exempt' });
-  const rp = ctx.salesReportByProduct(MGR, RNG);   // ช่วงนี้ไม่มีบิลเก่าปน ตัวเลขจึงนิ่ง
+  /* รายงานแยกสินค้าอ่าน fact ชุดเดียวกับ 1.8.1 — บรรทัดถูกสร้างไปแล้วตอนเปิดบิลข้างบน */
+  const rp = ctx.salesReportByProduct(MGR, { dateFrom: '2026-11-02', dateTo: '2026-11-02' });
   eq('★★ รายสินค้า: ของคิดภาษีถอดออก (535→500) · ของยกเว้นภาษีไม่ถอด (1,000→1,000)',
     [rp.products.find(x => x.productId === '10').revenue,
-     rp.products.find(x => x.productId === '22').revenue], [500, 1000]);
-  eq('   ยอดรวมภาษีของรายงานรายสินค้ายังเป็นราคาบนเอกสาร', rp.totalRevenueInclVat, 1535);
+     rp.products.find(x => x.productId === '30').revenue], [1000, 1000]);
+  /* ★ สินค้า 10 ได้ 1,000 เพราะมีสองบิลในวันนั้น: 535 (ถอดเหลือ 500) + 500 (บิลไม่คิดภาษี)
+     — ตัวเลขเดียวกันมาจากคนละเส้นทางภาษี ซึ่งเป็นสิ่งที่ตั้งใจทดสอบพอดี */
+  eq('   ยอดรวมรายงานรายสินค้า = ยอดของสองบิลในวันนั้น (1,500 + 500)', rp.totalRevenue, 2000);
 }
 
 /* ★★★ บิลที่มี "ของยกเว้นภาษี" ปนอยู่ — ยอดรวมในรายงานภาษีขายต้องไม่บวกมูลค่ายกเว้นซ้ำ

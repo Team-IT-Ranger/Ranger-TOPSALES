@@ -47,7 +47,8 @@ const ctx = {
 };
 vm.createContext(ctx);
 // ★ ใช้ตัวคิดเงินของจริง (soldNetByItem / lineExVat / splitVat) ไม่ใช่ตัวจำลอง — เลขต่อบรรทัดคือสิ่งที่กำลังทดสอบ
-vm.runInContext(B('18_pricing_engine.gs') + '\n' + B('58_tax_invoices.gs') + '\n' + B('59_dashboard_export.gs'), ctx);
+vm.runInContext([B('18_pricing_engine.gs'), B('58_tax_invoices.gs'),
+  B('60_sales_facts.gs'), B('59_dashboard_export.gs')].join('\n'), ctx);
 ctx._companyRow = () => ({ vat_rate: 7 });
 
 /* ══════════ ข้อมูลตั้งต้น ══════════ */

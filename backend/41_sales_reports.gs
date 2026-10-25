@@ -148,6 +148,34 @@ function _validateReportDates(payload) {
   return null;
 }
 
+/* ══════════════ รายงานยอดขาย 1.8.x — ใช้ฐานเดียวกับฝั่งการเงิน ══════════════
+   ★★★ เจ้าของระบบสั่ง 25 ต.ค. 2026: "ทำให้รายงานขายในเมนูกลุ่ม 1.8 ตรงกันกับรายงานทางการเงิน"
+   ทั้งสามรายงานอ่านจาก `salesFactRows()` (60_sales_facts.gs) ตัวเดียวกับไฟล์ Dashboard และ 5.3.1
+   จึงนับ **เฉพาะใบที่ออกใบกำกับภาษีแล้ว · หักใบลดหนี้ · ตามวันที่บนเอกสาร · ยอดก่อนภาษี**
+
+   ★★ ของเดิมนับ "ทุกบิลที่ไม่ถูกยกเลิก" ตามวันที่เปิดบิล ซึ่งทำให้ 1.8.1 ได้ 1,622,380.91
+   ขณะที่ฝั่งการเงินได้ 1,388,895.56 แล้วไม่มีใครบอกได้ว่าอันไหนถูก (ผู้ใช้เจอ 25 ต.ค. 2026)
+   ★ `_salesReportOrders()` ยังอยู่ ใช้กับ 1.8.4 รายงานรายใบ ซึ่งเป็นรายงาน "งานค้าง" ไม่ใช่ยอดขาย
+     — ที่นั่นต้องดูใบที่ยังไม่ออกเอกสารได้ด้วย จึงใช้ฐานคนละตัวโดยตั้งใจ */
+
+/** ยอดขายของสมุดนี้ในช่วงวันที่ — คืน facts พร้อมใช้ หรือ error ที่ส่งกลับได้เลย */
+function _sfForReport(session, payload) {
+  var tenantId = _salesTenantId(session, payload);
+  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
+  var dateErr = _validateReportDates(payload); if (dateErr) return dateErr;
+  var r = salesFactRows(_normBook(tenantId), { dateFrom: payload.dateFrom, dateTo: payload.dateTo });
+  if (!r.success) return r;
+  r.tenantId = tenantId;
+  return r;
+}
+
+/** นับ "จำนวนบิล" = จำนวนเอกสารที่ไม่ซ้ำ ไม่ใช่จำนวนบรรทัด */
+function _sfCountDocs(seen, f) {
+  var k = String(f.docNo);
+  if (seen[k]) return 0;
+  seen[k] = 1; return 1;
+}
+
 /**
  * 1.8.1 รายงานการขายแยกพนักงาน — "ยอดขายรายคน เทียบช่วงเวลา"
  * payload: { tenantId?, dateFrom, dateTo, compareDateFrom?, compareDateTo? }
@@ -156,51 +184,47 @@ function _validateReportDates(payload) {
 function salesReportByStaff(session, payload) {
   var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
   payload = payload || {};
-  var tenantId = _salesTenantId(session, payload);
-  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
-  var dateErr = _validateReportDates(payload); if (dateErr) return dateErr;
+  var cur = _sfForReport(session, payload);
+  if (!cur.success) return cur;
 
-  var fopts = _salesReportOpts(payload);
-  function summarize(from, to) {
-    var byStaff = {};
-    _salesReportOrders(tenantId, from, to, fopts).forEach(function(o) {
-      var key = String(o.sale_by || '');
-      if (!byStaff[key]) byStaff[key] = { label: _saleByLabel(key), bills: 0, revenue: 0, revenueInclVat: 0 };
-      byStaff[key].bills++;
-      /* ★★★ `revenue` = **ยอดก่อน VAT เสมอ** (กติกาเจ้าของระบบ 24 ต.ค. 2026 — คำอธิบายยาวอยู่ที่
-         `orderExVat` ใน 18_pricing_engine.gs) · เป้าของพนักงานขายวัดด้วยตัวนี้
-         ยอดที่ต้องไปเก็บเงินจริงอยู่ที่ `revenueInclVat` ซึ่งเป็นเรื่องของรายงานการเก็บเงิน */
-      byStaff[key].revenue = _money(byStaff[key].revenue + orderExVat(o));
-      byStaff[key].revenueInclVat = _money(byStaff[key].revenueInclVat + (parseFloat(o.total) || 0));
+  function summarize(facts) {
+    var by = {}, seen = {};
+    facts.forEach(function(f) {
+      var key = String(f.saleBy || '');
+      if (!by[key]) { by[key] = { label: f.saleByName || _saleByLabel(key), bills: 0, revenue: 0 }; seen[key] = {}; }
+      by[key].bills += _sfCountDocs(seen[key], f);
+      by[key].revenue = _money(by[key].revenue + f.netEx);
     });
-    return byStaff;
+    return by;
   }
-  var cur = summarize(payload.dateFrom, payload.dateTo);
+
   var hasCompare = !!(payload.compareDateFrom && payload.compareDateTo);
+  var prev = {};
   if (hasCompare) {
-    var cmpErr = _validateReportDates({ dateFrom: payload.compareDateFrom, dateTo: payload.compareDateTo });
-    if (cmpErr) return cmpErr;
+    var cmp = _sfForReport(session, { tenantId: payload.tenantId,
+      dateFrom: payload.compareDateFrom, dateTo: payload.compareDateTo });
+    if (!cmp.success) return cmp;
+    prev = summarize(cmp.facts);
   }
-  var prev = hasCompare ? summarize(payload.compareDateFrom, payload.compareDateTo) : {};
+  var now = summarize(cur.facts);
 
   var keys = {};
-  Object.keys(cur).forEach(function(k) { keys[k] = true; });
+  Object.keys(now).forEach(function(k) { keys[k] = true; });
   Object.keys(prev).forEach(function(k) { keys[k] = true; });
   var rows = Object.keys(keys).map(function(k) {
-    var c = cur[k] || { label: _saleByLabel(k), bills: 0, revenue: 0, revenueInclVat: 0 };
+    var c = now[k] || { label: _saleByLabel(k), bills: 0, revenue: 0 };
     var p = prev[k] || { bills: 0, revenue: 0 };
-    return { saleBy: k, label: c.label, bills: c.bills, revenue: c.revenue, revenueInclVat: c.revenueInclVat,
+    return { saleBy: k, label: c.label, bills: c.bills, revenue: c.revenue,
       compareBills: hasCompare ? p.bills : null, compareRevenue: hasCompare ? p.revenue : null,
       revenueChangePct: (hasCompare && p.revenue > 0) ? _money((c.revenue - p.revenue) / p.revenue * 100) : null };
   });
   rows.sort(function(a, b) { return b.revenue - a.revenue; });
 
-  return { success: true, tenantId: tenantId, dateFrom: payload.dateFrom, dateTo: payload.dateTo,
-    statuses: fopts.statuses || [], saleBy: fopts.saleBy, customerId: fopts.customerId, invoiced: fopts.invoiced,
+  return { success: true, tenantId: cur.tenantId, dateFrom: payload.dateFrom, dateTo: payload.dateTo,
     compareDateFrom: payload.compareDateFrom || '', compareDateTo: payload.compareDateTo || '', data: rows,
     totalRevenue: _money(rows.reduce(function(s, r) { return s + r.revenue; }, 0)),
-    totalRevenueInclVat: _money(rows.reduce(function(s, r) { return s + (r.revenueInclVat || 0); }, 0)),
-    totalBills: rows.reduce(function(s, r) { return s + r.bills; }, 0) };
+    totalBills: rows.reduce(function(s, r) { return s + r.bills; }, 0),
+    mismatches: cur.mismatches || [] };
 }
 
 /**
@@ -212,31 +236,29 @@ function salesReportByStaff(session, payload) {
 function salesReportByCustomer(session, payload) {
   var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
   payload = payload || {};
-  var tenantId = _salesTenantId(session, payload);
-  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
-  var dateErr = _validateReportDates(payload); if (dateErr) return dateErr;
+  var cur = _sfForReport(session, payload);
+  if (!cur.success) return cur;
+  var tenantId = cur.tenantId;
 
-  var custRows = centralObjects('customers').filter(function(c) { return String(c.tenant_id) === String(tenantId); });
-  var custMap = {}; custRows.forEach(function(c) { custMap[String(c.record_id)] = c; });
-
-  var byCust = {};
-  _salesReportOrders(tenantId, payload.dateFrom, payload.dateTo).forEach(function(o) {
-    var key = String(o.customer_id || '');
+  var byCust = {}, seen = {};
+  cur.facts.forEach(function(f) {
+    var key = String(f.customerId || '');
     if (!byCust[key]) {
-      var c = custMap[key];
-      byCust[key] = { customerId: key, customerCode: c ? (c.customer_code || '') : '', customerName: c ? customerFullName(c) : '(ลูกค้าทั่วไป)', bills: 0, revenue: 0, revenueInclVat: 0 };
+      byCust[key] = { customerId: key, customerCode: f.customerCode || '',
+        customerName: f.customerName || '(ลูกค้าทั่วไป)', bills: 0, revenue: 0 };
+      seen[key] = {};
     }
-    byCust[key].bills++;
-    // revenue = ก่อน VAT (กติกา 24 ต.ค. 2026) · ยอดที่ต้องเก็บเงินอยู่ที่ revenueInclVat
-    byCust[key].revenue = _money(byCust[key].revenue + orderExVat(o));
-    byCust[key].revenueInclVat = _money(byCust[key].revenueInclVat + (parseFloat(o.total) || 0));
+    byCust[key].bills += _sfCountDocs(seen[key], f);
+    byCust[key].revenue = _money(byCust[key].revenue + f.netEx);
   });
   var rows = Object.keys(byCust).map(function(k) { return byCust[k]; });
   rows.sort(function(a, b) { return b.revenue - a.revenue; });
   var limit = _int(payload.limit) || 200;
   rows = rows.slice(0, limit);
 
-  // ร้านที่หายไป — เกณฑ์เดียวกับ customerSaleGate (status ว่าง = เดาจาก is_active) แต่ blocked ก็ยังนับ (ยังขายสดได้)
+  /* ร้านที่หายไป — เกณฑ์เดียวกับ customerSaleGate (status ว่าง = เดาจาก is_active) แต่ blocked ก็ยังนับ
+     ★ ไม่ผูกกับช่วงวันที่ที่เลือกดูรายงาน เป็นภาพรวม ณ วันนี้เสมอ */
+  var custRows = centralObjects('customers').filter(function(c) { return String(c.tenant_id) === String(tenantId); });
   var lostDays = _int(payload.lostDays) || 60;
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   var lost = custRows.filter(function(c) {
@@ -251,8 +273,7 @@ function salesReportByCustomer(session, payload) {
 
   return { success: true, tenantId: tenantId, dateFrom: payload.dateFrom, dateTo: payload.dateTo, lostDays: lostDays,
     data: rows, totalRevenue: _money(rows.reduce(function(s, r) { return s + r.revenue; }, 0)),
-    totalRevenueInclVat: _money(rows.reduce(function(s, r) { return s + (r.revenueInclVat || 0); }, 0)),
-    lostCustomers: lost, lostCustomerCount: lost.length };
+    lostCustomers: lost, lostCustomerCount: lost.length, mismatches: cur.mismatches || [] };
 }
 
 /**
@@ -264,55 +285,38 @@ function salesReportByCustomer(session, payload) {
 function salesReportByProduct(session, payload) {
   var err = _requirePermission(session, 'sales_report', 'view'); if (err) return err;
   payload = payload || {};
-  var tenantId = _salesTenantId(session, payload);
-  if (!tenantId) return { success: false, message: 'กรุณาระบุตัวแทนจำหน่าย' };
-  var dateErr = _validateReportDates(payload); if (dateErr) return dateErr;
+  var cur = _sfForReport(session, payload);
+  if (!cur.success) return cur;
 
-  var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
   var groups = {}; centralObjects('product_groups').forEach(function(g) { groups[String(g.record_id)] = g.name; });
 
-  /* ★ เก็บ "ตัวบิล" ไว้ ไม่ใช่แค่ว่าบิลนั้นเข้ารายงานไหม — ต้องใช้ภาพนิ่งภาษีของบิล
-     (apply_vat / vat_rate) ไปถอด VAT ออกจากราคารายบรรทัด ซึ่งเก็บเป็นราคารวมภาษี */
-  var orderOf = {};
-  _salesReportOrders(tenantId, payload.dateFrom, payload.dateTo).forEach(function(o) { orderOf[String(o.record_id)] = o; });
-
   var byProduct = {}, byGroup = {}, byCategory = {};
-  tenantObjects(tenantId, 'order_items').forEach(function(it) {
-    var ord = orderOf[String(it.order_id)];
-    if (!ord) return;
-    var pid = String(it.product_id || '');
-    var p = products[pid];
-    var gid = p ? String(p.group_id || '') : '';
-    var groupName = groups[gid] || '(ไม่มีกลุ่ม)';
-    var isFree = isFlagOn(it.is_free);
-    // ★ ยอดขายรายสินค้าก็เป็น "ก่อน VAT" เหมือนรายงานอื่น (กติกา 24 ต.ค. 2026) · lineExVat ดูภาพนิ่งภาษีรายบรรทัด
-    var qty = Number(it.base_qty) || 0, revenue = lineExVat(ord, it), gross = _money(Number(it.line_total) || 0);
-
-    if (!byProduct[pid]) byProduct[pid] = { productId: pid, productCode: p ? p.product_code : '', productName: p ? p.name : '(สินค้าถูกลบ)',
-      groupId: gid, groupName: groupName, category: p ? (p.category || '') : '', subCategory: p ? (p.sub_category || '') : '', qty: 0, freeQty: 0, revenue: 0, revenueInclVat: 0, bills: {} };
+  cur.facts.forEach(function(f) {
+    var groupName = groups[f.groupId] || '(ไม่มีกลุ่ม)';
+    var pid = String(f.productId || '');
+    if (!byProduct[pid]) byProduct[pid] = { productId: pid, productCode: f.productCode, productName: f.productName,
+      groupId: f.groupId, groupName: groupName, category: f.category, subCategory: f.subCategory,
+      qty: 0, freeQty: 0, revenue: 0, bills: {} };
     var row = byProduct[pid];
-    if (isFree) row.freeQty += qty;
-    else { row.qty += qty; row.revenue = _money(row.revenue + revenue); row.revenueInclVat = _money(row.revenueInclVat + gross); }
-    row.bills[String(it.order_id)] = true;
+    /* ★ ของแถมนับจำนวนแยก ไม่เข้ายอดขาย (มูลค่า 0 อยู่แล้ว แต่จำนวนต้องไม่ไปปนกับของที่ขายจริง) */
+    if (f.isFree) row.freeQty += f.baseQty; else { row.qty += f.baseQty; row.revenue = _money(row.revenue + f.netEx); }
+    row.bills[String(f.docNo)] = true;
 
-    // สรุปตามหมวดหลัก (Category / subCategory — 44_product_categories.gs) · สินค้าที่ยังไม่มีหมวดรวมเป็น '(ไม่มีหมวด)'
-    var catName = (p && p.category) || '(ไม่มีหมวด)', subName = (p && p.sub_category) || '';
-    var catKey = catName + '\u0001' + subName;
-    if (!byCategory[catKey]) byCategory[catKey] = { category: catName, subCategory: subName, qty: 0, freeQty: 0, revenue: 0, revenueInclVat: 0 };
-    if (isFree) byCategory[catKey].freeQty += qty;
-    else { byCategory[catKey].qty += qty; byCategory[catKey].revenue = _money(byCategory[catKey].revenue + revenue);
-      byCategory[catKey].revenueInclVat = _money(byCategory[catKey].revenueInclVat + gross); }
-    if (!byGroup[gid]) byGroup[gid] = { groupId: gid, groupName: groupName, qty: 0, freeQty: 0, revenue: 0, revenueInclVat: 0 };
-    if (isFree) byGroup[gid].freeQty += qty;
-    else { byGroup[gid].qty += qty; byGroup[gid].revenue = _money(byGroup[gid].revenue + revenue);
-      byGroup[gid].revenueInclVat = _money(byGroup[gid].revenueInclVat + gross); }
+    var catName = f.category || '(ไม่มีหมวด)', catKey = catName + '\u0001' + (f.subCategory || '');
+    if (!byCategory[catKey]) byCategory[catKey] = { category: catName, subCategory: f.subCategory || '', qty: 0, freeQty: 0, revenue: 0 };
+    if (f.isFree) byCategory[catKey].freeQty += f.baseQty;
+    else { byCategory[catKey].qty += f.baseQty; byCategory[catKey].revenue = _money(byCategory[catKey].revenue + f.netEx); }
+
+    if (!byGroup[f.groupId]) byGroup[f.groupId] = { groupId: f.groupId, groupName: groupName, qty: 0, freeQty: 0, revenue: 0 };
+    if (f.isFree) byGroup[f.groupId].freeQty += f.baseQty;
+    else { byGroup[f.groupId].qty += f.baseQty; byGroup[f.groupId].revenue = _money(byGroup[f.groupId].revenue + f.netEx); }
   });
 
   var productRows = Object.keys(byProduct).map(function(k) {
     var r = byProduct[k];
-    return { productId: r.productId, productCode: r.productCode, productName: r.productName, groupId: r.groupId, groupName: r.groupName,
-      category: r.category, subCategory: r.subCategory, qty: r.qty, freeQty: r.freeQty, revenue: r.revenue,
-      revenueInclVat: r.revenueInclVat, bills: Object.keys(r.bills).length };
+    return { productId: r.productId, productCode: r.productCode, productName: r.productName, groupId: r.groupId,
+      groupName: r.groupName, category: r.category, subCategory: r.subCategory, qty: _round2(r.qty),
+      freeQty: _round2(r.freeQty), revenue: r.revenue, bills: Object.keys(r.bills).length };
   });
   productRows.sort(function(a, b) { return b.revenue - a.revenue; });
   var limit = _int(payload.limit) || 200;
@@ -323,10 +327,10 @@ function salesReportByProduct(session, payload) {
   var categoryRows = Object.keys(byCategory).map(function(k) { return byCategory[k]; });
   categoryRows.sort(function(a, b) { return b.revenue - a.revenue; });
 
-  return { success: true, tenantId: tenantId, dateFrom: payload.dateFrom, dateTo: payload.dateTo,
+  return { success: true, tenantId: cur.tenantId, dateFrom: payload.dateFrom, dateTo: payload.dateTo,
     products: productRows, groups: groupRows, categories: categoryRows,
     totalRevenue: _money(productRows.reduce(function(s, r) { return s + r.revenue; }, 0)),
-    totalRevenueInclVat: _money(productRows.reduce(function(s, r) { return s + (r.revenueInclVat || 0); }, 0)) };
+    mismatches: cur.mismatches || [] };
 }
 
 

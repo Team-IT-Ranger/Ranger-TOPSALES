@@ -1922,7 +1922,7 @@
 
         <!-- ═══ TENANTS ═══ -->
         <section class="view" id="view-v-rep-staff">
-          <div class="view-head"><div><h1>รายงานการขายแยกพนักงาน</h1><p>ยอดขายรายคน <b>ก่อนภาษี</b> เทียบช่วงเวลา · ไม่นับบิลที่ยกเลิกแล้ว</p></div></div>
+          <div class="view-head"><div><h1>รายงานการขายแยกพนักงาน</h1><p>ยอดขายรายคน <b>ก่อนภาษี</b> เทียบช่วงเวลา · นับตามใบกำกับภาษีที่ออกแล้ว หักใบลดหนี้ — ตรงกับรายงานการเงิน</p></div></div>
             <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
               <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rs-from"></div>
               <div class="field"><label>ถึงวันที่</label><input type="date" id="rs-to"></div>
@@ -1938,7 +1938,7 @@
         </section>
 
         <section class="view" id="view-v-rep-cust">
-          <div class="view-head"><div><h1>รายงานการขายแยกลูกค้า</h1><p>ยอดซื้อรายร้าน <b>ก่อนภาษี</b> จัดอันดับ และร้านที่หายไป</p></div></div>
+          <div class="view-head"><div><h1>รายงานการขายแยกลูกค้า</h1><p>ยอดซื้อรายร้าน <b>ก่อนภาษี</b> จัดอันดับ และร้านที่หายไป · นับตามใบกำกับภาษีที่ออกแล้ว หักใบลดหนี้</p></div></div>
             <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
               <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rc-from"></div>
               <div class="field"><label>ถึงวันที่</label><input type="date" id="rc-to"></div>
@@ -1960,7 +1960,7 @@
         </section>
 
         <section class="view" id="view-v-rep-prod">
-          <div class="view-head"><div><h1>รายงานการขายแยกสินค้า</h1><p>ยอดขายรายสินค้าและรายกลุ่มสินค้า <b>ก่อนภาษี</b> · จำนวนนับเป็นหน่วยฐาน</p></div></div>
+          <div class="view-head"><div><h1>รายงานการขายแยกสินค้า</h1><p>ยอดขายรายสินค้าและรายกลุ่มสินค้า <b>ก่อนภาษี</b> · จำนวนนับเป็นหน่วยฐาน · นับตามใบกำกับภาษีที่ออกแล้ว หักใบลดหนี้</p></div></div>
             <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
               <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rp-from"></div>
               <div class="field"><label>ถึงวันที่</label><input type="date" id="rp-to"></div>
@@ -4798,15 +4798,17 @@ async function loadSoMonthCards(){
   box.innerHTML =
     /* ★ เกณฑ์อยู่บนหัวการ์ดในวงเล็บ ไม่ใช่บรรทัดล่าง (เจ้าของระบบสั่ง 17 ต.ค. 2026)
        — คนอ่านต้องรู้ว่า "ยอดขาย" ก้อนนี้นับจากอะไรตั้งแต่บรรทัดแรก ก่อนจะอ่านตัวเลข */
-    /* ★ ยอดก่อน VAT เป็นตัวเลขหลักของการ์ด · ยอดรวมภาษีไปอยู่บรรทัดย่อย (กติกา 24 ต.ค. 2026) */
-    card('k-sales kpi-total', 'ยอดขายก่อนภาษี ' + mLabel + ' (ออกใบแจ้งหนี้/ใบกำกับภาษีแล้ว)',
-      r.totalRevenue, r.totalBills + ' ใบ · ยอดรวมภาษี ฿' + baht(r.totalRevenueInclVat),
+    /* ★★ ตั้งแต่ 25 ต.ค. 2026 การ์ดนี้นับฐานเดียวกับฝั่งการเงิน: **ออกใบกำกับภาษีแล้ว · หักใบลดหนี้ ·
+       ตามวันที่บนเอกสาร · ยอดก่อนภาษี** (salesFactRows ใน 60_sales_facts.gs)
+       ★ ไม่มียอดรวมภาษีให้ดูแล้ว — รายงานการขายไม่ดู VAT (เจ้าของระบบสั่ง) */
+    card('k-sales kpi-total', 'ยอดขายก่อนภาษี ' + mLabel + ' (ตามใบกำกับภาษี หักใบลดหนี้แล้ว)',
+      r.totalRevenue, r.totalBills + ' ใบ',
       "openSalesReport('')") +
     /* ★ ใบรายคนใช้ชุดสีลำดับ (k-s1..k-s6) — สีตรงนี้มีหน้าที่ "แยกคน" ไม่ได้บอกประเภทข้อมูล
        วนซ้ำเมื่อเกิน 6 คน · เรียงตามยอดขายเสมอ คนเดิมจึงมักได้สีเดิมตราบที่อันดับไม่สลับ */
     (r.data || []).map((x, i) => card('k-s' + (i % 6 + 1), x.label + ' — ยอดขายก่อนภาษี', x.revenue, x.bills + ' ใบ',
       "openSalesReport('" + plVal(x.saleBy).replace(/'/g, "\\'") + "')")).join('') +
-    (!(r.data || []).length ? '<div class="form-hint" style="padding:6px 2px">เดือนนี้ยังไม่มีบิลที่ออกใบแจ้งหนี้/ใบกำกับภาษี</div>' : '');
+    (!(r.data || []).length ? '<div class="form-hint" style="padding:6px 2px">เดือนนี้ยังไม่มีบิลที่ออกใบกำกับภาษี</div>' : '');
 }
 
 /* ══════════ หน้าต่างรายงานยอดขาย ══════════ */
