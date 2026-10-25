@@ -324,5 +324,41 @@ console.log('\n── ข้อความ CSV ──');
   eq('★★ ตัวเลขเขียนดิบ ไม่มีคั่นหลักพัน', [num.indexOf('1234.56') > -1, num.indexOf('1,234') > -1], [true, false]);
 }
 
+console.log('\n── กระทบยอดรายใบ (จับใบที่บรรทัดหาย) ──');
+{
+  /* ★★★ สองเคสนี้คือที่มาของ "ยอดในไฟล์ไม่ตรงกับในแอป" ที่หาสาเหตุไม่เจอ:
+     ไฟล์ออกมาหน้าตาปกติทุกอย่าง แค่ขาดไปเงียบๆ ทั้งใบ */
+  eq('ชุดข้อมูลปกติ ต้องไม่มีใบไหนยอดเพี้ยน', r.mismatches.length, 0);
+
+  // ⑪ ใบกำกับที่ไม่มีแถวใน order_items เลย (บิลเก่าที่ย้ายข้อมูลมา)
+  so('BDC', { record_id: 11, order_code: 'BD-NOITEM', customer_id: 1, payment_method: 'cash',
+    status: 'completed', sale_by: 'A', tax_invoice_no: 'TAX-NOITEM', tax_invoice_at: '2026-10-21 09:00:00',
+    apply_vat: 'TRUE', vat_rate: 0.07, subtotal: 1070, discount: 0,
+    subtotal_ex_vat: 1000, vat_amount: 70, total: 1070 });
+
+  // ⑫ บิลแยกรอบที่ไม่มีแถวใน delivery_round_items (รอบเก่าก่อนมีตารางนี้)
+  so('BDC', { record_id: 12, order_code: 'BD-NOROUNDITEM', customer_id: 2, payment_method: 'credit_term',
+    status: 'ready_to_ship', sale_by: 'B', apply_vat: 'TRUE', vat_rate: 0.07, subtotal: 500, discount: 0, total: 500 });
+  item('BDC', { record_id: 1201, order_id: 12, product_id: 10, qty: 5, unit_code: 'CT', price: 100,
+    line_total: 500, line_discount: 0, is_free: 0, tax_status: 'vat' });
+  mk('BDC').delivery_rounds.push({ record_id: 95, order_id: 12, round_no: 1, tax_invoice_no: 'TAX-NORI',
+    tax_invoice_at: '2026-10-22 09:00:00', subtotal_ex_vat: 467.29, vat_amount: 32.71, total: 500 });
+
+  const r2 = ctx._dashRowsFor('BDC', {});
+  const byDoc = {};
+  r2.mismatches.forEach(m => { byDoc[m.docNo] = m; });
+
+  eq('★★★ ใบที่ไม่มีบรรทัดสินค้าเลย ถูกจับได้ พร้อมบอกว่าหายทั้งใบ',
+    [!!byDoc['TAX-NOITEM'], byDoc['TAX-NOITEM'].lines, byDoc['TAX-NOITEM'].expected, byDoc['TAX-NOITEM'].actual],
+    [true, 0, 1000, 0]);
+  eq('★★★ รอบที่ไม่มีรายการของที่ส่ง ก็หายทั้งรอบ — ต้องถูกจับเหมือนกัน',
+    [!!byDoc['TAX-NORI'], byDoc['TAX-NORI'].lines, byDoc['TAX-NORI'].expected], [true, 0, 467.29]);
+  eq('   บอกเลขบิลมาด้วย จะได้ตามไปเปิดดูได้เลย', byDoc['TAX-NOITEM'].orderCode, 'BD-NOITEM');
+  eq('★ ใบที่ปกติไม่ถูกรายงาน (ไม่ใช่ขึ้นเตือนทุกใบจนไม่มีใครอ่าน)',
+    r2.mismatches.map(m => m.docNo).sort(), ['TAX-NOITEM', 'TAX-NORI']);
+  eq('   และยอดที่หายไปรวมกันคือผลต่างที่คนเห็นตอนกระทบยอด',
+    r2.mismatches.reduce((s, m) => s + m.expected - m.actual, 0), 1467.29);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

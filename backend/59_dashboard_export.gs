@@ -82,7 +82,7 @@ function _dashRowsFor(tenantId, opts) {
   var orderById = {};
   tenantObjectsIfExists(salesTenant, 'sales_orders').forEach(function(o) { orderById[String(o.record_id)] = o; });
 
-  var out = [];
+  var out = [], bad = [];
   (docs.data || []).forEach(function(r) {
     /* ★ บิลที่ยกเลิกไม่เข้าไฟล์ — Dashboard บวกคอลัมน์ยอดขายตรงๆ ใส่ไปแล้วยอดจะเกิน
        (ของจริงที่ขายแล้วคืนของ ต้องเป็น "ใบลดหนี้" ไม่ใช่การยกเลิกบิล — ดูหมายเหตุท้ายไฟล์) */
@@ -90,6 +90,7 @@ function _dashRowsFor(tenantId, opts) {
     var order = orderById[String(r.orderId)];
     if (!order) return;
     var items = itemsByOrder[String(r.orderId)] || [];
+    var docSum = 0, docLines = 0;        // ไว้กระทบยอดท้ายใบ (ดูหมายเหตุที่ _dashDocCheck)
     /* ★★ "ขายได้เท่าไรจริง" ต่อบรรทัด ใช้ `soldNetByItem` ตัวเดียวกับใบลดหนี้ (18_pricing_engine.gs)
        ซึ่งเฉลี่ยส่วนลดท้ายบิลลงบรรทัดให้แล้ว — คิดเองที่นี่อีกชุดเมื่อไหร่ ยอดในไฟล์กับยอดที่ลดหนี้
        จะคนละตัวทันที */
@@ -133,6 +134,7 @@ function _dashRowsFor(tenantId, opts) {
       var p = products[String(it.product_id)] || {};
       var free = isFlagOn(it.is_free) || String(it.is_free) === '1';
 
+      docSum = _round2(docSum + netEx); docLines++;
       out.push([
         DASH_SOURCE, _dashDate(r.docDate), r.docNo, r.orderCode || '', r.roundNo || '', tenantId,
         r.customerCode || '', r.customerName || '', r.taxId || '', r.branchCode || '',
@@ -144,6 +146,7 @@ function _dashRowsFor(tenantId, opts) {
         free ? 'ใช่' : '', DASH_KIND_SALE, ''
       ]);
     });
+    _dashDocCheck(bad, r, docSum, docLines);
   });
 
   _dashAppendNotes(out, tenantId, book, salesTenant, opts, products, orderById);
@@ -154,7 +157,29 @@ function _dashRowsFor(tenantId, opts) {
     var da = a[1] instanceof Date ? a[1].getTime() : 0, db = b[1] instanceof Date ? b[1].getTime() : 0;
     return da - db || String(a[2]).localeCompare(String(b[2]));
   });
-  return { success: true, rows: out, truncated: !!docs.truncated };
+  return { success: true, rows: out, truncated: !!docs.truncated, mismatches: bad };
+}
+
+/**
+ * กระทบยอดรายใบ — ผลรวม "ยอดขายลบส่วนลดแล้ว" ของทุกบรรทัด ต้องเท่ากับยอดก่อนภาษีบนใบกำกับใบนั้น
+ *
+ * ★★★ ทำไมต้องตรวจ: บรรทัดบิลหายได้โดยไม่มีอะไรฟ้อง และไฟล์ยังดูปกติทุกอย่าง —
+ *   1. บิลเก่าที่ไม่มีแถวใน `order_items` เลย (ย้ายข้อมูลมา/ลบบรรทัดทิ้ง) → ทั้งใบหายจากไฟล์
+ *   2. บิลที่แยกรอบแต่ไม่มีแถวใน `delivery_round_items` → ทั้งรอบหายจากไฟล์
+ *   3. ปัดเศษรายบรรทัดต่างจากยอดที่บิลเก็บไว้ทีละสตางค์
+ *   ทั้งสามแบบทำให้ยอดในไฟล์ต่ำกว่าในแอป แล้วคนมาเจอตอนกระทบยอดปลายเดือนว่า "เลขไม่ตรง"
+ *   โดยไม่มีทางรู้ว่าใบไหน · ตัวนี้บอกเป็นรายใบไปเลย
+ * ★ ยอมรับส่วนต่างไม่เกิน 1 สตางค์ต่อใบ (ปัดเศษ) · เกินกว่านั้นถือว่าข้อมูลขาด
+ */
+function _dashDocCheck(bad, r, docSum, docLines) {
+  var want = _round2(Number(r.subtotalExVat) || 0);
+  var diff = _round2(docSum - want);
+  if (Math.abs(diff) <= 0.01) return;
+  if (bad.length < 50) {            // พอให้เห็นว่าเป็นแบบไหน ไม่ต้องยาวเป็นพันบรรทัดใน log
+    bad.push({ docNo: r.docNo, orderCode: r.orderCode || '', lines: docLines,
+      expected: want, actual: docSum, diff: diff,
+      why: docLines ? 'ผลรวมรายบรรทัดไม่ตรงกับยอดบนใบ' : 'ไม่มีบรรทัดสินค้าเลย — ใบนี้หายทั้งใบ' });
+  }
 }
 
 /**
@@ -338,7 +363,8 @@ function exportSalesDashboardFiles(opts) {
        เพราะ Dashboard จะอ่านยอดเดือนที่แล้วมาแสดงเป็นเดือนนี้โดยไม่มีอะไรฟ้อง */
     var fileId = _dashWriteCsv(name, _dashCsvText(r.rows));
     report.push({ tenantId: name, rows: r.rows.length, truncated: r.truncated,
-      fileId: fileId, url: 'https://drive.google.com/file/d/' + fileId + '/view' });
+      mismatches: r.mismatches || [], fileId: fileId,
+      url: 'https://drive.google.com/file/d/' + fileId + '/view' });
     total += r.rows.length;
   });
 
@@ -353,6 +379,13 @@ function runDashboardExport() {
     var r = exportSalesDashboardFiles({});
     Logger.log('ส่งออก Dashboard สำเร็จ: ' + r.rows + ' แถว · ' +
       r.files.map(function(f) { return f.tenantId + '=' + (f.error || f.rows); }).join(' · '));
+    /* ★★ ใบที่ยอดไม่ตรง ต้องโผล่ใน log ทุกครั้ง ไม่ใช่รอให้คนไปกระทบยอดเจอเองปลายเดือน */
+    r.files.forEach(function(f) {
+      (f.mismatches || []).forEach(function(m) {
+        Logger.log('⚠ ' + f.tenantId + ' ' + m.docNo + ' (' + m.orderCode + '): ' + m.why +
+          ' — ในไฟล์ ' + m.actual + ' · บนใบ ' + m.expected + ' · ต่าง ' + m.diff);
+      });
+    });
     return r;
   } catch (e) {
     Logger.log('ส่งออก Dashboard ล้มเหลว: ' + e.message);
