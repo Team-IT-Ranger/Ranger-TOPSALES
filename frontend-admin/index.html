@@ -3638,11 +3638,15 @@ function renderDashboard(r, fromSnapshot){
 
   if (r.scope === 'tenant'){
     document.getElementById('dash-kpis').innerHTML =
-      /* ★★★ ตัวเลขยอดขายทุกที่เป็น "ก่อน VAT" (กติกาเจ้าของระบบ 24 ต.ค. 2026) — เป้าของพนักงานขาย
+      /* ★★ การ์ดนี้ชื่อ **"ยอดใบสั่งขาย"** ไม่ใช่ "ยอดขาย" (เจ้าของระบบสั่ง 25 ต.ค. 2026)
+         เพราะมันนับ**ทุกบิลที่เปิดวันนี้** ซึ่งเป็นคำถามเชิงปฏิบัติการ ("วันนี้ขายอะไรไปบ้าง")
+         คนละตัวกับ "ยอดขาย" ทางบัญชีในเมนู 1.8 ที่นับเฉพาะใบที่ออกใบกำกับภาษีแล้ว
+         ★ ใช้ชื่อเดียวกันเมื่อไหร่ คนจะเอาสองเลขนี้มาเทียบกันแล้วคิดว่าระบบผิด (เคยเกิดจริง 25 ต.ค. 2026)
+      ★★★ ตัวเลขยอดขายทุกที่เป็น "ก่อน VAT" (กติกาเจ้าของระบบ 24 ต.ค. 2026) — เป้าของพนักงานขาย
          วัดด้วยยอดไม่รวมภาษี · **ต้องเขียนกำกับไว้บนการ์ดเสมอ** ตัวเลขเปล่าๆ ที่ไม่บอกว่ารวมภาษีหรือยัง
          คือต้นเหตุที่คนเอาไปเทียบกับยอดในใบกำกับแล้วคิดว่าระบบคิดเลขผิด
          ★ ยอดที่ต้องไปเก็บเงินจริงบอกไว้ในบรรทัดย่อย — คนละคำถามกัน แต่คนเดียวกันมักอยากรู้ทั้งคู่ */
-      kpiLink('ยอดขายก่อนภาษี วันนี้', '฿' + baht(r.revenue),
+      kpiLink('ยอดใบสั่งขายวันนี้ (ก่อนภาษี)', '฿' + baht(r.revenue),
         r.bills + ' บิล · ยอดรวมภาษี ฿' + baht(r.revenueInclVat) + ' — กดเพื่อดูรายการ',
         'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
       kpiPendingGr(r.pendingGoodsReceipts) +
@@ -3653,13 +3657,13 @@ function renderDashboard(r, fromSnapshot){
     document.getElementById('dash-panel1-title').textContent = 'รายการขายล่าสุด';
     document.getElementById('dash-panel1').innerHTML = r.recentOrders.length
       ? r.recentOrders.map(saleActivityRow).join('')
-      : '<p style="color:var(--ink-soft);font-size:12.5px">ยังไม่มียอดขายวันนี้</p>';
+      : '<p style="color:var(--ink-soft);font-size:12.5px">ยังไม่มีใบสั่งขายวันนี้</p>';
     document.getElementById('dash-panel2-title').textContent = 'สถานะพนักงาน';
     document.getElementById('dash-panel2').innerHTML =
       activityRow('อนุมัติแล้ว', r.activeStaff) + activityRow('รออนุมัติ', r.pendingStaff);
   } else {
     document.getElementById('dash-kpis').innerHTML =
-      kpiLink('ยอดขายก่อนภาษี วันนี้ (รวมทุกตัวแทน)', '฿' + baht(r.revenue),
+      kpiLink('ยอดใบสั่งขายวันนี้ ก่อนภาษี (รวมทุกตัวแทน)', '฿' + baht(r.revenue),
         r.bills + ' บิล · ยอดรวมภาษี ฿' + baht(r.revenueInclVat) + ' — กดเพื่อดูรายการ',
         'salesorders', 'ไปที่ 1.1 บิลขาย', 'k-sales') +
       kpiPendingGr(r.pendingGoodsReceipts) +
@@ -3667,7 +3671,7 @@ function renderDashboard(r, fromSnapshot){
       kpi('ตัวแทนที่ใช้งาน', r.tenantCount, '', 'k-people') +
       kpi('สินค้าทั้งหมด', r.productCount, '', 'k-stock') +
       kpi('โปรโมชั่นที่ใช้งาน', r.activePromoCount, '', 'k-promo');
-    document.getElementById('dash-panel1-title').textContent = 'ยอดขายก่อนภาษี วันนี้ต่อตัวแทน';
+    document.getElementById('dash-panel1-title').textContent = 'ยอดใบสั่งขายวันนี้ต่อตัวแทน';
     document.getElementById('dash-panel1').innerHTML = r.perTenant.length
       ? r.perTenant.map(t => activityRow(t.tenantId + ' · ' + esc(t.name), '฿' + baht(t.revenue) + ' (' + t.bills + ')')).join('')
       : '<p style="color:var(--ink-soft);font-size:12.5px">ยังไม่มีตัวแทนที่ active</p>';

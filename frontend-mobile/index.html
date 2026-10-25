@@ -259,13 +259,13 @@
 
   <!-- หน้าแรก -->
   <section class="screen" id="tab-home">
-    <h2>ยอดวันนี้</h2>
+    <h2>ใบสั่งขายวันนี้</h2>
     <div class="kpis">
       <div class="kpi"><div class="v" id="k-bills">-</div><div class="l">บิล</div></div>
       <!-- ★★★ เขียนให้ชัดว่าเป็น "ยอดขายก่อนภาษี" (เจ้าของระบบสั่ง 24 ต.ค. 2026) — เป้าการขายวัดด้วยยอดนี้
            ★ ตัวเลขเปล่าๆ ที่ไม่บอกว่ารวมภาษีหรือยัง คือต้นเหตุที่เซลส์เอาไปเทียบกับยอดบนใบกำกับ
              แล้วคิดว่าระบบคิดเงินผิด · ยอดที่เก็บเงินมาจริงบอกไว้ใต้การ์ด -->
-      <div class="kpi"><div class="v" id="k-rev">-</div><div class="l">ยอดขายก่อนภาษี (บาท)</div></div>
+      <div class="kpi"><div class="v" id="k-rev">-</div><div class="l">ยอดใบสั่งขายวันนี้ ก่อนภาษี (บาท)</div></div>
       <div class="kpi"><div class="v" id="k-visits">-</div><div class="l">เยี่ยมร้าน</div></div>
     </div>
     <div class="muted" id="k-rev-incl" style="margin:-4px 0 10px;font-size:12px"></div>
@@ -663,7 +663,7 @@ async function loadDashboard(){
       $('k-rev-incl').textContent = r.revenueInclVat ? 'เก็บเงินรวมภาษี ฿' + baht(r.revenueInclVat) : '';
       $('h-top').innerHTML = (r.topProducts || []).length
         ? r.topProducts.map((t, i) => '<div class="row"><span>'+(i+1)+'. '+esc(t.name)+'</span><b>'+esc(t.sold)+'</b></div>').join('')
-        : '<div class="empty">ยังไม่มียอดขายวันนี้</div>';
+        : '<div class="empty">ยังไม่มีใบสั่งขายวันนี้</div>';
     }
     if (rs.success) { RECENT_SALES = rs.data || []; lsSet('recent_' + ME.lineUserId, RECENT_SALES); renderRecentSales(); }
   } catch (e) {}
