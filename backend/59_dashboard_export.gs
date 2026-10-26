@@ -154,6 +154,19 @@ function _dashWriteCsv(name, text, folder) {
     var it = folder.getFilesByName(fileName);
     if (it.hasNext()) id = it.next().getId();
   }
+  /* ★★★ ไฟล์ที่ถูกลบลงถังขยะ **ยังเขียนทับด้วย file id ได้ตามปกติ** API ตอบ 200 เหมือนไม่มีอะไรเกิดขึ้น
+     → ถ้าไม่ตรวจ ตัวส่งออกจะเขียนข้อมูลลงถังขยะทุกคืนโดยไม่มีอะไรฟ้อง และปลายทางก็ไม่เห็นไฟล์เลย
+     (เกิดจริง 26 ต.ค. 2026 — ผู้ใช้แจ้งว่า "ไฟล์ customer.csv ไม่มา")
+     ★ เจอแล้ว **ทิ้ง id เดิมแล้วสร้างใหม่** ไม่กู้ของเก่าขึ้นมาเอง — คนลบไปอาจตั้งใจลบ
+       และ Power Query อ่านแบบ From Folder อยู่แล้ว ไฟล์ใหม่คนละ id จึงไม่กระทบอะไร */
+  if (id) {
+    try {
+      if (DriveApp.getFileById(id).isTrashed()) {
+        Logger.log('ไฟล์ ' + fileName + ' เดิมอยู่ในถังขยะ — สร้างไฟล์ใหม่แทน');
+        id = null;
+      }
+    } catch (e) { id = null; }                 // เปิดไม่ได้/ถูกลบถาวร → สร้างใหม่
+  }
   if (id) {
     try {
       var up = UrlFetchApp.fetch(
