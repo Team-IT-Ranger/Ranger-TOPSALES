@@ -99,7 +99,8 @@ function _dashFolder() {
  * ★★ **เว้นวรรคหน้า/หลังก็ต้องครอบด้วย** ไม่งั้นตัวอ่านบางตัวตัดทิ้งเงียบๆ (ชื่อร้านที่มีเว้นวรรคท้าย
  *   เป็นเรื่องปกติในข้อมูลที่ย้ายมาจากระบบเดิม)
  */
-function _dashCsvText(rows) {
+function _dashCsvText(rows, headers) {
+  headers = headers || DASH_HEADERS;
   var esc = function(v) {
     if (v === null || v === undefined) return '';
     if (Object.prototype.toString.call(v) === '[object Date]') return _dashIsoDate(v);
@@ -108,7 +109,7 @@ function _dashCsvText(rows) {
     if (/[",\r\n]/.test(t) || t !== t.trim()) return '"' + t.replace(/"/g, '""') + '"';
     return t;
   };
-  var lines = [DASH_HEADERS.map(esc).join(',')];
+  var lines = [headers.map(esc).join(',')];
   rows.forEach(function(r) { lines.push(r.map(esc).join(',')); });
   return lines.join('\r\n') + '\r\n';
 }
@@ -198,11 +199,98 @@ function exportSalesDashboardFiles(opts) {
   return { success: true, rows: total, files: report, at: nowStr() };
 }
 
+/* ═══════════════ ทะเบียนร้านค้า — customer.csv ═══════════════
+   เจ้าของระบบสั่ง 26 ต.ค. 2026 · ชื่อคอลัมน์กำหนดมาจากระบบปลายทาง **ห้ามเปลี่ยนชื่อหรือสลับลำดับ**
+   (ปลายทางอ่านตามตำแหน่ง/ชื่อที่ตกลงไว้ — แก้ฝั่งเราฝ่ายเดียวแล้วเขาอ่านผิดทั้งไฟล์)
+
+   ★★ ไฟล์เดียวรวมทุกตัวแทน ต่างจากไฟล์ยอดขายที่แยกไฟล์ต่อตัวแทน — เพราะสเปกมีคอลัมน์
+     `dataAreaId` บอกตัวแทนอยู่ในแถวแล้ว · อยากแยกไฟล์ต่อตัวแทนเมื่อไหร่แก้ที่ `exportCustomerFile` ที่เดียว
+
+   ★★★ ค่าคงที่สามตัว (`SalesSegmentId` · `StatisticsGroupId` · `CustomerGroupId`) ปลายทางเป็นคนกำหนด
+     ไม่ได้มาจากข้อมูลของเรา — ตั้งทับได้ด้วย Script Property โดยไม่ต้อง deploy ใหม่
+     (วันที่ปลายทางเปลี่ยนรหัส เราไม่ควรต้องแก้โค้ด) */
+var DASH_CUST_HEADERS = [
+  'dataAreaId', 'CustomerAccount', 'SalesSegmentId', 'ShopType', 'AddressCity',
+  'EmployeeResponsibleNumber', 'SalesDistrict', 'AddressState', 'StatisticsGroupId',
+  'OrganizationName', 'PaymentTerms', 'SalesSubsegmentId', 'CreditLimit', 'CustomerGroupId',
+  'AddressStreet', 'company_Chain', 'salesp.Name', 'salesp.Region', 'SalesRegional',
+  'Province', '!Region', '!Region_Neilson', 'unicode_customer'
+];
+
+function _dashCustConst(prop, fallback) {
+  return PropertiesService.getScriptProperties().getProperty(prop) || fallback;
+}
+
+/**
+ * เงื่อนไขการชำระเงินในรูปแบบที่ปลายทางใช้: `CASH` · `30D` · `45D` · `60D`
+ * ★ ไม่ได้ตั้งจำนวนวันไว้ = ขายสด — **ห้ามเดาเป็น 30 วัน** ให้เครดิตเกินจริงกับร้านที่ไม่เคยได้เครดิต
+ *   (คนละเรื่องกับตอนออกใบแจ้งหนี้ ซึ่งมี fallback 30 วันของมันเอง ดู customerTermsDays)
+ */
+function _dashPaymentTerms(c) {
+  var d = parseInt(c.payment_terms_days, 10);
+  return (d > 0) ? (d + 'D') : 'CASH';
+}
+
+/** แถวทะเบียนร้านค้าทุกตัวแทน */
+function _dashCustomerRows() {
+  var shopTypes = {};
+  centralObjects('shop_types').forEach(function(t) { shopTypes[String(t.record_id)] = t.name || t.code || ''; });
+  var provinces = {}, districts = {};
+  centralObjects('provinces').forEach(function(p) { provinces[String(p.id)] = p; });
+  centralObjects('districts').forEach(function(d) { districts[String(d.id)] = d; });
+  var staff = {};
+  centralObjects('liff_users').forEach(function(u) { staff[String(u.line_user_id)] = u.display_name || ''; });
+
+  var seg = _dashCustConst('DASHBOARD_SALES_SEGMENT', DASH_SOURCE);
+  var statGroup = _dashCustConst('DASHBOARD_STAT_GROUP', 'TH-EAST');
+  var custGroup = _dashCustConst('DASHBOARD_CUSTOMER_GROUP', 'C-TT');
+
+  /* ตัวแทนที่ยังใช้งานอยู่เท่านั้น — ตัวแทนที่ปิดไปแล้วไม่ควรโผล่ในระบบปลายทาง */
+  var liveTenant = {};
+  centralObjects('tenants').forEach(function(t) { if (isFlagOn(t.is_active)) liveTenant[String(t.tenant_id)] = true; });
+
+  var out = [];
+  centralObjects('customers').forEach(function(c) {
+    /* ★ ร้านที่ปิดกิจการแล้วไม่ส่งออก · ร้านที่ถูกระงับเครดิต (`blocked`) ยัง**ส่ง** เพราะยังขายสดได้
+       (หลักเดียวกับ customerSaleGate ใน 33_customers.gs) */
+    var st = String(c.status || '').toLowerCase() ||
+      (isNotOff(c.is_active) ? CUSTOMER_STATUS_ACTIVE : CUSTOMER_STATUS_INACTIVE);
+    if (st === CUSTOMER_STATUS_INACTIVE) return;
+
+    var tid = String(c.tenant_id || '') || (typeof HOUSE_TENANT_ID !== 'undefined' ? HOUSE_TENANT_ID : 'HOUSE');
+    if (String(c.tenant_id || '') && !liveTenant[String(c.tenant_id)]) return;
+
+    var prov = provinces[String(c.province_id)] || {};
+    var dist = districts[String(c.district_id)] || {};
+    var code = c.customer_code || '';
+
+    out.push([
+      tid, code, seg, shopTypes[String(c.shop_type_id)] || '', c.province_id || '',
+      c.salesman_line_user_id || '', dist.name || '', prov.name_en || '', statGroup,
+      customerFullName(c), _dashPaymentTerms(c), tid, _round2(parseFloat(c.credit_limit) || 0), custGroup,
+      c.address || '', '', staff[String(c.salesman_line_user_id)] || '', c.area_code || '', c.area_code || '',
+      prov.name || '', prov.region || '', '',
+      // ★ คีย์ที่ปลายทางใช้เชื่อมกับไฟล์ยอดขาย — ต้องเป็น "<ตัวแทน>.<รหัสร้าน>" เป๊ะ
+      tid + '.' + code
+    ]);
+  });
+  return out;
+}
+
+/** เขียน customer.csv — เรียกต่อจากไฟล์ยอดขายในรอบเดียวกัน */
+function exportCustomerFile() {
+  var rows = _dashCustomerRows();
+  var fileId = _dashWriteCsv('customer', _dashCsvText(rows, DASH_CUST_HEADERS));
+  return { rows: rows.length, fileId: fileId, url: 'https://drive.google.com/file/d/' + fileId + '/view' };
+}
+
 /* ═══════════════ ตัวที่ trigger เรียก ═══════════════
    ★ ฟังก์ชันที่ trigger เรียกต้อง **ไม่รับอาร์กิวเมนต์** และห้าม throw ออกไป
      ไม่งั้น Apps Script ส่งอีเมลแจ้ง error ทุกชั่วโมงจนคนเลิกอ่าน แล้วของพังจริงก็ไม่มีใครเห็น */
 function runDashboardExport() {
   try {
+    var cu = exportCustomerFile();
+    Logger.log('ส่งออกทะเบียนร้านค้า: ' + cu.rows + ' ร้าน · ' + cu.url);
     var r = exportSalesDashboardFiles({});
     Logger.log('ส่งออก Dashboard สำเร็จ: ' + r.rows + ' แถว · ' +
       r.files.map(function(f) { return f.tenantId + '=' + (f.error || f.rows); }).join(' · '));
@@ -240,7 +328,9 @@ function exportSalesDashboard(session, payload) {
   if (!session || !session.isSuperAdmin) return { success: false, message: 'เฉพาะ Ultra Admin เท่านั้น' };
   payload = payload || {};
   try {
-    return exportSalesDashboardFiles({ dateFrom: payload.dateFrom, dateTo: payload.dateTo });
+    var out = exportSalesDashboardFiles({ dateFrom: payload.dateFrom, dateTo: payload.dateTo });
+    out.customers = exportCustomerFile();
+    return out;
   } catch (e) {
     return { success: false, message: 'ส่งออกไม่สำเร็จ: ' + e.message };
   }

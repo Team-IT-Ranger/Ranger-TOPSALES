@@ -14,7 +14,8 @@ function eq(name, got, want) {
 }
 
 /* ── ชีตจำลอง: เก็บเป็น array ของ object ตรงๆ พอสำหรับตัวอ่าน ── */
-const central = { tenants: [], customers: [], products: [], ar_invoices: [], ar_credit_notes: [], gl_journals: [] };
+const central = { tenants: [], customers: [], products: [], ar_invoices: [], ar_credit_notes: [], gl_journals: [],
+  shop_types: [], provinces: [], districts: [], liff_users: [] };
 const tenantData = {};   // tenantId -> { sales_orders, order_items, delivery_rounds, delivery_round_items }
 const T = (tid, tab) => ((tenantData[tid] || {})[tab] || []);
 
@@ -42,6 +43,10 @@ const ctx = {
   isFlagOn: v => String(v).toUpperCase() === 'TRUE' || v === true || v === 1,
   isCreditPayment: c => String(c || '').toLowerCase() === 'credit_term',
   customerFullName: c => String(c.name || ''),
+  isNotOff: v => !(String(v).toUpperCase() === 'FALSE' || v === false || v === 0),
+  CUSTOMER_STATUS_ACTIVE: 'active', CUSTOMER_STATUS_INACTIVE: 'inactive',
+  HOUSE_TENANT_ID: 'HOUSE',
+  _round2: n => Math.round((Number(n) || 0) * 100) / 100,
   saleOrderHasRounds: o => T(o.__tid, 'delivery_rounds').some(r => String(r.order_id) === String(o.record_id)),
   _saleByLabel: s => (s ? 'พนักงาน ' + s : '(ไม่ระบุ)')
 };
@@ -359,6 +364,75 @@ console.log('\n── กระทบยอดรายใบ (จับใบ�
     r2.mismatches.map(m => m.docNo).sort(), ['TAX-NOITEM', 'TAX-NORI']);
   eq('   และยอดที่หายไปรวมกันคือผลต่างที่คนเห็นตอนกระทบยอด',
     r2.mismatches.reduce((s, m) => s + m.expected - m.actual, 0), 1467.29);
+}
+
+console.log('\n── ทะเบียนร้านค้า customer.csv ──');
+{
+  central.shop_types = [{ record_id: 5, code: 'TT', name: 'ร้านค้าปลีก' }];
+  central.provinces = [{ id: 20, name: 'ชลบุรี', name_en: 'CBI', region: 'ตะวันออก' }];
+  central.districts = [{ id: 2001, name: 'ศรีราชา', province_id: 20 }];
+  central.liff_users = [{ line_user_id: 'U_STAFF1', display_name: 'สมชาย ขายดี', tenant_id: 'BDC' }];
+  central.customers.push(
+    { record_id: 50, customer_code: 'C-050', name: 'ร้านทดสอบ', tenant_id: 'BDC', status: 'active',
+      shop_type_id: 5, province_id: 20, district_id: 2001, area_code: 'SV11',
+      salesman_line_user_id: 'U_STAFF1', payment_terms_days: 30, credit_limit: 50000,
+      address: '99/1 ถนนสุขุมวิท' },
+    { record_id: 51, customer_code: 'C-051', name: 'ร้านขายสด', tenant_id: 'BDC', status: 'active',
+      payment_terms_days: 0, credit_limit: 0 },
+    { record_id: 52, customer_code: 'C-052', name: 'ร้านระงับเครดิต', tenant_id: 'BDC', status: 'blocked',
+      payment_terms_days: 45 },
+    { record_id: 53, customer_code: 'C-053', name: 'ร้านปิดกิจการ', tenant_id: 'BDC', status: 'inactive' },
+    { record_id: 54, customer_code: 'C-054', name: 'ร้านของตัวแทนที่ปิดไปแล้ว', tenant_id: 'OLD', status: 'active' },
+    { record_id: 55, customer_code: 'C-055', name: 'ร้านขายตรงของบริษัท', tenant_id: '', status: 'active' }
+  );
+
+  const cr = ctx._dashCustomerRows();
+  const H = {}; ctx.DASH_CUST_HEADERS.forEach((h, i) => { H[h] = i; });
+  const get = (row, name) => row[H[name]];
+  const byCode = {}; cr.forEach(r => { byCode[get(r, 'CustomerAccount')] = r; });
+
+  eq('หัวคอลัมน์ครบ 23 ช่อง ตามสเปกปลายทาง', ctx.DASH_CUST_HEADERS.length, 23);
+  eq('   และทุกแถวมีช่องเท่าหัวคอลัมน์', cr.every(r => r.length === 23), true);
+
+  /* ★★ ร้านที่ปิดกิจการไม่ส่งออก · ร้านที่ถูกระงับเครดิตยังส่ง เพราะยังขายสดได้
+     (หลักเดียวกับ customerSaleGate — ถ้าตัดออกด้วย ปลายทางจะเปิดบิลขายสดให้ร้านนั้นไม่ได้) */
+  eq('★★ ส่งร้านที่ยังขายได้ · ตัดร้านปิดกิจการและร้านของตัวแทนที่ปิดไปแล้วออก',
+    Object.keys(byCode).sort(), ['C-001', 'C-002', 'C-050', 'C-051', 'C-052', 'C-055']);
+  // C-001/C-002 เป็นร้านของบริษัท (ไม่มีสังกัด) จากฟิกซ์เจอร์ด้านบน — ออกไฟล์ถูกแล้ว
+
+  const r50 = byCode['C-050'];
+  eq('แมปช่องหลักครบ',
+    [get(r50, 'dataAreaId'), get(r50, 'CustomerAccount'), get(r50, 'OrganizationName'),
+     get(r50, 'ShopType'), get(r50, 'AddressStreet'), get(r50, 'CreditLimit')],
+    ['BDC', 'C-050', 'ร้านทดสอบ', 'ร้านค้าปลีก', '99/1 ถนนสุขุมวิท', 50000]);
+  eq('ที่อยู่: รหัสจังหวัด · อำเภอ · ตัวย่อจังหวัด · ชื่อจังหวัด · ภาค',
+    [get(r50, 'AddressCity'), get(r50, 'SalesDistrict'), get(r50, 'AddressState'),
+     get(r50, 'Province'), get(r50, '!Region')],
+    [20, 'ศรีราชา', 'CBI', 'ชลบุรี', 'ตะวันออก']);
+  eq('พนักงานขายประจำร้าน: รหัส + ชื่อ · เขตการขายสองช่องใช้ค่าเดียวกัน',
+    [get(r50, 'EmployeeResponsibleNumber'), get(r50, 'salesp.Name'),
+     get(r50, 'salesp.Region'), get(r50, 'SalesRegional')],
+    ['U_STAFF1', 'สมชาย ขายดี', 'SV11', 'SV11']);
+
+  /* ★★★ คีย์ที่ปลายทางใช้เชื่อมกับไฟล์ยอดขาย — ผิดรูปเมื่อไหร่ ข้อมูลสองไฟล์ต่อกันไม่ติดทั้งก้อน */
+  eq('★★★ unicode_customer = <ตัวแทน>.<รหัสร้าน>', get(r50, 'unicode_customer'), 'BDC.C-050');
+
+  /* ★★ ไม่ได้ตั้งจำนวนวันเครดิต = ขายสด ห้ามเดาเป็น 30 วัน (ให้เครดิตเกินจริงกับร้านที่ไม่เคยได้) */
+  eq('★★ เงื่อนไขชำระเงิน: 30 วัน → 30D · ไม่ตั้งไว้ → CASH · 45 วัน → 45D',
+    [get(r50, 'PaymentTerms'), get(byCode['C-051'], 'PaymentTerms'), get(byCode['C-052'], 'PaymentTerms')],
+    ['30D', 'CASH', '45D']);
+
+  eq('ร้านขายตรงของบริษัท (ไม่มีสังกัด) ใช้รหัส HOUSE',
+    [get(byCode['C-055'], 'dataAreaId'), get(byCode['C-055'], 'unicode_customer')], ['HOUSE', 'HOUSE.C-055']);
+
+  /* ★ สามค่านี้ปลายทางเป็นคนกำหนด ไม่ได้มาจากข้อมูลเรา — ต้องตั้งทับได้โดยไม่ต้องแก้โค้ด */
+  eq('★ ค่าคงที่จากปลายทาง: SalesSegmentId · StatisticsGroupId · CustomerGroupId · SalesSubsegmentId',
+    [get(r50, 'SalesSegmentId'), get(r50, 'StatisticsGroupId'), get(r50, 'CustomerGroupId'), get(r50, 'SalesSubsegmentId')],
+    ['RBS', 'TH-EAST', 'C-TT', 'BDC']);
+
+  const csv = ctx._dashCsvText(cr, ctx.DASH_CUST_HEADERS);
+  eq('เขียนเป็น CSV ด้วยหัวคอลัมน์ของตัวเอง ไม่ใช่หัวของไฟล์ยอดขาย',
+    csv.split('\r\n')[0].split(',').slice(0, 3), ['dataAreaId', 'CustomerAccount', 'SalesSegmentId']);
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
