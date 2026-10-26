@@ -320,19 +320,37 @@ function _dashCustomerRows() {
 /** เขียน customer.csv — เรียกต่อจากไฟล์ยอดขายในรอบเดียวกัน */
 function exportCustomerFile() {
   var rows = _dashCustomerRows();
-  var fileId = _dashWriteCsv('customer', _dashCsvText(rows, DASH_CUST_HEADERS), _dashCustomerFolder());
-  return { rows: rows.length, fileId: fileId, url: 'https://drive.google.com/file/d/' + fileId + '/view' };
+  var folder = _dashCustomerFolder();
+  var fileId = _dashWriteCsv('customer', _dashCsvText(rows, DASH_CUST_HEADERS), folder);
+  return { rows: rows.length, fileId: fileId, folderId: folder.getId(), folderName: folder.getName(),
+    url: 'https://drive.google.com/file/d/' + fileId + '/view' };
 }
 
 /* ═══════════════ ตัวที่ trigger เรียก ═══════════════
    ★ ฟังก์ชันที่ trigger เรียกต้อง **ไม่รับอาร์กิวเมนต์** และห้าม throw ออกไป
      ไม่งั้น Apps Script ส่งอีเมลแจ้ง error ทุกชั่วโมงจนคนเลิกอ่าน แล้วของพังจริงก็ไม่มีใครเห็น */
 function runDashboardExport() {
+  var out = { success: true, customers: null, sales: null };
+
+  /* ★★★ สองงานนี้ต้อง **ล้มแยกกัน** — เดิมอยู่ใน try เดียวกันและทะเบียนร้านค้ามาก่อน
+     ถ้ามันพัง (เช่นโฟลเดอร์ปลายทางเข้าไม่ถึง) ไฟล์ยอดขายก็ไม่ถูกเขียนตามไปด้วย
+     ทั้งที่ไม่ได้เกี่ยวอะไรกันเลย · งานหนึ่งพังอีกงานต้องยังทำงาน */
   try {
     var cu = exportCustomerFile();
-    Logger.log('ส่งออกทะเบียนร้านค้า: ' + cu.rows + ' ร้าน · ' + cu.url);
+    /* ★★ log ต้องบอก **โฟลเดอร์ปลายทาง** ด้วยเสมอ — คำถามแรกเวลาไฟล์ "ไม่มา" คือ
+       "มันไปลงที่ไหน" ซึ่งถ้า log ไม่บอก ต้องไล่เปิด Drive ทีละโฟลเดอร์เอง */
+    Logger.log('ทะเบียนร้านค้า: ' + cu.rows + ' ร้าน → โฟลเดอร์ "' + cu.folderName + '" (' +
+      cu.folderId + ') · ' + cu.url);
+    out.customers = cu;
+  } catch (e) {
+    out.success = false;
+    Logger.log('✖ ทะเบียนร้านค้าล้มเหลว: ' + e.message +
+      ' — ตรวจ Script Property DASHBOARD_CUSTOMER_FOLDER_ID ว่าชี้โฟลเดอร์ที่บัญชีนี้เข้าถึงได้');
+  }
+
+  try {
     var r = exportSalesDashboardFiles({});
-    Logger.log('ส่งออก Dashboard สำเร็จ: ' + r.rows + ' แถว · ' +
+    Logger.log('ยอดขาย: ' + r.rows + ' แถว · ' +
       r.files.map(function(f) { return f.tenantId + '=' + (f.error || f.rows); }).join(' · '));
     /* ★★ ใบที่ยอดไม่ตรง ต้องโผล่ใน log ทุกครั้ง ไม่ใช่รอให้คนไปกระทบยอดเจอเองปลายเดือน */
     r.files.forEach(function(f) {
@@ -341,11 +359,12 @@ function runDashboardExport() {
           ' — ในไฟล์ ' + m.actual + ' · บนใบ ' + m.expected + ' · ต่าง ' + m.diff);
       });
     });
-    return r;
+    out.sales = r;
   } catch (e) {
-    Logger.log('ส่งออก Dashboard ล้มเหลว: ' + e.message);
-    return { success: false, message: e.message };
+    out.success = false;
+    Logger.log('✖ ส่งออกยอดขายล้มเหลว: ' + e.message);
   }
+  return out;
 }
 
 /** ตั้ง trigger รายวัน (เรียกจาก editor ครั้งเดียว) — ลบตัวเดิมก่อนเสมอ กันตั้งซ้อนจนรันวันละหลายรอบ */
