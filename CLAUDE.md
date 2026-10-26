@@ -1153,9 +1153,10 @@ UAT มีกลุ่มลูกค้าชื่อเกือบเหม�
   · ค่าคงที่สามตัวที่ปลายทางกำหนด (`SalesSegmentId` · `StatisticsGroupId` · `CustomerGroupId`)
     ตั้งทับได้ด้วย Script Property `DASHBOARD_SALES_SEGMENT` / `DASHBOARD_STAT_GROUP` /
     `DASHBOARD_CUSTOMER_GROUP` — ปลายทางเปลี่ยนรหัสแล้วเราไม่ต้อง deploy ใหม่
+  · `EmployeeResponsibleNumber` ส่ง **ชื่อพนักงาน** (เจ้าของระบบสั่ง 26 ต.ค. 2026 — LINE id ยาวเกิน)
+    จึงซ้ำกับ `salesp.Name` โดยตั้งใจ · ไม่มีชื่อ = ส่งว่าง ไม่ตกกลับไปใช้ id
   · **ช่องที่ยังไม่มีข้อมูลต้นทาง ส่งค่าว่าง**: `company_Chain` (กลุ่มร้าน) · `!Region_Neilson`
-    และ `EmployeeResponsibleNumber` ส่ง LINE user id เพราะระบบเราไม่มีรหัสพนักงานแบบอื่น
-    — ถ้าปลายทางต้องการรหัสของเขา ต้องทำตารางจับคู่ก่อน
+  · `StatisticsGroupId` คงที่ `TH-EAST` ทั้งไฟล์ตามที่เจ้าของระบบยืนยัน — ยังไม่ผูกกับภาคของร้าน
 - เทสต์: `node .dev/test-dashboard-export.js`
 
 **★ `subtotal_ex_vat` ของบิลรวมมูลค่าสินค้ายกเว้นภาษีไว้ในตัวแล้ว** (`saleVatBreakdown` คืน

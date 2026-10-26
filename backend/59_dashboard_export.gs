@@ -264,11 +264,15 @@ function _dashCustomerRows() {
     var dist = districts[String(c.district_id)] || {};
     var code = c.customer_code || '';
 
+    /* ★★ `EmployeeResponsibleNumber` ส่ง **ชื่อพนักงาน** ไม่ใช่ LINE user id (เจ้าของระบบสั่ง 26 ต.ค. 2026
+       — "Line id ยาวเกิน") · ค่าจึงซ้ำกับ `salesp.Name` โดยตั้งใจ สเปกปลายทางมีสองช่องนี้อยู่แล้ว
+       ★ ไม่มีชื่อ = ส่งว่าง ไม่ตกกลับไปใช้ id ยาวๆ ซึ่งคือสิ่งที่เพิ่งเอาออก */
+    var salesName = staff[String(c.salesman_line_user_id)] || '';
     out.push([
       tid, code, seg, shopTypes[String(c.shop_type_id)] || '', c.province_id || '',
-      c.salesman_line_user_id || '', dist.name || '', prov.name_en || '', statGroup,
+      salesName, dist.name || '', prov.name_en || '', statGroup,
       customerFullName(c), _dashPaymentTerms(c), tid, _round2(parseFloat(c.credit_limit) || 0), custGroup,
-      c.address || '', '', staff[String(c.salesman_line_user_id)] || '', c.area_code || '', c.area_code || '',
+      c.address || '', '', salesName, c.area_code || '', c.area_code || '',
       prov.name || '', prov.region || '', '',
       // ★ คีย์ที่ปลายทางใช้เชื่อมกับไฟล์ยอดขาย — ต้องเป็น "<ตัวแทน>.<รหัสร้าน>" เป๊ะ
       tid + '.' + code

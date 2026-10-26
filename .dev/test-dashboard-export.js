@@ -409,10 +409,13 @@ console.log('\n── ทะเบียนร้านค้า customer.csv �
     [get(r50, 'AddressCity'), get(r50, 'SalesDistrict'), get(r50, 'AddressState'),
      get(r50, 'Province'), get(r50, '!Region')],
     [20, 'ศรีราชา', 'CBI', 'ชลบุรี', 'ตะวันออก']);
-  eq('พนักงานขายประจำร้าน: รหัส + ชื่อ · เขตการขายสองช่องใช้ค่าเดียวกัน',
+  /* ★★ ส่ง "ชื่อพนักงาน" ทั้งสองช่อง ไม่ใช่ LINE id (เจ้าของระบบสั่ง 26 ต.ค. 2026 — id ยาวเกิน) */
+  eq('★★ พนักงานขายประจำร้าน: ส่งชื่อ ไม่ใช่ LINE id · เขตการขายสองช่องใช้ค่าเดียวกัน',
     [get(r50, 'EmployeeResponsibleNumber'), get(r50, 'salesp.Name'),
      get(r50, 'salesp.Region'), get(r50, 'SalesRegional')],
-    ['U_STAFF1', 'สมชาย ขายดี', 'SV11', 'SV11']);
+    ['สมชาย ขายดี', 'สมชาย ขายดี', 'SV11', 'SV11']);
+  eq('   ร้านที่ไม่ได้ตั้งพนักงานประจำ → ว่าง ไม่ใช่ id ยาวๆ',
+    [get(byCode['C-051'], 'EmployeeResponsibleNumber'), get(byCode['C-051'], 'salesp.Name')], ['', '']);
 
   /* ★★★ คีย์ที่ปลายทางใช้เชื่อมกับไฟล์ยอดขาย — ผิดรูปเมื่อไหร่ ข้อมูลสองไฟล์ต่อกันไม่ติดทั้งก้อน */
   eq('★★★ unicode_customer = <ตัวแทน>.<รหัสร้าน>', get(r50, 'unicode_customer'), 'BDC.C-050');
