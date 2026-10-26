@@ -389,7 +389,8 @@ console.log('\n── ทะเบียนร้านค้า customer.csv �
   const cr = ctx._dashCustomerRows();
   const H = {}; ctx.DASH_CUST_HEADERS.forEach((h, i) => { H[h] = i; });
   const get = (row, name) => row[H[name]];
-  const byCode = {}; cr.forEach(r => { byCode[get(r, 'CustomerAccount')] = r; });
+  // อ้างด้วยรหัสร้านเปล่าๆ เพื่อให้เทสต์อ่านง่าย (CustomerAccount มีรหัสตัวแทนนำหน้าแล้ว)
+  const byCode = {}; cr.forEach(r => { byCode[String(get(r, 'CustomerAccount')).split('.').pop()] = r; });
 
   eq('หัวคอลัมน์ครบ 23 ช่อง ตามสเปกปลายทาง', ctx.DASH_CUST_HEADERS.length, 23);
   eq('   และทุกแถวมีช่องเท่าหัวคอลัมน์', cr.every(r => r.length === 23), true);
@@ -401,10 +402,14 @@ console.log('\n── ทะเบียนร้านค้า customer.csv �
   // C-001/C-002 เป็นร้านของบริษัท (ไม่มีสังกัด) จากฟิกซ์เจอร์ด้านบน — ออกไฟล์ถูกแล้ว
 
   const r50 = byCode['C-050'];
+/* ★★ `CustomerAccount` ต้องมีรหัสตัวแทนนำหน้า (เจ้าของระบบสั่ง 26 ต.ค. 2026) — ปลายทางรวมร้าน
+     ของทุกตัวแทนไว้ตารางเดียว รหัสร้านเปล่าๆ ซ้ำกันข้ามตัวแทนได้ ส่งไปเฉยๆ ร้านจะถูกยุบรวมเงียบๆ */
+  eq('★★ CustomerAccount = <ตัวแทน>.<รหัสร้าน> และเท่ากับ unicode_customer',
+    [get(r50, 'CustomerAccount'), get(r50, 'unicode_customer')], ['BDC.C-050', 'BDC.C-050']);
   eq('แมปช่องหลักครบ',
-    [get(r50, 'dataAreaId'), get(r50, 'CustomerAccount'), get(r50, 'OrganizationName'),
+    [get(r50, 'dataAreaId'), get(r50, 'OrganizationName'),
      get(r50, 'ShopType'), get(r50, 'AddressStreet'), get(r50, 'CreditLimit')],
-    ['BDC', 'C-050', 'ร้านทดสอบ', 'ร้านค้าปลีก', '99/1 ถนนสุขุมวิท', 50000]);
+    ['BDC', 'ร้านทดสอบ', 'ร้านค้าปลีก', '99/1 ถนนสุขุมวิท', 50000]);
   eq('ที่อยู่: รหัสจังหวัด · อำเภอ · ตัวย่อจังหวัด · ชื่อจังหวัด · ภาค',
     [get(r50, 'AddressCity'), get(r50, 'SalesDistrict'), get(r50, 'AddressState'),
      get(r50, 'Province'), get(r50, '!Region')],
@@ -418,7 +423,7 @@ console.log('\n── ทะเบียนร้านค้า customer.csv �
     [get(byCode['C-051'], 'EmployeeResponsibleNumber'), get(byCode['C-051'], 'salesp.Name')], ['', '']);
 
   /* ★★★ คีย์ที่ปลายทางใช้เชื่อมกับไฟล์ยอดขาย — ผิดรูปเมื่อไหร่ ข้อมูลสองไฟล์ต่อกันไม่ติดทั้งก้อน */
-  eq('★★★ unicode_customer = <ตัวแทน>.<รหัสร้าน>', get(r50, 'unicode_customer'), 'BDC.C-050');
+  eq('ร้านของบริษัทก็มีรหัสนำหน้าเหมือนกัน', get(byCode['C-055'], 'CustomerAccount'), 'HOUSE.C-055');
 
   /* ★★ ไม่ได้ตั้งจำนวนวันเครดิต = ขายสด ห้ามเดาเป็น 30 วัน (ให้เครดิตเกินจริงกับร้านที่ไม่เคยได้) */
   eq('★★ เงื่อนไขชำระเงิน: 30 วัน → 30D · ไม่ตั้งไว้ → CASH · 45 วัน → 45D',
