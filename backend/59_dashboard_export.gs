@@ -59,7 +59,11 @@ var DASH_HEADERS = [
   /* ★★ ใบลดหนี้/ใบเพิ่มหนี้อยู่ชีตเดียวกันเป็น **แถวติดลบ/บวก** (เจ้าของระบบสั่ง 24 ต.ค. 2026)
      Dashboard บวกคอลัมน์เดียวได้ยอดสุทธิเลย ไม่ต้องไปลบจากอีกชีต (ซึ่งมีวันลืม)
      ★ `ประเภทรายการ` ไว้ให้กรองแยกเมื่ออยากดูเฉพาะยอดขายดิบ · `เอกสารอ้างอิง` = ใบกำกับที่ถูกปรับ */
-  'ประเภทรายการ', 'เอกสารอ้างอิง'
+  'ประเภทรายการ', 'เอกสารอ้างอิง',
+  /* ★★ คีย์เชื่อมกับ `customer.csv` — ค่าเดียวกับ `CustomerAccount`/`unicode_customer` ที่นั่น
+     (เจ้าของระบบสั่ง 26 ต.ค. 2026) · ปลายทางต่อสองไฟล์ด้วยช่องนี้ได้เลย ไม่ต้องไปประกอบสูตรในคิวรี
+     ★ ชื่อคอลัมน์ต้องตรงกับฝั่ง `customer.csv` เป๊ะ ไม่งั้นคนตั้งคิวรีต้องมาเดาว่าช่องไหนคู่กับช่องไหน */
+  'unicode_customer'
 ];
 var DASH_SOURCE = 'RBS';        // ระบบต้นทาง — ค่าคงที่ของทุกแถวที่ออกจากที่นี่
 
@@ -72,14 +76,20 @@ var DASH_SOURCE = 'RBS';        // ระบบต้นทาง — ค่า�
 function _dashRowsFor(tenantId, opts) {
   var r = salesFactRows(_normBook(tenantId), opts || {});
   if (!r.success) return r;
+  /* ★★★ สมุดของบริษัทส่ง tenantId มาเป็นค่าว่าง (`''` = ไม่สังกัดตัวแทน) — ในไฟล์ต้องเขียนว่า `HOUSE`
+     ให้ตรงกับ `customer.csv` และกับชื่อไฟล์ `HOUSE.csv` · ปล่อยว่างไว้ = คอลัมน์รหัสตัวแทนว่างทั้งไฟล์
+     และคีย์กลายเป็น `.C-001` ซึ่งต่อกับทะเบียนร้านค้าไม่ติดสักแถว (เทสต์จับได้ 26 ต.ค. 2026) */
+  var area = tenantId || (typeof HOUSE_TENANT_ID !== 'undefined' ? HOUSE_TENANT_ID : 'HOUSE');
   return { success: true, truncated: r.truncated, mismatches: r.mismatches,
     rows: r.facts.map(function(f) {
       return [
-        DASH_SOURCE, _dashDate(f.docDate), f.docNo, f.orderCode, f.roundNo, tenantId,
+        DASH_SOURCE, _dashDate(f.docDate), f.docNo, f.orderCode, f.roundNo, area,
         f.customerCode, f.customerName, f.taxId, f.branchCode, f.saleByName, f.paymentLabel,
         f.productCode, f.productName, f.qty, f.unitCode, f.unitPriceEx,
         f.grossEx, f.lineDiscEx, f.billDiscEx, f.netEx,
-        f.isFree ? 'ใช่' : '', f.kind, f.refDoc
+        f.isFree ? 'ใช่' : '', f.kind, f.refDoc,
+        // ไม่มีรหัสร้าน (ลูกค้าทั่วไป/หาไม่เจอ) = ส่งว่าง ไม่ใช่ 'BDC.' ซึ่งเป็นคีย์ที่ไม่มีอยู่จริง
+        f.customerCode ? (area + '.' + f.customerCode) : ''
       ];
     }) };
 }
