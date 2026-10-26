@@ -82,14 +82,18 @@ function _dashRowsFor(tenantId, opts) {
   var area = tenantId || (typeof HOUSE_TENANT_ID !== 'undefined' ? HOUSE_TENANT_ID : 'HOUSE');
   return { success: true, truncated: r.truncated, mismatches: r.mismatches,
     rows: r.facts.map(function(f) {
+      /* ★★ `รหัสลูกค้า` ส่งเป็น `<รหัสตัวแทน>.<รหัสร้าน>` เหมือน `CustomerAccount` ใน customer.csv
+         (เจ้าของระบบสั่ง 26 ต.ค. 2026) — รหัสร้านเปล่าๆ ซ้ำกันข้ามตัวแทนได้ ปลายทางที่รวมทุกตัวแทน
+         ไว้ตารางเดียวจะยุบร้านคนละรายเป็นร้านเดียวกันเงียบๆ
+         ★ ค่าเดียวกับคอลัมน์ `unicode_customer` ท้ายไฟล์ ซ้ำกันสองช่องตามสเปกปลายทาง */
+      var custKey = f.customerCode ? (area + '.' + f.customerCode) : '';
       return [
         DASH_SOURCE, _dashDate(f.docDate), f.docNo, f.orderCode, f.roundNo, area,
-        f.customerCode, f.customerName, f.taxId, f.branchCode, f.saleByName, f.paymentLabel,
+        custKey, f.customerName, f.taxId, f.branchCode, f.saleByName, f.paymentLabel,
         f.productCode, f.productName, f.qty, f.unitCode, f.unitPriceEx,
         f.grossEx, f.lineDiscEx, f.billDiscEx, f.netEx,
         f.isFree ? 'ใช่' : '', f.kind, f.refDoc,
-        // ไม่มีรหัสร้าน (ลูกค้าทั่วไป/หาไม่เจอ) = ส่งว่าง ไม่ใช่ 'BDC.' ซึ่งเป็นคีย์ที่ไม่มีอยู่จริง
-        f.customerCode ? (area + '.' + f.customerCode) : ''
+        custKey
       ];
     }) };
 }

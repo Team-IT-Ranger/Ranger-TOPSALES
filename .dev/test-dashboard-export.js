@@ -303,6 +303,11 @@ eq('★★ ไฟล์ยอดขายมีคีย์ unicode_customer = <
   ['BDC.C-001', 'BDC.C-001']);
 eq('   สมุดของบริษัทใช้ HOUSE นำหน้า ตรงกับ customer.csv',
   ctx._dashRowsFor('', {}).rows.every(x => col(x, 'unicode_customer') === 'HOUSE.C-001'), true);
+/* ★★ คอลัมน์ `รหัสลูกค้า` ส่งรหัสเต็มเหมือนกัน (เจ้าของระบบสั่ง 26 ต.ค. 2026) — ค่าเดียวกับ
+   unicode_customer และกับ CustomerAccount ใน customer.csv ทั้งสามช่องต้องตรงกันเป๊ะ */
+eq('★★ คอลัมน์ "รหัสลูกค้า" ก็เป็น <ตัวแทน>.<รหัสร้าน> เท่ากับ unicode_customer',
+  r.rows.every(x => col(x, 'รหัสลูกค้า') === col(x, 'unicode_customer')), true);
+eq('   และมีค่าจริงไม่ใช่ว่างทั้งคอลัมน์', col(l1, 'รหัสลูกค้า'), 'BDC.C-001');
 
 console.log('\n── ข้อความ CSV ──');
 {
