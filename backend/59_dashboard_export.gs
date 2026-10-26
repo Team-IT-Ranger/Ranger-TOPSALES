@@ -28,7 +28,13 @@
  */
 
 var DASH_PROP_FILE_IDS = 'DASHBOARD_CSV_FILEIDS';   // {รหัสตัวแทน: fileId} — คงไฟล์เดิมไว้ ลิงก์จะได้ไม่ตาย
-var DASH_PROP_FOLDER   = 'DASHBOARD_FOLDER_ID';     // โฟลเดอร์ปลายทาง (ไม่ตั้ง = โฟลเดอร์ db ของ env)
+var DASH_PROP_FOLDER   = 'DASHBOARD_FOLDER_ID';     // โฟลเดอร์ไฟล์ยอดขาย (ไม่ตั้ง = โฟลเดอร์ db ของ env)
+/* ★★★ `customer.csv` ต้องอยู่ **คนละโฟลเดอร์กับไฟล์ยอดขาย** (เจ้าของระบบสั่ง 26 ต.ค. 2026)
+   เพราะปลายทางใช้ Power Query แบบ **From Folder** ซึ่งอ่านทุกไฟล์ในโฟลเดอร์มาต่อกันเป็นตารางเดียว
+   — วางปนกันเมื่อไหร่ ทะเบียนร้านค้ากับยอดขายคนละสคีมาจะถูกจับมารวมกันแล้วพังทั้งคิวรี
+   ★ ไม่ตั้ง property = ใช้โฟลเดอร์ย่อย `customer/` ใต้โฟลเดอร์ยอดขาย — **ค่าตั้งต้นต้องแยกอยู่แล้ว**
+     ไม่ใช่ตกไปกองรวมกัน (ค่าตั้งต้นที่พังเงียบคือสิ่งที่เรากำลังหลีกเลี่ยง) */
+var DASH_PROP_CUST_FOLDER = 'DASHBOARD_CUSTOMER_FOLDER_ID';
 
 /* กันไฟล์บวมจนรันไม่จบใน 6 นาที — เกินเท่านี้ให้ไปตั้งช่วงวันที่แทนการดึงทั้งหมด */
 var DASH_MAX_ROWS = 20000;
@@ -85,11 +91,18 @@ function _dashDate(s) {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
 
-/** โฟลเดอร์ปลายทาง — ไม่ตั้ง `DASHBOARD_FOLDER_ID` = โฟลเดอร์ฐานข้อมูลของ env นั้น */
+/** โฟลเดอร์ไฟล์ยอดขาย — ไม่ตั้ง `DASHBOARD_FOLDER_ID` = โฟลเดอร์ฐานข้อมูลของ env นั้น */
 function _dashFolder() {
   var fid = PropertiesService.getScriptProperties().getProperty(DASH_PROP_FOLDER);
   if (fid) return DriveApp.getFolderById(fid);
   return _dbEnvFolder();
+}
+
+/** โฟลเดอร์ทะเบียนร้านค้า — ต้องแยกจากไฟล์ยอดขายเสมอ (ดูหมายเหตุที่ DASH_PROP_CUST_FOLDER) */
+function _dashCustomerFolder() {
+  var fid = PropertiesService.getScriptProperties().getProperty(DASH_PROP_CUST_FOLDER);
+  if (fid) return DriveApp.getFolderById(fid);
+  return _ensureChildFolder(_dashFolder(), 'customer');
 }
 
 /**
@@ -128,7 +141,8 @@ function _dashIsoDate(d) {
  * ★ หา id ตามลำดับ: property → ชื่อไฟล์ในโฟลเดอร์ → สร้างใหม่ · ลำดับนี้ทำให้ย้าย/ลบไฟล์ด้วยมือแล้ว
  *   รอบถัดไปยังทำงานต่อได้เอง ไม่ต้องมาแก้ property
  */
-function _dashWriteCsv(name, text) {
+function _dashWriteCsv(name, text, folder) {
+  folder = folder || _dashFolder();
   var props = PropertiesService.getScriptProperties();
   var map = {};
   try { map = JSON.parse(props.getProperty(DASH_PROP_FILE_IDS) || '{}'); } catch (e) { map = {}; }
@@ -137,7 +151,7 @@ function _dashWriteCsv(name, text) {
 
   var id = map[name];
   if (!id) {                                   // ยังไม่เคยจำ — ดูว่ามีไฟล์ชื่อนี้อยู่ก่อนแล้วไหม
-    var it = _dashFolder().getFilesByName(fileName);
+    var it = folder.getFilesByName(fileName);
     if (it.hasNext()) id = it.next().getId();
   }
   if (id) {
@@ -146,14 +160,36 @@ function _dashWriteCsv(name, text) {
         'https://www.googleapis.com/upload/drive/v3/files/' + id + '?uploadType=media&supportsAllDrives=true',
         { method: 'patch', contentType: 'text/csv', payload: blob.getBytes(),
           headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-      if (up.getResponseCode() === 200) { map[name] = id; props.setProperty(DASH_PROP_FILE_IDS, JSON.stringify(map)); return id; }
+      if (up.getResponseCode() === 200) {
+        _dashEnsureIn(id, folder);
+        map[name] = id; props.setProperty(DASH_PROP_FILE_IDS, JSON.stringify(map)); return id;
+      }
       // ไฟล์ถูกลบไปแล้ว → ตกลงไปสร้างใหม่ข้างล่าง
     } catch (e) { /* เหมือนกัน */ }
   }
-  var created = _dashFolder().createFile(blob);
+  var created = folder.createFile(blob);
   map[name] = created.getId();
   props.setProperty(DASH_PROP_FILE_IDS, JSON.stringify(map));
   return created.getId();
+}
+
+/**
+ * ย้ายไฟล์ไปโฟลเดอร์ที่ควรอยู่ ถ้ามันไม่ได้อยู่ที่นั่นแล้ว
+ * ★★ จำเป็นเพราะเราเขียนทับ **ด้วย file id** ซึ่งไม่สนว่าไฟล์อยู่โฟลเดอร์ไหน —
+ *   วันที่ย้ายโฟลเดอร์ปลายทาง (หรือเพิ่งแยก customer.csv ออกมา) ไฟล์เดิมจะยังนอนอยู่ที่เก่า
+ *   แล้ว Power Query ก็ยังอ่านของเก่าต่อไปโดยไม่มีอะไรฟ้อง
+ * ★ ย้ายไม่สำเร็จไม่ล้มทั้งงาน — เนื้อไฟล์ถูกเขียนไปแล้ว แค่รายงานไว้ใน log
+ */
+function _dashEnsureIn(fileId, folder) {
+  try {
+    var file = DriveApp.getFileById(fileId);
+    var parents = file.getParents(), already = false;
+    while (parents.hasNext()) { if (parents.next().getId() === folder.getId()) { already = true; break; } }
+    if (!already) {
+      file.moveTo(folder);
+      Logger.log('ย้าย ' + file.getName() + ' ไปโฟลเดอร์ ' + folder.getName());
+    }
+  } catch (e) { Logger.log('ย้ายไฟล์ไม่สำเร็จ (' + fileId + '): ' + e.message); }
 }
 
 /**
@@ -284,7 +320,7 @@ function _dashCustomerRows() {
 /** เขียน customer.csv — เรียกต่อจากไฟล์ยอดขายในรอบเดียวกัน */
 function exportCustomerFile() {
   var rows = _dashCustomerRows();
-  var fileId = _dashWriteCsv('customer', _dashCsvText(rows, DASH_CUST_HEADERS));
+  var fileId = _dashWriteCsv('customer', _dashCsvText(rows, DASH_CUST_HEADERS), _dashCustomerFolder());
   return { rows: rows.length, fileId: fileId, url: 'https://drive.google.com/file/d/' + fileId + '/view' };
 }
 
