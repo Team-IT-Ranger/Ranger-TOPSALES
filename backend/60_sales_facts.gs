@@ -83,15 +83,30 @@ function salesFactRows(book, opts) {
         if (!qty || !ordered) return;                       // บรรทัดนี้ไม่ได้ส่งในรอบนี้
         share = qty / ordered;
       }
-      var gross = _round2((parseFloat(it.line_total) || 0) * share);
-      var net   = _round2((netOf[String(it.record_id)] || 0) * share);
-      var lineDisc = _round2((parseFloat(it.line_discount) || 0) * share);
+      var sold = _round2((parseFloat(it.line_total) || 0) * share);
+      var net  = _round2((netOf[String(it.record_id)] || 0) * share);
       /* ★★★ ถอด VAT ออกทุกช่องเงิน (เจ้าของระบบสั่ง 25 ต.ค. 2026 — รายงานการขายไม่ดู VAT)
-         บรรทัดที่ยกเว้นภาษีไม่ถูกถอด เพราะ `lineExVat` ดูภาพนิ่งภาษีรายบรรทัด
-         ★ `billDiscEx` คิดเป็น **ส่วนที่เหลือ** ไม่ใช่ถอดเอง — ไม่งั้นปัดเศษคนละช่องแล้ว
-           ยอดตามราคาขาย − ส่วนลด ≠ ยอดสุทธิ ทีละสตางค์ ซึ่งคนกระทบยอดหาไม่เจอ */
+         บรรทัดที่ยกเว้นภาษีไม่ถูกถอด เพราะ `lineExVat` ดูภาพนิ่งภาษีรายบรรทัด */
       var exOf = function(v) { return lineExVat(order, { line_total: v, tax_status: it.tax_status }); };
-      var grossEx = exOf(gross), netEx = exOf(net), lineDiscEx = exOf(lineDisc);
+      var soldEx = exOf(sold), netEx = exOf(net);
+
+      /* ═══ ส่วนลดสองชั้น เป็นข้อมูล **คนละชนิดกัน** ห้ามสลับช่อง ═══
+         (ผู้ใช้จับได้ 4 พ.ย. 2026 — SO-202610-0068 ส่วนลดท้ายบิล 1,085.98 ไปโผล่ในช่องส่วนลดรายบรรทัด)
+         ★★★ **`order_items.line_discount` ไม่ใช่ส่วนลดรายบรรทัด** แม้ชื่อคอลัมน์จะชวนให้คิดอย่างนั้น —
+           มันคือ "โปร + ส่วนลดท้ายบิล ที่ `_allocateLineDiscount` (18_pricing_engine.gs) เฉลี่ยลงบรรทัดแล้ว"
+           อ่านตรงๆ มาใส่ช่องรายบรรทัด = ส่งข้อมูลผิดชนิดให้ปลายทาง **และช่องส่วนลดท้ายบิลจะเป็น 0 ทุกแถว**
+           (เพราะ net = line_total − line_discount อยู่แล้ว ส่วนที่เหลือจึงไม่มี) — อาการนี้มองจากเทสต์
+           ไม่เห็น ถ้าเทสต์ตั้ง fixture ด้วยความเข้าใจผิดชุดเดียวกัน ซึ่งเป็นสิ่งที่เกิดขึ้นจริง
+         ★ ส่วนลดรายบรรทัดตัวจริง = **ส่วนลดขั้นบันไดของสินค้านั้นเอง** ซึ่งระบบไม่ได้เก็บเป็นยอดส่วนลด
+           แต่เก็บเป็น "ราคาตั้งก่อนภาษี" (`list_price_ex_vat`) → ต้องคิดจาก ราคาตั้ง − ราคาที่ขายจริง
+           สูตรเดียวกับ `_lineListBreakdown` ที่ใบขาย/ใบกำกับใช้พิมพ์ ราคาตั้ง → ส่วนลด → ราคาหลังหักส่วนลด
+           **ตัวเลขในไฟล์จึงตรงกับที่ลูกค้าเห็นบนเอกสารทุกช่อง**
+         ★ บิลก่อน 30 ก.ย. 2026 และบิลเส้นทางโปรโมชั่นเดิมไม่มีราคาตั้ง → ส่วนลดรายบรรทัด = 0
+           และยอดตามราคาขาย = ราคาที่ขายจริง (ไม่เดาราคาตั้งขึ้นมาเอง) */
+      var lpRaw = it.list_price_ex_vat;
+      var hasList = lpRaw !== '' && lpRaw !== null && lpRaw !== undefined && isFinite(parseFloat(lpRaw));
+      var unitPriceEx = hasList ? _round2(parseFloat(lpRaw)) : exOf(_round2(parseFloat(it.price) || 0));
+      var grossEx = hasList ? _round2(unitPriceEx * qty) : soldEx;
       var p = products[String(it.product_id)] || {};
 
       docSum = _round2(docSum + netEx); docLines++;
@@ -99,8 +114,10 @@ function salesFactRows(book, opts) {
         kind: SF_SALE, refDoc: '',
         productId: String(it.product_id || ''), product: p,
         qty: qty, baseQty: _round2((parseFloat(it.base_qty) || 0) * share),
-        unitCode: it.unit_code || '', unitPriceEx: exOf(_round2(parseFloat(it.price) || 0)),
-        grossEx: grossEx, lineDiscEx: lineDiscEx, billDiscEx: _round2(grossEx - lineDiscEx - netEx),
+        unitCode: it.unit_code || '', unitPriceEx: unitPriceEx,
+        /* ★ ทั้งสองชั้นคิดเป็น **ส่วนต่าง** ไม่ถอด VAT แยกช่อง — ไม่งั้นปัดเศษคนละช่องแล้ว
+             ยอดตามราคาขาย − ส่วนลดสองชั้น ≠ ยอดสุทธิ ทีละสตางค์ ซึ่งคนกระทบยอดหาไม่เจอ */
+        grossEx: grossEx, lineDiscEx: _round2(grossEx - soldEx), billDiscEx: _round2(soldEx - netEx),
         netEx: netEx, isFree: isFlagOn(it.is_free) || String(it.is_free) === '1'
       }));
     });
