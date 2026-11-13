@@ -483,6 +483,61 @@ function withdrawExternalGoodsReceipt(session, payload) {
   });
 }
 
+/**
+ * ประวัติใบรับของที่มาจากการนำเข้า — เมนู 4.3.3 (ผู้ใช้สั่ง 13 พ.ย. 2026)
+ * ★ ทำไมต้องมีหน้านี้แยก: 4.3.2 กรองแค่ `pending_review` **ตรวจรับแล้วใบหายจากหน้าจอทันที** แล้วไม่มีทาง
+ *   กลับไปดูว่ารับอะไรเข้ามาบ้าง · 4.2.1 มีใบอยู่ครบแต่ไม่โชว์เลขเอกสารฝั่ง TNK และอยู่คนละกลุ่มเมนู
+ *   คนที่ทำงานอยู่ใน 4.3 จึงหาไม่เจอ
+ * ★★ `source_ref` = `InvoiceNumber` ของชีต D365 ฝั่ง TNK = **กุญแจจับคู่ตัวเดียวที่มี** ระหว่างเอกสารของเรา
+ *   (GR/PO) กับเอกสารฝั่งบริษัท — ไม่โชว์ช่องนี้ = กระทบยอดกับ TNK ไม่ได้เลย ต้องเปิดชีตเทียบมือ
+ * ★ คืนรายการสินค้ามาพร้อมในคำขอเดียว (ไม่แยก getGoodsReceipt) — คำขอบน Apps Script ไม่ต่ำกว่า ~1.5 วิ
+ *   กดดูรายละเอียดทีละใบแล้วรอทุกครั้งคือสิ่งที่ CLAUDE.md ข้อ 7 ห้ามไว้
+ * payload: { from?, to?: 'yyyy-MM-dd', tenantId? } — ไม่ส่งช่วงวันที่ = ย้อนหลัง 90 วันจากวันนี้
+ *   (ไม่ปล่อยให้ดึงทั้งหมดโดยไม่มีขอบ เพราะศูนย์ใหญ่รับของทุกวัน ใบจะสะสมไปเรื่อยๆ)
+ */
+function listExternalGoodsReceiptHistory(session, payload) {
+  var err = _requirePermission(session, 'inventory', 'view'); if (err) return err;
+  payload = payload || {};
+  var scope = _purchaseScope(session, payload);
+  var dre = /^\d{4}-\d{2}-\d{2}$/;
+  var to = dre.test(String(payload.to || '')) ? String(payload.to) : _todayStr();
+  var from = dre.test(String(payload.from || '')) ? String(payload.from)
+    : Utilities.formatDate(new Date(new Date().getTime() - 90 * 24 * 3600 * 1000), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  var rows = _scoped('goods_receipts', scope).filter(function(g) {
+    if (!String(g.source_ref || '').trim()) return false;      // เฉพาะใบที่มาจากการนำเข้า
+    var d = String(_dOnly(g.receive_date) || '').slice(0, 10);
+    return d >= from && d <= to;
+  });
+
+  var pos = {}; centralObjects('purchase_orders').forEach(function(p) { pos[String(p.record_id)] = p; });
+  var whs = {}; centralObjects('warehouses').forEach(function(w) { whs[String(w.record_id)] = w.name; });
+  var products = {}; centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
+  var billedGr = {};
+  centralObjects('ap_bills').forEach(function(b) { if (b.gr_id && b.status !== 'void') billedGr[String(b.gr_id)] = b.bill_no; });
+  var itemsByGr = {};
+  centralObjects('gr_items').forEach(function(it) { (itemsByGr[String(it.gr_id)] = itemsByGr[String(it.gr_id)] || []).push(it); });
+
+  var out = rows.map(function(g) {
+    var po = pos[String(g.po_id)];
+    var items = (itemsByGr[String(g.record_id)] || []).map(function(it) {
+      var p = it.product_id ? products[String(it.product_id)] : null;
+      return { productCode: p ? p.product_code : '', productName: p ? p.name : '(ไม่ผูกสินค้า)',
+        qty: Number(it.qty) || 0, unitCode: it.unit_code || '', unitFactor: Number(it.unit_factor) || 1,
+        baseQty: Number(it.base_qty) || 0, unitCost: Number(it.unit_cost) || 0, amount: Number(it.amount) || 0 };
+    });
+    return { id: g.record_id, grNo: g.gr_no, poId: g.po_id || '', poNo: po ? po.po_no : '',
+      sourceRef: String(g.source_ref || '').trim(), receiveDate: String(_dOnly(g.receive_date) || '').slice(0, 10),
+      status: g.status, warehouseName: whs[String(g.warehouse_id)] || '', note: String(g.note || ''),
+      createdAt: safeDateStr(g.created_at), createdBy: String(g.created_by || ''),
+      itemCount: items.length, amount: _money(items.reduce(function(s, it) { return s + it.amount; }, 0)),
+      billNo: billedGr[String(g.record_id)] || '', journalId: g.journal_id || '', items: items };
+  });
+  // ใหม่สุดอยู่บน · วันเดียวกันเรียงตามเลขใบรับของ (= ลำดับที่นำเข้า)
+  out.sort(function(a, b) { return String(b.receiveDate).localeCompare(String(a.receiveDate)) || String(b.grNo).localeCompare(String(a.grNo)); });
+  return { success: true, data: out, from: from, to: to };
+}
+
 /* ═══════════ นำเข้าอัตโนมัติตามเวลา (2 ต.ค. 2026 — เจ้าของระบบสั่ง: ไม่ต้องรอใครมากดสั่ง) ═══════════
  * ตั้ง trigger ด้วยการเปิด Apps Script editor → เลือกฟังก์ชัน installExternalSalesImportTriggers → Run (ครั้งเดียว — ครั้งแรก
  * จะขอสิทธิ์ script.scriptapp ให้กดยอมรับ) แล้วระบบรัน scheduledExternalSalesImport ทุกวันตามเวลาใน EXTERNAL_SALES_AUTO_HOURS

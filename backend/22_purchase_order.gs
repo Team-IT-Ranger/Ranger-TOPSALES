@@ -387,6 +387,8 @@ function listGoodsReceipts(session, payload) {
     var items = itemsByGr[String(g.record_id)] || [];
     return { id: g.record_id, grNo: g.gr_no, poId: g.po_id, poNo: pos[String(g.po_id)] || '', vendorId: g.vendor_id,
       vendorName: vendors[String(g.vendor_id)] || '', warehouseId: g.warehouse_id, receiveDate: _dOnly(g.receive_date),
+      // เลขเอกสารฝั่งต้นทาง (ใบที่นำเข้าจากรายการขายออกของบริษัท = InvoiceNumber ฝั่ง TNK) — กุญแจจับคู่ตัวเดียวที่มี
+      sourceRef: String(g.source_ref || '').trim(),
       status: g.status, note: g.note || '', itemCount: items.length,
       amount: _money(items.reduce(function(s, it) { return s + (Number(it.amount) || 0); }, 0)),
       billNo: billedGr[String(g.record_id)] || '', journalId: g.journal_id || '' };
@@ -407,6 +409,7 @@ function getGoodsReceipt(session, payload) {
   return { success: true, gr: {
     id: gr.record_id, grNo: gr.gr_no, poId: gr.po_id, poNo: po ? po.po_no : '', vendorId: gr.vendor_id, vendorName: v ? v.name : '',
     warehouseId: gr.warehouse_id, warehouseName: w ? w.name : '', receiveDate: _dOnly(gr.receive_date), status: gr.status,
+    sourceRef: String(gr.source_ref || '').trim(),
     note: gr.note || '', journalId: gr.journal_id || '', createdAt: safeDateStr(gr.created_at),
     items: _childrenOf('gr_items', 'gr_id', gr.record_id).map(function(it) {
       var p = it.product_id ? products[String(it.product_id)] : null;

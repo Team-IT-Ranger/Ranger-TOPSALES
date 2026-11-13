@@ -2178,8 +2178,8 @@
             <button class="btn" onclick="gotoView('purchaseorders')">ไปหน้าใบสั่งซื้อเพื่อรับของ</button>
           </div>
           <div class="table-wrap"><table>
-            <thead><tr><th>เลขที่</th><th>วันที่รับ</th><th>ใบสั่งซื้อ</th><th>ผู้ขาย</th><th>รายการ</th><th>มูลค่า</th><th>ตั้งหนี้แล้ว</th></tr></thead>
-            <tbody id="grs-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+            <thead><tr><th>เลขที่</th><th>วันที่รับ</th><th>ใบสั่งซื้อ</th><th>เลขเอกสาร TNK</th><th>ผู้ขาย</th><th>รายการ</th><th>มูลค่า</th><th>ตั้งหนี้แล้ว</th></tr></thead>
+            <tbody id="grs-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
           </table></div>
         </section>
 
@@ -2203,6 +2203,30 @@
                 ยืนยันแล้วระบบจะเพิ่มสต็อกให้ทันที</p></div>
           </div>
           <div id="pgr-body"><p class="unit">กำลังโหลด...</p></div>
+        </section>
+
+        <!-- ═══ ประวัติใบรับของที่นำเข้า (13 พ.ย. 2026) — ตรวจรับแล้วใบหายจาก 4.3.2 ต้องมีที่ให้กลับมาดู ═══ -->
+        <section class="view" id="view-externalgrhistory">
+          <div class="view-head">
+            <div><h1>ประวัติใบรับของที่นำเข้า</h1>
+              <p>ใบรับของทุกใบที่มาจากรายการขายออกของบริษัท — ทั้งที่ตรวจรับแล้ว ยังรอตรวจรับ และที่ถอนกลับไป
+                · <b>เลขเอกสาร TNK</b> คือเลขที่ใบกำกับภาษีฝั่งบริษัท ใช้จับคู่กับเอกสารของเราได้ทุกใบ</p></div>
+            <button class="btn" onclick="loadExternalGrHistory()">โหลดใหม่</button>
+          </div>
+          <div class="filter-bar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <label class="unit">ตั้งแต่ <input type="date" id="egh-from" onchange="loadExternalGrHistory()"></label>
+            <label class="unit">ถึง <input type="date" id="egh-to" onchange="loadExternalGrHistory()"></label>
+            <label class="unit">สถานะ <select id="egh-status" onchange="renderExternalGrHistory()">
+              <option value="">ทั้งหมด</option><option value="posted">ตรวจรับแล้ว</option>
+              <option value="pending_review">รอตรวจรับ</option><option value="cancelled">ถอน / ยกเลิก</option>
+            </select></label>
+            <span class="unit" id="egh-summary"></span>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>เลขเอกสาร TNK</th><th>เลขที่ใบรับของ</th><th>ใบสั่งซื้อ</th><th>วันที่รับ</th><th>คลัง</th>
+              <th>สถานะ</th><th>รายการ</th><th>มูลค่า</th><th>ตั้งหนี้</th><th></th></tr></thead>
+            <tbody id="egh-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+          </table></div>
         </section>
 
         <section class="view" id="view-warehousestock">
@@ -3016,7 +3040,10 @@ const NAV_GROUPS = [
     // ★ 2 ต.ค. 2026 ย้ายมาจากโมดูล 2 (เดิม 2.4) — เจ้าของระบบสั่ง: งานนี้คือการเพิ่มจำนวนสินค้าเข้าคลัง คนจะนึกถึงโมดูลคลังก่อน
     { n:'4.3', label:'นำเข้าจากรายการขายออกของบริษัท', items:[
       {n:'4.3.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner'},
-      {n:'4.3.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'} ]},
+      {n:'4.3.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'},
+      // 13 พ.ย. 2026 — ตรวจรับแล้วใบหายจาก 4.3.2 ทันที ผู้ใช้หาประวัติที่นำเข้าไม่เจอ (4.2.1 มีใบแต่คนละกลุ่มเมนู
+      // และไม่โชว์เลขเอกสารฝั่ง TNK ซึ่งเป็นกุญแจจับคู่กับบริษัท)
+      {n:'4.3.3', label:'ประวัติใบรับของที่นำเข้า', view:'externalgrhistory', mod:'inventory', ready:true, scope:'both'} ]},
     { n:'4.7', label:'ตั้งค่าคลัง', items:[
       {n:'4.7.1', label:'ทะเบียนคลังสินค้า', view:'warehouses', mod:'inventory', ready:true, scope:'both'} ]},
     { n:'4.8', label:'รายงานเคลื่อนไหวสินค้า', items:[
@@ -3578,6 +3605,7 @@ const LOADERS = {
   vendors: loadVendors, approvalflows: loadApprovalFlows, purchasereqs: loadPurchaseReqs,
   purchaseorders: loadPurchaseOrders, goodsreceipts: loadGoodsReceipts, warehousestock: loadWarehouseStock,
   externalsalesimport: loadExternalSalesImport, pendinggoodsreceipts: loadPendingGoodsReceipts,
+  externalgrhistory: loadExternalGrHistory,
   apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes,
   acctsettings: loadAcctSettings, vatreport: loadVatReport, billingnotes: loadBillingNotes,
   creditcontrol: loadCreditControl,
@@ -9032,9 +9060,9 @@ async function billFromGr(grId){
 async function loadGoodsReceipts(){
   const body = document.getElementById('grs-body');
   if (!grsCache.length) grsCache = listSnapLoad('goodsreceipts') || [];
-  if (grsCache.length) renderGrs(); else tblLoading(body, 7);
+  if (grsCache.length) renderGrs(); else tblLoading(body, 8);
   const r = await callApi('listGoodsReceipts', {});
-  if (!r.success) { if (!grsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="7">'+esc(r.message)+'</td></tr>'; return; }
+  if (!r.success) { if (!grsCache.length) body.innerHTML = '<tr class="empty-row"><td colspan="8">'+esc(r.message)+'</td></tr>'; return; }
   grsCache = r.data;
   listSnapSave('goodsreceipts', grsCache);
   renderGrs();
@@ -9042,11 +9070,13 @@ async function loadGoodsReceipts(){
 function renderGrs(){
   document.getElementById('grs-body').innerHTML = rowsOrEmpty(grsCache.map(g =>
     '<tr><td class="mono-data">'+esc(g.grNo)+'</td><td class="mono-data">'+esc(g.receiveDate)+'</td>' +
-    '<td class="clickable-row" onclick="openPoDetail('+g.poId+')">'+dash(g.poNo)+'</td><td>'+dash(g.vendorName)+'</td>' +
+    '<td class="clickable-row" onclick="openPoDetail('+g.poId+')">'+dash(g.poNo)+'</td>' +
+    // เลขที่ใบกำกับภาษีฝั่งบริษัท (เฉพาะใบที่นำเข้าจากรายการขายออก) — ว่างคือใบที่คีย์เองในระบบ
+    '<td class="mono-data">'+dash(g.sourceRef)+'</td><td>'+dash(g.vendorName)+'</td>' +
     '<td>'+g.itemCount+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
     '<td>'+(g.billNo ? '<span class="pill ok">'+esc(g.billNo)+'</span>'
       : (canEdit('accounting') ? '<button class="btn btn-sm" onclick="billFromGrList('+g.id+')">ตั้งหนี้</button>' : '<span class="muted">—</span>'))+'</td></tr>').join(''),
-    7, 'ยังไม่มีใบรับของ');
+    8, 'ยังไม่มีใบรับของ');
 }
 async function billFromGrList(grId){
   const inv = prompt('เลขที่ใบแจ้งหนี้ของผู้ขาย (ไม่บังคับ)'); if (inv === null) return;
@@ -9054,6 +9084,86 @@ async function billFromGrList(grId){
   if (!r.success) { toast(r.message, true); return; }
   apCache = []; toast(r.message); loadGoodsReceipts();
 }
+
+/* ═══ 4.3.3 ประวัติใบรับของที่นำเข้า (13 พ.ย. 2026 — ผู้ใช้สั่ง) ═══
+   ★ ทำไมต้องมี: 4.3.2 โชว์แค่ใบที่ยัง `pending_review` — **กดตรวจรับแล้วใบหายจากหน้าจอทันที** แล้วไม่มีทาง
+     กลับไปดูว่ารับอะไรเข้ามาบ้าง · 4.2.1 มีใบอยู่ครบแต่อยู่คนละกลุ่มเมนู คนที่ทำงานใน 4.3 ไม่เจอ
+   ★★ โชว์ **เลขเอกสาร TNK** (`source_ref` = InvoiceNumber ของชีต D365) เป็นคอลัมน์แรก — เป็นกุญแจจับคู่
+     ตัวเดียวที่มีระหว่างใบของเรา (GR/PO) กับใบกำกับภาษีฝั่งบริษัท ไม่มีช่องนี้ = กระทบยอดกันไม่ได้
+   ★ รายการสินค้ามาพร้อมในคำขอเดียวแล้วเปิดดูในหน้าต่าง — ไม่ยิง getGoodsReceipt ทีละใบ (คำขอละ ~1.5 วิ) */
+const EGH_PILL = { posted: 'ok', pending_review: 'wait', cancelled: 'off' };
+const EGH_LABEL = { posted: 'ตรวจรับแล้ว', pending_review: 'รอตรวจรับ', cancelled: 'ถอน / ยกเลิก' };
+let eghCache = [];
+/* ★ ห้ามใช้ `toISOString()` หาวันที่ — มันคืนเวลา UTC ไทยอยู่ UTC+7 ช่วง 00:00-07:00 จะได้ "เมื่อวาน"
+     แล้วช่อง "ถึง" เป็นวันวาน ของที่รับเข้าเช้านี้หายไปจากรายการโดยไม่มีอะไรบอก */
+const eghDay = back => {
+  const d = new Date(Date.now() - back * 864e5);
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+};
+
+async function loadExternalGrHistory(){
+  const fEl = document.getElementById('egh-from'), tEl = document.getElementById('egh-to');
+  if (!fEl.value) fEl.value = eghDay(90);
+  if (!tEl.value) tEl.value = eghDay(0);
+  const from = fEl.value, to = tEl.value;
+  /* ★ คีย์ snapshot ผูกกับช่วงวันที่ด้วย — ไม่งั้นเปลี่ยนช่วงแล้วเห็นของช่วงเก่าค้าง 2 วินาที
+     แล้วนึกว่าตัวกรองไม่ทำงาน (กติกาข้อ 6 ของ CLAUDE.md ไม่ได้เผื่อหน้าที่มีตัวกรองไว้) */
+  const key = 'extgrhistory|' + from + '|' + to;
+  eghCache = listSnapLoad(key) || [];
+  if (eghCache.length) renderExternalGrHistory(); else tblLoading(document.getElementById('egh-body'), 10);
+  const r = await callApi('listExternalGoodsReceiptHistory', { from, to });
+  if (!r.success) {
+    if (!eghCache.length) document.getElementById('egh-body').innerHTML = '<tr class="empty-row"><td colspan="10">'+esc(r.message)+'</td></tr>';
+    return;
+  }
+  eghCache = r.data;
+  listSnapSave(key, eghCache);
+  renderExternalGrHistory();
+}
+
+function renderExternalGrHistory(){
+  const want = document.getElementById('egh-status').value;
+  const rows = want ? eghCache.filter(g => g.status === want) : eghCache;
+  document.getElementById('egh-body').innerHTML = rowsOrEmpty(rows.map(g =>
+    '<tr><td class="mono-data"><b>'+dash(g.sourceRef)+'</b></td><td class="mono-data">'+esc(g.grNo)+'</td>' +
+    '<td'+(g.poId ? ' class="clickable-row" onclick="openPoDetail('+g.poId+')"' : '')+'>'+dash(g.poNo)+'</td>' +
+    '<td class="mono-data">'+esc(g.receiveDate)+'</td><td>'+dash(g.warehouseName)+'</td>' +
+    '<td><span class="pill '+(EGH_PILL[g.status] || 'off')+'">'+esc(EGH_LABEL[g.status] || g.status)+'</span></td>' +
+    '<td>'+g.itemCount+'</td><td class="mono-data">฿'+bahtPlain(g.amount)+'</td>' +
+    '<td class="mono-data">'+dash(g.billNo)+'</td>' +
+    '<td><button class="btn btn-sm" onclick="eghOpen('+g.id+')">ดูรายการ</button></td></tr>').join(''),
+    10, 'ไม่มีใบรับของที่นำเข้าในช่วงวันที่นี้');
+  const sum = rows.reduce((s, g) => s + (parseFloat(g.amount) || 0), 0);
+  document.getElementById('egh-summary').innerHTML = rows.length
+    ? rows.length + ' ใบ · รวม ฿' + bahtPlain(sum) : '';
+}
+
+// รายการสินค้าของใบนั้น — ข้อมูลอยู่ในมือแล้วจากคำขอเดียวตอนโหลดรายการ จึงเปิดได้ทันทีไม่ต้องรอเน็ต
+function eghOpen(id){
+  const g = eghCache.filter(x => String(x.id) === String(id))[0];
+  if (!g) { toast('ไม่พบใบรับของนี้ในรายการที่โหลดไว้ — กดโหลดใหม่', true); return; }
+  plModal('<h3>ใบรับของ ' + esc(g.grNo) + '</h3>' +
+    '<div class="form-grid" style="margin-bottom:10px">' +
+      '<div><span class="unit">เลขเอกสาร TNK (ใบกำกับภาษีของบริษัท)</span><div class="mono-data"><b>'+dash(g.sourceRef)+'</b></div></div>' +
+      '<div><span class="unit">ใบสั่งซื้อของเรา</span><div class="mono-data">'+dash(g.poNo)+'</div></div>' +
+      '<div><span class="unit">วันที่รับของ</span><div class="mono-data">'+esc(g.receiveDate)+'</div></div>' +
+      '<div><span class="unit">สถานะ</span><div><span class="pill '+(EGH_PILL[g.status] || 'off')+'">'+esc(EGH_LABEL[g.status] || g.status)+'</span></div></div>' +
+      '<div><span class="unit">คลังที่รับเข้า</span><div>'+dash(g.warehouseName)+'</div></div>' +
+      '<div><span class="unit">ใบตั้งหนี้</span><div class="mono-data">'+dash(g.billNo)+'</div></div>' +
+    '</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>รหัส</th><th>สินค้า</th><th>จำนวนรับ</th><th>หน่วย</th>' +
+      '<th>ต่อหน่วย</th><th>หน่วยฐานที่เข้าสต็อก</th><th>ต้นทุน/หน่วยฐาน</th><th>มูลค่า</th></tr></thead><tbody>' +
+      rowsOrEmpty(g.items.map(it =>
+        '<tr><td class="mono-data">'+dash(it.productCode)+'</td><td>'+esc(it.productName)+'</td>' +
+        '<td class="mono-data">'+it.qty+'</td><td>'+esc(it.unitCode)+'</td><td class="mono-data">'+it.unitFactor+'</td>' +
+        '<td class="mono-data">'+it.baseQty+'</td><td class="mono-data">฿'+bahtPlain(it.unitCost)+'</td>' +
+        '<td class="mono-data">฿'+bahtPlain(it.amount)+'</td></tr>').join(''), 8, 'ใบนี้ไม่มีรายการสินค้า') +
+      '</tbody></table></div>' +
+    (g.note ? '<p class="form-hint" style="white-space:pre-wrap;margin-top:10px"><b>หมายเหตุ / ประวัติการแก้ตอนตรวจรับ</b>\n'+esc(g.note)+'</p>' : '') +
+    '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
+}
+
 /* ═══ นำเข้ารายการขายออกของบริษัท → PO+GR ของศูนย์ (2026-10-02) ═══
    หน้านี้ยิง previewExternalSalesImport ซึ่งอ่านชีตภายนอก 256,484 แถว — ช้า (~2 นาที) ตั้งใจไม่ทำ
    ตอนเปิดหน้าอัตโนมัติ ต้องกดปุ่ม "ตรวจรายการใหม่" เอง จะได้ไม่ไปรอทุกครั้งที่แวะเข้าเมนู */

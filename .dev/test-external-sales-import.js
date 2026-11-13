@@ -316,5 +316,62 @@ console.log('\n── ★ ตรวจรับแล้วลงบัญชี
   ctx.jvFails = false;
 }
 
+console.log('\n── 4.3.3 ประวัติใบรับของที่นำเข้า (ผู้ใช้สั่ง 13 พ.ย. 2026) ──');
+/* ★ 4.3.2 กรองแค่ pending_review — ตรวจรับแล้วใบหายจากหน้าจอทันที ไม่มีทางกลับไปดูว่ารับอะไรเข้ามา
+   หน้านี้คือที่เดียวที่จับคู่ "เลขเอกสารฝั่ง TNK (source_ref)" กับใบรับของ/ใบสั่งซื้อของเราได้ */
+{
+  const today = new Date().toISOString().slice(0, 10);
+  const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const D3 = {
+    products: [{ record_id: 1, product_code: 'P1', name: 'สินค้า 1' }],
+    warehouses: [{ record_id: 1, name: 'คลังศูนย์' }],
+    purchase_orders: [{ record_id: 10, po_no: 'PO-A', source_ref: 'IV-A' }, { record_id: 11, po_no: 'PO-B', source_ref: 'IV-B' },
+                      { record_id: 12, po_no: 'PO-C', source_ref: 'IV-C' }, { record_id: 13, po_no: 'PO-MANUAL', source_ref: '' },
+                      { record_id: 14, po_no: 'PO-OLD', source_ref: 'IV-OLD' }],
+    ap_bills: [{ record_id: 5, gr_id: 20, bill_no: 'AP-1', status: 'posted' },
+               { record_id: 6, gr_id: 21, bill_no: 'AP-VOID', status: 'void' }],   // ใบที่ void แล้วต้องไม่นับว่าตั้งหนี้แล้ว
+    goods_receipts: [
+      { record_id: 20, gr_no: 'GR-20', po_id: 10, warehouse_id: 1, source_ref: 'IV-A', status: 'posted', receive_date: daysAgo(3), journal_id: 900, note: 'ตรวจรับแล้ว', created_at: '2026-11-10 09:00:00', created_by: 'system:auto' },
+      { record_id: 21, gr_no: 'GR-21', po_id: 11, warehouse_id: 1, source_ref: 'IV-B', status: 'pending_review', receive_date: today, journal_id: '', note: '', created_at: '', created_by: 'system:auto' },
+      { record_id: 22, gr_no: 'GR-22', po_id: 12, warehouse_id: 1, source_ref: 'IV-C', status: 'cancelled', receive_date: daysAgo(1), journal_id: '', note: 'ถอนกลับ', created_at: '', created_by: '' },
+      { record_id: 23, gr_no: 'GR-23', po_id: 13, warehouse_id: 1, source_ref: '', status: 'posted', receive_date: today, journal_id: '', note: 'คีย์เองในระบบ', created_at: '', created_by: 'u1' },
+      { record_id: 24, gr_no: 'GR-24', po_id: 14, warehouse_id: 1, source_ref: 'IV-OLD', status: 'posted', receive_date: daysAgo(200), journal_id: '', note: '', created_at: '', created_by: 'system:auto' }
+    ],
+    gr_items: [{ record_id: 200, gr_id: 20, product_id: 1, qty: 10, unit_code: 'CT', unit_factor: 60, base_qty: 600, unit_cost: 10, amount: 6000 },
+               { record_id: 201, gr_id: 20, product_id: 1, qty: 2, unit_code: 'CT', unit_factor: 60, base_qty: 120, unit_cost: 10, amount: 1200 },
+               { record_id: 202, gr_id: 21, product_id: 1, qty: 1, unit_code: 'CT', unit_factor: 60, base_qty: 60, unit_cost: 10, amount: 600 },
+               { record_id: 203, gr_id: 24, product_id: 1, qty: 1, unit_code: 'CT', unit_factor: 60, base_qty: 60, unit_cost: 10, amount: 600 }]
+  };
+  Object.assign(ctx, {
+    _dOnly: v => String(v || ''), _todayStr: () => today,
+    centralObjects: name => D3[name] || [], _scoped: name => D3[name] || [],
+    _childrenOf: (name, fk, id) => (D3[name] || []).filter(r => String(r[fk]) === String(id))
+  });
+
+  const h = ctx.listExternalGoodsReceiptHistory({ adminUserId: 'u1' }, {});
+  eq('ไม่ส่งช่วงวันที่ = ย้อนหลัง 90 วัน · เอาเฉพาะใบที่มีเลขเอกสาร TNK (ใบที่คีย์เองและใบเก่า 200 วันไม่ติดมา)',
+    h.data.map(g => g.sourceRef), ['IV-B', 'IV-C', 'IV-A']);
+  eq('  ★ เรียงใหม่สุดอยู่บน (วันนี้ → เมื่อวาน → 3 วันก่อน)', h.data.map(g => g.grNo), ['GR-21', 'GR-22', 'GR-20']);
+  eq('  ★★ ทุกใบบอกเลขเอกสารฝั่ง TNK คู่กับเลขใบรับของและใบสั่งซื้อของเรา — กุญแจจับคู่ที่ขาดไปก่อนหน้านี้',
+    h.data.map(g => g.sourceRef + '=' + g.grNo + '/' + g.poNo), ['IV-B=GR-21/PO-B', 'IV-C=GR-22/PO-C', 'IV-A=GR-20/PO-A']);
+
+  const a = h.data.find(g => g.sourceRef === 'IV-A');
+  eq('  รายการสินค้ามาพร้อมในคำขอเดียว (ไม่ต้องยิง getGoodsReceipt ทีละใบ) พร้อมรหัส/ชื่อ/หน่วยฐาน/ต้นทุน',
+    [a.itemCount, a.items[0].productCode, a.items[0].baseQty, a.items[0].unitCost], [2, 'P1', 600, 10]);
+  eq('  มูลค่าใบ = ผลรวมของรายการในใบนั้น (6000 + 1200)', a.amount, 7200);
+  eq('  ใบที่ตั้งหนี้แล้วบอกเลขใบตั้งหนี้ · ใบสถานะยังอยู่ครบทั้งสามแบบ',
+    [a.billNo, a.status, h.data.find(g => g.sourceRef === 'IV-B').status, h.data.find(g => g.sourceRef === 'IV-C').status],
+    ['AP-1', 'posted', 'pending_review', 'cancelled']);
+  eq('  ใบตั้งหนี้ที่ void แล้วไม่นับว่าตั้งหนี้ (GR-21 ต้องว่าง)', h.data.find(g => g.grNo === 'GR-21').billNo, '');
+
+  const narrow = ctx.listExternalGoodsReceiptHistory({ adminUserId: 'u1' }, { from: daysAgo(2), to: today });
+  eq('ส่งช่วงวันที่มา → กรองตามนั้น (3 วันก่อนหลุดออกไป) และบอกช่วงที่ใช้กลับมาให้หน้าจอ',
+    [narrow.data.map(g => g.grNo), narrow.from, narrow.to], [['GR-21', 'GR-22'], daysAgo(2), today]);
+
+  const old = ctx.listExternalGoodsReceiptHistory({ adminUserId: 'u1' }, { from: daysAgo(201), to: daysAgo(199) });
+  eq('ย้อนไปช่วงเก่าได้ (ใบ 200 วันก่อนยังหาเจอ — ประวัติไม่ได้ถูกตัดทิ้ง แค่ไม่โหลดมาทั้งหมดโดยปริยาย)',
+    old.data.map(g => g.grNo), ['GR-24']);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
