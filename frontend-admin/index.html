@@ -680,7 +680,12 @@
   .top-right #who-name,.top-right #who-role,.top-right #who-tenant{ overflow:hidden; text-overflow:ellipsis; max-width:220px; }
   /* จอแคบ: ซ่อนชื่อ/บทบาทผู้ใช้ (ดูได้จากรูปโปรไฟล์อยู่แล้ว) เหลือปุ่มที่ต้องกดจริง */
   @media (max-width:1180px){ .top-right #who-name,.top-right #who-role,.top-right #who-tenant{ display:none; } }
-  .avatar{ width:30px; height:30px; background:var(--blue); font-size:12px; }
+  /* รูปโปรไฟล์กดได้ = หน้าต่าง "ข้อมูลผู้ใช้งาน" (ผู้ใช้สั่ง 13 พ.ย. 2026) — ต้องดูออกว่ากดได้
+     โดยไม่ต้องลองกด จึงมีวงแหวนจางรอบตัวและขยับขึ้นเล็กน้อยตอนชี้ */
+  .avatar{ width:30px; height:30px; background:var(--blue); font-size:12px; cursor:pointer;
+    box-shadow:0 0 0 2px var(--surface), 0 0 0 3px var(--border); transition:transform .12s, box-shadow .12s; }
+  .avatar:hover{ transform:translateY(-1px); box-shadow:0 0 0 2px var(--surface), 0 0 0 3px var(--blue); }
+  .avatar:focus-visible{ outline:2px solid var(--blue); outline-offset:3px; }
   /* ★ ไม่มีเพดานความกว้างแล้ว — ใช้เต็มจอ (เจ้าของระบบสั่ง 17 ต.ค. 2026 ให้เหมือนแอป PAOPAO Club Admin)
      ของเดิมตั้งเพดาน 1,280 (ตารางได้ 1,680 ผ่าน :has) ด้วยเหตุผลว่าฟอร์มที่กว้างเกินไป
      ตากวาดจากป้ายไปถึงช่องไม่ไหว · แต่บนจอ 1920 ที่ใช้งานจริง ผลคือแถบว่างสองข้างตลอดเวลา
@@ -1166,7 +1171,8 @@
           </div>
           <button class="btn btn-sm" onclick="gotoView('changepassword')">เปลี่ยนรหัสผ่าน</button>
           <button class="btn btn-sm" onclick="doLogout()">ออกจากระบบ</button>
-          <div class="avatar" id="who-avatar">-</div>
+          <div class="avatar" id="who-avatar" role="button" tabindex="0" title="ข้อมูลผู้ใช้งานของฉัน"
+               onclick="openMyProfile()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openMyProfile();}">-</div>
         </div>
       </header>
 
@@ -2738,6 +2744,74 @@ function finishLogin(data, username){
   localStorage.setItem(LS_SESSION, JSON.stringify(SESSION));
   routeAfterAuth();
 }
+/* ═══ ข้อมูลผู้ใช้งานของฉัน — กดรูปโปรไฟล์มุมขวาบน (ผู้ใช้สั่ง 13 พ.ย. 2026) ═══
+   ★★ ไม่ยิงคำขอเลยสักครั้ง — ทุกช่องมาจากของที่อยู่ในมือแล้ว (`SESSION` + `MY_PERMS` ซึ่งเก็บ
+      `modules`/`roleLabel` จาก `getAdminBootstrap` ไว้ตั้งแต่เปิดแอป) · หน้าต่างจึงกางทันที
+   ★★ "สังกัด" กับ "กำลังทำงานในนาม" เป็นคนละเรื่องและต้องแยกบรรทัดกันเสมอ — ฝั่งบริษัทที่สวมสิทธิ์
+      เข้าตัวแทนอยู่ จะเห็นเมนูชุดของตัวแทน ซึ่งเป็นต้นเหตุของคำถาม "ทำไมเมนูหาย" (ผู้ใช้ถามเองจริง
+      13 พ.ย. 2026 เรื่องเมนู 4.3.1) · หน้าต่างนี้จึงต้องตอบคำถามนั้นได้ด้วยตัวเอง
+   ★ ตารางสิทธิ์แสดง **เฉพาะโมดูลที่มีสิทธิ์** แล้วบอกจำนวนที่เหลือเป็นบรรทัดเดียว — ไล่โมดูลทั้ง 25 ตัว
+      ที่ส่วนใหญ่เป็น "ไม่มีสิทธิ์" ทำให้หาของที่ตัวเองมีไม่เจอ */
+function openMyProfile(){
+  if (!SESSION) return;
+  const effTenant = EFFECTIVE_TENANT_ID();
+  const tenantName = tid => { const t = tenantsCache.find(x => String(x.tenantId) === String(tid)); return t ? t.name : ''; };
+  const row = (k, v) => '<div><span class="unit">' + k + '</span><div>' + v + '</div></div>';
+
+  // สังกัดจริงของบัญชี (ไม่ขึ้นกับการสวมสิทธิ์) — ค่าว่าง = บัญชีของบริษัทกลาง
+  const homeTxt = SESSION.tenantId
+    ? ('ตัวแทนจำหน่าย ' + esc(SESSION.tenantId) + (tenantName(SESSION.tenantId) ? ' · ' + esc(tenantName(SESSION.tenantId)) : ''))
+    : esc(COMPANY.name || 'บริษัทเจ้าของสินค้า');
+  // สมุด/บริษัทที่คำขอทุกอันกำลังวิ่งเข้าอยู่ตอนนี้
+  const nowTxt = effTenant
+    ? ('<b>ตัวแทนจำหน่าย ' + esc(effTenant) + '</b>' + (tenantName(effTenant) ? ' · ' + esc(tenantName(effTenant)) : ''))
+    : ('<b>' + esc(COMPANY.name || 'บริษัทเจ้าของสินค้า') + '</b>');
+  const actingNote = (!SESSION.tenantId && effTenant)
+    ? '<p class="form-hint" style="margin:8px 0 0">กำลังสวมสิทธิ์เข้าตัวแทนอยู่ — หน้าจอจะเห็นเมนูและข้อมูล' +
+      'ชุดของตัวแทนรายนี้ <b>เมนูที่เป็นงานของบริษัทล้วนๆ จะเป็นสีเทากดไม่ได้</b> ' +
+      'กด “↔ เปลี่ยนบริษัท” บนแถบบนเพื่อกลับไปทำงานในนามบริษัท</p>'
+    : '';
+
+  let permsHtml;
+  if (MY_PERMS.isSuper) {
+    permsHtml = '<p class="form-hint">บทบาทนี้เป็น <b>Ultra Admin</b> — เห็นและแก้ได้ทุกโมดูลโดยไม่ต้องติ๊กสิทธิ์รายโมดูล</p>';
+  } else if (!MY_PERMS.loaded) {
+    permsHtml = '<p class="form-hint">ยังโหลดสิทธิ์ไม่เสร็จ — เปิดใหม่อีกครั้งในอีกสักครู่</p>';
+  } else {
+    const mods = (MY_PERMS.modules || []);
+    const got = mods.filter(m => { const p = MY_PERMS.permissions[m.code]; return p && (p.view || p.edit); });
+    const none = mods.length - got.length;
+    permsHtml = got.length
+      ? '<div class="table-wrap"><table><thead><tr><th>โมดูล</th><th>ดู</th><th>แก้ไข</th></tr></thead><tbody>' +
+        got.map(m => { const p = MY_PERMS.permissions[m.code] || {};
+          return '<tr><td>' + esc(m.label || m.code) + ' <span class="muted mono-data">' + esc(m.code) + '</span></td>' +
+            '<td>' + (p.view ? '<span class="pill ok">ดูได้</span>' : '<span class="muted">—</span>') + '</td>' +
+            '<td>' + (p.edit ? '<span class="pill ok">แก้ได้</span>' : '<span class="muted">—</span>') + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' +
+        (none ? '<p class="form-hint">อีก ' + none + ' โมดูลยังไม่ได้รับสิทธิ์ — เมนูของโมดูลเหล่านั้นจะเป็นสีเทากดไม่ได้ ' +
+                'ต้องให้ผู้ดูแลติ๊กสิทธิ์ให้ที่เมนู ผู้ใช้งานและสิทธิ์ → บทบาท</p>' : '')
+      : '<p class="form-hint">บทบาทนี้ยังไม่ได้รับสิทธิ์โมดูลใดเลย — ติดต่อผู้ดูแลระบบ</p>';
+  }
+
+  plModal('<h3>ข้อมูลผู้ใช้งานของฉัน</h3>' +
+    '<div class="form-grid" style="margin-bottom:10px">' +
+      row('ชื่อที่แสดง', '<b>' + esc(SESSION.displayName || '—') + '</b>') +
+      row('ชื่อผู้ใช้', '<span class="mono-data">' + esc(SESSION.username || '—') + '</span>') +
+      row('บทบาท', esc(MY_PERMS.roleLabel || SESSION.roleCode || '—') +
+        ' <span class="muted mono-data">' + esc(SESSION.roleCode || '') + '</span>') +
+      row('สังกัด', homeTxt) +
+      row('กำลังทำงานในนาม', nowTxt) +
+      row('เข้าสู่ระบบด้วย LINE', SESSION.lineUserId
+        ? '<span class="pill ok">ผูกแล้ว</span> <span class="muted mono-data">' + esc(String(SESSION.lineUserId).slice(0, 10)) + '…</span>'
+        : '<span class="muted">ยังไม่ได้ผูก — ใช้ชื่อผู้ใช้/รหัสผ่าน</span>') +
+    '</div>' + actingNote +
+    '<h4 style="margin:14px 0 8px">สิทธิ์ที่ได้รับ</h4>' + permsHtml +
+    '<div class="form-actions">' +
+      '<button class="btn" onclick="plModalClose()">ปิด</button>' +
+      '<button class="btn" onclick="plModalClose();gotoView(\'changepassword\')">เปลี่ยนรหัสผ่าน</button>' +
+    '</div>');
+}
+
 function doLogout(){
   TOKEN = ''; SESSION = null; ACTIVE_TENANT_ID = null;
   localStorage.removeItem(LS_TOKEN); localStorage.removeItem(LS_SESSION);
@@ -2872,7 +2946,11 @@ function listSnapSave(name, rows){
    fromSnapshot = true → เป็นข้อมูลของเมื่อครู่ ให้ขึ้นป้าย "กำลังอัปเดต…" ไว้ */
 function applyBootstrap(b, fromSnapshot){
   if (!b) return;
-  if (b.permissions) MY_PERMS = { isSuper: !!b.isSuperAdmin, permissions: b.permissions, loaded: true };
+  /* ★ เก็บ modules (รหัส→ชื่อไทย) กับ roleLabel ไว้ด้วย — `getAdminBootstrap` ส่งมาให้อยู่แล้ว
+     หน้าต่าง "ข้อมูลผู้ใช้งาน" จึงวาดได้โดยไม่ต้องยิงคำขอเพิ่มสักครั้ง (กติกาความเร็วข้อ 1)
+     ★ ของเก่าใน snapshot ยังไม่มีสองช่องนี้ จึงต้องคงค่าเดิมไว้ ไม่ใช่เขียนทับด้วยค่าว่าง */
+  if (b.permissions) MY_PERMS = { isSuper: !!b.isSuperAdmin, permissions: b.permissions, loaded: true,
+    modules: b.modules || MY_PERMS.modules || [], roleLabel: b.roleLabel || MY_PERMS.roleLabel || '' };
   if (b.roleLabel) { const el = document.getElementById('who-role'); if (el) el.textContent = b.roleLabel; }
   if (b.company) { COMPANY = b.company; applyCompanyName(); }
   if (b.tenants) tenantsCache = b.tenants;
@@ -3039,7 +3117,9 @@ const NAV_GROUPS = [
     ]},
     // ★ 2 ต.ค. 2026 ย้ายมาจากโมดูล 2 (เดิม 2.4) — เจ้าของระบบสั่ง: งานนี้คือการเพิ่มจำนวนสินค้าเข้าคลัง คนจะนึกถึงโมดูลคลังก่อน
     { n:'4.3', label:'นำเข้าจากรายการขายออกของบริษัท', items:[
-      {n:'4.3.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner'},
+      // 13 พ.ย. 2026 — ฝั่งตัวแทน "โชว์เทา" ไม่ซ่อน (ผู้ใช้สั่ง) · เดิมหายทั้งเมนูทันทีที่ฝั่งบริษัทสวมสิทธิ์
+      // เข้าตัวแทน ทำให้คนที่สลับไปดู 4.3.2/4.3.3 นึกว่าเมนูหาย · เทาแล้วยังบอกได้ว่ามีอยู่และใครคุม
+      {n:'4.3.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner', grey:'tenant'},
       {n:'4.3.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'},
       // 13 พ.ย. 2026 — ตรวจรับแล้วใบหายจาก 4.3.2 ทันที ผู้ใช้หาประวัติที่นำเข้าไม่เจอ (4.2.1 มีใบแต่คนละกลุ่มเมนู
       // และไม่โชว์เลขเอกสารฝั่ง TNK ซึ่งเป็นกุญแจจับคู่กับบริษัท)
@@ -3218,7 +3298,7 @@ function applyCompanyName(){
    และ `permissions={}` ด่านจึงเห็นว่า "ไม่มีสิทธิ์แก้" แล้วซ่อนปุ่มทิ้ง — และเพราะมันลบ `onclick`
    ออกไปเลย ปุ่มจึงหายถาวรทั้ง session แม้สิทธิ์จะมาถึงทีหลังว่าเป็น super_admin ก็ตาม
    ★ อาการที่เห็น: หน้าบัญชีไม่มีปุ่ม "+ ออกใบลดหนี้" เลย ทั้งที่สิทธิ์ครบ (ผู้ใช้แจ้ง 24 ต.ค. 2026) */
-let MY_PERMS = { isSuper: false, permissions: {}, loaded: false };
+let MY_PERMS = { isSuper: false, permissions: {}, loaded: false, modules: [], roleLabel: '' };
 const canView = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].view);
 const canEdit = mod => !mod || MY_PERMS.isSuper || !!(MY_PERMS.permissions[mod] && MY_PERMS.permissions[mod].edit);
 
@@ -11060,7 +11140,7 @@ function submitRole(code){ return plBusy(async () => {
   const r = await callApi('saveRole', { code: code || undefined, label, description: document.getElementById('rf-desc').value.trim(), permissions });
   if (!r.success) return plModalErr(r.message);
   ROLES = r; plModalClose(); renderRoles(); toast(r.message || 'บันทึกแล้ว');
-  if (code && code === MY_PERMS.roleCode) { const p = await callApi('getMyPermissions', {}); if (p.success) { MY_PERMS = { isSuper: !!p.isSuperAdmin, permissions: p.permissions, loaded: true }; renderNav(); applyViewOnlyGuards(); } }
+  if (code && code === MY_PERMS.roleCode) { const p = await callApi('getMyPermissions', {}); if (p.success) { MY_PERMS = { isSuper: !!p.isSuperAdmin, permissions: p.permissions, loaded: true, modules: p.modules || MY_PERMS.modules || [], roleLabel: p.roleLabel || '' }; renderNav(); applyViewOnlyGuards(); } }
 }); }
 async function deleteRoleUI(code){
   const role = ROLES.data.find(r => r.code === code);
