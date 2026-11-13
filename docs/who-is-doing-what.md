@@ -22,11 +22,10 @@
 
 จับกุญแจ = เขียนชื่อเลนกับวันที่ · ปล่อย = เปลี่ยนกลับเป็น `— ว่าง`
 
-**ขึ้น prod แล้วถึง `ce665dd` · 13 พ.ย. 2026** (ไม่ต้องไล่อ่าน git log) — `main` ff-merge จาก `UAT` แล้ว
-และ Cloudflare build หน้า prod ใหม่แล้ว (ยืนยันจากหน้าที่เสิร์ฟจริง) · backend push เข้าโปรเจกต์ prod แล้ว
-**★ เหลือขั้นเดียว: Deploy → New version ของ prod** — ตรวจแล้วว่า deployment ปัจจุบันยังตอบ
-`ไม่พบ action: listExternalGoodsReceiptHistory` ดังนั้น **เมนู 4.3.3 กดแล้วยังขึ้น error และคอลัมน์
-"เลขเอกสาร TNK" ใน 4.2.1 ยังว่างทุกแถว จนกว่าจะ deploy**
+**ขึ้น prod แล้วถึง `ce665dd` · 13 พ.ย. 2026 — ครบทุกขั้น ไม่มีของค้าง** (ไม่ต้องไล่อ่าน git log)
+`main` ff-merge จาก `UAT` · Cloudflare build หน้า prod ใหม่แล้ว · backend push เข้าโปรเจกต์ prod ·
+**Deploy → New version แล้วทั้ง prod และ UAT** — ยิง `listExternalGoodsReceiptHistory` เข้า exec URL
+ของทั้งสอง env แล้วตอบ `authError` (= รู้จัก action แล้ว) ไม่ใช่ `ไม่พบ action` อีก
 รอบนี้ขึ้นไป: ไฟล์ Dashboard แยกส่วนลดสองชั้นถูกช่อง · `customer.csv` ทะเบียนร้านค้า ·
 เมนู 4.3.3 ประวัติใบรับของที่นำเข้า + เลขเอกสาร TNK
 
