@@ -785,17 +785,23 @@
   .tag-ok{ background:#EAF6EE; color:#1B7A43; border-color:#BFE3CC; }
   .tag-warn{ background:#FDF3E2; color:#8A5A12; border-color:#F0DCB4; }
   .tag-info{ background:#EAF1FD; color:#2B63D9; border-color:#C9DAF7; }
+  /* ══ ตัวหมุนรอ: วงแหวนมาตรฐาน TNK ทั้งแอป (spinner.js) ══
+     ★★ วงบนปุ่มมาจาก `tnkBusy()` เหมือนสูตร 4.4 ของมาตรฐาน แต่จัดไว้ "กลางปุ่ม"
+       แทนที่หน้าข้อความ — ปุ่มในแอปนี้สูง 26px ในโหมดกระชับและอยู่ติดกันหลายใบในช่องตาราง
+       วงที่หน้าข้อความดันปุ่มกว้างขึ้น ~24px กลางการกด แล้วแถบปุ่มเลื่อน/ตกบรรทัดทั้งแถบ
+       (บทเรียนเดิมของ `.sod-print-list .btn` ที่เจ้าของระบบส่งรูปมาว่า "ตีกันมั่ว")
+       ★ ตัววงแหวนไม่ถูกแก้สักนิด เปลี่ยนแค่ "ตำแหน่งที่วาง" ห้ามแก้ spinner.js */
   .btn.is-busy{ position:relative; color:transparent !important; pointer-events:none; }
-  .btn.is-busy::after{ content:''; position:absolute; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px;
-    border:2px solid currentColor; border-top-color:transparent; border-radius:50%; color:var(--ink-soft);
-    animation:btnspin .6s linear infinite; }
-  .btn-primary.is-busy::after{ color:#fff; }
-  @keyframes btnspin{ to{ transform:rotate(360deg); } }
-  /* หน้าต่างที่กางมารอข้อมูล — สูงพอให้กรอบไม่กระตุกตอนข้อมูลมาถึง */
-  .modal-wait{ display:flex; align-items:center; gap:10px; min-height:120px; padding:24px 2px;
-    color:var(--ink-soft); font-size:13px; }
-  .modal-wait .spin{ width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--brand,#2B63D9);
-    border-radius:50%; animation:btnspin .6s linear infinite; flex:0 0 auto; }
+  .btn.is-busy .tnk-btn-spin{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); margin:0; }
+  /* ★ วงหมุน "กลางจอจริง" (สูตร 4.2 ของมาตรฐาน) — หน้านี้มีเมนูข้าง
+     จัดกลางใน main จะเยื้องไปทางขวา จึงต้องเป็น fixed ୿ z-index อยู่เหนือแถบบน (20) แต่ใต้หน้าต่าง (60)
+     ★★ ต้องมี `[hidden]{display:none}` ด้วย เพราะกฮิ `display:grid` ของผู้เขียนชนะ `[hidden]`
+        ของเบราว์เหนอร์เสมอ — ตั้ง el.hidden = true แล้วของยังโผล่อยู่ (บทเรียนเดิมของ `.dgb`) */
+  .wait-page{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:50; }
+  .wait-page[hidden]{ display:none; }
+  .wait-page .tnk-wait{ min-height:0 !important; width:auto; }
+  /* ข้อความ "กำลังโหลด…" ที่แทรกอยู่ในบรรทัดข้อความอื่น (มาตรฐานข้อ 5.3 — ห้ามมีข้อความเปล่าๆ โดยไม่มีวง) */
+  .wait-inline{ display:inline-flex; align-items:center; gap:5px; vertical-align:-4px; }
   /* กฎกลาง: ช่องกรอกทุกตัวในทุกหน้าหน้าตาเดียวกัน แม้จะไม่ได้ใส่คลาส (เดิมบางหน้าใช้ <select>/<input> เปล่า ๆ
      เลยได้หน้าตา default ของเบราว์เซอร์ มุมเหลี่ยม ไม่มีกรอบ ดูหลุดจากหน้าอื่น) */
   .view input:not([type=checkbox]):not([type=radio]):not([type=file]),.view select,.view textarea{
@@ -1039,8 +1045,12 @@
   .busy-chip{ display:inline-flex; align-items:center; gap:6px; margin-left:10px; padding:2px 9px;
     border-radius:999px; background:var(--blue-pale); color:var(--blue); font-size:11px; font-weight:600; }
   .busy-chip[hidden]{ display:none; }
-  .busy-dot{ width:6px; height:6px; border-radius:50%; background:currentColor; animation:busyPulse 1s infinite; }
-  @keyframes busyPulse{ 0%,100%{opacity:.25} 50%{opacity:1} }
+  /* ★★ ป้ายนี้คือ "ตัวบอกว่ากำลังรอ" ตัวเดียวของแอป — มาตรฐาน TNK สูตร 4.5 ให้ใช้
+     `tnkNetBusy` เป็นไอคอนมุมขวาล่าง แต่แอปนี้มีป้ายที่แถบบนอยู่ก่อนแล้ว และเคยลองย้ายไปท้ายตาราง
+     แล้วตัวนับจำนวนแถวเขียนทับ (CLAUDE.md ความเร็ว ข้อ 5) — ใส่สองที่ = ผู้ใช้เห็นตัวบอกสองตัว
+     สำหรับเรื่องเดียว → คงป้ายไว้ เปลี่ยนแค่จุดกะพริบเป็นวงแหวนมาตรฐาน
+     (แนวเดียวกับ Pao Pao Club Admin ที่หัวข้อ 8 ของมาตรฐานรับรองไว้) */
+  .busy-spin{ display:inline-flex; flex:0 0 auto; }
 .pgr-off td{opacity:.45}.pgr-off td:first-child{opacity:1}
 .pf-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:0 0 12px}
 .pf-tab{background:none;border:none;border-bottom:2px solid transparent;padding:9px 18px;font:inherit;font-weight:600;color:var(--ink-soft);cursor:pointer}
@@ -1065,6 +1075,11 @@
      ผู้ใช้แจ้ง 18 ต.ค. 2026 -->
 <body class="sb-collapsed">
 <script src="config.js?v=20260924"></script>   <!-- ใส่ ?v= ทุกครั้งที่แก้ config.js: เบราว์เซอร์แคชไฟล์นี้ไว้ ถ้าไม่บัมป์ ผู้ใช้เดิมจะยังคุยกับ backend ตัวเก่า -->
+<!-- ★★ TNK spinner — วงแหวนมาตรฐานของทุกแอพในเครือ (ต้นหบับ: repo TNK-AppStore โฟลเดอร์ docs/spinner/)
+     ★ ห้ามแก้ spinner.js ในแอพ — ต้องเท่ากับต้นหบับเป๊นทุกไบต์ (เช็คด้วย md5sum) อยากแก้รูป/สี/ความเร็วให้แจ้งทีมไอที
+     ★ ต้องมาก่อนสคริปต์ของแอป เพราะ tnkWait/tnkBusy ถูกเรียกตั้งแต่ตอนวาดหน้าแรก
+     ไม่ต้องบัมป์ ?v= — `_headers` ตั้ง no-cache ให้ไฟล์นี้ไว้แล้ว (มาตรฐานข้อ 5.9) -->
+<script src="spinner.js"></script>
 <!-- pricelist-parser.js โหลดแบบ lazy ตอนเข้าหน้านำเข้าไฟล์ (ดู ensurePricelistParser) — ไม่ถ่วงการเปิดแอป -->
 <div id="env-banner" style="display:none"></div>
 
@@ -1114,7 +1129,7 @@
         <span class="txt"><div class="name" id="picker-owner-name">บริษัทเจ้าของสินค้า</div><div class="sub">เข้าใช้งานในฐานะบริษัท — เห็นทุกเมนูตามสิทธิ์ของบัญชีคุณ</div></span>
       </button>
       <hr class="picker-divider">
-      <div id="picker-tenants"><div class="sub" style="padding:8px 4px">กำลังโหลดรายชื่อตัวแทน...</div></div>
+      <div id="picker-tenants"><div class="tnk-wait" style="min-height:90px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลดรายชื่อตัวแทน…</span></div></div>
     </div>
   </div>
 </div>
@@ -1152,7 +1167,7 @@
     <div class="main-area">
       <header class="topbar">
         <div class="crumb">TOPSALES Admin / <b id="crumb-current">ภาพรวม</b>
-          <span class="busy-chip" id="busy-chip" hidden><span class="busy-dot"></span>กำลังอัปเดต…</span></div>
+          <span class="busy-chip" id="busy-chip" hidden><span class="busy-spin" data-tnk-spin="18"></span>กำลังอัปเดต…</span></div>
         <div class="top-right">
           <span id="who-name"></span> · <b id="who-role" class="mono-data"></b> <span id="who-tenant"></span>
           <button class="btn btn-sm" id="switch-company-btn" style="display:none" onclick="backToPicker()">↔ เปลี่ยนบริษัท</button>
@@ -1181,7 +1196,7 @@
         <!-- ═══ DASHBOARD ═══ -->
         <section class="view active" id="view-dashboard">
           <div class="view-head"><div><h1>ภาพรวม</h1><p id="dash-date">กำลังโหลด...</p></div></div>
-          <div class="kpi-row kpi-badges" id="dash-kpis"><div class="kpi"><div class="lbl">กำลังโหลด...</div><div class="val">—</div></div></div>
+          <div class="kpi-row kpi-badges" id="dash-kpis"><div class="tnk-wait" style="min-height:96px;flex:1 1 100%"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
           <!-- ★ แถวที่สอง: ยอดขายเดือนนี้ นับเฉพาะบิล "จัดส่งสำเร็จ" (เจ้าของระบบสั่ง 17 ต.ค. 2026)
                ใบแรกเป็นยอดรวมทั้งเดือน ใบถัดไปแยกตามพนักงานขาย · กดใบไหนก็ไปหน้ารายงานที่กรองไว้ให้แล้ว -->
           <div class="kpi-row kpi-chips" id="so-month-cards"></div>
@@ -1249,7 +1264,7 @@
           <div id="ud-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สังกัด</th><th>บทบาท / สิทธิ์</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead>
-            <tbody id="userdir-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+            <tbody id="userdir-body"><tr class="empty-row"><td colspan="7"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่มผู้ใช้งานใหม่ (แอดมิน)</h3>
@@ -1293,7 +1308,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>ชื่อร้าน</th><th>อำเภอ / จังหวัด</th><th>กลุ่ม / ประเภท</th><th>เบอร์โทร</th><th>เครดิต</th><th>ซื้อล่าสุด</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="customers-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+            <tbody id="customers-body"><tr class="empty-row"><td colspan="9"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -1348,7 +1363,7 @@
           <p class="form-hint sheet-mid" id="so-board-note" style="margin:0;padding:0 10px"></p>
           <div class="table-wrap sheet-bot"><table class="tbl-sticky-end">
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th>ยอดสุทธิ</th><th>ชำระเงิน</th><th>การจัดส่ง</th><th>สถานะ</th><th title="ของในคลังพอส่งใบนี้ไหม — เขียว=ครบ · ส้ม=ได้บางส่วน · แดง=ไม่มีของเลย">ของ</th><th>การเงิน</th><th>พนักงานขาย</th><th></th></tr></thead>
-            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
+            <tbody id="salesorders-body"><tr class="empty-row"><td colspan="12"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -1384,7 +1399,7 @@
           <div class="kpi-row kpi-chips" id="srp-sum" style="margin:12px 0"></div>
           <div class="table-wrap sheet-bot"><table>
             <thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ใบแจ้งหนี้/ใบกำกับภาษี</th><th>ลูกค้า</th><th>รหัสลูกค้า</th><th title="ยอดขายก่อนภาษี — ตัวเลขที่นับเป็นผลงานการขาย">ยอดขายก่อนภาษี</th><th title="ยอดรวมภาษีบนใบกำกับภาษี — เงินที่ต้องเก็บจากลูกค้าจริง">ยอดเก็บเงิน (รวมภาษี)</th><th>ชำระเงิน</th><th>สถานะ</th><th>การเงิน</th><th>พนักงานขาย</th></tr></thead>
-            <tbody id="srp-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
+            <tbody id="srp-body"><tr class="empty-row"><td colspan="11"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -1484,7 +1499,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>ชื่อประเภทเอกสาร</th><th>Prefix</th><th>รูปแบบวันที่</th><th>หลัก</th><th>เลขที่เอกสารถัดไป</th><th>รีเซ็ต</th><th>สถานะ</th></tr></thead>
-            <tbody id="docnum-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+            <tbody id="docnum-body"><tr class="empty-row"><td colspan="8"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่ม/แก้ไขรูปแบบเลขที่เอกสาร</h3>
@@ -1539,7 +1554,7 @@
           <div class="cat-filter" id="products-cat-filter"></div>
           <div class="table-wrap"><table>
             <thead><tr id="products-thead-row"></tr></thead>
-            <tbody id="products-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
+            <tbody id="products-body"><tr class="empty-row"><td colspan="12"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -1586,7 +1601,7 @@
           <div class="form-card">
             <div class="table-wrap"><table>
               <thead><tr><th>ชื่อกลุ่ม</th><th>คำอธิบาย</th></tr></thead>
-              <tbody id="pgroups-body"><tr class="empty-row"><td colspan="2">กำลังโหลด...</td></tr></tbody>
+              <tbody id="pgroups-body"><tr class="empty-row"><td colspan="2"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
             </table></div>
             <p id="pgroups-viewonly-hint" class="form-hint" style="display:none">ข้อมูลกลุ่มสินค้านี้บริษัทเป็นผู้ดูแล ดูได้แต่แก้ไม่ได้</p>
             <div id="pgroups-addform">
@@ -1634,7 +1649,7 @@
               <p class="form-hint" id="pf-units-hint">คลิกที่หน่วยในตารางเพื่อดู/แก้ไขข้อมูลของหน่วยนั้นด้านล่าง — Factor = 1 หน่วยนี้เท่ากับกี่หน่วยฐาน (สต็อกเก็บเป็นหน่วยฐานเสมอ)</p>
               <div class="table-wrap"><table>
                 <thead><tr><th>รหัสหน่วย</th><th>ชื่อหน่วย</th><th>Factor</th><th>ราคา</th><th>บาร์โค้ด</th><th>สถานะ</th></tr></thead>
-                <tbody id="pf-units-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+                <tbody id="pf-units-body"><tr class="empty-row"><td colspan="6"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
               </table></div>
               <div id="pf-unit-edit" style="margin-top:12px"></div>
             </div>
@@ -1654,7 +1669,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อชุดราคา</th><th>กลุ่มลูกค้า</th><th>ช่วงเวลา</th><th>รายการสินค้า</th><th>สถานะ</th></tr></thead>
-            <tbody id="pricelists-body"><tr class="empty-row"><td colspan="5">กำลังโหลด...</td></tr></tbody>
+            <tbody id="pricelists-body"><tr class="empty-row"><td colspan="5"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -1671,7 +1686,7 @@
           <div id="pld-editbar"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>สินค้า</th><th>บรรจุ</th><th>ราคาตั้ง (ไม่รวม VAT)</th><th>ช่วงจำนวน</th><th>เงินสด (รวม VAT)</th><th>ลด %</th><th>เครดิต (รวม VAT)</th><th>ลด %</th></tr></thead>
-            <tbody id="pld-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+            <tbody id="pld-body"><tr class="empty-row"><td colspan="8"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card" id="pld-dist-card">
             <h3>จ่ายให้ตัวแทน — ใครได้ใช้ชุดนี้</h3>
@@ -1784,7 +1799,7 @@
       โปรซ้อนบนชุดราคาได้ (ชุดราคา = ราคาตั้ง · โปร = ส่วนลดเพิ่ม) · เครื่องยนต์คำนวณซ้ำเสมอตอนบันทึกขายจริง</p></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อ</th><th>ประเภท</th><th>มูลค่า</th><th>ช่วงเวลา</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="promotions-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <tbody id="promotions-body"><tr class="empty-row"><td colspan="6"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>สร้างโปรโมชั่นใหม่</h3>
@@ -1835,7 +1850,7 @@
           <div class="view-head"><div><h1>กลุ่มลูกค้า</h1><p>ข้อมูลกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — จัดการได้เฉพาะบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อกลุ่ม</th><th>คำอธิบาย</th></tr></thead>
-            <tbody id="custgroups-body"><tr class="empty-row"><td colspan="2">กำลังโหลด...</td></tr></tbody>
+            <tbody id="custgroups-body"><tr class="empty-row"><td colspan="2"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่มกลุ่มลูกค้าใหม่</h3>
@@ -1872,7 +1887,7 @@
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่ใบกำกับ</th><th>วันที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>วิธีชำระ</th>
               <th>มูลค่าก่อนภาษี</th><th>ภาษี</th><th>รวม</th><th>ลงบัญชี</th><th></th></tr></thead>
-            <tbody id="ti-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+            <tbody id="ti-body"><tr class="empty-row"><td colspan="10"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -1888,7 +1903,7 @@
               <button class="btn btn-primary" onclick="openWarehouseModal()">+ เพิ่มคลัง</button></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>ชื่อคลัง</th><th>หน้าที่</th><th>ที่อยู่</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="wh-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <tbody id="wh-body"><tr class="empty-row"><td colspan="6"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -1897,7 +1912,7 @@
           <div class="view-head"><div><h1>ช่องทางการจัดจำหน่าย</h1><p>ข้อมูลกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — จัดการได้เฉพาะบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อช่องทาง</th><th>คำอธิบาย</th><th>สถานะ</th></tr></thead>
-            <tbody id="distchannels-body"><tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr></tbody>
+            <tbody id="distchannels-body"><tr class="empty-row"><td colspan="3"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่มช่องทางการจัดจำหน่ายใหม่</h3>
@@ -1914,7 +1929,7 @@
           <div class="view-head"><div><h1>ประเภทการชำระเงิน</h1><p>ข้อมูลกลาง ใช้ร่วมกันทุกตัวแทนจำหน่าย — จัดการได้เฉพาะบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>ชื่อ</th><th>สถานะ</th></tr></thead>
-            <tbody id="paytypes-body"><tr class="empty-row"><td colspan="3">กำลังโหลด...</td></tr></tbody>
+            <tbody id="paytypes-body"><tr class="empty-row"><td colspan="3"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>เพิ่มประเภทการชำระเงินใหม่</h3>
@@ -1997,7 +2012,7 @@
           <div class="view-head"><div><h1>ตัวแทนจำหน่าย</h1><p>สร้าง Tenant Sheet ใหม่ให้ตัวแทนแต่ละราย — ฝั่งบริษัทเจ้าของสินค้าเท่านั้น</p></div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>ชื่อ</th><th>Customer account (D365)</th><th>ภาค</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
-            <tbody id="tenants-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <tbody id="tenants-body"><tr class="empty-row"><td colspan="6"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card">
             <h3>สร้างตัวแทนใหม่</h3>
@@ -2079,7 +2094,7 @@
             <div><h1>บทบาทและสิทธิ์</h1><p>กำหนดว่าบทบาทไหนเห็นเมนูอะไร และแก้ไขอะไรได้บ้าง — ผู้ใช้แต่ละคนถือ 1 บทบาท</p></div>
             <button class="btn btn-primary" onclick="openRoleForm(null)">+ สร้างบทบาทใหม่</button>
           </div>
-          <div id="roles-list"><p class="form-hint">กำลังโหลด...</p></div>
+          <div id="roles-list"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
         </section>
 
         <!-- ═══ คู่มือใช้งานระบบ (module 8, เจ้าของระบบสั่ง 2026-09-29) ═══
@@ -2105,7 +2120,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>ชื่อผู้ขาย</th><th>ผู้ติดต่อ</th><th>โทร</th><th>เครดิต (วัน)</th><th>สถานะ</th></tr></thead>
-            <tbody id="vendors-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <tbody id="vendors-body"><tr class="empty-row"><td colspan="6"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2115,7 +2130,7 @@
             <div><h1>สายอนุมัติใบขอซื้อ</h1><p>ออกแบบขั้นตอน เงื่อนไขวงเงิน และจำนวนผู้อนุมัติที่ต้องผ่านในแต่ละขั้น — ใบขอซื้อจะเลือกสายให้เองตามวงเงินรวม</p></div>
             <button class="btn btn-primary" onclick="openFlowForm()">+ เพิ่มสายอนุมัติ</button>
           </div>
-          <div id="flows-list"><p class="form-hint">กำลังโหลด...</p></div>
+          <div id="flows-list"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
         </section>
 
         <!-- ═══ งานซื้อ: ใบขอซื้อ ═══ -->
@@ -2129,7 +2144,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>ผู้ขอ</th><th>แผนก</th><th>ต้องการใช้</th><th>รายการ</th><th>ยอด (ไม่รวม VAT)</th><th>สถานะ</th></tr></thead>
-            <tbody id="prs-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+            <tbody id="prs-body"><tr class="empty-row"><td colspan="7"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2157,7 +2172,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>ผู้ขาย</th><th>วันที่สั่ง</th><th>กำหนดรับ</th><th>ยอดรวม</th><th>รับแล้ว</th><th>สถานะ</th></tr></thead>
-            <tbody id="pos-body"><tr class="empty-row"><td colspan="7">กำลังโหลด...</td></tr></tbody>
+            <tbody id="pos-body"><tr class="empty-row"><td colspan="7"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2185,7 +2200,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>วันที่รับ</th><th>ใบสั่งซื้อ</th><th>เลขเอกสาร TNK</th><th>ผู้ขาย</th><th>รายการ</th><th>มูลค่า</th><th>ตั้งหนี้แล้ว</th></tr></thead>
-            <tbody id="grs-body"><tr class="empty-row"><td colspan="8">กำลังโหลด...</td></tr></tbody>
+            <tbody id="grs-body"><tr class="empty-row"><td colspan="8"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2208,7 +2223,7 @@
               <p>ใบรับของกึ่งสำเร็จรูปจากรายการขายออกของบริษัท — ตรวจว่ารายการตรงกับของที่รับจริง แก้จำนวนได้ก่อนกดยืนยัน
                 ยืนยันแล้วระบบจะเพิ่มสต็อกให้ทันที</p></div>
           </div>
-          <div id="pgr-body"><p class="unit">กำลังโหลด...</p></div>
+          <div id="pgr-body"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
         </section>
 
         <!-- ═══ ประวัติใบรับของที่นำเข้า (13 พ.ย. 2026) — ตรวจรับแล้วใบหายจาก 4.3.2 ต้องมีที่ให้กลับมาดู ═══ -->
@@ -2231,7 +2246,7 @@
           <div class="table-wrap"><table>
             <thead><tr><th>เลขเอกสาร TNK</th><th>เลขที่ใบรับของ</th><th>ใบสั่งซื้อ</th><th>วันที่รับ</th><th>คลัง</th>
               <th>สถานะ</th><th>รายการ</th><th>มูลค่า</th><th>ตั้งหนี้</th><th></th></tr></thead>
-            <tbody id="egh-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+            <tbody id="egh-body"><tr class="empty-row"><td colspan="10"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2243,7 +2258,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>รหัส</th><th>สินค้า</th><th>หมวด</th><th>หมวดย่อย</th><th>คลัง</th><th>คงเหลือ</th><th>จองแล้ว</th><th>ขายได้</th><th>หน่วย</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่า</th><th></th></tr></thead>
-            <tbody id="ws-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
+            <tbody id="ws-body"><tr class="empty-row"><td colspan="12"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card" id="ws-ledger-card" style="display:none"><h3 id="ws-ledger-title">ความเคลื่อนไหว</h3><div id="ws-ledger"></div></div>
         </section>
@@ -2260,7 +2275,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>ผู้ขาย</th><th>อ้างอิง</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>จ่ายแล้ว</th><th>คงค้าง</th><th>สถานะ</th></tr></thead>
-            <tbody id="ap-body"><tr class="empty-row"><td colspan="9">กำลังโหลด...</td></tr></tbody>
+            <tbody id="ap-body"><tr class="empty-row"><td colspan="9"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card" id="ap-aging-card" style="display:none"><h3>อายุหนี้เจ้าหนี้</h3><div id="ap-aging"></div></div>
         </section>
@@ -2277,7 +2292,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>ลูกค้า</th><th>บิลขาย</th><th>เลขใบกำกับ</th><th>วันที่</th><th>ครบกำหนด</th><th>ยอดรวม</th><th>รับแล้ว</th><th>คงค้าง</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="ar-body"><tr class="empty-row"><td colspan="11">กำลังโหลด...</td></tr></tbody>
+            <tbody id="ar-body"><tr class="empty-row"><td colspan="11"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card" id="ar-aging-card" style="display:none"><h3>อายุหนี้ลูกหนี้</h3><div id="ar-aging"></div></div>
         </section>
@@ -2303,7 +2318,7 @@
           <div class="table-wrap"><table>
             <thead><tr><th>ชนิด</th><th>เลขที่</th><th>วันที่</th><th>ลูกค้า</th><th>อ้างใบแจ้งหนี้</th>
               <th>บิลขาย</th><th>เหตุผล</th><th>ก่อนภาษี</th><th>ภาษี</th><th>รวม</th><th>ของ</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="adj-body"><tr class="empty-row"><td colspan="13">กำลังโหลด...</td></tr></tbody>
+            <tbody id="adj-body"><tr class="empty-row"><td colspan="13"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2319,7 +2334,7 @@
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>วันที่</th><th>บิลขาย</th><th>ลูกค้า</th><th>เหตุผล</th>
               <th>รายการ</th><th>มูลค่า</th><th>เข้าคลัง</th><th>ของเสีย</th><th>ใบลดหนี้</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="grn-body"><tr class="empty-row"><td colspan="12">กำลังโหลด...</td></tr></tbody>
+            <tbody id="grn-body"><tr class="empty-row"><td colspan="12"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2333,7 +2348,7 @@
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>วันที่วางบิล</th><th>ลูกค้า</th><th>จำนวนใบ</th>
               <th>ยอดวางบิล</th><th>เก็บได้แล้ว</th><th>คงค้าง</th><th>นัดชำระ</th><th>สถานะ</th><th></th></tr></thead>
-            <tbody id="bn-body"><tr class="empty-row"><td colspan="10">กำลังโหลด...</td></tr></tbody>
+            <tbody id="bn-body"><tr class="empty-row"><td colspan="10"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
         </section>
 
@@ -2358,7 +2373,7 @@
                 <th>รหัส</th><th>ร้าน</th><th>เครดิต (วัน)</th><th>วงเงิน</th><th>ค้างชำระ</th>
                 <th>ยังไม่ออกใบแจ้งหนี้</th><th>เลยกำหนด</th><th>ค้างมา (วัน)</th><th>วงเงินคงเหลือ</th><th>เกินวงเงิน</th>
               </tr></thead>
-              <tbody id="cc-body"><tr><td colspan="10">กำลังโหลด...</td></tr></tbody>
+              <tbody id="cc-body"><tr><td colspan="10"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
             </table>
           </div>
         </section>
@@ -2374,7 +2389,7 @@
               <button class="btn" onclick="printVatReport('purchase')">พิมพ์ภาษีซื้อ</button>
             </div>
           </div>
-          <div id="vat-body"><p class="form-hint">กำลังโหลด...</p></div>
+          <div id="vat-body"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
         </section>
 
         <!-- ═══ ตั้งค่าทางบัญชี: วิธีตัดต้นทุนขาย (50_cogs.gs) ═══ -->
@@ -2383,7 +2398,7 @@
             <div><h1>ตั้งค่าทางบัญชี</h1>
               <p data-book-sub="วิธีที่ระบบใช้ลงบัญชีต้นทุนขาย · สมุดบัญชีของ">วิธีที่ระบบใช้ลงบัญชีต้นทุนขายเมื่อของออกจากคลังเพราะการขาย</p></div>
           </div>
-          <div id="acct-settings-body"><p class="form-hint">กำลังโหลด...</p></div>
+          <div id="acct-settings-body"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
         </section>
 
         <!-- ═══ บัญชี: แยกประเภท ═══ -->
@@ -2400,7 +2415,7 @@
           </div>
           <div class="table-wrap"><table>
             <thead><tr><th>เลขที่</th><th>วันที่</th><th>ที่มา</th><th>คำอธิบาย</th><th>ยอด</th><th>สถานะ</th></tr></thead>
-            <tbody id="gl-body"><tr class="empty-row"><td colspan="6">กำลังโหลด...</td></tr></tbody>
+            <tbody id="gl-body"><tr class="empty-row"><td colspan="6"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></td></tr></tbody>
           </table></div>
           <div class="form-card" id="gl-tb-card" style="display:none"><h3>งบทดลอง</h3><div id="gl-tb"></div></div>
         </section>
@@ -2508,7 +2523,7 @@ const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','upd
      ตกหล่น = ไม่มีวงหมุน ปุ่มไม่ถูกปิด และกดซ้ำได้ — เงียบสนิทจนกว่าจะมีคนกดสองที */
   'resetAdminUserPasswordByAdmin','uploadTenantLogo','addProductGroup','addDistributionChannel','addPaymentType',
   'importPriceList','updatePriceList','addPromotion','updatePromotion','deactivatePromotion',
-  'backfillUserAffiliations','cancelPurchaseRequisition','cancelGoodsReceipt','saveGlAccount','postManualJournal']);
+  'backfillUserAffiliations','backfillGrJournals','cancelPurchaseRequisition','cancelGoodsReceipt','saveGlAccount','postManualJournal']);
 // action ที่ "สร้างของใหม่" — ต้องแนบ requestId (ต้องตรงกับ IDEMPOTENT_ACTIONS ฝั่ง backend)
 const IDEMPOTENT_ACTIONS = new Set(['recordSaleAdmin','savePurchaseRequisition','savePurchaseOrder','receiveGoods',
   'createApBillFromGr','createApBillManual','payApBills','createArInvoice','receiveArPayment','createTenant','addCustomerAdmin',
@@ -2522,8 +2537,8 @@ function _pressedButton(){
 }
 function _setBusy(btn, on){
   if (!btn) return;
-  btn.disabled = on;
   btn.classList.toggle('is-busy', on);
+  tnkBusy(btn, on);     // มาตรฐาน TNK: ใส่/เอาวงแหวน และ disable/enable ปุ่มให้ในคำสั่งเดียว
 }
 
 /* ★ ป้าย "กำลังอัปเดต…" — คุมจากที่เดียวคือ callApi
@@ -2536,6 +2551,18 @@ function _busyChip(on){
   const el = document.getElementById('busy-chip');
   if (el) el.hidden = _busyCount === 0;
 }
+
+/* ★★ วงแหวนกลางจอ — ใช้เฉพาะจังหวะ "เปิดโปรแกรม" ที่ยังไม่มีอะไรให้ดูเลยจริงๆ (สูตร 4.2 ของมาตรฐาน TNK)
+   ★ ห้ามเอาไปครอบการโหลดหน้าทั่วไป — กติกาข้อ 2 ของแอปนี้คือ "วาดจาก snapshot ก่อนเสมอ"
+     เอาแผ่นนี้ไปคลุมทับของที่วาดได้แล้วใน 60 ms = ยกเลิกสิ่งที่ตั้งใจทำไว้ทั้งหมด
+     หน้าที่โหลดข้อมูลปกติใช้ tblLoading() / tnkWait() ในพื้นที่ของตัวเองเท่านั้น */
+function tnkPageWait(caption, size){
+  let el = document.getElementById('tnk-page-wait');
+  if (!el) { el = document.createElement('div'); el.id = 'tnk-page-wait'; el.className = 'wait-page'; document.body.appendChild(el); }
+  el.innerHTML = tnkWait(0, caption || 'กำลังโหลด…', size || 96);
+  el.hidden = false;
+}
+function tnkPageWaitOff(){ const el = document.getElementById('tnk-page-wait'); if (el) el.hidden = true; }
 
 /* opts.quiet = งานเบื้องหลังที่ผู้ใช้ไม่ได้สั่ง (โหลดล่วงหน้า) — ห้ามขึ้นป้าย "กำลังอัปเดต…"
    ป้ายมีไว้บอกว่า "สิ่งที่คุณเพิ่งสั่งกำลังทำอยู่" ถ้ามันกะพริบตามเมาส์ด้วย ความหมายนั้นจะหายไป */
@@ -2626,11 +2653,18 @@ async function handleLineCallback(){
   const errEl = document.getElementById('login-err'); errEl.style.display = 'none';
   if (saved && state !== saved) { errEl.textContent = 'การเข้าสู่ระบบด้วย LINE ไม่ถูกต้อง (state ไม่ตรง) กรุณาลองใหม่'; errEl.style.display = 'block'; return true; }
   const btn = document.getElementById('line-login-btn'); btn.disabled = true; btn.textContent = 'กำลังยืนยันกับ LINE...';
+  // ★ จังหวะ "เปิดโปรแกรม" ตัวจริง: หน้าเพิ่งโหลดกลับมาจาก LINE พร้อม ?code= แล้วรอ backend แลกเป็น session
+  //   ไม่มีอะไรให้ดูนอกจากปุ่มที่ถูกปิด → วงแหวนกลางจอตามเช็กลิสต์ข้อแรกของมาตรฐาน
+  tnkPageWait('กำลังยืนยันตัวตนกับ LINE…', 96);
+  /* ★★ ยืนยันผ่านแล้ว = ส่งไม้ต่อให้ enterApp() ซึ่งกาง "กำลังเตรียมระบบ…" ของตัวเองไว้แล้ว (แบบ sync
+     ก่อน await แรกของมัน) ถ้า finally ตรงนี้ปิดแผ่นทิ้ง วงที่ enterApp เพิ่งกางจะหายไปทันที
+     แล้วเครื่องที่ยังไม่มี snapshot จะนั่งมองจอว่าง 4-5 วินาที — จุดที่งานนี้ตั้งใจแก้พอดี */
+  let handoff = false;
   try {
     const res = await fetch(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({ action:'adminLoginWithLine', payload:{ code, redirectUrl: lineRedirectUrl() } }) });
     const data = await res.json();
-    if (data.success) { finishLogin(data); return true; }
+    if (data.success) { handoff = true; finishLogin(data); return true; }
     if (data.needRegister) {                       // ยังไม่มีบัญชี → สมัครต่อด้วยตั๋วที่ผูกกับ LINE ที่ยืนยันแล้ว
       SIGNUP_TICKET = data.signupTicket || '';
       showSignup();
@@ -2648,7 +2682,7 @@ async function handleLineCallback(){
     errEl.textContent = data.message || 'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ'; errEl.style.display = 'block';
   } catch (e) {
     errEl.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message; errEl.style.display = 'block';
-  } finally { btn.disabled = false; btn.innerHTML = btn.dataset.label || btn.innerHTML; }
+  } finally { if (!handoff) tnkPageWaitOff(); btn.disabled = false; btn.innerHTML = btn.dataset.label || btn.innerHTML; }
   return true;
 }
 
@@ -2834,7 +2868,7 @@ async function showCompanyPicker(){
   document.getElementById('app-screen').style.display = 'none';
   document.getElementById('picker-screen').style.display = 'flex';
   const list = document.getElementById('picker-tenants');
-  list.innerHTML = '<div class="sub" style="padding:8px 4px">กำลังโหลดรายชื่อตัวแทน...</div>';
+  list.innerHTML = tnkWait(90, 'กำลังโหลดรายชื่อตัวแทน…', 56);
   const snap = snapLoad();
   if (snap && snap.data) {                       // รายชื่อของเมื่อครู่ขึ้นก่อน แล้วค่อยรีเฟรช
     if (snap.data.company) { COMPANY = snap.data.company; applyCompanyName(); }
@@ -2998,10 +3032,14 @@ async function enterApp(){
   // โหลดสิทธิ์จริงของผู้ใช้ + ชื่อบริษัท แล้ววาดเมนู/ป้ายบริบทอีกรอบ (ครั้งแรกวาดแบบเห็นทุกเมนูไปก่อนเพื่อไม่ให้หน้าค้าง)
   const snap = snapLoad();
   if (snap) applyBootstrap(snap.data, true);          // ของเมื่อครู่ — เห็นทันที
+  // ★ ไม่มี snapshot = เครื่องใหม่/ล้างแคช ไม่มีอะไรให้ดูเลยจริงๆ 4-5 วินาที → วงแหวนกลางจอ
+  //   มี snapshot แล้วห้ามคลุม (กติกาข้อ 2) ป้าย "กำลังอัปเดต…" บนแถบบนบอกอยู่แล้วว่าของสดกำลังมา
+  else tnkPageWait('กำลังเตรียมระบบ…', 96);
   let b = await callApi('getAdminBootstrap', {});     // สิทธิ์ + บริษัท + ตัวแทน + แดชบอร์ด ในคำขอเดียว
   // backend รุ่นเก่า (ยังไม่ deploy) ไม่มี action นี้ — ถอยไปใช้วิธีเดิมหลายคำขอ เพื่อให้หน้าเว็บยังทำงานได้
   if (b && !b.success && /ไม่พบ action/.test(b.message || '')) b = await legacyBootstrap();
   BOOT_IN_FLIGHT = false;
+  tnkPageWaitOff();
   if (b && b.success) { applyBootstrap(b, false); snapSave(b); }
   else if (!snap) { const d = document.getElementById('dash-date'); if (d) d.textContent = (b && b.message) || 'โหลดข้อมูลไม่สำเร็จ'; }
 }
@@ -3555,7 +3593,7 @@ const CR_PILL = { pending: 'wait', approved: 'ok', rejected: 'off' };
 async function loadCustRequests(){
   const box = document.getElementById('cr-list');
   const status = document.getElementById('cr-filter').value;
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listCustomerRequests', { status });
   if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   CR_ROWS = r.requests || []; CR_SHOPTYPES = r.shopTypes || []; CR_GROUPS = r.groups || [];
@@ -4672,7 +4710,7 @@ function renderSalesOrders(){
 async function renderSalesOrderBoard(){
   const el = document.getElementById('so-board');
   if (!window.DragBoard) {
-    el.innerHTML = '<p class="form-hint">กำลังโหลดกระดาน…</p>';
+    el.innerHTML = tnkWait(120, 'กำลังโหลดกระดาน…', 56);
     try { await ensureDragBoard(); } catch(e){ el.innerHTML = '<p class="form-hint">โหลดกระดานไม่สำเร็จ</p>'; return; }
     if (soViewMode !== 'board') return;         // ผู้ใช้สลับกลับไปแล้วระหว่างรอโหลด
   }
@@ -5060,7 +5098,7 @@ function sodPreview(id){
     ' · ' + esc(o.createdAt || '') +
     ' · ' + soStatusPill(o.status) + ' ' + soPayPill(o.paymentStatus) +
     ' · <b class="mono-data">฿' + baht(o.total) + '</b>' +
-    ' <span class="unit">กำลังโหลดรายการ…</span>';
+    ' <span class="unit wait-inline">' + tnkSpinner(18) + 'กำลังโหลดรายการ…</span>';
   return true;
 }
 /* ── แท็บของหน้ารายละเอียดบิล: รายการขาย ↔ การจัดส่ง (15 ต.ค. 2026) ──
@@ -6959,7 +6997,7 @@ let PL_MODAL_WAIT = 0;
 function plModalWait(title, hint){
   PL_MODAL_WAIT++;
   plModal('<h3>' + title + '</h3>' +
-    '<div class="modal-wait"><span class="spin"></span>' + (hint || 'กำลังโหลดข้อมูล…') + '</div>' +
+    tnkWait(120, hint || 'กำลังโหลดข้อมูล…', 56) +
     '<div class="form-actions"><button class="btn" onclick="plModalClose()">ปิด</button></div>');
   return PL_MODAL_WAIT;
 }
@@ -6969,8 +7007,10 @@ const plModalActions = (fn, label) => '<div class="err" id="plm-err" style="marg
 // กันกดซ้ำระหว่างรอ backend (UAT บางทีช้า 10+ วิ)
 async function plBusy(fn){
   const b = document.getElementById('plm-save'); if (b && b.disabled) return;
-  const label = b ? b.textContent : ''; if (b) { b.disabled = true; b.textContent = 'กำลังบันทึก...'; }
-  try { await fn(); } finally { if (b && document.body.contains(b)) { b.disabled = false; b.textContent = label; } }
+  const label = b ? b.textContent : '';
+  // ★ ลำดับสำคัญ: เขียนข้อความก่อน แล้วค่อย tnkBusy — กลับกันแล้ว textContent จะล้างวงทิ้ง (มาตรฐานข้อ 5.7)
+  if (b) { b.textContent = 'กำลังบันทึก...'; tnkBusy(b, true); }
+  try { await fn(); } finally { if (b && document.body.contains(b)) { tnkBusy(b, false); b.textContent = label; } }
 }
 document.addEventListener('keydown', e => {
   const m = document.getElementById('pl-modal'); if (!m || m.style.display !== 'flex') return;
@@ -7065,7 +7105,7 @@ async function ensureRuleMeta(){
 async function loadPriceListRules(){
   const box = document.getElementById('pld-rules');
   if (!box) return;
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   PLR_TARGET = 'price_list';
   const r = await callApi('listPriceListRules', { priceListId: currentPriceListId, targetType: PLR_TARGET });
   if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
@@ -7245,7 +7285,7 @@ async function loadCustLists(){
   const box = document.getElementById('cl-list');
   document.getElementById('cl-members').innerHTML = '';
   if (!CL_LISTS.length) CL_LISTS = listSnapLoad('custlists') || [];
-  if (CL_LISTS.length) renderClLists(); else box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  if (CL_LISTS.length) renderClLists(); else box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listCustomerLists', {});
   if (!r.success) { if (!CL_LISTS.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   CL_LISTS = r.data || [];
@@ -7294,7 +7334,7 @@ async function deleteClUI(id, force){
 async function openClMembers(id){
   CL_CUR = CL_LISTS.find(x => String(x.id)===String(id)) || { id };
   const box = document.getElementById('cl-members');
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listCustomerListMembers', { id });
   if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   const rows = r.data || [];
@@ -7336,7 +7376,7 @@ async function loadFreeGoods(){
   document.getElementById('fg-detail').style.display = 'none';
   box.style.display = '';
   if (!FG_SETS.length) FG_SETS = listSnapLoad('freegoods') || [];
-  if (FG_SETS.length) renderFgList(); else box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  if (FG_SETS.length) renderFgList(); else box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listFreeGoodsSets', {});
   if (!r.success) { if (!FG_SETS.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   FG_SETS = r.data || [];
@@ -7524,7 +7564,7 @@ const PKG_STATE = {};   // 'ชนิด|id' → { assigned:[], tenants:[] }
 async function loadPackageTenants(type, id, boxId){
   const box = document.getElementById(boxId);
   if (!box) return;
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listPackageTenants', { packageType: type, packageId: id });
   if (!r.success) { box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   PKG_STATE[type+'|'+id] = { assigned: r.assigned || [], tenants: r.tenants || [] };
@@ -9338,7 +9378,7 @@ let PGR_PRODUCTS = null;   // รายการสินค้าไว้เ�
 let PGR_ACTIVE = null;     // id ใบที่เปิดแท็บอยู่
 async function loadPendingGoodsReceipts(){
   const box = document.getElementById('pgr-body');
-  box.innerHTML = '<p class="unit">กำลังโหลด...</p>';
+  box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listPendingExternalGoodsReceipts', {});
   if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   if (!r.data.length) { box.innerHTML = '<p class="unit">ไม่มีใบรับของค้างตรวจรับ</p>'; return; }
@@ -9599,7 +9639,7 @@ function renderWarehouseStock(){
 async function showLedger(productId, name){
   const card = document.getElementById('ws-ledger-card');
   card.style.display = ''; document.getElementById('ws-ledger-title').textContent = 'ความเคลื่อนไหว — ' + name;
-  document.getElementById('ws-ledger').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  document.getElementById('ws-ledger').innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listStockLedger', { productId, limit: 50 });
   if (!r.success) { document.getElementById('ws-ledger').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   document.getElementById('ws-ledger').innerHTML = r.data.length ? r.data.map(l =>
@@ -9687,7 +9727,7 @@ function submitApPay(){ return plBusy(async () => {
 }); }
 async function openApAging(){
   const card = document.getElementById('ap-aging-card');
-  card.style.display = ''; document.getElementById('ap-aging').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  card.style.display = ''; document.getElementById('ap-aging').innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('getApAging', {});
   if (!r.success) { document.getElementById('ap-aging').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   document.getElementById('ap-aging').innerHTML = agingTable(r.data, 'ผู้ขาย');
@@ -10081,7 +10121,7 @@ async function loadVatReport(){
   const mEl = document.getElementById('vat-month');
   if (!mEl.value) mEl.value = new Date().toISOString().slice(0, 7);
   const box = document.getElementById('vat-body');
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const [sum, sales, pur] = await Promise.all([
     callApi('getVatSummary', { month: mEl.value }),
     callApi('getVatSalesReport', { month: mEl.value }),
@@ -10923,7 +10963,7 @@ function submitArReceive(){ return plBusy(async () => {
 }); }
 async function openArAging(){
   const card = document.getElementById('ar-aging-card');
-  card.style.display = ''; document.getElementById('ar-aging').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  card.style.display = ''; document.getElementById('ar-aging').innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('getArAging', {});
   if (!r.success) { document.getElementById('ar-aging').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   document.getElementById('ar-aging').innerHTML = agingTable(r.data, 'ลูกค้า');
@@ -11000,7 +11040,7 @@ function submitJournal(){ return plBusy(async () => {
 }); }
 async function loadTrialBalance(){
   const card = document.getElementById('gl-tb-card');
-  card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  card.style.display = ''; document.getElementById('gl-tb').innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('getTrialBalance', {});
   if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   card.querySelector('h3').textContent = 'งบทดลอง — ' + currentBookName();
@@ -11016,7 +11056,7 @@ const acctRows = (rows, sign) => rows.map(a => '<div class="activity-row"><span 
   '</span><span class="amt mono-data">฿'+bahtPlain(sign ? a.balance : a.balance)+'</span></div>').join('') || '<p class="form-hint">ไม่มีรายการ</p>';
 async function loadIncomeStatement(){
   const card = document.getElementById('gl-tb-card');
-  card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  card.style.display = ''; document.getElementById('gl-tb').innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('getIncomeStatement', {});
   if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   card.querySelector('h3').textContent = 'งบกำไรขาดทุน (ทุกงวดที่มีข้อมูล) — ' + currentBookName();
@@ -11030,7 +11070,7 @@ async function loadIncomeStatement(){
 }
 async function loadBalanceSheet(){
   const card = document.getElementById('gl-tb-card');
-  card.style.display = ''; document.getElementById('gl-tb').innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  card.style.display = ''; document.getElementById('gl-tb').innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('getBalanceSheet', {});
   if (!r.success) { document.getElementById('gl-tb').innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   card.querySelector('h3').textContent = 'งบแสดงฐานะการเงิน ณ ' + r.asOf + ' — ' + currentBookName();
@@ -11084,7 +11124,7 @@ async function saveCompanySettings(){
 let ROLES = { data: [], modules: [], myPermissions: {} };
 async function loadRoles(){
   const box = document.getElementById('roles-list');
-  box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>';
+  box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   const r = await callApi('listRolesWithPermissions', {});
   if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   ROLES = r; renderRoles();
@@ -11220,7 +11260,7 @@ function tblLoading(body, cols){
   if (!body) return;
   const hasRows = [...body.rows].some(r => !r.classList.contains('empty-row'));
   if (!hasRows) {
-    body.innerHTML = '<tr class="empty-row"><td colspan="' + cols + '">กำลังโหลด...</td></tr>';
+    body.innerHTML = '<tr class="empty-row"><td colspan="' + cols + '">' + tnkWait(120, 'กำลังโหลด…', 56) + '</td></tr>';
     return;
   }
   // มีของเดิมอยู่แล้ว — คงไว้ให้ใช้งานต่อได้ ผู้ใช้อ่าน/ค้นหาของเดิมได้ระหว่างรอ
@@ -11764,7 +11804,7 @@ function helpRenderBody(text){
 
 async function loadHelpCenter(){
   const box = document.getElementById('hc-list');
-  if (!helpArticles.length) { helpArticles = listSnapLoad('helparticles') || []; if (helpArticles.length) { renderHelpCats(); renderHelpList(); } else box.innerHTML = '<p class="form-hint">กำลังโหลด...</p>'; }
+  if (!helpArticles.length) { helpArticles = listSnapLoad('helparticles') || []; if (helpArticles.length) { renderHelpCats(); renderHelpList(); } else box.innerHTML = tnkWait(120, 'กำลังโหลด…', 56); }
   const r = await callApi('listHelpArticles', { includeInactive: true });
   if (!r.success) { if (!helpArticles.length) box.innerHTML = '<p class="form-hint">'+esc(r.message)+'</p>'; return; }
   helpArticles = r.data; helpCanEdit = !!r.canEdit;

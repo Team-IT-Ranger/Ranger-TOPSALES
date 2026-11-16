@@ -3,3 +3,8 @@
 # (ปัญหาเดิมที่ต้องคอยบัมป์ ?v= เอง ตอนอยู่บน GitHub Pages — ใช้ header คุมแทนแล้วไม่ต้องจำอีก)
 /config.js
   Cache-Control: no-store
+
+# spinner.js = วงแหวนมาตรฐาน TNK (มาตรฐานข้อ 5.9 สั่งไว้)
+# กำกับด้วย header เหมือน config.js — ไม่ต้องไล่บัมป์ ?v= เวลาอัปเดตไฟล์จากต้นหบับ
+/spinner.js
+  Cache-Control: no-cache
