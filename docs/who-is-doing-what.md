@@ -21,11 +21,12 @@
 | แก้ข้อมูลเป็นชุดบน UAT | — ว่าง | — | `applyCustomerBulkAssign`, `migrate*`, e2e ที่สร้างตัวแทนทิ้งไว้ — ทำตอนอีกคนดูราคาอยู่ ผลจะอธิบายไม่ได้ |
 
 จับกุญแจ = เขียนชื่อเลนกับวันที่ · ปล่อย = เปลี่ยนกลับเป็น `— ว่าง`
-**★ ค้างอยู่: Ultra Admin ใช้เมนู 4.3.1 ในนามตัวแทนได้** (16 พ.ย. 2026 — บน `UAT` แล้ว ยังไม่ขึ้น `main`)
-— **เป็น backend เปลี่ยน** (`43_external_sales_import.gs`) → ต้อง `clasp push` + Deploy → New version ทั้ง UAT และ prod ก่อนแตะ `main`
-· **ลำดับ: backend ก่อน → เจ้าของระบบ deploy → ค่อย merge `main`** ถ้าหน้าเว็บขึ้นก่อน backend เก่าจะโชว์และนำเข้าได้ทุกศูนย์ไม่กรอง
-· เทสต์ `.dev/test-external-sales-import.js` ผ่านครบ · ตรรกะเมนู ตรวจบนเบราว์เซอร์แล้ว · **UAT: push + Deploy แล้ว** (16 พ.ย. 2026 — ดึงเนื้อโค้ดของเวอร์ชัน @171 ที่ deployment ชี้อยู่มาเทียบแล้วเจอโค้ดใหม่ — คำอธิบายเวอร์ชันยังเป็นของ 2 ต.ค. ไม่บอกอะไร)
-· **prod: `clasp push` แล้ว (16 พ.ย. 2026 17:01) แต่ยังไม่ Deploy** — deployment ที่คนใช้จริง (`AKfycbxGSgR4…`) ยังชี้ @76 เดิม จึงยังไม่มีอะไรเปลี่ยนบน prod · `main` ยังไม่ขยับ
+**ขึ้น prod แล้วถึง `2e4752b` · 16 พ.ย. 2026 — Ultra Admin ใช้เมนู 4.3.1 ในนามตัวแทนได้ — ครบทุกขั้น ไม่มีของค้าง**
+ลำดับที่ใช้: `clasp push` UAT → Deploy UAT → `clasp push` prod → เจ้าของระบบ Deploy prod → ค่อย `main`
+· **ตรวจจริงแล้วทุกชั้น**: deployment prod `AKfycbxGSgR4…` ขยับ @76 → **@77** และดึงเนื้อโค้ด @77 มาเทียบแล้วเจอ `_extImportScope` · ยิง exec URL สดซึ่งสอง action ตอบ "ต้องล็อกอิน" (รู้จัก) ไม่ใช่ "ไม่พบ action"
+· หน้าเว็บ prod build ใหม่แล้ว (curl เจอ `superTenant` + `esiRenderScope`)
+· **★ กับดักตอนยิงทดสอบ exec URL ด้วย curl**: ห้ามใส่ `-X POST` — Apps Script ตอบ 302 แล้วต้องตามด้วย GET บังคับ POST ซ้ำจะได้หน้า HTML error แทน JSON
+ใช้ `curl -sL -H 'Content-Type: text/plain' --data '{"action":"..."}' <url>` แทน
 
 
 **ขึ้น prod แล้วถึง `41780a2` · 16 พ.ย. 2026 — วงแหวนมาตรฐานครบทั้งสองแอป ไม่มีของค้าง**
