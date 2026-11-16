@@ -2556,13 +2556,23 @@ function _busyChip(on){
    ★ ห้ามเอาไปครอบการโหลดหน้าทั่วไป — กติกาข้อ 2 ของแอปนี้คือ "วาดจาก snapshot ก่อนเสมอ"
      เอาแผ่นนี้ไปคลุมทับของที่วาดได้แล้วใน 60 ms = ยกเลิกสิ่งที่ตั้งใจทำไว้ทั้งหมด
      หน้าที่โหลดข้อมูลปกติใช้ tblLoading() / tnkWait() ในพื้นที่ของตัวเองเท่านั้น */
+/* ★★ ตาข่ายกันวงค้าง: ปิดเองเมื่อเกินเวลา ไม่ว่าใครจะลืมเรียก tnkPageWaitOff()
+   วงที่ค้างกลางจอทำให้ผู้ใช้คิดว่าโปรแกรมแฮงก์ ทั้งที่ของพร้อมใช้งานอยู่ข้างหลังแล้ว (pointer-events:none
+   จึงกดอะไรทะลุได้ตามปกติ — ยิ่งสับสนเข้าไปอีกว่า "ค้างหรือไม่ค้าง")
+   30 วินาทีเผื่อไว้ยาวกว่าคำขอที่ช้าที่สุดของ Apps Script มาก มันจึงไม่เคยตัดงานที่ยังทำอยู่จริง */
+let TNK_PAGE_WAIT_T = 0;
 function tnkPageWait(caption, size){
   let el = document.getElementById('tnk-page-wait');
   if (!el) { el = document.createElement('div'); el.id = 'tnk-page-wait'; el.className = 'wait-page'; document.body.appendChild(el); }
   el.innerHTML = tnkWait(0, caption || 'กำลังโหลด…', size || 96);
   el.hidden = false;
+  clearTimeout(TNK_PAGE_WAIT_T);
+  TNK_PAGE_WAIT_T = setTimeout(tnkPageWaitOff, 30000);
 }
-function tnkPageWaitOff(){ const el = document.getElementById('tnk-page-wait'); if (el) el.hidden = true; }
+function tnkPageWaitOff(){
+  clearTimeout(TNK_PAGE_WAIT_T); TNK_PAGE_WAIT_T = 0;
+  const el = document.getElementById('tnk-page-wait'); if (el) el.hidden = true;
+}
 
 /* opts.quiet = งานเบื้องหลังที่ผู้ใช้ไม่ได้สั่ง (โหลดล่วงหน้า) — ห้ามขึ้นป้าย "กำลังอัปเดต…"
    ป้ายมีไว้บอกว่า "สิ่งที่คุณเพิ่งสั่งกำลังทำอยู่" ถ้ามันกะพริบตามเมาส์ด้วย ความหมายนั้นจะหายไป */
@@ -2847,6 +2857,7 @@ function openMyProfile(){
 }
 
 function doLogout(){
+  tnkPageWaitOff();            // ออกจากระบบกลางคันระหว่างรอ — อย่าทิ้งวงค้างไว้บนหน้าเข้าสู่ระบบ
   TOKEN = ''; SESSION = null; ACTIVE_TENANT_ID = null;
   localStorage.removeItem(LS_TOKEN); localStorage.removeItem(LS_SESSION);
   document.getElementById('app-screen').style.display = 'none';
@@ -2865,6 +2876,11 @@ function routeAfterAuth(){
   else enterApp();
 }
 async function showCompanyPicker(){
+  /* ★★ ปิดวงกลางจอที่ handleLineCallback ส่งไม้ต่อมา — หน้านี้มีวงรอของตัวเองในช่องรายชื่อตัวแทนอยู่แล้ว
+     เดิมไม่มีบรรทัดนี้ แล้วบัญชีฝั่งบริษัท (ซึ่งเด้งมาหน้าเลือกบริษัทเสมอ) จะเหลือวงค้างกลางจอตลอด
+     เพราะ enterApp() เป็นที่เดียวที่เคยปิดให้ แต่เส้นทางนี้ไม่ได้ผ่าน enterApp (ผู้ใช้เจอ 16 พ.ย. 2026)
+     ★ routeAfterAuth() มีปลายทางแค่สองทาง — ที่นี่กับ enterApp() ทั้งสองทางต้องปิดวงเองเสมอ */
+  tnkPageWaitOff();
   document.getElementById('app-screen').style.display = 'none';
   document.getElementById('picker-screen').style.display = 'flex';
   const list = document.getElementById('picker-tenants');
