@@ -30,6 +30,11 @@
 · **ตรวจแล้วว่า Cloudflare build หน้า prod ใหม่จริง**: curl เจอ `tnkPageWaitOff` · ไม่เหลือ `busy-dot` ของเก่า
 · ช่อง `data-tnk-spin` 38 จุด · `/spinner.js` เสิร์ฟไฟล์จริง md5 ตรงกับต้นฉบับ
 
+**★ ค้างอยู่: วงแหวนมาตรฐานของ**แอปมือถือ** อยู่บน `UAT` แล้ว ยังไม่ขึ้น `main`** (16 พ.ย. 2026)
+— แก้หน้าเว็บอย่างเดียว ไม่แตะ backend จึงไม่ต้อง `clasp push` และไม่ต้อง Deploy → New version
+ไฟล์ใหม่: `frontend-mobile/spinner.js` (md5 เท่าต้นฉบับและเท่าของแอดมิน ห้ามแก้ในแอป)
+· ตรวจบนเครื่องแล้วที่ขนาด 375×812 ทั้งโหมดปกติและกระชับ · ยิงคำขอจริงเข้า UAT แล้ววงโผล่/เก็บเองถูกต้อง
+
 **ขึ้น prod แล้วถึง `ce665dd` · 13 พ.ย. 2026 — ครบทุกขั้น ไม่มีของค้าง** (ไม่ต้องไล่อ่าน git log)
 `main` ff-merge จาก `UAT` · Cloudflare build หน้า prod ใหม่แล้ว · backend push เข้าโปรเจกต์ prod ·
 **Deploy → New version แล้วทั้ง prod และ UAT** — ยิง `listExternalGoodsReceiptHistory` เข้า exec URL

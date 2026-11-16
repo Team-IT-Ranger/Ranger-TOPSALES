@@ -40,8 +40,6 @@
 
   .env-bar{ background:var(--red); color:#fff; text-align:center; font-size:11.5px; font-weight:700; padding:3px; }
   .center-screen{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 16px; text-align:center; gap:12px; }
-  .spinner{ width:34px; height:34px; border:3px solid var(--blue-soft); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; }
-  @keyframes spin{ to{ transform:rotate(360deg); } }
   .card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; }
   .center-screen .card{ width:100%; max-width:420px; text-align:left; }
 
@@ -52,6 +50,7 @@
   .top .who b{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .net{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--green-soft); color:var(--green); }
   .net.off{ background:var(--orange-soft); color:var(--orange); }
+  .net-busy{ display:inline-flex; align-items:center; flex:0 0 auto; }
   .screen{ display:none; padding:14px 16px; }
   .screen.active{ display:block; }
   h2{ font-size:17px; margin:4px 0 12px; }
@@ -165,13 +164,14 @@
   /* กดแล้วต้องรู้ว่ากดติด — บนมือถือไม่มี hover ให้ดู ปุ่มจึงต้องยุบลงทันทีที่นิ้วแตะ */
   .btn:active:not(:disabled){ transform:translateY(1px) scale(.98); box-shadow:inset 0 2px 6px rgba(15,27,45,.18); }
   .btn:disabled{ cursor:not-allowed; }
-  /* ระหว่างรอเซิร์ฟเวอร์: ซ่อนข้อความ ขึ้นวงหมุนแทน — บอกว่ากำลังทำงาน ไม่ใช่ค้าง */
+  /* ระหว่างรอเซิร์ฟเวอร์: ซ่อนข้อความ ขึ้นวงหมุนแทน — บอกว่ากำลังทำงาน ไม่ใช่ค้าง
+     ★ วงมาจาก tnkBusy() ของ spinner.js — ห้ามวาดวงเองที่นี่อีก
+     ★ วางไว้ "กลางปุ่ม" แทนที่จะอยู่หน้าข้อความตามสูตร 4.4 ของมาตรฐาน — ปุ่มเล็ก (.btn-sm)
+       อยู่เรียงกันหลายใบในแถวเดียว วงที่แทรกหน้าข้อความจะดันปุ่มกว้างขึ้น**กลางการกด**
+       แล้วแถวปุ่มเลื่อน/ตกบรรทัด · ตัววงแหวนไม่ถูกแก้สักนิด เปลี่ยนแค่ตำแหน่งที่วาง (เหมือนแอปแอดมิน) */
   .btn.is-busy{ position:relative; color:transparent !important; pointer-events:none; }
-  .btn.is-busy > *{ visibility:hidden; }
-  .btn.is-busy::after{ content:''; position:absolute; left:50%; top:50%; width:16px; height:16px; margin:-8px 0 0 -8px;
-    border:2px solid #fff; border-top-color:transparent; border-radius:50%; animation:btnspin .6s linear infinite; }
-  .btn:not(.btn-primary):not(.btn-green).is-busy::after{ border-color:var(--ink-soft); border-top-color:transparent; }
-  @keyframes btnspin{ to{ transform:rotate(360deg); } }
+  .btn.is-busy > *:not(.tnk-btn-spin){ visibility:hidden; }
+  .btn.is-busy .tnk-btn-spin{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); margin:0; }
   .inp,.prod select,.step input{ border-radius:var(--r-ctl); }
   .inp:focus,.prod select:focus,.step input:focus,textarea:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
   .step button{ border-radius:var(--r-ctl); }
@@ -187,7 +187,6 @@
   .cartbar .note{ opacity:1; color:var(--ink-soft); }
   .cartbar .tot{ color:var(--ink); }
   .cartbar .err{ background:var(--red-soft); color:var(--red); }
-  .spinner{ border-color:var(--blue-soft); border-top-color:var(--blue); }
 
   /* มุมมองกระชับ — เห็นสินค้า/รายการต่อหน้าจอมากขึ้น (ปุ่มสลับอยู่ที่การ์ด "ข้อมูลในเครื่อง" หน้าแรก)
      จำค่าไว้ใน localStorage เหมือนฝั่งแอดมิน */
@@ -218,11 +217,16 @@
 </head>
 <body>
 <script src="config.js?v=20260924"></script>   <!-- ใส่ ?v= ทุกครั้งที่แก้ config.js: เบราว์เซอร์แคชไฟล์นี้ไว้ ถ้าไม่บัมป์ ผู้ใช้เดิมจะยังคุยกับ backend ตัวเก่า -->
+<!-- ★★ TNK spinner — วงแหวนมาตรฐานของทุกแอปในเครือ (ต้นฉบับ: repo TNK-AppStore โฟลเดอร์ docs/spinner/)
+     ★ ห้ามแก้ spinner.js ในแอป — ต้องเท่ากับต้นฉบับเป๊ะทุกไบต์ (เช็คด้วย md5sum) อยากแก้รูป/สี/ความเร็วให้แจ้งทีมไอที
+     ★ ต้องมาก่อนสคริปต์ของแอป เพราะ tnkWait/tnkBusy ถูกเรียกตั้งแต่ตอนวาดหน้าแรก
+     ไม่ต้องบัมป์ ?v= — `_headers` ตั้ง no-cache ให้ไฟล์นี้ไว้แล้ว (มาตรฐานข้อ 5.9) -->
+<script src="spinner.js"></script>
 <div class="env-bar hidden" id="env-bar">UAT — สภาพแวดล้อมทดสอบ ข้อมูลไม่ใช่ของจริง</div>
 
 <!-- ═══ โหลด / ข้อความค้าง ═══ -->
 <div class="center-screen" id="scr-loading">
-  <div class="spinner" id="load-spin"></div>
+  <div id="load-spin" data-tnk-spin="96"></div>
   <div id="load-txt">กำลังเริ่มต้น...</div>
   <div id="load-extra"></div>
 </div>
@@ -254,6 +258,9 @@
   <div class="top">
     <img id="me-pic" class="hidden" alt=""><div class="av" id="me-av">?</div>
     <div class="who"><b id="me-name">-</b><span class="muted" id="me-sub">-</span></div>
+    <!-- ★ วงแหวนเล็กข้างป้ายออนไลน์ = กำลังคุยกับเซิร์ฟเวอร์อยู่ (ทำหน้าที่เดียวกับป้าย "กำลังอัปเดต…" ของแอปแอดมิน)
+         ★★ ไม่ใช้ tnkNetBusy ที่ลอยมุมขวาล่าง เพราะมุมนั้นมีแถบแท็บล่างกับแถบตะกร้าลอยอยู่แล้ว มันจะทับกัน -->
+    <span class="net-busy hidden" id="net-busy" data-tnk-spin="18" aria-hidden="true"></span>
     <span class="net" id="net">ออนไลน์</span>
   </div>
 
@@ -404,7 +411,7 @@
       <button class="btn btn-sm" onclick="closeSaleDetail()">← กลับ</button>
       <h2 style="margin:0">รายละเอียดบิล</h2>
     </div>
-    <div id="sd-body"><div class="empty">กำลังโหลด...</div></div>
+    <div id="sd-body"><div class="tnk-wait" style="min-height:120px"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
   </section>
 
   <!-- แถบตะกร้า (เฉพาะหน้าขาย) -->
@@ -458,7 +465,7 @@ let DATA = { products: [], customers: [] };
 const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder','submitCustomerRequest']);
 const INFLIGHT = new Set();
 const newRequestId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-function pressBusy(btn, on){ if (!btn) return; btn.disabled = on; btn.classList.toggle('is-busy', on); }
+function pressBusy(btn, on){ if (!btn) return; btn.classList.toggle('is-busy', on); tnkBusy(btn, on); }   // tnkBusy ใส่/เอาวงแหวน และ disable/enable ปุ่มให้ในคำสั่งเดียว
 
 async function api(action, payload, timeoutMs = 45000, retriedAuth = false){
   if (MUTATING.has(action) && !retriedAuth) {
@@ -469,15 +476,29 @@ async function api(action, payload, timeoutMs = 45000, retriedAuth = false){
   }
   return _apiSend(action, payload, timeoutMs, retriedAuth);
 }
+/* ★ วงเล็กข้างป้ายออนไลน์ = กำลังรอเซิร์ฟเวอร์อยู่ — คำขอหนึ่งครั้งของ Apps Script ไม่เคยต่ำกว่า ~1.5 วินาที
+   งานที่วิ่งเบื้องหลัง (ดึงแดชบอร์ด / รีเฟรชข้อมูล) จึงต้องมีอะไรบอกว่าแอปกำลังทำงาน ไม่ใช่ค้าง
+   ★ รอ 350 ms ก่อนขึ้น (เกณฑ์เดียวกับ tnkNetBusy ของมาตรฐาน) คำขอที่ตอบเร็วจะไม่ทำให้มีวงกะพริบ */
+let NET_PENDING = 0, NET_SPIN_T = 0;
+function netBusy(delta){
+  NET_PENDING = Math.max(0, NET_PENDING + delta);
+  const el = $('net-busy'); if (!el) return;
+  if (NET_PENDING > 0) {
+    if (NET_SPIN_T) return;
+    NET_SPIN_T = setTimeout(() => { NET_SPIN_T = 0; if (NET_PENDING > 0) el.classList.remove('hidden'); }, 350);
+  } else { clearTimeout(NET_SPIN_T); NET_SPIN_T = 0; el.classList.add('hidden'); }
+}
+
 async function _apiSend(action, payload, timeoutMs = 45000, retriedAuth = false){
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeoutMs);
   let out;
+  netBusy(1);
   try {
     const res = await fetch(CFG.BACKEND_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action, lineUserId: ME.lineUserId, idToken: ID_TOKEN, payload: payload || {} }), signal: ctl.signal });
     const txt = await res.text();
     try { out = JSON.parse(txt); } catch (e) { throw new Error('เซิร์ฟเวอร์ตอบผิดรูปแบบชั่วคราว'); }   // Apps Script บางทีตอบหน้า HTML
-  } finally { clearTimeout(t); }
+  } finally { clearTimeout(t); netBusy(-1); }
   // ID token หมดอายุระหว่างใช้งาน (ปกติ ~1 ชม.) → ขอใหม่แล้วลองซ้ำครั้งเดียว
   if (out && out.needLogin && !retriedAuth && await refreshIdToken()) return api(action, payload, timeoutMs, true);
   return out;
@@ -580,13 +601,13 @@ async function submitRegister(){
   const name = $('reg-name').value.trim(), tenant = $('reg-tenant').value, btn = $('reg-btn');
   if (!name) return toast('กรุณากรอกชื่อ', 'err');
   if (!tenant) return toast('กรุณาเลือกสังกัด', 'err');
-  btn.disabled = true; btn.textContent = 'กำลังส่ง...';
+  pressBusy(btn, true);
   try {
     const r = await api('registerUser', { lineUid: ME.lineUserId, name, schema: tenant });
     if (!r.success) { toast(r.message || 'ส่งคำขอไม่สำเร็จ', 'err'); return; }
     showPending('ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้');
   } catch (e) { toast('ส่งไม่ได้: ' + e.message, 'err'); }
-  finally { btn.disabled = false; btn.textContent = 'ส่งคำขอใช้งาน'; }
+  finally { pressBusy(btn, false); }
 }
 function showPending(msg){ show('scr-pending'); $('pending-msg').textContent = msg; $('pending-uid').value = ME.lineUserId; }
 function copyUid(){ const i = $('pending-uid'); i.select(); (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject()).then(() => toast('คัดลอกแล้ว', 'ok')).catch(() => { document.execCommand('copy'); toast('คัดลอกแล้ว', 'ok'); }); }
@@ -621,13 +642,13 @@ async function refreshData(silent){
   } catch (e) { if (!silent) toast('ดึงข้อมูลไม่ได้: ' + e.message, 'err'); return false; }
 }
 async function syncNow(){
-  const b = $('sync-btn'); b.disabled = true; b.textContent = 'กำลัง Sync...';
+  const b = $('sync-btn'); pressBusy(b, true);
   try {
     if (!navigator.onLine) { toast('ไม่มีสัญญาณ', 'err'); return; }
     const q = await flushQueue();
     if (await refreshData(false)) toast('Sync สำเร็จ' + (q ? ' · ' + q.msg : ''), q && q.bad ? 'err' : 'ok');
     loadDashboard();
-  } finally { b.disabled = false; b.innerHTML = MI.sync + 'Sync ข้อมูล'; renderHome(); }
+  } finally { pressBusy(b, false); renderHome(); }
 }
 
 /* ══════════════ แท็บ ══════════════ */
@@ -655,6 +676,11 @@ function renderCurrentTab(){
 let RECENT_SALES = [];
 async function loadDashboard(){
   if (!navigator.onLine) return;
+  /* ★ ขึ้นวงรอเฉพาะการ์ดที่ยัง "ไม่มีอะไรให้อ่าน" — การ์ดที่มีของเก่าอยู่คงไว้ให้อ่านต่อระหว่างรอ
+     (กติกาเดียวกับ tblLoading ของแอปแอดมิน: อย่าล้างของเก่าทิ้งแล้วนั่งรอ)
+     ★ คืนค่าใน finally เสมอ — คำขอล้มแล้วปล่อยวงค้างไว้ คนจะนั่งรอข้อมูลที่ไม่มีวันมา */
+  const waiting = ['h-recent', 'h-top'].filter(id => { const b = $(id); return b && !b.querySelector('.row'); });
+  waiting.forEach(id => { $(id).innerHTML = tnkWait(72, '', 44); });
   try {
     const [r, rs] = await Promise.all([api('getDashboard', {}), api('getRecentSales', { limit: 15 })]);
     if (r.success) {
@@ -667,6 +693,7 @@ async function loadDashboard(){
     }
     if (rs.success) { RECENT_SALES = rs.data || []; lsSet('recent_' + ME.lineUserId, RECENT_SALES); renderRecentSales(); }
   } catch (e) {}
+  finally { waiting.forEach(id => { const b = $(id); if (b && b.querySelector('.tnk-wait')) b.innerHTML = '<div class="empty">-</div>'; }); }
 }
 /* รหัสชั่วคราวของใบร่าง (DRAFT-<id>) ไม่ใช่เลขที่เอกสาร — อย่าโชว์เป็นเลขบิลให้คนเข้าใจผิด
    เลขจริงออกให้ตอนกดยืนยันเท่านั้น (ดู confirmSalesOrder) */
@@ -706,7 +733,7 @@ function unitLabelForItem(it){ const p = prodById(it.productId); return p ? unit
 async function openSaleDetail(code){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $('tab-saledetail').classList.add('active');
-  $('sd-body').innerHTML = '<div class="empty">กำลังโหลด...</div>';
+  $('sd-body').innerHTML = tnkWait(120, 'กำลังโหลด…', 56);
   scrollTo(0, 0);
   if (!navigator.onLine) { $('sd-body').innerHTML = '<div class="empty">ต้องออนไลน์ถึงจะเปิดดูรายละเอียดบิลได้</div>'; return; }
   try {
@@ -1012,9 +1039,9 @@ async function recalcPrice(){
   if (!CART.length || !navigator.onLine) return;
   clearTimeout(quoteTimer);
   const btn = $('cart-recalc-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'กำลังคำนวณ...'; }
-  await fetchQuote();
-  if (btn) { btn.disabled = false; btn.textContent = '🧮 คำนวณราคา'; }
+  pressBusy(btn, true);
+  try { await fetchQuote(); }
+  finally { pressBusy(btn, false); }   // ป้ายปุ่มไม่ถูกเขียนทับอีกแล้ว จึงไม่ต้องประกอบป้ายเดิมคืนเอง
 }
 function estimate(){ return CART.reduce((s, c) => { const p = prodById(c.productId); return s + (p ? unitOf(p, c.unitCode).price * c.qty : 0); }, 0); }
 // ★ 2026-09-30 เจ้าของระบบสั่ง: แยก "หน้าเลือกสินค้า" (pick) กับ "หน้าตะกร้า" (cart) ออกจากกันชัดเจน
@@ -1229,7 +1256,7 @@ function renderVisit(){
 }
 async function doCheckIn(){
   const cid = Number($('v-cust').value); if (!cid) return toast('เลือกร้านก่อน', 'err');
-  const btn = $('v-checkin'); btn.disabled = true; btn.textContent = 'กำลังเช็คอิน...';
+  const btn = $('v-checkin'); pressBusy(btn, true);
   try {
     const gps = await getGPS();
     const r = await api('checkInVisit', { customerId: cid, lat: gps.lat, lng: gps.lng });
@@ -1237,7 +1264,7 @@ async function doCheckIn(){
     VISIT = { visitId: r.visitId, customerId: cid, name: custName(cid), day: new Date().toDateString() }; lsSet('visit', VISIT);
     toast('เช็คอินแล้ว', 'ok'); renderVisit();
   } catch (e) { toast('เช็คอินไม่ได้: ' + e.message, 'err'); }
-  finally { btn.disabled = false; btn.innerHTML = MI.pin + 'เช็คอิน'; }
+  finally { pressBusy(btn, false); }
 }
 async function submitNote(){
   const note = $('v-note').value.trim(); if (!note) return toast('กรอกบันทึกก่อน', 'err');
