@@ -24,7 +24,7 @@
 **★ ค้างอยู่: Ultra Admin ใช้เมนู 4.3.1 ในนามตัวแทนได้** (16 พ.ย. 2026 — บน `UAT` แล้ว ยังไม่ขึ้น `main`)
 — **เป็น backend เปลี่ยน** (`43_external_sales_import.gs`) → ต้อง `clasp push` + Deploy → New version ทั้ง UAT และ prod ก่อนแตะ `main`
 · **ลำดับ: backend ก่อน → เจ้าของระบบ deploy → ค่อย merge `main`** ถ้าหน้าเว็บขึ้นก่อน backend เก่าจะโชว์และนำเข้าได้ทุกศูนย์ไม่กรอง
-· เทสต์ `.dev/test-external-sales-import.js` ผ่านครบ · ซีนอาคารเมนู ตรวจบนเบราว์เซอร์แล้ว · **ยังไม่ได้ `clasp push` ขึ้น UAT**
+· เทสต์ `.dev/test-external-sales-import.js` ผ่านครบ · ตรรกะเมนู ตรวจบนเบราว์เซอร์แล้ว · **ยังไม่ได้ `clasp push` ขึ้น UAT**
 
 
 **ขึ้น prod แล้วถึง `41780a2` · 16 พ.ย. 2026 — วงแหวนมาตรฐานครบทั้งสองแอป ไม่มีของค้าง**
