@@ -373,5 +373,92 @@ console.log('\n── 4.3.3 ประวัติใบรับของที�
     old.data.map(g => g.grNo), ['GR-24']);
 }
 
+
+console.log('\n── ★ 4.3.1: Ultra Admin ใช้ในนามตัวแทนได้ แต่เห็น/นำเข้าได้เฉพาะใบของตัวแทนนั้น (เจ้าของระบบสั่ง 16 พ.ย. 2026) ──');
+{
+  // ★ ดึงตัวตัดสินสิทธิ์จากไฟล์จริงมาใช้ ไม่เขียนเลียนแบบ — ไม่งั้นวันที่ของจริงเปลี่ยน เทสต์จะยังเขียวทั้งที่ด่านพัง
+  const grab = (file, name) => { const m = B(file).match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')); if (!m) throw new Error('ไม่พบ ' + name); return m[0]; };
+  vm.runInContext('var OWNER_TENANT_ID = "TNKI";\n' + grab('02_helpers.gs', '_isCompanySide') + '\n' + grab('14_permissions.gs', '_effectiveTenantId'), ctx);
+
+  const S3 = { purchase_orders: [], po_items: [], goods_receipts: [], gr_items: [] };
+  let n3 = 0;
+  Object.assign(ctx, {
+    _requirePermission: () => null,
+    _withDocLock: fn => fn(),
+    centralObjects: name => S3[name] || [],
+    centralNextId: name => (S3[name] || []).reduce((m, o) => Math.max(m, o.record_id || 0), 0) + 1,
+    centralAppend: (name, row) => { S3[name].push(Object.assign({}, row)); },
+    centralAppendMany: (name, rows) => { rows.forEach(r => S3[name].push(Object.assign({}, r))); },
+    _findById: (name, id) => S3[name].find(x => String(x.record_id) === String(id)),
+    _nextCentralDocNo: kind => kind + '-' + (++n3),
+    _ensureCompanyVendor: () => 1, _ensureScopeWarehouse: () => 1,
+  });
+  const mk = (inv, tid, name) => ({ invoiceNumber: inv, invoiceDate: '2026-09-26', tenantId: tid, tenantName: name,
+    lines: [{ productId: 1, productName: 'สินค้า A', qtyCT: 2, amtActual: 200 }], totalAmt: 200 });
+  const CANDS = () => ({
+    candidates: [mk('IV-T1', 'T1', 'ศูนย์ที่ 1'), mk('IV-T2', 'T2', 'ศูนย์ที่ 2')],
+    alreadyImported: [{ invoiceNumber: 'IV-OLD1', invoiceDate: '2026-09-20', tenantId: 'T1' }, { invoiceNumber: 'IV-OLD2', invoiceDate: '2026-09-20', tenantId: 'T2' }],
+    errors: [{ invoiceNumber: 'IV-E1', tenantId: 'T1', reason: 'ไม่พบสินค้า' }, { invoiceNumber: 'IV-E2', tenantId: 'T2', reason: 'ไม่พบสินค้า' },
+             { invoiceNumber: 'IV-E3', reason: 'ไม่พบศูนย์ที่ customer_account = "X"' }]
+  });
+  ctx._computeExternalSalesCandidates = CANDS;
+
+  const COMPANY_ADMIN = { adminUserId: 'a1', role_code: 'owner_admin', tenant_id: '' };
+  const ULTRA        = { adminUserId: 'u9', role_code: 'super_admin', tenant_id: '' };
+  const ULTRA_TNKI   = { adminUserId: 'u9', role_code: 'super_admin', tenant_id: 'TNKI' };   // ฝั่งบริษัทเก็บสังกัดเป็น TNKI (truthy) — กับดักเดิมของ _effectiveTenantId
+  const TENANT_USER  = { adminUserId: 't1', role_code: 'tenant_admin', tenant_id: 'T1' };
+  const ids = a => a.map(x => x.invoiceNumber);
+
+  // ── ในนามบริษัท: เหมือนเดิมทุกอย่าง เห็นทุกศูนย์ ──
+  let r1 = ctx.previewExternalSalesImport(COMPANY_ADMIN, {});
+  eq('ในนามบริษัท: เห็นทุกศูนย์ (ใบ/นำเข้าแล้ว/จับคู่ไม่ได้ ครบ รวมใบที่ไม่รู้ว่าเป็นของใคร)',
+    [r1.success, ids(r1.candidates), ids(r1.alreadyImported), ids(r1.errors)], [true, ['IV-T1', 'IV-T2'], ['IV-OLD1', 'IV-OLD2'], ['IV-E1', 'IV-E2', 'IV-E3']]);
+  eq('เรียกแบบไม่ส่ง payload เลย (ของเดิมเรียกแบบนี้) ก็ยังทำงาน', ctx.previewExternalSalesImport(COMPANY_ADMIN).success, true);
+
+  // ── Ultra Admin สวมสิทธิ์ตัวแทน: เห็นเฉพาะของตัวแทนนั้น ──
+  let r2 = ctx.previewExternalSalesImport(ULTRA, { tenantId: 'T1' });
+  eq('Ultra Admin สวมสิทธิ์ T1: เห็นเฉพาะใบของ T1 (ใบของ T2 ถูกกรองออก ไม่ใช่แค่ซ่อน)',
+    [r2.success, ids(r2.candidates), ids(r2.alreadyImported), r2.scopeTenantId], [true, ['IV-T1'], ['IV-OLD1'], 'T1']);
+  eq('  ★ ใบที่จับคู่ศูนย์ไม่ได้ (ไม่รู้ว่าเป็นของใคร) ไม่โผล่ในมุมมองของตัวแทน — ตอบไม่ได้ว่าเป็นของเขา', ids(r2.errors), ['IV-E1']);
+  eq('  ★★ สังกัดเก็บเป็น TNKI (truthy) ก็สวมสิทธิ์ได้ — กับดักเดียวกับที่ทำให้ฝั่งบริษัทเข้าไปดูแลตัวแทนไม่ได้ทั้งระบบ (1 ต.ค. 2026)',
+    ids(ctx.previewExternalSalesImport(ULTRA_TNKI, { tenantId: 'T1' }).candidates), ['IV-T1']);
+  eq('  Ultra Admin ที่ยังไม่ได้สวมสิทธิ์ใคร ยังเห็นทุกศูนย์', ids(ctx.previewExternalSalesImport(ULTRA, {}).candidates), ['IV-T1', 'IV-T2']);
+
+  // ── บทบาทฝั่งบริษัทอื่น (ไม่ใช่ Ultra) สวมสิทธิ์ตัวแทนแล้วใช้ไม่ได้ ──
+  let r3 = ctx.previewExternalSalesImport(COMPANY_ADMIN, { tenantId: 'T1' });
+  eq('แอดมินบริษัท (ไม่ใช่ Ultra) สวมสิทธิ์ T1 → ปฏิเสธ ไม่คืนรายการสักใบ', [r3.success, r3.candidates], [false, undefined]);
+  eq('  ข้อความบอกทางออก (กลับไปทำในนามบริษัท)', /Ultra Admin/.test(r3.message) && /นามบริษัท/.test(r3.message), true);
+
+  // ── ตัวแทนจริง: ไม่มีทางเข้า แม้ส่ง tenantId มาเอง ──
+  eq('บัญชีที่สังกัดตัวแทน → ปฏิเสธ (ข้อมูลขายออกเป็นของบริษัท กติกาเดิม)', ctx.previewExternalSalesImport(TENANT_USER, {}).success, false);
+  eq('  ส่ง tenantId ตัวเองมาก็ไม่ช่วย', ctx.previewExternalSalesImport(TENANT_USER, { tenantId: 'T1' }).success, false);
+  eq('  ส่ง tenantId ของศูนย์อื่นมาก็ไม่ช่วย', ctx.previewExternalSalesImport(TENANT_USER, { tenantId: 'T2' }).success, false);
+  eq('  แม้ role_code จะเป็น super_admin แต่สังกัดตัวแทนอยู่ → ยังปฏิเสธ (สังกัดตัดสินก่อนบทบาท)',
+    ctx.previewExternalSalesImport({ adminUserId: 'x', role_code: 'super_admin', tenant_id: 'T1' }, { tenantId: 'T1' }).success, false);
+
+  // ── นำเข้าจริง: กรองซ้ำฝั่ง backend เพราะเลขใบมาจากหน้าจอ (เชื่อไม่ได้) ──
+  let im = ctx.importExternalSalesInvoices(ULTRA, { tenantId: 'T1', invoiceNumbers: ['IV-T1', 'IV-T2'] });
+  eq('สวมสิทธิ์ T1 แล้วส่งเลขใบของ T2 มาด้วย → นำเข้าเฉพาะของ T1 ใบของ T2 ถูกข้ามพร้อมเหตุผล',
+    [im.success, ids(im.created), im.skipped.map(x => x.invoiceNumber), S3.purchase_orders.map(x => x.source_ref)], [true, ['IV-T1'], ['IV-T2'], ['IV-T1']]);
+  eq('  ★ ใบที่ถูกข้ามไม่สร้างเอกสารสักแถว (ไม่มี PO/GR ของ T2 โผล่ในสมุดคนอื่น)',
+    [S3.purchase_orders.filter(x => x.tenant_id === 'T2').length, S3.goods_receipts.filter(x => x.tenant_id === 'T2').length], [0, 0]);
+  eq('  เหตุผลที่ข้ามบอกชื่อศูนย์เจ้าของใบ', /ศูนย์ที่ 2/.test(im.skipped[0].reason), true);
+
+  const before = S3.purchase_orders.length;
+  let bad = ctx.importExternalSalesInvoices(COMPANY_ADMIN, { tenantId: 'T2', invoiceNumbers: ['IV-T2'] });
+  eq('แอดมินบริษัท (ไม่ใช่ Ultra) สวมสิทธิ์แล้วสั่งนำเข้า → ปฏิเสธ และไม่สร้างอะไร', [bad.success, S3.purchase_orders.length], [false, before]);
+  let bad2 = ctx.importExternalSalesInvoices(TENANT_USER, { invoiceNumbers: ['IV-T2'] });
+  eq('บัญชีตัวแทนสั่งนำเข้า → ปฏิเสธ และไม่สร้างอะไร', [bad2.success, S3.purchase_orders.length], [false, before]);
+
+  let all = ctx.importExternalSalesInvoices(ULTRA, { invoiceNumbers: ['IV-T2'] });
+  eq('ในนามบริษัท (ไม่สวมสิทธิ์) นำเข้าใบของ T2 ได้ตามปกติ — พฤติกรรมเดิมไม่เปลี่ยน',
+    [all.success, ids(all.created), S3.purchase_orders.some(x => x.source_ref === 'IV-T2' && x.tenant_id === 'T2')], [true, ['IV-T2'], true]);
+
+  // ── สถานะนำเข้าอัตโนมัติ ──
+  eq('สถานะนำเข้าอัตโนมัติ: Ultra Admin สวมสิทธิ์ตัวแทนดูได้', ctx.getExternalSalesAutoImportStatus(ULTRA, { tenantId: 'T1' }).success, true);
+  eq('  แอดมินบริษัทที่ไม่ใช่ Ultra สวมสิทธิ์ → ปฏิเสธ', ctx.getExternalSalesAutoImportStatus(COMPANY_ADMIN, { tenantId: 'T1' }).success, false);
+  eq('  บัญชีตัวแทน → ปฏิเสธ', ctx.getExternalSalesAutoImportStatus(TENANT_USER, {}).success, false);
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

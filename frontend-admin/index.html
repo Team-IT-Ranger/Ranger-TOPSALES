@@ -2212,6 +2212,7 @@
                 (ไม่ต้องรอกด) หรือกดตรวจ/นำเข้าเองที่นี่ก็ได้ · <b>สต็อกไม่ขยับจนกว่าแอดมินศูนย์จะตรวจรับ</b>ที่เมนู 4.3.2</p></div>
             <button class="btn btn-primary" id="esi-check-btn" onclick="esiCheck()">ตรวจรายการใหม่</button>
           </div>
+          <div id="esi-scope"></div>
           <div id="esi-auto"></div>
           <div id="esi-result"></div>
         </section>
@@ -3173,7 +3174,9 @@ const NAV_GROUPS = [
     { n:'4.3', label:'นำเข้าจากรายการขายออกของบริษัท', items:[
       // 13 พ.ย. 2026 — ฝั่งตัวแทน "โชว์เทา" ไม่ซ่อน (ผู้ใช้สั่ง) · เดิมหายทั้งเมนูทันทีที่ฝั่งบริษัทสวมสิทธิ์
       // เข้าตัวแทน ทำให้คนที่สลับไปดู 4.3.2/4.3.3 นึกว่าเมนูหาย · เทาแล้วยังบอกได้ว่ามีอยู่และใครคุม
-      {n:'4.3.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner', grey:'tenant'},
+      /* superTenant: Ultra Admin ที่สวมสิทธิ์ตัวแทนอยู่กดใช้ได้ (16 พ.ย. 2026) · ฝั่ง backend ตรวจซ้ำที่ _extImportScope และกรองเหลือเฉพาะใบของตัวแทนนั้น
+         บัญชีที่สังกัดตัวแทนจริงยังเห็นเป็นสีเทาเหมือนเดิม */
+      {n:'4.3.1', label:'ตรวจ/นำเข้ารายการใหม่', view:'externalsalesimport', mod:'purchasing', ready:true, scope:'owner', grey:'tenant', superTenant:true},
       {n:'4.3.2', label:'ใบรับของรอตรวจรับ', view:'pendinggoodsreceipts', mod:'inventory', ready:true, scope:'both'},
       // 13 พ.ย. 2026 — ตรวจรับแล้วใบหายจาก 4.3.2 ทันที ผู้ใช้หาประวัติที่นำเข้าไม่เจอ (4.2.1 มีใบแต่คนละกลุ่มเมนู
       // และไม่โชว์เลขเอกสารฝั่ง TNK ซึ่งเป็นกุญแจจับคู่กับบริษัท)
@@ -3420,7 +3423,8 @@ function scheduleViewOnlyGuards(){ clearTimeout(_roGuardTimer); _roGuardTimer = 
  *   'hidden' ไม่ใช่งานของฝั่งนี้เลย ไม่ต้องโชว์ให้รก
  */
 function navState(it){
-  const mine = !it.scope || it.scope === 'both' || it.scope === SCOPE;
+  // superTenant = เมนูฝั่งบริษัทที่ Ultra Admin ตามเข้าไปใช้ในนามตัวแทนได้ (ตัวแทนจริงไม่มีทางเป็น super_admin จึงไม่หลุดไปถึงเขา)
+  const mine = !it.scope || it.scope === 'both' || it.scope === SCOPE || (it.superTenant && MY_PERMS.isSuper);
   if (!mine) {
     return it.grey === SCOPE
       ? { s:'locked', why:'บริษัทเจ้าของสินค้าเป็นผู้ดูแลเมนูนี้' }
@@ -9311,7 +9315,20 @@ let esiData = null;
 function loadExternalSalesImport(){
   esiData = null;
   document.getElementById('esi-result').innerHTML = '';
+  esiRenderScope();
   esiLoadAutoStatus();
+}
+/* ★ สวมสิทธิ์ตัวแทนอยู่ = รายการที่เห็น/นำเข้าได้มีแต่ของตัวแทนนั้น (backend กรองให้ ไม่ใช่แค่ซ่อน)
+   ต้องบอกให้ชัดไว้บนหัวหน้า — ไม่งั้นคนเห็นรายการน้อยกว่าที่คาดแล้วนึกว่าใบหาย
+   ★ "นำเข้าอัตโนมัติ" ด้านล่างเป็นของทุกศูนย์เสมอ ไม่ขึ้นกับว่าสวมสิทธิ์ใครอยู่ — บอกไว้ด้วย ไม่งั้นคนเข้าใจว่ารอบอัตโนมัติ
+   ทำเฉพาะศูนย์นี้ */
+function esiRenderScope(){
+  const box = document.getElementById('esi-scope'); if (!box) return;
+  if (!ACTIVE_TENANT_ID) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="form-card" style="margin-bottom:10px;border-left:4px solid var(--blue)">' +
+    '<b>กำลังทำงานในนาม ' + esc(currentBookName()) + '</b> — ตรวจและนำเข้าได้เฉพาะใบของศูนย์นี้ ' +
+    '<span class="unit">(ใบของศูนย์อื่นถูกกรองออก · อยากเห็นทุกศูนย์ให้กด "เปลี่ยนบริษัท" กลับไปทำงานในนามบริษัท)</span>' +
+    '<div class="unit" style="margin-top:4px">การนำเข้าอัตโนมัติตามเวลา (ด้านล่าง) ยังทำให้<b>ทุกศูนย์</b>เสมอ ไม่ใช่เฉพาะศูนย์นี้</div></div>';
 }
 // สถานะนำเข้าอัตโนมัติ (เร็ว ไม่อ่านชีตภายนอก) — บอกว่าตั้งเวลาไว้หรือยัง + ผลรอบล่าสุด · ตั้งเวลาด้วยการรัน
 // installExternalSalesImportTriggers ใน Apps Script editor (ดู 43_external_sales_import.gs)

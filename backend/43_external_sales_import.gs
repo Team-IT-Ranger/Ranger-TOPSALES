@@ -96,11 +96,11 @@ function _computeExternalSalesCandidates() {
   var candidates = [], alreadyImported = [], errors = [];
   order.forEach(function(invNo) {
     var lines = groups[invNo];
-    if (importedInvoices[invNo]) { alreadyImported.push({ invoiceNumber: invNo, invoiceDate: lines[0].invoiceDate }); return; }
     var tenant = tenantByAccount[lines[0].customerId];
+    if (importedInvoices[invNo]) { alreadyImported.push({ invoiceNumber: invNo, invoiceDate: lines[0].invoiceDate, tenantId: tenant ? tenant.tenant_id : '' }); return; }
     if (!tenant) { errors.push({ invoiceNumber: invNo, reason: 'ไม่พบศูนย์ที่ customer_account = "' + lines[0].customerId + '"' }); return; }
     var mismatchTenant = lines.some(function(l) { return l.customerId !== lines[0].customerId; });
-    if (mismatchTenant) { errors.push({ invoiceNumber: invNo, reason: 'ใบเดียวกันมี Customer_id ไม่ตรงกันหลายค่า — ข้ามทั้งใบ' }); return; }
+    if (mismatchTenant) { errors.push({ invoiceNumber: invNo, tenantId: tenant.tenant_id, reason: 'ใบเดียวกันมี Customer_id ไม่ตรงกันหลายค่า — ข้ามทั้งใบ' }); return; }
 
     var outLines = [], missingProducts = [], total = 0;
     lines.forEach(function(l) {
@@ -110,21 +110,42 @@ function _computeExternalSalesCandidates() {
       outLines.push({ productId: p.record_id, productCode: p.product_code, productName: p.name, qtyCT: l.qtyCT, amtActual: l.amtActual });
       total += l.amtActual;
     });
-    if (missingProducts.length) { errors.push({ invoiceNumber: invNo, reason: 'ไม่พบสินค้ารหัส ' + missingProducts.join(', ') + ' ในระบบ (ProductNumber ไม่ตรงกับ product_code ใดเลย)' }); return; }
-    if (!outLines.length) { errors.push({ invoiceNumber: invNo, reason: 'ใบนี้ไม่มีรายการที่ต้องซื้อจริง (เป็นของแถมล้วน)' }); return; }
+    if (missingProducts.length) { errors.push({ invoiceNumber: invNo, tenantId: tenant.tenant_id, reason: 'ไม่พบสินค้ารหัส ' + missingProducts.join(', ') + ' ในระบบ (ProductNumber ไม่ตรงกับ product_code ใดเลย)' }); return; }
+    if (!outLines.length) { errors.push({ invoiceNumber: invNo, tenantId: tenant.tenant_id, reason: 'ใบนี้ไม่มีรายการที่ต้องซื้อจริง (เป็นของแถมล้วน)' }); return; }
     candidates.push({ invoiceNumber: invNo, invoiceDate: lines[0].invoiceDate, tenantId: tenant.tenant_id, tenantName: tenant.name,
       lines: outLines, totalAmt: _money(total) });
   });
   return { candidates: candidates, alreadyImported: alreadyImported, errors: errors };
 }
 
-// แอดมินกดปุ่ม "ตรวจรายการใหม่" — ดูได้เฉพาะฝั่งบริษัท (ข้อมูลขายออกเป็นของบริษัท ไม่ใช่ของศูนย์ใดศูนย์หนึ่ง)
-function previewExternalSalesImport(session) {
+/**
+ * ด่านเดียวของเมนู 4.3.1 — คืน { scope } (null = ทำงานในนามบริษัท เห็นทุกศูนย์ · มีค่า = สวมสิทธิ์ตัวแทนรายนั้น)
+ * หรือคืน { error } ถ้าไม่ผ่าน
+ * ★★ สวมสิทธิ์ตัวแทนแล้วใช้เมนูนี้ได้ **เฉพาะ Ultra Admin (super_admin)** (เจ้าของระบบสั่ง 16 พ.ย. 2026)
+ *   บทบาทฝั่งบริษัทอื่นยังต้องกลับไปทำในนามบริษัท · บัญชีที่สังกัดตัวแทนเข้าไม่ได้เลย เหมือนเดิม
+ *   เหตุผลที่ยังไม่เปิดให้ตัวแทนเอง: ข้อมูลขายออกเป็นของบริษัท (กติกาเดิม 2 ต.ค. 2026 — ดู CLAUDE.md หัวข้อ 4.3.1)
+ * ★ ตอนสวมสิทธิ์ตัวแทน ทุกอย่างถูกกรองเหลือเฉพาะใบของตัวแทนรายนั้น — นั่งอยู่ในศูนย์ A แล้วนำเข้าใบของศูนย์ B ได้
+ *   = เอกสารไปโผล่ในสมุดของคนที่ไม่ได้ดูอยู่ ซึ่งคนกดจะไม่ทันสังเกต
+ */
+function _extImportScope(session, payload) {
+  if (!_isCompanySide(session)) return { error: { success: false, message: 'เฉพาะฝั่งบริษัทเท่านั้นที่ใช้เมนูนี้ได้' } };
+  var scope = _effectiveTenantId(session, payload);
+  if (scope && session.role_code !== 'super_admin')
+    return { error: { success: false, message: 'ใช้เมนูนี้ในนามตัวแทนได้เฉพาะ Ultra Admin — กลับไปทำงานในนามบริษัทแล้วลองใหม่' } };
+  return { scope: scope || null };
+}
+function _inExtScope(row, scope) { return !scope || String(row.tenantId || '') === String(scope); }
+
+// แอดมินกดปุ่ม "ตรวจรายการใหม่" — ฝั่งบริษัทเห็นทุกศูนย์ · Ultra Admin ที่สวมสิทธิ์ตัวแทนเห็นเฉพาะของตัวแทนรายนั้น
+function previewExternalSalesImport(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
-  if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะฝั่งบริษัทเท่านั้นที่ดึงรายการขายออกได้' };
+  var g = _extImportScope(session, payload); if (g.error) return g.error;
   try {
     var r = _computeExternalSalesCandidates();
-    return { success: true, candidates: r.candidates, alreadyImported: r.alreadyImported, errors: r.errors,
+    var inS = function(x) { return _inExtScope(x, g.scope); };
+    return { success: true, candidates: r.candidates.filter(inS), alreadyImported: r.alreadyImported.filter(inS),
+      // จับคู่ศูนย์ไม่ได้ = ไม่รู้ว่าเป็นของใคร → ตอนสวมสิทธิ์ตัวแทนไม่โชว์ (ไม่ใช่ของตัวแทนนี้แน่ๆ หรือไม่ก็ตอบไม่ได้)
+      errors: r.errors.filter(inS), scopeTenantId: g.scope || '',
       cutoffDate: EXTERNAL_SALES_IMPORT_CUTOFF };
   } catch (e) { return { success: false, message: 'อ่านชีตภายนอกไม่สำเร็จ: ' + e.message }; }
 }
@@ -151,10 +172,10 @@ function _ensureCompanyVendor(scope) {
  */
 function importExternalSalesInvoices(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
-  if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะฝั่งบริษัทเท่านั้นที่นำเข้ารายการนี้ได้' };
+  var g = _extImportScope(session, payload); if (g.error) return g.error;
   var wanted = {}; (payload.invoiceNumbers || []).forEach(function(n) { wanted[String(n).trim()] = true; });
   if (!Object.keys(wanted).length) return { success: false, message: 'ยังไม่ได้เลือกใบที่จะนำเข้า' };
-  return _runExternalSalesImport(wanted, String(session.adminUserId || ''));
+  return _runExternalSalesImport(wanted, String(session.adminUserId || ''), g.scope);
 }
 
 /**
@@ -163,7 +184,7 @@ function importExternalSalesInvoices(session, payload) {
  * actorId = ผู้สร้างเอกสาร ('system:auto' ตอนรันเวลาอัตโนมัติ)
  * ★ นำเข้าอัตโนมัติปลอดภัยเพราะสร้างได้แค่ PO + ใบรับของสถานะ pending_review — **สต็อกไม่ขยับ** จนกว่าแอดมินศูนย์จะตรวจรับเอง
  */
-function _runExternalSalesImport(wanted, actorId) {
+function _runExternalSalesImport(wanted, actorId, onlyTenant) {
   var fresh;
   try { fresh = _computeExternalSalesCandidates(); } catch (e) { return { success: false, message: 'อ่านชีตภายนอกไม่สำเร็จ: ' + e.message }; }
   var byInvoice = {}; fresh.candidates.forEach(function(c) { byInvoice[c.invoiceNumber] = c; });
@@ -181,6 +202,8 @@ function _runExternalSalesImport(wanted, actorId) {
       var c = byInvoice[invNo];
       if (!c) { skipped.push({ invoiceNumber: invNo, reason: 'ไม่พบในรายการที่พร้อมนำเข้าแล้ว (อาจถูกนำเข้าไปแล้ว หรือจับคู่ไม่ได้)' }); return; }
       if (already[invNo]) { skipped.push({ invoiceNumber: invNo, reason: 'ถูกนำเข้าไปแล้วโดยอีกรอบหนึ่ง' }); return; }
+      // ★ สวมสิทธิ์ตัวแทนอยู่ = นำเข้าได้เฉพาะใบของตัวแทนรายนั้น · ตรวจซ้ำฝั่งนี้เพราะเลขใบมาจากหน้าจอ (เชื่อไม่ได้)
+      if (onlyTenant && String(c.tenantId) !== String(onlyTenant)) { skipped.push({ invoiceNumber: invNo, reason: 'ใบนี้เป็นของศูนย์อื่น (' + c.tenantName + ') ไม่ใช่ศูนย์ที่กำลังทำงานอยู่' }); return; }
       var scope = String(c.tenantId);
       var vendorId = _ensureCompanyVendor(scope);
       var warehouseId = _ensureScopeWarehouse(scope);
@@ -586,9 +609,9 @@ function removeExternalSalesImportTriggers() {
 }
 
 /** เร็ว (ไม่อ่านชีตภายนอก) — หน้าเมนู 4.3.1 เรียกตอนเปิดหน้า เพื่อโชว์ว่าตั้งเวลาไว้หรือยัง + ผลรอบอัตโนมัติล่าสุด */
-function getExternalSalesAutoImportStatus(session) {
+function getExternalSalesAutoImportStatus(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'view'); if (err) return err;
-  if (!_isCompanySide(session)) return { success: false, message: 'เฉพาะฝั่งบริษัท' };
+  var g = _extImportScope(session, payload); if (g.error) return g.error;
   var last = null;
   try { var raw = PropertiesService.getScriptProperties().getProperty(EXTERNAL_SALES_AUTO_PROP); if (raw) last = JSON.parse(raw); } catch (e) {}
   var installed = null;   // null = อ่านไม่ได้ (ยังไม่ได้ให้สิทธิ์ script.scriptapp กับ deployment นี้)
