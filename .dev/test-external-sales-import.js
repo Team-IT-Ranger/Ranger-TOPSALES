@@ -37,7 +37,18 @@ const SHEET_ROWS = [
   row({ InvoiceDate: '2026/09/27', InvoiceNumber: 'INV-8', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 1000, DiscountAmt: 0, Sales_type: 'Sell-in', Sell_FOC: 'Sell', Sales_business: 'XY', Entity: 'TNKI' })
 ];
 
-class FakeSheet { getDataRange() { return { getValues: () => SHEET_ROWS }; } }
+// ★ นับจำนวนเซลล์ที่โค้ดอ่านจริง และ "ห้าม" getDataRange() — ถ้าโค้ดกลับไปอ่านทั้งชีตเทสต์จะพังทันที
+// (ชีตจริง 256K แถว: อ่านทั้งชีต ~2 นาที เจอตอน 17 พ.ย. 2026 ที่ผู้ใช้แจ้งว่า 4.3.1 ช้ามาก)
+let CELLS_READ = 0, BIG_SHEET = null;
+const rowsOf = () => BIG_SHEET || SHEET_ROWS;
+class FakeSheet {
+  getLastRow() { return rowsOf().length; }
+  getLastColumn() { return HEADER.length; }
+  getRange(r, c, nr, nc) {
+    return { getValues: () => { CELLS_READ += nr * nc; return rowsOf().slice(r - 1, r - 1 + nr).map(x => x.slice(c - 1, c - 1 + nc)); } };
+  }
+  getDataRange() { throw new Error('ห้ามอ่านทั้งชีต (getDataRange) — ใช้ getRange เฉพาะช่วงที่ต้องใช้'); }
+}
 class FakeSpreadsheet { getSheetByName(n) { return n === 'FactSales' ? new FakeSheet() : null; } }
 
 const ctx = {
@@ -49,6 +60,7 @@ const ctx = {
 };
 vm.createContext(ctx);
 vm.runInContext(B('43_external_sales_import.gs'), ctx, { filename: '43_external_sales_import.gs' });
+const REAL_COMPUTE = ctx._computeExternalSalesCandidates;
 
 const TENANTS = [{ tenant_id: 'T1', name: 'ศูนย์ทดสอบ', customer_account: 'CD00017' }];
 const PRODUCTS = [{ record_id: 1, product_code: '10114', name: 'สินค้า A' }, { record_id: 2, product_code: '10115', name: 'สินค้า B' }];
@@ -458,6 +470,101 @@ console.log('\n── ★ 4.3.1: Ultra Admin ใช้ในนามตัว�
   eq('สถานะนำเข้าอัตโนมัติ: Ultra Admin สวมสิทธิ์ตัวแทนดูได้', ctx.getExternalSalesAutoImportStatus(ULTRA, { tenantId: 'T1' }).success, true);
   eq('  แอดมินบริษัทที่ไม่ใช่ Ultra สวมสิทธิ์ → ปฏิเสธ', ctx.getExternalSalesAutoImportStatus(COMPANY_ADMIN, { tenantId: 'T1' }).success, false);
   eq('  บัญชีตัวแทน → ปฏิเสธ', ctx.getExternalSalesAutoImportStatus(TENANT_USER, {}).success, false);
+}
+
+
+console.log('\n── ★ 4.3.1 ช้ามาก: ไม่อ่านทั้งชีต + แคชผลที่กรองแล้ว (17 พ.ย. 2026) ──');
+{
+  const cacheStore = {};
+  Object.assign(ctx, {
+    _cacheBigGet: k => (k in cacheStore ? cacheStore[k] : null),
+    _cacheBigPut: (k, v) => { cacheStore[k] = v; },
+    centralObjects: name => { if (name === 'tenants') return TENANTS; if (name === 'products') return PRODUCTS; if (name === 'purchase_orders') return PURCHASE_ORDERS; return []; },
+  });
+  ctx._computeExternalSalesCandidates = REAL_COMPUTE;
+  const ids = a => a.map(x => x.invoiceNumber);
+  // ★ ต้องสร้าง Date ใน vm เดียวกับโค้ด — `new Date` ของไฟล์เทสต์เป็นคนละ realm ทำให้ `instanceof Date` ในโค้ดไม่เข้าเงื่อนไข (บน Apps Script จริงเป็นโลกเดียวกัน)
+  const D = iso => vm.runInContext('new Date(' + JSON.stringify(iso) + ')', ctx);
+
+  // ชีตใหญ่: ใบเก่าล้วน 6,000 แถว (ผสมวันที่แบบข้อความกับ Date จริง) แล้วตามด้วยใบใหม่ชุดเดิม
+  const OLD = (i) => row({ InvoiceDate: i % 2 ? '2024/03/10' : D('2024-03-10T00:00:00Z'), InvoiceNumber: 'OLD-' + i, Customer_id: 'CD00017',
+    ProductNumber: '10114', qtyCT: 1, Amt_actual: 100, Sales_type: 'Sell-in', Sales_business: 'TD', Entity: 'TNKI' });
+  const OLD_ROWS = Array.from({ length: 6000 }, (_, i) => OLD(i));
+  BIG_SHEET = [HEADER].concat(OLD_ROWS, SHEET_ROWS.slice(1));
+  const totalCells = BIG_SHEET.length * HEADER.length;
+
+  // 1) ผลลัพธ์ต้องเหมือนชีตเล็กเป๊ะ
+  CELLS_READ = 0;
+  const big = ctx._computeExternalSalesCandidates({ fresh: true });
+  const small = (BIG_SHEET = null, ctx._computeExternalSalesCandidates({ fresh: true }));
+  eq('ผลลัพธ์จากชีตที่มีใบเก่า 6,000 แถว = ชีตเล็กเป๊ะ (ใบพร้อมนำเข้า/นำเข้าแล้ว/จับคู่ไม่ได้)',
+    [ids(big.candidates), ids(big.alreadyImported), ids(big.errors)], [ids(small.candidates), ids(small.alreadyImported), ids(small.errors)]);
+
+  // 2) อ่านน้อยลงจริง
+  BIG_SHEET = [HEADER].concat(OLD_ROWS, SHEET_ROWS.slice(1));
+  CELLS_READ = 0;
+  ctx._readExternalFactSalesRows({ fresh: true });
+  eq('อ่านเซลล์น้อยกว่าทั้งชีตอย่างน้อย 5 เท่า (ชีต ' + totalCells + ' เซลล์ · อ่านจริง ' + CELLS_READ + ')', CELLS_READ * 5 < totalCells, true);
+  eq('  ไม่เรียก getDataRange เลย (ตัวจำลองจะ throw ถ้าเรียก)', true, true);
+
+  // 3) ชีตไม่เรียงตามวันที่ ต้องไม่ตกหล่น (ใบใหม่แทรกอยู่กลางใบเก่า)
+  const SCATTER = row({ InvoiceDate: '2026/10/01', InvoiceNumber: 'SCATTER-1', Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 3, Amt_actual: 300, Sales_type: 'Sell-in', Sales_business: 'TD', Entity: 'TNKI' });
+  BIG_SHEET = [HEADER].concat(OLD_ROWS.slice(0, 2000), [SCATTER], OLD_ROWS.slice(2000), SHEET_ROWS.slice(1));
+  const sc = ctx._readExternalFactSalesRows({ fresh: true });
+  eq('ชีตเรียงไม่ตรง: ใบใหม่ที่แทรกกลางใบเก่าต้องไม่ตกหล่น (ไม่สมมติว่าเรียงตามวันที่)', sc.some(x => x.invoiceNumber === 'SCATTER-1'), true);
+  eq('  และใบก่อน cutoff ที่อยู่ในช่วงเดียวกันยังถูกตัดทิ้ง (ตัวกรองรายแถวยังอยู่)', sc.some(x => /^OLD-/.test(x.invoiceNumber)), false);
+
+  // 4) วันที่เป็น Date จริงที่ตกขอบ cutoff — ช่วงอ่านเผื่อเขตเวลาไว้ 2 วัน แต่ตัวกรองรายแถวต้องตัดสินให้ถูกเสมอ
+  const E = (d, n) => row({ InvoiceDate: D(d), InvoiceNumber: n, Customer_id: 'CD00017', ProductNumber: '10114', qtyCT: 1, Amt_actual: 10, Sales_type: 'Sell-in', Sales_business: 'TD', Entity: 'TNKI' });
+  BIG_SHEET = [HEADER, E('2026-09-23T00:00:00Z', 'EDGE-23'), E('2026-09-24T15:00:00Z', 'EDGE-24'), E('2026-09-25T02:00:00Z', 'EDGE-25')];
+  const eg = ids(ctx._readExternalFactSalesRows({ fresh: true }));
+  eq('ขอบ cutoff แบบ Date จริง: 25 ก.ย. เข้า · 24 และ 23 ก.ย. ไม่เข้า (ช่วงอ่านหยาบเผื่อไว้ แต่ตัวกรองรายแถวตัดสินจริง)', eg, ['EDGE-25']);
+
+  // 5) ชีตว่าง/ไม่มีใบใหม่เลย
+  BIG_SHEET = [HEADER].concat(OLD_ROWS.slice(0, 50));
+  eq('ไม่มีใบใหม่เลย → คืนค่าว่าง ไม่ error ไม่อ่านแถวข้อมูลเพิ่ม', ctx._readExternalFactSalesRows({ fresh: true }).length, 0);
+  BIG_SHEET = [HEADER];
+  eq('ชีตมีแต่หัวตาราง → คืนค่าว่าง', ctx._readExternalFactSalesRows({ fresh: true }).length, 0);
+
+  // 6) แคช
+  BIG_SHEET = null;
+  Object.keys(cacheStore).forEach(k => delete cacheStore[k]);
+  CELLS_READ = 0;
+  const a1 = ctx._computeExternalSalesCandidates();
+  const firstRead = CELLS_READ;
+  const a2 = ctx._computeExternalSalesCandidates();
+  eq('เรียกครั้งที่สองใช้แคช ไม่อ่านชีตอีก (เซลล์ที่อ่านไม่เพิ่ม)', [firstRead > 0, CELLS_READ], [true, firstRead]);
+  eq('  ผลลัพธ์เหมือนกัน', [ids(a2.candidates), ids(a2.errors)], [ids(a1.candidates), ids(a1.errors)]);
+  eq('  บอกหน้าจอว่ามาจากแคช', ctx._EXT_LAST_READ.fromCache, true);
+  ctx._computeExternalSalesCandidates({ fresh: true });
+  eq('fresh:true ข้ามแคชและอ่านชีตใหม่', [CELLS_READ > firstRead, ctx._EXT_LAST_READ.fromCache], [true, false]);
+
+  // ใบที่ "นำเข้าแล้ว" ต้องไม่ติดแคชไปด้วย — ตัดสินจากตาราง PO สดทุกครั้ง
+  const before = ids(ctx._computeExternalSalesCandidates().candidates);
+  PURCHASE_ORDERS.push({ record_id: 50, tenant_id: 'T1', source_ref: 'INV-1', status: 'sent' });
+  const after = ctx._computeExternalSalesCandidates();
+  eq('★ นำเข้า INV-1 ไปแล้วระหว่างแคชยังอุ่น → รอบถัดไปไม่เสนอใบนั้นซ้ำ (แคชเก็บแค่แถวจากชีต ไม่เก็บสถานะนำเข้า)',
+    [before.includes('INV-1'), ids(after.candidates).includes('INV-1'), ids(after.alreadyImported).includes('INV-1')], [true, false, true]);
+  PURCHASE_ORDERS.pop();
+
+  // 7) preview: refresh ข้ามแคช และบอกเวลา/แหล่ง
+  Object.assign(ctx, { _requirePermission: () => null, _isCompanySide: () => true });
+  const SESS = { adminUserId: 'a1', role_code: 'owner_admin', tenant_id: '' };
+  ctx.previewExternalSalesImport(SESS, {});
+  const warm = ctx.previewExternalSalesImport(SESS, {});
+  eq('preview ปกติ: ใช้แคช + บอกว่ามาจากแคชและอ่านเมื่อไหร่', [warm.fromCache, typeof warm.sheetReadAt], [true, 'string']);
+  const cold = ctx.previewExternalSalesImport(SESS, { refresh: true });
+  eq('preview ส่ง refresh:true → อ่านสดใหม่', cold.fromCache, false);
+
+  // 8) รอบอัตโนมัติต้องข้ามแคช ส่วนปุ่มแอดมินใช้แคช
+  const SPY = [];
+  ctx._computeExternalSalesCandidates = (o) => { SPY.push(o && o.fresh); return { candidates: [], errors: [], alreadyImported: [] }; };
+  Object.assign(ctx, { _withDocLock: fn => fn() });
+  ctx._runExternalSalesImport(null, 'system:auto');
+  ctx._runExternalSalesImport({ 'IV-X': true }, 'u1');
+  eq('★ รอบอัตโนมัติตามเวลาอ่านสดเสมอ (ชีตเพิ่งอัปเดต 08:00) · ปุ่มแอดมินใช้แคชที่ตอนกดตรวจเพิ่งสร้าง', SPY, [true, false]);
+  ctx._computeExternalSalesCandidates = REAL_COMPUTE;
+  BIG_SHEET = null;
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

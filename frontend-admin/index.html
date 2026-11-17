@@ -9346,24 +9346,31 @@ async function esiLoadAutoStatus(){
     (lr.invoices && lr.invoices.length ? '<br>'+lr.invoices.map(esc).join('<br>') : '')+'</div>' : '<div class="unit" style="margin-top:4px">ยังไม่เคยรันอัตโนมัติ</div>';
   box.innerHTML = '<div class="form-card" style="margin-bottom:10px">'+head+last+'</div>';
 }
-async function esiCheck(){
+async function esiCheck(refresh){
   const btn = document.getElementById('esi-check-btn'), box = document.getElementById('esi-result');
-  btn.disabled = true; btn.textContent = 'กำลังตรวจ... (อ่านชีตภายนอกช้า รอสักครู่)';
-  box.innerHTML = '<p class="unit">กำลังอ่านรายการขายออกจากชีตกลาง — ปกติใช้เวลา 1-2 นาที…</p>';
-  const r = await callApi('previewExternalSalesImport', {});
+  btn.disabled = true; btn.textContent = 'กำลังตรวจ...';
+  box.innerHTML = tnkWait(120, 'กำลังอ่านรายการขายออกจากชีตกลาง…', 56);
+  const r = await callApi('previewExternalSalesImport', refresh === true ? { refresh: true } : {});
   btn.disabled = false; btn.textContent = 'ตรวจรายการใหม่';
   if (!r.success) { box.innerHTML = '<div class="err" style="display:block">'+esc(r.message)+'</div>'; return; }
   esiData = r;
   renderEsi();
 }
+/* ★ บอกว่าข้อมูลนี้อ่านจากชีตเมื่อไหร่ + มาจากแคชหรือไม่ — แคชทำให้ "ตรวจ → นำเข้า → ตรวจซ้ำ" ไม่ต้องรออ่านชีตสามรอบ
+   แต่ต้องมีทางดึงสดเมื่ออยากเห็นของที่ชีตเพิ่งอัปเดต (ชีตอัปเดต 08:00/12:00/18:00) */
+function esiReadNote(r){
+  if (!r.sheetReadAt) return '';
+  return '<p class="unit" style="margin:0 0 8px">อ่านชีตเมื่อ ' + esc(r.sheetReadAt) + (r.fromCache ? ' (ใช้ข้อมูลที่เพิ่งอ่านไว้ ไม่ต้องรอใหม่)' : '') +
+    ' · <a href="#" onclick="esiCheck(true);return false">ดึงสดใหม่จากชีต</a></p>';
+}
 function renderEsi(){
   const r = esiData, box = document.getElementById('esi-result');
   if (!r.candidates.length) {
-    box.innerHTML = '<p class="unit">ไม่มีรายการใหม่ที่พร้อมนำเข้า (ตั้งแต่ '+esc(r.cutoffDate)+')'+
+    box.innerHTML = esiReadNote(r) + '<p class="unit">ไม่มีรายการใหม่ที่พร้อมนำเข้า (ตั้งแต่ '+esc(r.cutoffDate)+')'+
       (r.errors.length ? ' — มี '+r.errors.length+' ใบจับคู่ไม่ได้ ดูด้านล่าง' : '')+'</p>' + esiErrorsHtml(r);
     return;
   }
-  box.innerHTML =
+  box.innerHTML = esiReadNote(r) +
     '<div class="table-wrap"><table><thead><tr><th><input type="checkbox" checked onclick="esiToggleAll(this.checked)"></th>' +
     '<th>ใบกำกับภาษี</th><th>วันที่ขาย</th><th>ศูนย์</th><th>รายการ</th><th>มูลค่า</th></tr></thead><tbody>' +
     r.candidates.map(c => '<tr><td><input type="checkbox" class="esi-pick" value="'+esc(c.invoiceNumber)+'" checked></td>' +

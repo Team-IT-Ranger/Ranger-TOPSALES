@@ -37,32 +37,70 @@ function _externalDateStr(v) {
  * อ่านชีต FactSales ดิบๆ กรองแค่ Entity/Sales_type/วันที่ตั้งแต่ cutoff — คืน array ของแถวที่ map คอลัมน์แล้ว
  * (ไม่ขึ้นกับ session/permission เพื่อให้เรียกจาก time trigger ได้ในอนาคต)
  */
-function _readExternalFactSalesRows() {
+/* ★★ เร็วขึ้นด้วยการ "ไม่อ่านทั้งชีต" (17 พ.ย. 2026 — ผู้ใช้แจ้งว่า 4.3.1 ช้ามากๆ)
+   เดิม `getDataRange().getValues()` ดึงทั้ง 256K แถว × ทุกคอลัมน์ (หลายล้านเซลล์ ~2 นาที) ทั้งที่ใช้แค่แถวตั้งแต่ cutoff
+   ตอนนี้: 1) อ่านหัวตาราง 2) อ่าน **คอลัมน์วันที่คอลัมน์เดียว** แล้วหาช่วงแถวที่ >= cutoff
+   3) อ่านเฉพาะช่วงแถวนั้น + เฉพาะช่วงคอลัมน์ที่ใช้ · ผลลัพธ์เหมือนเดิมทุกอย่าง (ตัวกรองรายแถวด้านล่างยังอยู่ครบ)
+   ★ ไม่สมมติว่าชีตเรียงตามวันที่ — อ่านตั้งแต่แถวแรกถึงแถวสุดท้ายที่เข้าเงื่อนไข ถ้าเรียงไม่ตรงก็ยังถูก แค่อ่านเยอะขึ้น
+   ★ แคชผลที่กรองแล้ว 5 นาที: "กดตรวจ → กดนำเข้า → ตรวจซ้ำ" เคยอ่านชีตสามรอบติด · รอบอัตโนมัติตามเวลาข้ามแคชเสมอ
+     (opts.fresh) เพราะต้องเห็นข้อมูลที่ชีตเพิ่งอัปเดต · ใบที่ "นำเข้าแล้ว" ตัดสินจากตาราง PO สดเสมอ ไม่ผ่านแคชนี้ */
+var EXTERNAL_SALES_CACHE_KEY = 'ext_sales_rows_v1';
+var EXTERNAL_SALES_CACHE_TTL = 300;
+var _EXT_LAST_READ = { fromCache: false, at: '' };   // ให้ preview บอกหน้าจอว่าข้อมูลนี้อ่านเมื่อไหร่/มาจากแคชหรือไม่
+
+function _readExternalFactSalesRows(opts) {
+  opts = opts || {};
+  if (!opts.fresh) {
+    try {
+      var hit = _cacheBigGet(EXTERNAL_SALES_CACHE_KEY);
+      if (hit) { var parsed = JSON.parse(hit); _EXT_LAST_READ = { fromCache: true, at: parsed.at }; return parsed.rows; }
+    } catch (e) { /* แคชพัง = อ่านชีตสด */ }
+  }
   var ss = SpreadsheetApp.openById(EXTERNAL_SALES_SHEET_ID);
   var sh = ss.getSheetByName(EXTERNAL_SALES_SHEET_TAB);
   if (!sh) throw new Error('ไม่พบชีต "' + EXTERNAL_SALES_SHEET_TAB + '" ในไฟล์ภายนอก');
-  var values = sh.getDataRange().getValues();
-  if (values.length < 2) return [];
-  var header = values[0];
+  var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return [];
+  var header = sh.getRange(1, 1, 1, lastCol).getValues()[0];
   var col = {};
   header.forEach(function(h, i) { col[String(h).trim()] = i; });
   var need = ['InvoiceDate', 'InvoiceNumber', 'Customer_id', 'ProductNumber', 'qtyCT', 'Amt_actual', 'DiscountAmt', 'Sales_type', 'Entity', 'Sales_business'];
   need.forEach(function(k) { if (col[k] === undefined) throw new Error('ชีตภายนอกไม่มีคอลัมน์ "' + k + '" (โครงสร้างไฟล์อาจเปลี่ยน)'); });
 
-  var out = [];
-  for (var r = 1; r < values.length; r++) {
-    var row = values[r];
-    if (String(row[col.Entity] || '').trim() !== EXTERNAL_SALES_ENTITY) continue;
-    if (String(row[col.Sales_type] || '').trim() !== EXTERNAL_SALES_TYPE) continue;
-    if (String(row[col.Sales_business] || '').trim() !== EXTERNAL_SALES_BUSINESS) continue;
-    var dateStr = _externalDateStr(row[col.InvoiceDate]);
-    if (!dateStr || dateStr < EXTERNAL_SALES_IMPORT_CUTOFF) continue;
-    out.push({
-      invoiceDate: dateStr, invoiceNumber: String(row[col.InvoiceNumber] || '').trim(),
-      customerId: String(row[col.Customer_id] || '').trim(), productNumber: String(row[col.ProductNumber] || '').trim(),
-      qtyCT: Number(row[col.qtyCT]) || 0, amtActual: Number(row[col.Amt_actual]) || 0, discountAmt: Number(row[col.DiscountAmt]) || 0
-    });
+  // 2) คอลัมน์วันที่คอลัมน์เดียว → ช่วงแถวที่เข้าเงื่อนไข
+  var dates = sh.getRange(2, col.InvoiceDate + 1, lastRow - 1, 1).getValues();
+  var cutoffMs = new Date(EXTERNAL_SALES_IMPORT_CUTOFF + 'T00:00:00Z').getTime() - 2 * 86400000;   // เผื่อเขตเวลา — ตัวกรองรายแถวด้านล่างตัดสินจริง
+  var first = -1, last = -1;
+  for (var i = 0; i < dates.length; i++) {
+    var v = dates[i][0], ok;
+    if (v instanceof Date) ok = v.getTime() >= cutoffMs;       // ไม่ format ทีละเซลล์ — 256K ครั้งช้ากว่าอ่านชีตอีก
+    else { var ds = _externalDateStr(v); ok = !!ds && ds >= EXTERNAL_SALES_IMPORT_CUTOFF; }
+    if (ok) { if (first < 0) first = i; last = i; }
   }
+  var out = [];
+  if (first >= 0) {
+    // 3) เฉพาะช่วงแถว + ช่วงคอลัมน์ที่ใช้
+    var minC = lastCol, maxC = 0;
+    need.forEach(function(k) { if (col[k] < minC) minC = col[k]; if (col[k] > maxC) maxC = col[k]; });
+    var values = sh.getRange(first + 2, minC + 1, last - first + 1, maxC - minC + 1).getValues();
+    var c = {}; need.forEach(function(k) { c[k] = col[k] - minC; });
+    for (var r = 0; r < values.length; r++) {
+      var row = values[r];
+      if (String(row[c.Entity] || '').trim() !== EXTERNAL_SALES_ENTITY) continue;
+      if (String(row[c.Sales_type] || '').trim() !== EXTERNAL_SALES_TYPE) continue;
+      if (String(row[c.Sales_business] || '').trim() !== EXTERNAL_SALES_BUSINESS) continue;
+      var dateStr = _externalDateStr(row[c.InvoiceDate]);
+      if (!dateStr || dateStr < EXTERNAL_SALES_IMPORT_CUTOFF) continue;
+      out.push({
+        invoiceDate: dateStr, invoiceNumber: String(row[c.InvoiceNumber] || '').trim(),
+        customerId: String(row[c.Customer_id] || '').trim(), productNumber: String(row[c.ProductNumber] || '').trim(),
+        qtyCT: Number(row[c.qtyCT]) || 0, amtActual: Number(row[c.Amt_actual]) || 0, discountAmt: Number(row[c.DiscountAmt]) || 0
+      });
+    }
+  }
+  var at = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HH:mm');
+  _EXT_LAST_READ = { fromCache: false, at: at };
+  try { _cacheBigPut(EXTERNAL_SALES_CACHE_KEY, JSON.stringify({ at: at, rows: out }), EXTERNAL_SALES_CACHE_TTL); } catch (e2) { /* ไม่มีแคชก็แค่ช้ากว่า */ }
   return out;
 }
 
@@ -71,8 +109,8 @@ function _readExternalFactSalesRows() {
  * คืน { candidates:[...พร้อมนำเข้า], alreadyImported:[...], errors:[...แถวที่จับคู่ไม่ได้] }
  * candidates[i] = { invoiceNumber, invoiceDate, tenantId, tenantName, lines:[{productId,productCode,productName,qtyCT,amtActual}], totalAmt }
  */
-function _computeExternalSalesCandidates() {
-  var rows = _readExternalFactSalesRows();
+function _computeExternalSalesCandidates(opts) {
+  var rows = _readExternalFactSalesRows(opts);
   var tenantByAccount = {}; centralObjects('tenants').forEach(function(t) {
     var acc = String(t.customer_account || '').trim(); if (acc) tenantByAccount[acc] = t;
   });
@@ -141,12 +179,12 @@ function previewExternalSalesImport(session, payload) {
   var err = _requirePermission(session, 'purchasing', 'edit'); if (err) return err;
   var g = _extImportScope(session, payload); if (g.error) return g.error;
   try {
-    var r = _computeExternalSalesCandidates();
+    var r = _computeExternalSalesCandidates({ fresh: !!(payload && payload.refresh) });
     var inS = function(x) { return _inExtScope(x, g.scope); };
     return { success: true, candidates: r.candidates.filter(inS), alreadyImported: r.alreadyImported.filter(inS),
       // จับคู่ศูนย์ไม่ได้ = ไม่รู้ว่าเป็นของใคร → ตอนสวมสิทธิ์ตัวแทนไม่โชว์ (ไม่ใช่ของตัวแทนนี้แน่ๆ หรือไม่ก็ตอบไม่ได้)
       errors: r.errors.filter(inS), scopeTenantId: g.scope || '',
-      cutoffDate: EXTERNAL_SALES_IMPORT_CUTOFF };
+      cutoffDate: EXTERNAL_SALES_IMPORT_CUTOFF, sheetReadAt: _EXT_LAST_READ.at, fromCache: _EXT_LAST_READ.fromCache };
   } catch (e) { return { success: false, message: 'อ่านชีตภายนอกไม่สำเร็จ: ' + e.message }; }
 }
 
@@ -186,7 +224,8 @@ function importExternalSalesInvoices(session, payload) {
  */
 function _runExternalSalesImport(wanted, actorId, onlyTenant) {
   var fresh;
-  try { fresh = _computeExternalSalesCandidates(); } catch (e) { return { success: false, message: 'อ่านชีตภายนอกไม่สำเร็จ: ' + e.message }; }
+  // รอบอัตโนมัติ (wanted = null) ข้ามแคชเสมอ · ปุ่มแอดมินใช้แคช 5 นาทีที่ตอนกด "ตรวจ" เพิ่งสร้างไว้ (ไม่อ่านชีตซ้ำ)
+  try { fresh = _computeExternalSalesCandidates({ fresh: !wanted }); } catch (e) { return { success: false, message: 'อ่านชีตภายนอกไม่สำเร็จ: ' + e.message }; }
   var byInvoice = {}; fresh.candidates.forEach(function(c) { byInvoice[c.invoiceNumber] = c; });
   var targets = wanted ? Object.keys(wanted) : fresh.candidates.map(function(c) { return c.invoiceNumber; });
 
