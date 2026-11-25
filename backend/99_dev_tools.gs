@@ -470,6 +470,8 @@ function testStaffApprovalPush() {
   if (!t) { var first = centralObjects('tenants').filter(function(x) { return isFlagOn(x.is_active); })[0]; t = first ? String(first.tenant_id) : ''; }
   var sp = PropertiesService.getScriptProperties();
   Logger.log('ปลายทาง: ' + JSON.stringify(_saNotifyTargets(t)) + ' · มี token: ' + !!sp.getProperty('LINE_CHANNEL_ACCESS_TOKEN') + ' · มี LIFF_ID: ' + !!getConfig().LIFF_ID);
-  _saNotifyNewRequest('Utest0000000000000000000000000000', 'ทดสอบ การแจ้งเตือน (ไม่ใช่คำขอจริง)', t);
+  // ★ ไม่ส่ง LINE id ปลอมไปในลิงก์ — ปุ่มจะเปิดหน้าอนุมัติเฉยๆ (รายการจริงที่รออยู่) แทนที่จะชี้ไปหาคนที่ไม่มีอยู่จริง
+  //   (เจอ 25 พ.ย. 2026: ผู้ใช้กดปุ่มจากการ์ดทดสอบแล้วไม่เห็นอะไรให้อนุมัติ เพราะการ์ดชี้ไปที่ผู้สมัครปลอม)
+  _saNotifyNewRequest('', 'ทดสอบ การแจ้งเตือน (ไม่ใช่คำขอจริง)', t);
   Logger.log('ส่งแล้ว — ดูผลในกลุ่ม/แชท และบรรทัด "staff approval push" ด้านบนถ้ามีปัญหา');
 }
