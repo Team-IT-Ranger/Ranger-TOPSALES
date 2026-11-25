@@ -114,7 +114,7 @@ function handleFollow_(event) {
 function handleMessage_(event) {
   var lineUserId = event.source && event.source.userId;
   var replyToken = event.replyToken;
-  if (!lineUserId || !replyToken) return;
+  if (!replyToken) return; // ไม่เช็ค lineUserId ตรงนี้: /id ในกลุ่มต้องตอบ Group ID ได้แม้ LINE ไม่ส่ง userId ของคนพิมพ์มา (ด่านเช็คอยู่หลังคำสั่ง id)
 
   var rawText = String(event.message.text || '').trim(); // เก็บของดิบไว้ log — ตัวที่ใช้ตัดสินคำสั่งจะถูกตัด "/" ออกด้านล่าง
   var text = rawText;
@@ -131,6 +131,23 @@ function handleMessage_(event) {
        (ไม่ได้บังคับให้ใส่ — แชทเดี่ยวพิมพ์เฉยๆ ก็ยังได้เหมือนเดิม) */
     text = text.substring(1).trim();
   }
+
+  /* ★ คำสั่ง id / Id / ID (แชทเดี่ยว) และ /id (กลุ่ม) — แสดง User ID / Group ID เป็นการ์ด Flex (25 พ.ย. 2026)
+     จงใจตอบ "ก่อนด่านตัวตน และก่อนลงทะเบียน liff_users": คนที่ต้องใช้คำสั่งนี้มากที่สุดคือคนที่ยังไม่ได้รับอนุมัติ/ยังไม่ผูก LINE
+     เพราะต้องเอา User ID ไปให้ผู้ดูแลผูกบัญชี (ดู bindAdminLineId ใน backend/99_dev_tools.gs) — ติดด่านอนุมัติแล้วจะเป็นไก่กับไข่
+     ไม่เปิดเผยอะไรเกินที่ LINE ส่งมาในคำขอของคนพิมพ์เองอยู่แล้ว (ID ของตัวเอง/ของกลุ่มที่ตัวเองอยู่) */
+  if (/^id$/i.test(text)) {
+    var idName = '';
+    try {
+      if (!isGroupChat && lineUserId) idName = fetchLineDisplayName_(lineUserId); // best effort — ไม่ได้ชื่อก็ตอบแค่ ID
+      replyAndLog_(replyToken, lineUserId || '', idName, rawText, botIdMessages_(event.source, idName));
+    } catch (err) {
+      console.error('id command error: ' + (err && err.stack || err));
+      replyAndLog_(replyToken, lineUserId || '', idName, rawText, 'ขอโทษครับ ดึงไอดีไม่สำเร็จ ลองใหม่อีกครั้ง');
+    }
+    return;
+  }
+  if (!lineUserId) return;
 
   var displayName = '';
 
@@ -170,6 +187,48 @@ function replyAndLog_(replyToken, lineUserId, displayName, userMessage, response
   }).join('\n'));
 }
 
+/** การ์ด Flex แสดง User ID (แชทเดี่ยว) / Group ID / Room ID (แชทกลุ่ม) + ข้อความล้วนที่มีแต่ ID ให้กดค้างคัดลอก
+    ★ ส่งสองข้อความ: Flex คัดลอกด้วยการกดค้างไม่ได้เสถียร ข้อความล้วนข้อสองคือทางคัดลอกที่ใช้ได้ทุกเครื่อง
+    (ไม่ใช้ action `clipboard` ในปุ่ม — ไม่ได้ทดสอบกับ LINE จริง และ action ที่ไม่รู้จักทำให้ LINE ปฏิเสธทั้งคำตอบ) */
+function botIdMessages_(source, displayName) {
+  var type = source && source.type;
+  var kind = type === 'group'
+    ? { id: source.groupId, label: 'GROUP ID', title: 'LINE Group ID', sub: 'ไอดีของกลุ่มนี้', color: '#12805C', tint: '#E4F5EE', ink: '#0B5D42', icon: '👥',
+        hint: 'ส่งไอดีนี้ให้ผู้ดูแลระบบเพื่อตั้งค่าส่งข้อความเข้ากลุ่มนี้' }
+    : type === 'room'
+    ? { id: source.roomId, label: 'ROOM ID', title: 'LINE Room ID', sub: 'ไอดีของห้องแชทนี้', color: '#6D4AFF', tint: '#EEE9FF', ink: '#4A2FD0', icon: '💬',
+        hint: 'ส่งไอดีนี้ให้ผู้ดูแลระบบเพื่อตั้งค่าส่งข้อความเข้าห้องนี้' }
+    : { id: source && source.userId, label: 'USER ID', title: 'LINE User ID', sub: 'ไอดีประจำตัวของคุณ', color: '#2B63D9', tint: '#E8EFFD', ink: '#1F4BB0', icon: '🪪',
+        hint: 'ส่งไอดีนี้ให้ผู้ดูแลระบบเพื่อผูกบัญชี LINE ของคุณเข้ากับระบบ' };
+  var id = String(kind.id || '');
+  if (!id) return 'ขอโทษครับ LINE ไม่ได้ส่งไอดีมาให้ในแชทนี้ ลองพิมพ์ในแชทเดี่ยวกับบอทแทนนะครับ';
+
+  var body = [];
+  if (displayName) {
+    body.push({ type: 'box', layout: 'horizontal', contents: [
+      { type: 'text', text: 'ชื่อ LINE', size: 'xs', color: '#8A94A6', flex: 0 },
+      { type: 'text', text: String(displayName), size: 'sm', weight: 'bold', color: '#1B2433', align: 'end', wrap: true }
+    ] });
+  }
+  body.push({ type: 'text', text: kind.label, size: 'xxs', weight: 'bold', color: '#8A94A6', margin: displayName ? 'lg' : 'none' });
+  body.push({ type: 'box', layout: 'vertical', margin: 'sm', backgroundColor: kind.tint, cornerRadius: 'md', paddingAll: '12px',
+    contents: [{ type: 'text', text: id, size: 'sm', weight: 'bold', color: kind.ink, wrap: true }] });
+  body.push({ type: 'text', text: kind.hint, size: 'xs', color: '#8A94A6', wrap: true, margin: 'lg' });
+  body.push({ type: 'text', text: '⬇ กดค้างที่ข้อความด้านล่างเพื่อคัดลอก', size: 'xs', color: kind.color, weight: 'bold', wrap: true, margin: 'sm' });
+
+  return [
+    { type: 'flex', altText: kind.title + ': ' + id, contents: {
+      type: 'bubble', size: 'mega',
+      header: { type: 'box', layout: 'vertical', backgroundColor: kind.color, paddingAll: '16px', spacing: 'xs', contents: [
+        { type: 'text', text: kind.icon + '  ' + kind.title, size: 'lg', weight: 'bold', color: '#FFFFFF' },
+        { type: 'text', text: kind.sub, size: 'xs', color: '#E6EDFB' }
+      ] },
+      body: { type: 'box', layout: 'vertical', paddingAll: '16px', contents: body }
+    } },
+    { type: 'text', text: id }
+  ];
+}
+
 // ── ตอบคำถาม (ชุดคำสั่งเริ่มต้น — เพิ่มเงื่อนไขใหม่ต่อท้ายได้เรื่อยๆ) ──
 // คืนสตริง = ข้อความล้วน · คืน array = message object ของ LINE (ใช้กับ Flex/ปุ่มเลือก)
 function answerQuestion_(text, lineUserId) {
@@ -200,6 +259,7 @@ function helpText_() {
     '• สต็อก <รหัส/ชื่อสินค้า> — สินค้าตัวเดียวในคลังกลางบริษัท หน่วยฐาน + ยอดจอง\n' +
     '• ยอดค้างชำระ <รหัส/ชื่อลูกค้า> — ใบแจ้งหนี้ที่ยังค้างของลูกค้ารายนั้น\n' +
     '• สถานะบิล <รหัส/ชื่อลูกค้า> — บิลขายล่าสุดของลูกค้ารายนั้น (สถานะส่งของ+การชำระเงิน)\n' +
+    '• id — แสดง LINE User ID ของคุณ (ในกลุ่มพิมพ์ /id เพื่อดู Group ID)\n' +
     '(กำลังทยอยเพิ่มคำสั่งอื่นครับ)\n\n' +
     'ในแชทกลุ่ม ต้องพิมพ์ "/" นำหน้าเสมอ เช่น /ยอดขายวันนี้ — แชทเดี่ยวไม่ต้องใส่';
 }

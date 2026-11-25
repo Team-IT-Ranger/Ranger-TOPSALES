@@ -534,6 +534,47 @@ eq('★ ในกลุ่ม ไม่มี "/" นำหน้า = ไม่
 post([msg('U7', '/ยอดขายวันนี้', { type: 'group', groupId: 'G1', userId: 'U7' })]);
 ok('ในกลุ่ม มี "/" = ตอบ', /ยอดขายวันนี้/.test(lastText()), lastText());
 
+console.log('\n-- คำสั่ง id / /id (25 พ.ย. 2026) --');
+const flexOf = () => lastMsgs().find(m => m.type === 'flex');
+const flexTexts = f => JSON.stringify(f.contents);
+for (const w of ['id', 'Id', 'ID', 'iD', '/id', '/ID', '  id  ']) {
+  post([msg('U7', w)]);
+  const m = lastMsgs();
+  ok('แชทเดี่ยวพิมพ์ "' + w.trim() + '" → การ์ด Flex + ข้อความล้วนที่มีแค่ User ID', m.length === 2 && m[0].type === 'flex' && m[1].type === 'text' && m[1].text === 'U7', m);
+}
+post([msg('U7', 'id')]);
+ok('การ์ด User ID: หัวเขียน LINE User ID, มี ID, มีชื่อ LINE จากโปรไฟล์, altText อ่านได้',
+  /LINE User ID/.test(flexTexts(flexOf())) && /"text":"U7"/.test(flexTexts(flexOf())) && /ชื่อจาก LINE/.test(flexTexts(flexOf())) && flexOf().altText === 'LINE User ID: U7', flexOf());
+ok('การ์ดเป็น bubble ที่ LINE รับได้ (มี header/body และไม่ใช้ action ที่ไม่ได้ทดสอบ)', flexOf().contents.type === 'bubble' && !!flexOf().contents.header && !!flexOf().contents.body && !/clipboard/.test(flexTexts(flexOf())), flexOf());
+ok('คำว่า id ไม่ถูกลากไปตอบเป็นคำสั่งอื่น / ไม่ใช่ "ยังไม่เข้าใจคำถาม"', !/ยังไม่เข้าใจ/.test(JSON.stringify(lastMsgs())), lastMsgs());
+
+post([msg('U9x', 'id', { type: 'user', userId: 'U9x' })]);
+ok('★ ผู้ใช้ที่ยังไม่ได้รับอนุมัติ/ไม่เคยลงทะเบียน ก็ขอ ID ได้ (ต้องใช้ ID นี้ไปให้แอดมินผูกบัญชี)', lastMsgs()[1] && lastMsgs()[1].text === 'U9x', lastMsgs());
+eq('  และคำสั่ง id ไม่ลงทะเบียนเขาเข้า liff_users ให้ (ไม่มีผลข้างเคียง)', files[PROD].liff_users.__rows.some(r => r.line_user_id === 'U9x'), false);
+post([msg('U8', 'id')]);
+ok('  ผู้ใช้ที่รออนุมัติอยู่ (U8) ก็ได้การ์ด ไม่ใช่ข้อความ "รอแอดมินอนุมัติ"', lastMsgs()[0] && lastMsgs()[0].type === 'flex', lastMsgs());
+
+post([msg('U7', '/id', { type: 'group', groupId: 'Cgroup123', userId: 'U7' })]);
+ok('กลุ่ม: /id → การ์ด Group ID + ข้อความล้วนที่มีแค่ Group ID',
+  lastMsgs().length === 2 && /LINE Group ID/.test(flexTexts(flexOf())) && lastMsgs()[1].text === 'Cgroup123' && !/"text":"U7"/.test(flexTexts(flexOf())), lastMsgs());
+ok('  การ์ดกลุ่มเป็นคนละสี/คนละหัวกับการ์ดส่วนตัว (แยกด้วยตาได้)', flexOf().contents.header.backgroundColor !== (post([msg('U7', 'id')]), flexOf().contents.header.backgroundColor), 'same color');
+post([msg('U7', '/ID', { type: 'group', groupId: 'Cgroup123', userId: 'U7' })]);
+ok('  /ID ตัวพิมพ์ใหญ่ในกลุ่มก็ได้', lastMsgs()[1] && lastMsgs()[1].text === 'Cgroup123', lastMsgs());
+post([msg('U7', 'id', { type: 'group', groupId: 'Cgroup123', userId: 'U7' })]);
+eq('★ ในกลุ่มพิมพ์ id เฉยๆ (ไม่มี /) ยังเงียบเหมือนเดิม — กติกา "กลุ่มต้องมี /" ไม่ถูกเจาะ', replies().length, 0);
+post([msg('U7', '/id', { type: 'group', groupId: 'Cgroup123' })]);
+ok('  LINE ไม่ส่ง userId ของคนพิมพ์มาในกลุ่ม → ยังตอบ Group ID ได้', lastMsgs()[1] && lastMsgs()[1].text === 'Cgroup123', lastMsgs());
+post([msg('U7', '/id', { type: 'room', roomId: 'Rroom9', userId: 'U7' })]);
+ok('ห้องแชท (room) → การ์ด Room ID', /LINE Room ID/.test(flexTexts(flexOf())) && lastMsgs()[1].text === 'Rroom9', lastMsgs());
+post([msg('U7', '/id', { type: 'group', userId: 'U7' })]);
+ok('ไม่มี groupId มาเลย → ข้อความบอกตรงๆ ไม่ส่งการ์ดว่าง', lastMsgs().length === 1 && lastMsgs()[0].type === 'text' && /ไม่ได้ส่งไอดี/.test(lastMsgs()[0].text), lastMsgs());
+const idLog = chatlog()[chatlog().length - 1];
+ok('chatlog เก็บ altText ของการ์ด ไม่ใช่ JSON ทั้งก้อน', /^\[flex\]/.test(String(idLog.response_message)) || /Group ID|ไม่ได้ส่งไอดี/.test(String(idLog.response_message)), idLog);
+post([msg('U7', 'identity')]);
+ok('คำที่ขึ้นต้นด้วย id แต่ไม่ใช่ id เปล่าๆ ไม่เข้าคำสั่งนี้', !(lastMsgs()[0] && lastMsgs()[0].type === 'flex' && /LINE User ID/.test(flexTexts(lastMsgs()[0]))), lastMsgs());
+post([msg('U7', 'help')]);
+ok('ช่วยเหลือ มีบรรทัดอธิบายคำสั่ง id', /id — แสดง LINE User ID/.test(lastText()) && /\/id/.test(lastText()), lastText());
+
 console.log('\n-- LINE ส่งซ้ำ --');
 const dup = msg('U7', 'ยอดขายวันนี้');
 post([dup]);
