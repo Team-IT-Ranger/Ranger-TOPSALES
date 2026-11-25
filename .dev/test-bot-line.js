@@ -50,8 +50,10 @@ const resetData = () => {
         { role_code: 'viewer', module_code: 'sales', can_view: 'TRUE', can_edit: 'FALSE' }
       ]),
       admin_user_tenants: sheet(['record_id', 'admin_user_id', 'tenant_id', 'created_at', 'created_by', 'line_user_id'], []),
-      liff_users: sheet(['line_user_id', 'display_name', 'role', 'tenant_id', 'status', 'last_login'], [
+      liff_users: sheet(['line_user_id', 'display_name', 'role', 'tenant_id', 'status', 'last_login', 'expires_at'], [
         { line_user_id: 'U7', display_name: 'พนักงานที่อนุมัติแล้ว', role: 'sales', tenant_id: '', status: 'Yes' },
+        { line_user_id: 'U20', display_name: 'ทีมชั่วคราวหมดอายุ', role: 'van_sales', tenant_id: '', status: 'Yes', expires_at: '2020-01-01' },
+        { line_user_id: 'U21', display_name: 'ทีมชั่วคราวยังไม่หมด', role: 'van_sales', tenant_id: '', status: 'Yes', expires_at: '2099-12-31' },
         { line_user_id: 'U8', display_name: 'ยังไม่อนุมัติ', role: 'รออนุมัติ', tenant_id: '', status: 'No' },
         { line_user_id: 'U10', display_name: 'พนักงานของ BDC', role: 'sales', tenant_id: 'BDC', status: 'Yes' }
       ]),
@@ -237,6 +239,13 @@ ok('★ แอดมินที่ผูก LINE ไว้ → ผ่านด�
 eq('และถูกลงทะเบียนในชีตให้ (ผู้ใช้ใหม่)', files[PROD].liff_users.__rows.some(r => r.line_user_id === 'U2'), true);
 post([msg('U5', 'ยอดขายวันนี้')]);
 ok('บัญชีแอดมินที่ถูกระงับ → ไม่ผ่าน', /รอแอดมินอนุมัติ/.test(lastText()), lastText());
+
+post([msg('U20', 'ยอดขายวันนี้')]);
+ok('★ ทีมชั่วคราวที่สิทธิ์หมดอายุแล้ว → บอทไม่ตอบข้อมูล บอกวันหมดอายุ (ตรงกับด่านมือถือ)', /หมดอายุแล้ว/.test(lastText()) && /2020-01-01/.test(lastText()) && !/จำนวนบิล/.test(lastText()), lastText());
+post([msg('U21', 'ยอดขายวันนี้')]);
+ok('วันหมดอายุยังไม่ถึง → ตอบได้ตามปกติ', /จำนวนบิล/.test(lastText()), lastText());
+post([msg('U20', 'id')]);
+ok('★ คำสั่ง id ยังตอบได้แม้สิทธิ์หมดอายุ (ต้องใช้ ID ไปขอสิทธิ์ใหม่)', lastMsgs()[0] && lastMsgs()[0].type === 'flex', lastMsgs());
 
 console.log('\n-- คำสั่งเดิมต้องไม่พังจากการแก้ --');
 post([msg('U7', 'ยอดขายวันนี้')]);

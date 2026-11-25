@@ -89,7 +89,10 @@ function listStaffAdmin(session, payload) {
   if (effTenantId) rows = rows.filter(function(u) { return String(u.tenant_id) === String(effTenantId); });
   return { success: true, data: rows.map(function(u) { return {
     lineUserId: u.line_user_id, displayName: u.display_name, role: u.role, tenantId: u.tenant_id,
-    status: u.status, lastLogin: safeDateStr(u.last_login)
+    status: u.status, lastLogin: safeDateStr(u.last_login),
+    // 61_staff_approval.gs — วันหมดอายุ/ใครตัดสิน (ชีตที่ยังไม่มีคอลัมน์ = ว่าง ไม่ใช่ error)
+    requestedAt: _saStamp(u.requested_at), expiresAt: _saDateStr(u.expires_at), expired: _saExpired(u.expires_at),
+    decidedBy: String(u.decided_by_name || ''), decidedAt: _saStamp(u.decided_at), campaign: _saCampaignOf(u.campaign)
   }; }) };
 }
 
@@ -117,15 +120,25 @@ function updateStaffAdmin(session, payload) {
       if (isFlagOn(ntRow.is_house)) return { success: false, message: 'สังกัดนี้ใช้ไม่ได้ — เลือก "บริษัท" หรือตัวแทนจำหน่ายรายใดรายหนึ่ง' };
     }
   }
+  // วันหมดอายุ (ทีมชั่วคราว) — ตรวจก่อนเขียนอะไรทั้งสิ้น ผิดแล้วต้องไม่เหลือการเปลี่ยนสถานะค้างครึ่งๆ
+  if (payload.expiresAt !== undefined && String(payload.expiresAt || '').trim()) {
+    var expIn = String(payload.expiresAt).trim();
+    if (!_saValidDate(expIn)) return { success: false, message: 'วันหมดอายุไม่ถูกต้อง' };
+    if (expIn < _saToday()) return { success: false, message: 'วันหมดอายุต้องไม่ใช่วันที่ผ่านมาแล้ว' };
+  }
   var sh = centralSheet('liff_users');
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(payload.lineUserId)) {
       if (effTenantId && String(data[i][3]) !== String(effTenantId)) return { success: false, message: 'ไม่มีสิทธิ์แก้ไขพนักงานของตัวแทนอื่น' };
+      var beforeStatus = data[i][4];
       if (payload.status) sh.getRange(i + 1, 5).setValue(payload.status);
       if (payload.role) sh.getRange(i + 1, 3).setValue(payload.role);
       if (newTenantId !== null) sh.getRange(i + 1, 4).setValue(newTenantId);
       centralInvalidate('liff_users');   // เขียนแบบดิบ ไม่ผ่าน centralUpdate
+      // ประทับ "ใครตัดสิน/หมดอายุ" + ลงประวัติ ให้ตรงกับทางมือถือ — ล้มเหลวต้องไม่ล้มการอนุมัติ (สถานะเขียนไปแล้ว)
+      try { _saStampAdminDecision(payload.lineUserId, beforeStatus, payload, session); }
+      catch (e) { Logger.log('updateStaffAdmin stamp: ' + (e && e.message || e)); }
       return { success: true };
     }
   }

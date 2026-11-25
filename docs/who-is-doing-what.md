@@ -70,6 +70,14 @@
 
 ---
 
+## ★ ค้างอยู่: อนุมัติผู้ใช้แอปมือถือผ่าน LINE + ทีม Sales Blitz (25 พ.ย. 2026 — บน `UAT` แล้ว ยังไม่ขึ้น `main`)
+
+- **เป็น backend เปลี่ยน** (`61_staff_approval.gs` ใหม่ + `04_auth` `05_router` `10_master_data` `00_setup_sheets` `99_dev_tools`) → ต้อง `clasp push` + Deploy → New version
+  **ทั้ง UAT และ prod** และ **บอท LINE ต้อง `clasp push` + Deploy แยก** (เช็ควันหมดอายุ) · ยังไม่มีใคร `clasp push` ของชิ้นนี้
+- **ต้องตั้ง Script Properties ของ backend (UAT และ prod)** ก่อนการแจ้งเตือนจะทำงาน: `LINE_CHANNEL_ACCESS_TOKEN` (ของบอท) · `STAFF_APPROVAL_LINE_GROUP_ID` (ได้จาก `/id` ในกลุ่ม · บอทต้องอยู่ในกลุ่ม)
+  แล้วรัน `testStaffApprovalPush()` ใน editor ดู log · รายละเอียดทั้งหมดใน CLAUDE.md หัวข้อ "อนุมัติผู้ใช้แอปมือถือผ่าน LINE"
+- ลำดับ: backend ก่อน → ค่อย `main` (หน้าเว็บใหม่ใช้กับ backend เก่าได้ไม่พัง แต่ยังไม่มีแจ้งเตือน/ประวัติ)
+
 ## เลน frontend
 
 - **กำลังทำ**: ว่าง — งานที่รับมาทั้งหมด merge เข้า UAT แล้ว (เป็นงานหน้าเว็บล้วน ไม่ต้อง clasp push)

@@ -25,7 +25,19 @@ var TENANT_MODULES = ['staff', 'zones', 'customers', 'sales', 'docnum', 'stock_r
 var TENANT_VIEW_ONLY_MODULES = ['products', 'pricing', 'promotions', 'settings'];
 
 var CENTRAL_SHEETS = {
-  liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login'],
+  /* ★ 25 พ.ย. 2026 (อนุมัติผู้ใช้ผ่านแอปมือถือ — 61_staff_approval.gs) เพิ่มคอลัมน์ต่อท้าย 6 ช่อง: เวลาที่ขอ · วันหมดอายุ ·
+     ใครตัดสิน · ชื่อคนตัดสิน · เวลาตัดสิน · หมายเหตุ — **ต่อท้ายเท่านั้น** เพราะโค้ดเดิมเขียน 6 ช่องแรกด้วยตำแหน่ง (04_auth/10_master_data)
+     · `status`: No = รออนุมัติ · Yes = อนุมัติ · Rejected = ไม่อนุมัติ · `expires_at` = วันสุดท้ายที่ใช้ได้ (yyyy-MM-dd ข้อความล้วน) */
+  liff_users: ['line_user_id','display_name','role','tenant_id','status','last_login',
+    'requested_at','expires_at','decided_by','decided_by_name','decided_at','decision_note',
+    'campaign'],   // 'BLITZ' = สมัครผ่านลิงก์/QR ของทีม sales blitz (61_staff_approval.gs) · ว่าง = สมัครตามปกติ
+  /* ★ ประวัติการอนุมัติทุกครั้ง (ไม่ลบ ไม่ทับ) — แถวใน liff_users บอกได้แค่ "ตอนนี้เป็นอย่างไร" ไม่บอกว่าเปลี่ยนมากี่รอบ ใครเปลี่ยน */
+  staff_approval_log: ['record_id','line_user_id','display_name','tenant_id','from_status','to_status','role','expires_at',
+    'by_line_user_id','by_name','note','channel','created_at'],
+  /* ★ รายชื่อผู้อนุมัติ "เพิ่ม" (นอกเหนือจากสิทธิ์โมดูล staff เดิม) — หนึ่งแถวต่อ (คน × ตัวแทน) · หนึ่งแถวใช้คีย์เดียว
+     เหมือน admin_user_tenants: เป็นแอดมินกรอก admin_user_id · เป็นพนักงานขายกรอก line_user_id
+     ★ คนละตารางกับ admin_user_tenants โดยตั้งใจ — อันนั้นแค่ "ย่อรายการ" ไม่ใช่ "ให้สิทธิ์" (ดูหัวไฟล์ 61_staff_approval.gs) */
+  staff_approvers: ['record_id','admin_user_id','line_user_id','tenant_id','created_at','created_by'],
   // line_user_id = ตัวตน LINE ที่ผูกกับบัญชีนี้ (กติกา 2026-09-24: ทุกบัญชีของทุกแอปผูกกับ LINE user id เสมอ)
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at','line_user_id'],
   /* ★ ผู้รับผิดชอบตัวแทน (57_user_tenants.gs) — "บัญชีฝั่งบริษัทคนนี้ดูแลตัวแทนรายไหนอยู่"

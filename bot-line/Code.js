@@ -169,12 +169,33 @@ function handleMessage_(event) {
       replyAndLog_(replyToken, lineUserId, displayName, rawText, 'บัญชีนี้ยังรอแอดมินอนุมัติอยู่ครับ อนุมัติแล้วถึงจะถามข้อมูลได้');
       return;
     }
+    // ทีมชั่วคราว (sales blitz) หมดสิทธิ์เองตามวันที่ผู้อนุมัติตั้งไว้ — ตรงกับด่านมือถือ (checkUser ใน backend/04_auth.gs)
+    // แอดมินที่ผูก LINE ไม่ถูกตัด (สิทธิ์ของเขามาจากบัญชีแอดมิน ไม่ใช่แถว liff_users)
+    if (!admin && liffExpired_(me)) {
+      replyAndLog_(replyToken, lineUserId, displayName, rawText, 'สิทธิ์การใช้งานของคุณหมดอายุแล้วครับ (ถึงวันที่ ' + liffExpiryStr_(me) + ') — ติดต่อผู้อนุมัติถ้าต้องใช้งานต่อ');
+      return;
+    }
 
     replyAndLog_(replyToken, lineUserId, displayName, rawText, answerQuestion_(text, lineUserId));
   } catch (err) {
     console.error('handleMessage_ error: ' + (err && err.stack || err));
     replyAndLog_(replyToken, lineUserId, displayName, rawText, 'ขอโทษครับ ระบบขัดข้องตอนตอบคำถามนี้ ลองใหม่อีกครั้ง หรือแจ้งแอดมิน');
   }
+}
+
+/** วันหมดอายุของแถว liff_users เป็น yyyy-MM-dd (Sheets อาจแปลงข้อความวันที่เป็น Date เอง) — ว่าง = ไม่หมดอายุ
+ *  ★ คัดลอกกติกาจาก `_saDateStr`/`_saExpired` ใน backend/61_staff_approval.gs (คนละโปรเจกต์ เรียกข้ามกันไม่ได้)
+ *    ใช้ได้ถึงสิ้นวันที่ระบุ · แก้ที่ใดที่หนึ่งต้องแก้อีกที่ */
+function liffExpiryStr_(me) {
+  var v = me && me.expires_at;
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v.getTime()) ? '' : Utilities.formatDate(v, 'Asia/Bangkok', 'yyyy-MM-dd');
+  var m = String(v).trim().match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : '';
+}
+function liffExpired_(me) {
+  var e = liffExpiryStr_(me);
+  return !!e && e < Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
 }
 
 /** response รับได้ทั้งสตริง (ข้อความล้วน) และ array ของ message object (Flex/quick reply) */

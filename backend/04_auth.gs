@@ -76,15 +76,23 @@ function getLineProfile(code, redirectUrl) {
 function checkUser(lineUid) {
   var sheet = centralSheet('liff_users');
   var data = sheet.getDataRange().getValues();
+  /* ★ อ่านคอลัมน์ expires_at ตามชื่อหัว (25 พ.ย. 2026) — 6 ช่องแรกยังเป็นตำแหน่งเดิมเสมอ คอลัมน์ใหม่ต่อท้าย
+     ชีตที่ยังไม่มีคอลัมน์นี้ = ไม่มีวันหมดอายุ ไม่ใช่ error (ก่อน deploy/ก่อนมีใครอนุมัติแบบใหม่) */
+  var expCol = (data[0] || []).indexOf('expires_at');
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] === lineUid) {
       sheet.getRange(i + 1, 6).setValue(new Date()); // last_login
+      var exp = expCol === -1 ? '' : _saDateStr(data[i][expCol]);
       return {
         exists: true,
         name: data[i][1],
         role: data[i][2],
         tenantId: data[i][3],
-        status: data[i][4]
+        status: data[i][4],
+        /* ★ expired แยกจาก status โดยตั้งใจ — status ยังเป็น 'Yes' (ตรวจย้อนได้ว่าเคยอนุมัติ) แต่ใช้งานไม่ได้แล้ว
+           ทุกด่านที่เช็ค "อนุมัติแล้วไหม" ต้องดู expired ด้วย (ดูหัวไฟล์ 61_staff_approval.gs) */
+        expiresAt: exp,
+        expired: !!exp && exp < _saToday()
       };
     }
   }
@@ -100,14 +108,20 @@ function registerUser(userData) {
   if (!_activeTenantRow(userData.schema)) return { success: false, message: 'ไม่พบตัวแทนจำหน่ายที่เลือก (หรือถูกปิดการใช้งานอยู่)' };
   var existing = checkUser(userData.lineUid);   // กดสมัครซ้ำ/เน็ตกระตุก แล้วได้แถวซ้ำกันในชีต
   if (existing.exists) return { success: true, already: true, message: 'บัญชีนี้ลงทะเบียนไว้แล้ว (สถานะ: ' + (existing.status || '-') + ')' };
+  centralEnsureColumns('liff_users');     // requested_at เป็นคอลัมน์ใหม่ — ไม่มีคอลัมน์ = ค่าถูกทิ้งเงียบๆ (ดู 02_helpers)
   centralAppend('liff_users', {
     line_user_id: userData.lineUid,
     display_name: userData.name,
     role: 'van_sales',
     tenant_id: userData.schema,
-    status: 'No',                         // 'No' = รอผู้ดูแลอนุมัติที่เมนู "พนักงานขาย" (updateStaffAdmin)
-    last_login: new Date()
+    status: 'No',                         // 'No' = รอผู้ดูแลอนุมัติ — ที่เมนู "พนักงานขาย" ของแอดมิน หรือหน้าอนุมัติในแอปมือถือ (61_staff_approval.gs)
+    last_login: new Date(),
+    requested_at: nowStr(),
+    campaign: _saCampaignOf(userData.campaign)   // ป้ายแคมเปญ (sales blitz) — ไม่รู้จัก/ว่าง = สมัครปกติ
   });
+  // ส่งการ์ดเข้ากลุ่ม LINE ของผู้อนุมัติ — ล้มเหลวต้องไม่ล้มการสมัคร (คนสมัครไปแล้ว) แอดมินยังเห็นในคิวเหมือนเดิม
+  try { _saNotifyNewRequest(userData.lineUid, userData.name, userData.schema, _saCampaignOf(userData.campaign)); }
+  catch (e) { Logger.log('registerUser notify: ' + (e && e.message || e)); }
   return { success: true, pending: true, message: 'ลงทะเบียนแล้ว — รอผู้ดูแลระบบอนุมัติก่อนเริ่มใช้งาน' };
 }
 
@@ -212,6 +226,14 @@ function doPost(e) {
     var mobileId = resolveLineIdentity(body);
     if (!mobileId.ok) return _jsonOutput({ success: false, message: mobileId.message, authError: true, needLogin: !!mobileId.needLogin });
     return _jsonOutput(_handleMobileActionCore(mobileId.lineUserId, action, payload));
+  }
+
+  // ── 2.5) ผู้อนุมัติผู้ใช้ (หน้าอนุมัติในแอปมือถือ): ตัวตน LINE ที่ยืนยันแล้ว **แต่ไม่ต้องเป็นพนักงานที่อนุมัติแล้ว**
+  //    — ผู้อนุมัติอาจเป็นแอดมินที่ไม่เคยขายของ · สิทธิ์ตัดสินที่ _saApproverCtx ทุกครั้ง (ดู 61_staff_approval.gs)
+  if (APPROVER_ACTION_MAP[action] || action === 'getApproverContext') {
+    var apId = resolveLineIdentity(body);
+    if (!apId.ok) return _jsonOutput({ success: false, message: apId.message, authError: true, needLogin: !!apId.needLogin });
+    return _jsonOutput(_handleApproverActionCore(apId.lineUserId, action, payload));
   }
 
   // ── 3) Admin: ต้องมี token ที่ valid ──

@@ -455,3 +455,21 @@ function seedAllHelpArticles() {
   seedCreditNoteHelpArticle();
   Logger.log('— ติดตั้งคู่มือครบแล้ว เปิดดูที่เมนู 8.1.1 คู่มือใช้งานระบบ —');
 }
+
+/**
+ * ทดสอบการแจ้งเตือนอนุมัติผู้ใช้ (61_staff_approval.gs) — รันใน Apps Script editor ของ env นั้น (ไม่ต้อง Deploy)
+ * ส่งการ์ด "คำขอใช้งานแอปใหม่" ตัวอย่างเข้าปลายทางจริงที่ตั้งไว้ แล้วรายงานผลใน Execution log:
+ *   • ไม่เห็นการ์ดในกลุ่ม + log บอก "no_token"  → ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN ใน Script Properties
+ *   • log บอก ตอบ 400/403 + ข้อความ           → บอทยังไม่ได้อยู่ในกลุ่มนั้น หรือ Group ID ผิด (ขอใหม่ด้วยคำสั่ง /id ในกลุ่ม)
+ *   • ปุ่ม "เปิดหน้าอนุมัติ" ไม่โผล่            → ยังไม่ได้ตั้ง LIFF_ID ใน Script Properties
+ * ใช้ tenantId ตัวอย่างจากตัวแทนตัวแรกที่เปิดใช้งาน (เปลี่ยน TEST_TENANT ได้)
+ */
+function testStaffApprovalPush() {
+  var TEST_TENANT = '';
+  var t = TEST_TENANT;
+  if (!t) { var first = centralObjects('tenants').filter(function(x) { return isFlagOn(x.is_active); })[0]; t = first ? String(first.tenant_id) : ''; }
+  var sp = PropertiesService.getScriptProperties();
+  Logger.log('ปลายทาง: ' + JSON.stringify(_saNotifyTargets(t)) + ' · มี token: ' + !!sp.getProperty('LINE_CHANNEL_ACCESS_TOKEN') + ' · มี LIFF_ID: ' + !!getConfig().LIFF_ID);
+  _saNotifyNewRequest('Utest0000000000000000000000000000', 'ทดสอบ การแจ้งเตือน (ไม่ใช่คำขอจริง)', t);
+  Logger.log('ส่งแล้ว — ดูผลในกลุ่ม/แชท และบรรทัด "staff approval push" ด้านบนถ้ามีปัญหา');
+}

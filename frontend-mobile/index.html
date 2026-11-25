@@ -213,6 +213,27 @@
     #tab-saledetail{ display:block !important; padding:0; }
     #tab-saledetail #sd-body{ display:block !important; }
   }
+
+  /* ══════════ หน้าอนุมัติผู้ใช้งาน (25 พ.ย. 2026 — sales blitz) ══════════ */
+  .ap-card{ display:flex; flex-direction:column; gap:5px; }
+  .ap-card.hl{ box-shadow:0 0 0 2px var(--blue), var(--shadow-sm); }
+  .ap-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .ap-top b{ font-size:15px; word-break:break-word; }
+  .ap-actions{ display:flex; gap:8px; margin-top:6px; }
+  .ap-actions .btn{ flex:1; }
+  .ap-bar{ display:flex; flex-direction:column; gap:8px; margin:10px 0; }
+  .ap-banner{ border-radius:12px; padding:10px 12px; margin-bottom:10px; font-size:13.5px; line-height:1.55; background:var(--orange-soft); color:#7A4E10; border:1px solid #F0D9B0; }
+  .ap-banner.ok{ background:var(--green-soft); color:#12603F; border-color:#BFE3D0; }
+  .ap-banner .btn{ margin-top:6px; }
+  .pill.blitz{ background:#EEE9FF; color:#4A2FD0; }
+  .reg-blitz{ background:#EEE9FF; color:#3A2399; border:1px solid #D5CBFF; border-radius:12px; padding:10px 12px; font-size:13.5px; line-height:1.55; }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{ border:1px solid var(--border); background:var(--surface-2); color:var(--ink-soft); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600; }
+  .chip.on{ background:var(--blue-soft); color:var(--blue); border-color:#B7CBF3; }
+  .sheet-bg{ position:fixed; inset:0; background:rgba(15,27,45,.45); z-index:80; display:flex; align-items:flex-end; justify-content:center; }
+  .sheet{ background:var(--surface); width:100%; max-width:560px; border-radius:18px 18px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-height:92vh; overflow:auto; box-shadow:0 -10px 30px -12px rgba(15,27,45,.4); }
+  .sheet h3{ font-size:16px; margin:0 0 4px; }
+  .sheet .field{ margin-top:12px; }
 </style>
 </head>
 <body>
@@ -234,7 +255,8 @@
 <!-- ═══ สมัครใช้งาน (ยังไม่มีในระบบ) ═══ -->
 <div class="center-screen hidden" id="scr-register">
   <div class="card stack">
-    <h2 style="margin:0">ลงทะเบียนพนักงานขาย</h2>
+    <h2 style="margin:0" id="reg-title">ลงทะเบียนพนักงานขาย</h2>
+    <div class="reg-blitz hidden" id="reg-blitz"></div>
     <p class="muted" style="margin:0">บัญชี LINE นี้ยังไม่มีในระบบ — กรอกชื่อและเลือกตัวแทนจำหน่ายที่สังกัด แล้วรอแอดมินอนุมัติ</p>
     <div class="field"><label>ชื่อ-นามสกุล</label><input class="inp" id="reg-name"></div>
     <div class="field"><label>สังกัด</label><select class="inp" id="reg-tenant"><option value="">กำลังโหลด...</option></select></div>
@@ -245,13 +267,44 @@
 <!-- ═══ รออนุมัติ ═══ -->
 <div class="center-screen hidden" id="scr-pending">
   <div class="card stack">
-    <h2 style="margin:0">รอแอดมินอนุมัติ</h2>
+    <h2 style="margin:0" id="pending-title">รอแอดมินอนุมัติ</h2>
     <p class="muted" style="margin:0" id="pending-msg">ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้</p>
     <div class="field"><label>LINE User ID ของคุณ (แจ้งแอดมินได้)</label>
       <div style="display:flex;gap:8px"><input class="inp mono" id="pending-uid" readonly style="font-size:12px"><button class="btn btn-sm" onclick="copyUid()">คัดลอก</button></div></div>
     <button class="btn btn-primary btn-block" onclick="boot()">ตรวจสอบอีกครั้ง</button>
   </div>
 </div>
+
+<!-- ═══ อนุมัติผู้ใช้งาน ═══
+     เปิดจากปุ่มในการ์ด LINE ที่เข้ากลุ่มผู้อนุมัติ (?go=approvals&u=<LINE id ผู้สมัคร>) หรือปุ่มในหน้าแรก
+     ★ ใครกดลิงก์ก็เปิดหน้านี้ได้ แต่ backend ตรวจสิทธิ์จากตัวตน LINE ของคนกดทุกครั้ง (61_staff_approval.gs) — ไม่ใช่จากลิงก์ -->
+<div class="app hidden" id="scr-approve">
+  <div class="top">
+    <button class="btn btn-sm" id="ap-back" onclick="closeApprovals()">‹ กลับ</button>
+    <div class="who"><b>อนุมัติผู้ใช้งาน</b><span class="muted" id="ap-sub">-</span></div>
+    <button class="btn btn-sm" id="ap-refresh" onclick="apLoad()">รีเฟรช</button>
+  </div>
+  <div class="screen active" style="padding-bottom:24px">
+    <div id="ap-focus"></div>
+    <div class="segrow">
+      <div class="segtog">
+        <button id="ap-tab-pending" class="on" onclick="apTab('pending')">รออนุมัติ <span id="ap-n-pending"></span></button>
+        <button id="ap-tab-history" onclick="apTab('history')">ประวัติ <span id="ap-n-history"></span></button>
+      </div>
+    </div>
+    <div class="ap-bar">
+      <select class="inp hidden" id="ap-tenant" onchange="apFilterChanged()"></select>
+      <div class="chips hidden" id="ap-chips">
+        <button class="chip on" data-f="all" onclick="apSetFilter('all')">ทั้งหมด</button>
+        <button class="chip" data-f="approved" onclick="apSetFilter('approved')">อนุมัติ</button>
+        <button class="chip" data-f="rejected" onclick="apSetFilter('rejected')">ไม่อนุมัติ</button>
+      </div>
+      <input class="inp hidden" id="ap-q" placeholder="ค้นหาชื่อ" oninput="apSearchTyped()">
+    </div>
+    <div id="ap-list" class="stack"></div>
+  </div>
+</div>
+<div class="sheet-bg hidden" id="ap-sheet-bg" onclick="if(event.target===this)apCloseSheet()"><div class="sheet" id="ap-sheet"></div></div>
 
 <!-- ═══ แอปหลัก ═══ -->
 <div class="app hidden" id="scr-app">
@@ -266,6 +319,11 @@
 
   <!-- หน้าแรก -->
   <section class="screen" id="tab-home">
+    <!-- ผู้อนุมัติเท่านั้น (getApproverContext) — ซ่อนเป็นค่าเริ่มต้น แล้วโชว์เมื่อ backend ยืนยันสิทธิ์แล้ว -->
+    <div class="card hidden" id="home-approve" style="margin-bottom:12px">
+      <div class="row" style="border-top:none;padding:0"><span><b>อนุมัติผู้ใช้งาน</b><br><span class="muted" id="home-approve-sub">-</span></span>
+        <button class="btn btn-primary btn-sm" onclick="openApprovals({ from: 'app' })">เปิด</button></div>
+    </div>
     <h2>ใบสั่งขายวันนี้</h2>
     <div class="kpis">
       <div class="kpi"><div class="v" id="k-bills">-</div><div class="l">บิล</div></div>
@@ -445,7 +503,7 @@ const LSK = k => 'srm_' + ENV + '_' + k;           // แยก key ตามส
 const lsGet = (k, def) => { try { const v = localStorage.getItem(LSK(k)); return v == null ? def : JSON.parse(v); } catch (e) { return def; } };
 const lsSet = (k, v) => { try { localStorage.setItem(LSK(k), JSON.stringify(v)); } catch (e) {} };
 function toast(msg, kind){ const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200); }
-function show(id){ ['scr-loading','scr-register','scr-pending','scr-app'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+function show(id){ ['scr-loading','scr-register','scr-pending','scr-app','scr-approve'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
 function setLoad(txt, spin = true, extraHtml = ''){ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
 
 let ME = { lineUserId: '', name: '', pictureUrl: '', role: '', tenantId: '' };
@@ -462,7 +520,7 @@ let DATA = { products: [], customers: [] };
      2) action เดียวกันที่ยังค้างอยู่ ถูกบล็อกก่อนถึง network
      3) บิล/สต็อกแนบ requestId ที่สร้าง "ตอนประกอบข้อมูล" ครั้งเดียว — ส่งซ้ำกี่รอบเซิร์ฟเวอร์ก็บันทึกใบเดียว
         สำคัญมากกับคิวออฟไลน์: บิลในคิวพก requestId เดิมติดตัวไปด้วย การส่งซ้ำจึงไม่เกิดใบที่สอง */
-const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder','submitCustomerRequest']);
+const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder','submitCustomerRequest','decideStaffApproval']);
 const INFLIGHT = new Set();
 const newRequestId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 function pressBusy(btn, on){ if (!btn) return; btn.classList.toggle('is-busy', on); tnkBusy(btn, on); }   // tnkBusy ใส่/เอาวงแหวน และ disable/enable ปุ่มให้ในคำสั่งเดียว
@@ -553,9 +611,32 @@ function loadLiffSdk(){
   if (window.liff) return Promise.resolve();
   return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js'; s.onload = ok; s.onerror = () => bad(new Error('โหลด LINE SDK ไม่ได้')); document.head.appendChild(s); });
 }
+/* ★ ลิงก์ลึกจากการ์ดในกลุ่ม LINE: https://liff.line.me/<LIFF_ID>?go=approvals&u=<LINE id ผู้สมัคร>
+   LIFF ต่อ query ท้าย Endpoint URL ให้ — แต่ถ้าต้องล็อกอินก่อน พารามิเตอร์จะถูกห่อไว้ใน `liff.state` แทน
+   (เช่น ?liff.state=%3Fgo%3Dapprovals%26u%3DU…) จึงต้องอ่านทั้งสองแบบ · **ต้องอ่านก่อน liff.init()**
+   เพราะ SDK เขียน URL ใหม่ทับ · อ่านครั้งเดียวต่อการเปิดแอป (ปุ่ม "ลองใหม่/ตรวจสอบอีกครั้ง" เรียก boot ซ้ำ
+   ต้องไม่เด้งกลับมาหน้าอนุมัติอีก) */
+/* ★ ลิงก์/QR สมัครของทีม Sales Blitz: https://liff.line.me/<LIFF_ID>?go=register&c=BLITZ&t=<รหัสตัวแทน>
+   พก "แคมเปญ + ตัวแทน" เท่านั้น ไม่มีสิทธิ์อะไรติดมา — ใครสแกนก็ได้แค่ฟอร์มสมัคร แล้วต้องรอผู้อนุมัติกดอยู่ดี
+   ใช้กับคนที่ยังไม่มีบัญชีเท่านั้น (คนที่มีแล้วเข้าแอป/หน้ารออนุมัติตามปกติ) · ทิ้งค่าที่ไม่รู้จักเงียบๆ ไม่ใช่ error */
+let REG_DL = null;
+let DEEPLINK;   // undefined = ยังไม่ได้อ่าน · null = ไม่มีลิงก์ลึก/ใช้ไปแล้ว
+function readDeepLink(){
+  try {
+    const q = new URLSearchParams(location.search);
+    let go = q.get('go'), u = q.get('u'), c = q.get('c'), t = q.get('t');
+    const st = q.get('liff.state');
+    if (!go && st) { const q2 = new URLSearchParams(st.indexOf('?') !== -1 ? st.slice(st.indexOf('?') + 1) : st); go = q2.get('go'); u = q2.get('u'); c = q2.get('c'); t = q2.get('t'); }
+    return go ? { go: go, u: u || '', c: c || '', t: t || '' } : null;
+  } catch (e) { return null; }
+}
 async function boot(){
   if (ENV === 'uat') $('env-bar').classList.remove('hidden');
   if (!CFG.BACKEND_URL) return setLoad('ยังไม่ได้ตั้งค่า backend ของสภาพแวดล้อม ' + String(ENV).toUpperCase(), false);
+  if (DEEPLINK === undefined) {
+    DEEPLINK = readDeepLink();
+    if (DEEPLINK && DEEPLINK.go === 'register') { REG_DL = String(DEEPLINK.c).toUpperCase() === 'BLITZ' ? DEEPLINK : null; DEEPLINK = null; }
+  }
   try {
     // โหมดทดสอบ (UAT เท่านั้น): เปิดในเบราว์เซอร์ธรรมดาด้วย ?devLineUserId=... แทน LINE — production ไม่มีทางเข้านี้
     const dev = new URLSearchParams(location.search).get('devLineUserId');
@@ -572,6 +653,18 @@ async function boot(){
       const p = await liff.getProfile();
       ME.lineUserId = p.userId; ME.name = p.displayName; ME.pictureUrl = p.pictureUrl || '';
     }
+    // ผู้อนุมัติกดปุ่มจากการ์ดในกลุ่ม → เข้าหน้าอนุมัติก่อนเสมอ (เขาอาจไม่ใช่พนักงานขายเลย จึงต้องมาก่อนด่าน checkUser)
+    if (DEEPLINK && DEEPLINK.go === 'approvals') {
+      const dl = DEEPLINK; DEEPLINK = null;
+      setLoad('กำลังตรวจสอบสิทธิ์อนุมัติ...');
+      try {
+        const c = await api('getApproverContext', {}, 30000);
+        if (c && c.success && c.isApprover) { AP.ctx = c; ME.isApprover = true; return openApprovals({ uid: dl.u, from: 'boot' }); }
+        if (c && c.success) toast('บัญชี LINE นี้ไม่มีสิทธิ์อนุมัติผู้ใช้งาน', 'err');
+        else if (c && c.message) toast(c.message, 'err');
+      } catch (e) { toast('ตรวจสิทธิ์อนุมัติไม่ได้: ' + e.message, 'err'); }
+      // ไม่มีสิทธิ์/ตรวจไม่ได้ → ไหลต่อเข้าแอปตามปกติ (ไม่ทิ้งให้ติดหน้าโหลด)
+    }
     setLoad('กำลังตรวจสอบสิทธิ์...');
     let st;
     try { st = await api('checkUser', { lineUid: ME.lineUserId }, 30000); }
@@ -582,7 +675,10 @@ async function boot(){
       return setLoad('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message, false, '<button class="btn btn-primary" onclick="boot()">ลองใหม่</button>');
     }
     if (!st || !st.exists) return showRegister();
+    if (String(st.status) === 'Rejected') return showPending('คำขอใช้งานไม่ได้รับอนุมัติ — สอบถามผู้อนุมัติของสังกัดคุณ (แจ้ง LINE User ID ด้านล่างได้)', 'ไม่ได้รับอนุมัติ');
     if (String(st.status) !== 'Yes') return showPending('บัญชีรอแอดมินอนุมัติ (สถานะ: ' + (st.status || '-') + ')');
+    // ทีมชั่วคราวหมดสิทธิ์เองตามวันที่ผู้อนุมัติตั้งไว้ — backend ก็ปฏิเสธทุก action อยู่แล้ว ที่นี่แค่บอกให้รู้เรื่อง ไม่ใช่ให้เข้าแอปแล้วกดอะไรก็ error
+    if (st.expired) return showPending('สิทธิ์การใช้งานหมดอายุแล้ว (ถึงวันที่ ' + (st.expiresAt || '-') + ') — ติดต่อผู้อนุมัติถ้าต้องใช้งานต่อ', 'สิทธิ์หมดอายุแล้ว');
     ME.role = st.role || ''; ME.tenantId = st.tenantId || ''; if (st.name) ME.name = st.name;
     lsSet('me', ME);
     enterApp();
@@ -591,10 +687,17 @@ async function boot(){
 async function showRegister(){
   show('scr-register');
   $('reg-name').value = ME.name || '';
+  const blitz = !!REG_DL;
+  $('reg-title').textContent = blitz ? 'ลงทะเบียนทีม Sales Blitz' : 'ลงทะเบียนพนักงานขาย';
+  const bn = $('reg-blitz'); bn.classList.toggle('hidden', !blitz);
+  if (blitz) bn.innerHTML = '<b>🚀 คำขอของทีม Sales Blitz</b><br>กรอกชื่อ-นามสกุลจริงเพื่อให้ผู้อนุมัติตรวจสอบได้ แล้วกดส่งคำขอ — ใช้งานได้หลังผู้อนุมัติกดอนุมัติแล้วเท่านั้น (ระบบแจ้งผู้อนุมัติให้อัตโนมัติ)';
   try {
     const r = await api('listActiveTenants', {});
     const ts = (r && r.data) || [];
     $('reg-tenant').innerHTML = '<option value="">— เลือกสังกัด —</option>' + ts.map(t => '<option value="'+esc(t.tenant_id)+'">'+esc(t.name)+'</option>').join('');
+    // ลิงก์ blitz ระบุตัวแทนมาแล้ว → เลือกให้และล็อกไว้ (ทีมเสริมไม่ต้องรู้ว่าสังกัดอะไร และไม่เลือกผิดได้) · ตัวแทนที่ไม่มีในรายการ = ไม่ล็อก ให้เลือกเอง
+    const sel = $('reg-tenant');
+    if (blitz && REG_DL.t && ts.some(t => t.tenant_id === REG_DL.t)) { sel.value = REG_DL.t; sel.disabled = true; } else sel.disabled = false;
   } catch (e) { $('reg-tenant').innerHTML = '<option value="">โหลดรายชื่อไม่ได้ — ลองใหม่</option>'; }
 }
 async function submitRegister(){
@@ -603,13 +706,13 @@ async function submitRegister(){
   if (!tenant) return toast('กรุณาเลือกสังกัด', 'err');
   pressBusy(btn, true);
   try {
-    const r = await api('registerUser', { lineUid: ME.lineUserId, name, schema: tenant });
+    const r = await api('registerUser', { lineUid: ME.lineUserId, name, schema: tenant, campaign: REG_DL ? 'BLITZ' : '' });
     if (!r.success) { toast(r.message || 'ส่งคำขอไม่สำเร็จ', 'err'); return; }
-    showPending('ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้');
+    showPending(REG_DL ? 'ส่งคำขอทีม Sales Blitz แล้ว — รอผู้อนุมัติกดอนุมัติ เสร็จแล้วกด "ตรวจสอบอีกครั้ง" ด้านล่าง' : 'ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้');
   } catch (e) { toast('ส่งไม่ได้: ' + e.message, 'err'); }
   finally { pressBusy(btn, false); }
 }
-function showPending(msg){ show('scr-pending'); $('pending-msg').textContent = msg; $('pending-uid').value = ME.lineUserId; }
+function showPending(msg, title){ show('scr-pending'); $('pending-title').textContent = title || 'รอแอดมินอนุมัติ'; $('pending-msg').textContent = msg; $('pending-uid').value = ME.lineUserId; }
 function copyUid(){ const i = $('pending-uid'); i.select(); (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject()).then(() => toast('คัดลอกแล้ว', 'ok')).catch(() => { document.execCommand('copy'); toast('คัดลอกแล้ว', 'ok'); }); }
 
 function enterApp(){
@@ -627,7 +730,205 @@ function enterApp(){
   const cached = lsGet('boot_' + ME.lineUserId, null);
   if (cached) DATA = cached.data;
   gotoTab('home');
-  if (navigator.onLine) refreshData(true);        // เปิดจาก cache ทันที แล้วค่อยดึงของใหม่เบื้องหลัง
+  if (navigator.onLine) { refreshData(true); checkApprover(); }   // เปิดจาก cache ทันที แล้วค่อยดึงของใหม่เบื้องหลัง
+  else paintApproverCard(lsGet('approver_' + ME.lineUserId, null));
+}
+
+/* ══════════════ อนุมัติผู้ใช้งาน (ผู้อนุมัติเท่านั้น) — backend/61_staff_approval.gs ══════════════
+   ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ของคนกดทุกครั้ง · ที่นี่แค่ "โชว์/ซ่อนปุ่ม" และวาดหน้าจอ
+   ★ ค่าตั้งต้นของบทบาทตอนอนุมัติ = van_sales (เจ้าของระบบสั่ง: blitz = ขายหาร้านใหม่ ต้องเก็บเงินสด) */
+const AP = { ctx: null, tab: 'pending', filter: 'all', tenantId: '', q: '', rows: [], counts: { pending: 0, approved: 0, rejected: 0 }, focusUid: '', from: 'app', loaded: false, sheet: null };
+const AP_ROLES = [['van_sales', 'พนักงานขับรถ (เงินสด)'], ['credit_sales', 'พนักงานเครดิต']];
+const pad2 = n => String(n).padStart(2, '0');
+const ymdLocal = d => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+const addDaysYmd = n => { const d = new Date(); d.setDate(d.getDate() + n); return ymdLocal(d); };
+function apAgo(s){
+  if (!s) return '-';
+  const t = Date.parse(String(s).replace(' ', 'T') + '+07:00');
+  if (isNaN(t)) return String(s);
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 1) return 'เมื่อสักครู่';
+  if (m < 60) return m + ' นาทีที่แล้ว';
+  if (m < 60 * 24) return Math.round(m / 60) + ' ชม.ที่แล้ว';
+  return String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + ' ' + String(s).slice(11, 16);
+}
+function apStamp(s){ return s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + ' ' + String(s).slice(11, 16) : '-'; }
+function apDate(s){ return s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : ''; }
+
+async function checkApprover(){
+  try {
+    const c = await api('getApproverContext', {}, 30000);
+    if (!c || !c.success) return;
+    AP.ctx = c.isApprover ? c : null;
+    ME.isApprover = !!c.isApprover;
+    lsSet('approver_' + ME.lineUserId, c.isApprover ? { pendingCount: c.pendingCount } : null);
+    paintApproverCard(c.isApprover ? c : null);
+  } catch (e) { /* ถามไม่ได้ก็ไม่ต้องทำอะไร — ปุ่มแค่ไม่โผล่ ไม่ใช่ปัญหาของการขาย */ }
+}
+function paintApproverCard(c){
+  const card = $('home-approve'); if (!card) return;
+  card.classList.toggle('hidden', !c);
+  if (c) $('home-approve-sub').textContent = c.pendingCount ? ('รออนุมัติ ' + c.pendingCount + ' คน') : 'ไม่มีคำขอค้างอยู่';
+}
+
+async function openApprovals(opts){
+  opts = opts || {};
+  AP.from = opts.from || 'app'; AP.focusUid = opts.uid || ''; AP.tab = 'pending'; AP.filter = 'all'; AP.q = ''; AP.tenantId = '';
+  AP.rows = []; AP.loaded = false;
+  show('scr-approve');
+  // เปิดจากลิงก์ในกลุ่ม = ไม่มีแอปให้กลับไป ปุ่มกลับเปลี่ยนเป็นไปตรวจสอบสิทธิ์ใช้งานของตัวเองต่อ
+  $('ap-back').textContent = AP.from === 'boot' ? 'ไปหน้าแอป ›' : '‹ กลับ';
+  $('ap-q').value = '';
+  const tenants = (AP.ctx && AP.ctx.tenants) || [];
+  const sel = $('ap-tenant');
+  sel.classList.toggle('hidden', tenants.length < 2);
+  sel.innerHTML = '<option value="">ทุกตัวแทนที่ดูแล (' + tenants.length + ')</option>' + tenants.map(t => '<option value="' + esc(t.tenantId) + '">' + esc(t.name) + '</option>').join('');
+  $('ap-sub').textContent = AP.ctx ? (AP.ctx.name || '') + (AP.ctx.all ? ' · ทุกตัวแทน' : tenants.length === 1 ? ' · ' + tenants[0].name : ' · ' + tenants.length + ' ตัวแทน') : '';
+  apPaintTabs();
+  await apLoad();
+}
+function closeApprovals(){
+  apCloseSheet();
+  if (AP.from === 'boot') { boot(); return; }   // ไม่ได้มาจากแอป → ตรวจสิทธิ์ใช้งานของตัวเองต่อ (ผู้อนุมัติที่ไม่ใช่พนักงานจะเห็นหน้าสมัคร)
+  show('scr-app'); gotoTab('home'); checkApprover();
+}
+function apPaintTabs(){
+  $('ap-tab-pending').classList.toggle('on', AP.tab === 'pending');
+  $('ap-tab-history').classList.toggle('on', AP.tab === 'history');
+  $('ap-chips').classList.toggle('hidden', AP.tab !== 'history');
+  $('ap-q').classList.toggle('hidden', AP.tab !== 'history');
+  $('ap-chips').querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.f === AP.filter));
+  $('ap-n-pending').textContent = AP.counts.pending ? '(' + AP.counts.pending + ')' : '';
+  $('ap-n-history').textContent = (AP.counts.approved + AP.counts.rejected) ? '(' + (AP.counts.approved + AP.counts.rejected) + ')' : '';
+}
+function apTab(t){ if (AP.tab === t) return; AP.tab = t; apPaintTabs(); apLoad(); }
+function apSetFilter(f){ AP.filter = f; apPaintTabs(); apLoad(); }
+function apFilterChanged(){ AP.tenantId = $('ap-tenant').value; apLoad(); }
+let AP_QT = 0;
+function apSearchTyped(){ clearTimeout(AP_QT); AP_QT = setTimeout(() => { AP.q = $('ap-q').value.trim(); apLoad(); }, 350); }
+
+async function apLoad(){
+  const list = $('ap-list');
+  if (!AP.loaded || !AP.rows.length) list.innerHTML = tnkWait(120, 'กำลังโหลด…', 56);   // มีของเดิมอยู่ = คงไว้ให้อ่านต่อระหว่างรอ (กติกาเดียวกับ tblLoading)
+  const btn = $('ap-refresh'); pressBusy(btn, true);
+  try {
+    const r = await api('listStaffApprovals', { view: AP.tab, tenantId: AP.tenantId, filter: AP.filter, q: AP.q, uid: AP.focusUid });
+    if (!r || !r.success) {
+      list.innerHTML = '<div class="empty">' + esc((r && r.message) || 'โหลดไม่ได้') + '</div>';
+      if (r && r.notApprover) toast(r.message, 'err');
+      return;
+    }
+    AP.rows = r.data || []; AP.counts = r.counts || AP.counts; AP.loaded = true;
+    apPaintTabs(); apRenderFocus(r.focus); apRender(r);
+  } catch (e) { list.innerHTML = '<div class="empty">เชื่อมต่อไม่ได้: ' + esc(e.message) + '</div>'; }
+  finally { pressBusy(btn, false); }
+}
+
+/* แบนเนอร์ของคนที่กดเข้ามาจากลิงก์ — บอกสถานะล่าสุดของ "คนนี้" ตรงๆ ไม่ต้องไล่หาในรายการ
+   ★ ถ้าตัดสินไปแล้ว (มีผู้อนุมัติคนอื่นกดไปก่อน) ต้องบอกว่าใคร/เมื่อไหร่ ไม่ใช่ให้เห็นแค่ว่าหายไปจากคิว */
+function apRenderFocus(f){
+  const box = $('ap-focus');
+  if (!AP.focusUid) { box.innerHTML = ''; return; }
+  if (!f) { box.innerHTML = '<div class="ap-banner">ไม่พบคำขอนี้ในรายการที่คุณดูแล (อาจเป็นของตัวแทนอื่น หรือถูกลบไปแล้ว)</div>'; return; }
+  if (f.status === 'No') { box.innerHTML = '<div class="ap-banner">คำขอจาก <b>' + esc(f.name || '-') + '</b> ยังรออนุมัติอยู่ — ดูรายการด้านล่าง</div>'; return; }
+  const yes = f.status === 'Yes';
+  box.innerHTML = '<div class="ap-banner ok"><b>' + esc(f.name || '-') + '</b> ' + (yes ? 'ได้รับอนุมัติแล้ว' : 'ถูกตั้งเป็นไม่อนุมัติแล้ว') +
+    (f.decidedBy ? ' โดย ' + esc(f.decidedBy) : '') + (f.decidedAt ? ' เมื่อ ' + esc(apStamp(f.decidedAt)) : '') +
+    '<br><button class="btn btn-sm" onclick="apOpenSheet(\'' + esc(f.lineUserId) + '\',\'edit\')">แก้คำตัดสิน</button></div>';
+}
+
+function apCard(u){
+  const focus = AP.focusUid && u.lineUserId === AP.focusUid;
+  const tail = (u.lineUserId || '').slice(-6);
+  if (u.status === 'No') {
+    return '<div class="card ap-card' + (focus ? ' hl' : '') + '" id="apc-' + esc(u.lineUserId) + '">' +
+      '<div class="ap-top"><b>' + esc(u.name || '(ไม่มีชื่อ)') + '</b><span class="pill warn">รออนุมัติ</span></div>' +
+      (u.campaign ? '<div><span class="pill blitz">🚀 ' + esc(u.campaignLabel || u.campaign) + '</span></div>' : '') +
+      '<div class="muted">' + esc(u.tenantName || '-') + ' · ขอเมื่อ ' + esc(apAgo(u.requestedAt)) + '</div>' +
+      '<div class="muted mono">LINE …' + esc(tail) + '</div>' +
+      '<div class="ap-actions"><button class="btn btn-green" onclick="apOpenSheet(\'' + esc(u.lineUserId) + '\',\'approve\')">อนุมัติ</button>' +
+      '<button class="btn" onclick="apOpenSheet(\'' + esc(u.lineUserId) + '\',\'reject\')">ไม่อนุมัติ</button></div></div>';
+  }
+  const yes = u.status === 'Yes';
+  const exp = yes ? (u.expiresAt ? (u.expired ? '<span class="pill bad">หมดอายุแล้ว ' + esc(apDate(u.expiresAt)) + '</span>' : 'ใช้ได้ถึง ' + esc(apDate(u.expiresAt))) : 'ไม่กำหนดวันหมดอายุ') : '';
+  return '<div class="card ap-card' + (focus ? ' hl' : '') + '" id="apc-' + esc(u.lineUserId) + '">' +
+    '<div class="ap-top"><b>' + esc(u.name || '(ไม่มีชื่อ)') + '</b><span class="pill ' + (yes ? 'good' : 'bad') + '">' + (yes ? 'อนุมัติ' : 'ไม่อนุมัติ') + '</span></div>' +
+    (u.campaign ? '<div><span class="pill blitz">🚀 ' + esc(u.campaignLabel || u.campaign) + '</span></div>' : '') +
+    '<div class="muted">' + esc(u.tenantName || '-') + (yes ? ' · ' + esc(u.roleLabel || u.role || '') : '') + '</div>' +
+    (yes ? '<div class="muted">' + exp + '</div>' : '') +
+    '<div class="muted">' + (u.decidedBy ? 'โดย ' + esc(u.decidedBy) + ' · ' + esc(apStamp(u.decidedAt)) : 'ตัดสินก่อนมีระบบนี้ (ไม่มีบันทึกผู้ตัดสิน)') + '</div>' +
+    (u.note ? '<div class="muted">หมายเหตุ: ' + esc(u.note) + '</div>' : '') +
+    '<div class="ap-actions"><button class="btn btn-sm" onclick="apOpenSheet(\'' + esc(u.lineUserId) + '\',\'edit\')">' + (yes ? 'แก้ไข' : 'เปลี่ยนเป็นอนุมัติ') + '</button></div></div>';
+}
+function apRender(r){
+  const list = $('ap-list');
+  if (!AP.rows.length) {
+    list.innerHTML = '<div class="empty">' + (AP.tab === 'pending' ? 'ไม่มีคำขอที่รออนุมัติ 🎉' : 'ยังไม่มีประวัติการอนุมัติ') + '</div>';
+    return;
+  }
+  list.innerHTML = AP.rows.map(apCard).join('') + (r && r.truncated ? '<div class="note" style="text-align:center">แสดง ' + AP.rows.length + ' จาก ' + r.total + ' รายการ — ใช้ช่องค้นหาเพื่อหาคนที่ต้องการ</div>' : '');
+  if (AP.focusUid) { const el = document.getElementById('apc-' + AP.focusUid); if (el) el.scrollIntoView({ block: 'center' }); }
+}
+
+/* ── หน้าต่างตัดสิน: อนุมัติ (เลือกบทบาท+วันหมดอายุ) · ไม่อนุมัติ · แก้คำตัดสินที่ทำไปแล้ว ── */
+function apFindRow(uid){
+  return AP.rows.find(x => x.lineUserId === uid) || null;
+}
+async function apOpenSheet(uid, mode){
+  let u = apFindRow(uid);
+  if (!u) {   // เปิดจากแบนเนอร์ของลิงก์ แต่ไม่ได้อยู่ในแท็บที่เปิดอยู่ → ถามเฉพาะคนนี้
+    try { const r = await api('listStaffApprovals', { view: 'history', uid: uid }); u = r && r.focus; } catch (e) {}
+  }
+  if (!u) { toast('ไม่พบผู้ใช้นี้ — ลองรีเฟรชรายการ', 'err'); return; }
+  const isEdit = mode === 'edit';
+  AP.sheet = { uid: uid, mode: mode, status: u.status, role: u.status === 'Yes' ? (u.role || 'van_sales') : 'van_sales', expiresAt: u.status === 'Yes' ? (u.expiresAt || '') : '' };
+  const showForm = mode !== 'reject';
+  let h = '<h3>' + (mode === 'reject' ? 'ไม่อนุมัติ' : mode === 'approve' ? 'อนุมัติ' : (u.status === 'Yes' ? 'แก้ไขสิทธิ์' : 'เปลี่ยนเป็นอนุมัติ')) + ': ' + esc(u.name || '-') + '</h3>' +
+    '<div class="muted">' + esc(u.tenantName || '-') + (isEdit ? ' · ตอนนี้: ' + (u.status === 'Yes' ? 'อนุมัติ' : 'ไม่อนุมัติ') : '') + '</div>';
+  if (showForm) {
+    h += '<div class="field"><label>บทบาท</label><div class="seg" id="ap-roleseg">' +
+      AP_ROLES.map(r => '<button type="button" data-r="' + r[0] + '" class="' + (AP.sheet.role === r[0] ? 'on' : '') + '" onclick="apPickRole(\'' + r[0] + '\')">' + esc(r[1]) + '</button>').join('') + '</div></div>' +
+      '<div class="field"><label>ใช้งานได้ถึงวันที่ (ไม่กรอก = ไม่หมดอายุ)</label>' +
+      '<input class="inp" type="date" id="ap-exp" min="' + ymdLocal(new Date()) + '" value="' + esc(AP.sheet.expiresAt) + '">' +
+      '<div class="chips" style="margin-top:6px"><button class="chip" onclick="apPickExp(3)">+3 วัน</button><button class="chip" onclick="apPickExp(7)">+7 วัน</button>' +
+      '<button class="chip" onclick="apPickExp(14)">+14 วัน</button><button class="chip" onclick="apPickExp(30)">+30 วัน</button><button class="chip" onclick="apPickExp(0)">ไม่กำหนด</button></div></div>';
+  }
+  h += '<div class="field"><label>หมายเหตุ (ไม่บังคับ)</label><input class="inp" id="ap-note" maxlength="200" placeholder="เช่น ทีม blitz สัปดาห์หน้า"></div>';
+  h += '<div class="ap-actions" style="margin-top:14px">';
+  if (mode === 'reject') h += '<button class="btn" onclick="apCloseSheet()">ยกเลิก</button><button class="btn btn-primary" id="ap-go" onclick="apSubmit(\'reject\')">ยืนยันไม่อนุมัติ</button>';
+  else {
+    h += '<button class="btn btn-green" id="ap-go" onclick="apSubmit(\'approve\')">' + (isEdit && u.status === 'Yes' ? 'บันทึกการแก้ไข' : 'ยืนยันอนุมัติ') + '</button>';
+    if (isEdit && u.status === 'Yes') h += '<button class="btn" id="ap-go2" onclick="apSubmit(\'reject\')">เปลี่ยนเป็นไม่อนุมัติ</button>';
+    else h += '<button class="btn" onclick="apCloseSheet()">ยกเลิก</button>';
+  }
+  h += '</div>';
+  $('ap-sheet').innerHTML = h;
+  $('ap-sheet-bg').classList.remove('hidden');
+}
+function apCloseSheet(){ $('ap-sheet-bg').classList.add('hidden'); AP.sheet = null; }
+function apPickRole(r){ if (!AP.sheet) return; AP.sheet.role = r; $('ap-roleseg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.r === r)); }
+function apPickExp(days){ $('ap-exp').value = days ? addDaysYmd(days) : ''; }
+async function apSubmit(decision){
+  const s = AP.sheet; if (!s) return;
+  const expEl = $('ap-exp'), exp = expEl ? expEl.value : '';
+  if (decision === 'approve' && exp && exp < ymdLocal(new Date())) { toast('วันหมดอายุต้องไม่ใช่วันที่ผ่านมาแล้ว', 'err'); return; }
+  const btn = $(decision === 'reject' && $('ap-go2') ? 'ap-go2' : 'ap-go');
+  pressBusy(btn, true);
+  try {
+    const r = await api('decideStaffApproval', { lineUserId: s.uid, decision: decision, role: s.role, expiresAt: decision === 'approve' ? exp : '',
+      note: $('ap-note').value.trim(), expectStatus: s.status });
+    if (r && r.busy) return;
+    if (!r || !r.success) {
+      toast((r && r.message) || 'บันทึกไม่สำเร็จ', 'err');
+      if (r && r.conflict) { apCloseSheet(); apLoad(); }      // มีคนตัดสินไปก่อนแล้ว → โหลดสถานะล่าสุดมาให้ดู ไม่ปล่อยให้กดซ้ำด้วยข้อมูลเก่า
+      return;
+    }
+    toast(r.message || 'บันทึกแล้ว', 'ok');
+    apCloseSheet();
+    AP.focusUid = '';           // ตัดสินแล้วเลิกไฮไลต์/แบนเนอร์ของลิงก์ (ไม่งั้นเห็นสถานะค้างของครั้งก่อน)
+    await apLoad();
+  } catch (e) { toast('บันทึกไม่ได้: ' + e.message, 'err'); }
+  finally { pressBusy(btn, false); }
 }
 
 /* ══════════════ ข้อมูลตั้งต้น (สินค้า/ลูกค้า/สต็อกบนรถ) ══════════════ */

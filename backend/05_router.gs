@@ -30,6 +30,14 @@ var ACTION_MAP = {
   listShopTypesMobile:     listShopTypesMobile
 };
 
+// ── อนุมัติผู้ใช้งานแอปมือถือ (61_staff_approval.gs) ──
+// ยืนยันตัวตนด้วย LINE ID token เหมือน Mobile แต่ **ไม่บังคับว่าต้องเป็นพนักงานที่อนุมัติแล้ว** (ดู doPost ข้อ 2.5)
+// getApproverContext จัดการเองใน _handleApproverActionCore (คนทั่วไปได้ isApprover:false ไม่ใช่ error)
+var APPROVER_ACTION_MAP = {
+  listStaffApprovals:   listStaffApprovals,
+  decideStaffApproval:  decideStaffApproval
+};
+
 // เรียกจาก doPost() หลังตรวจแล้วว่า action อยู่ใน ACTION_MAP
 function _handleMobileActionCore(lineUserId, action, payload) {
   try {
@@ -38,6 +46,10 @@ function _handleMobileActionCore(lineUserId, action, payload) {
     var userStatus = checkUser(lineUserId);
     if (!userStatus.exists || userStatus.status !== 'Yes') {
       return { success: false, message: 'บัญชียังไม่ได้รับอนุมัติให้ใช้งาน' };
+    }
+    // ทีมชั่วคราว (sales blitz) หมดสิทธิ์เองตามวันที่ผู้อนุมัติตั้งไว้ — status ยังเป็น Yes แต่ใช้ไม่ได้แล้ว
+    if (userStatus.expired) {
+      return { success: false, expired: true, message: 'สิทธิ์การใช้งานหมดอายุแล้ว (ถึงวันที่ ' + userStatus.expiresAt + ') — ติดต่อผู้อนุมัติถ้าต้องใช้งานต่อ' };
     }
 
     var user = { lineUserId: lineUserId, tenantId: userStatus.tenantId, role: userStatus.role, name: userStatus.name };
@@ -68,6 +80,10 @@ var ADMIN_ACTION_MAP = {
 
   listStaffAdmin:         listStaffAdmin,
   updateStaffAdmin:       updateStaffAdmin,
+  // รายชื่อผู้อนุมัติ "เพิ่ม" (ฝั่งบริษัทตั้ง) — ผู้อนุมัติตัวจริงใช้ APPROVER_ACTION_MAP ผ่านแอปมือถือ (61_staff_approval.gs)
+  listStaffApprovers:     listStaffApprovers,
+  saveStaffApprover:      saveStaffApprover,
+  getBlitzRegisterLink:   getBlitzRegisterLink,
 
   listCustomersAdmin:     listCustomersAdmin,
   addCustomerAdmin:       addCustomerAdmin,
