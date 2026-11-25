@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Ranger TOPSALES — ขาย</title>
+<!-- ★ LIFF SDK โหลดล่วงหน้า (25 พ.ย. 2026 หน้าอนุมัติเปิดช้า) — เดิมเริ่มโหลดตอน boot() ลงมือแล้ว ซึ่งเป็นเวลาที่เสียเปล่า -->
+<link rel="preconnect" href="https://static.line-scdn.net">
+<link rel="preload" href="https://static.line-scdn.net/liff/edge/2/sdk.js" as="script">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <!--
@@ -285,6 +288,7 @@
     <button class="btn btn-sm" id="ap-refresh" onclick="apLoad()">รีเฟรช</button>
   </div>
   <div class="screen active" style="padding-bottom:24px">
+    <div class="note hidden" id="ap-stale" style="margin-bottom:8px">กำลังอัปเดตข้อมูลล่าสุด… (รายการด้านล่างเป็นของครั้งก่อน)</div>
     <div id="ap-focus"></div>
     <div class="segrow">
       <div class="segtog">
@@ -504,7 +508,7 @@ const lsGet = (k, def) => { try { const v = localStorage.getItem(LSK(k)); return
 const lsSet = (k, v) => { try { localStorage.setItem(LSK(k), JSON.stringify(v)); } catch (e) {} };
 function toast(msg, kind){ const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200); }
 function show(id){ ['scr-loading','scr-register','scr-pending','scr-app','scr-approve'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
-function setLoad(txt, spin = true, extraHtml = ''){ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
+function setLoad(txt, spin = true, extraHtml = ''){ if (spin && typeof AP !== 'undefined' && AP.fromSnap) return; /* กำลังโชว์หน้าอนุมัติจาก snapshot อยู่ — ข้อความ "กำลังโหลด" ห้ามทับ (ข้อความผิดพลาดยังโชว์ตามปกติ) */ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
 
 let ME = { lineUserId: '', name: '', pictureUrl: '', role: '', tenantId: '' };
 let ID_TOKEN = '';           // LINE ID token — ไม่เก็บลง localStorage (อายุสั้นและเป็นข้อมูลยืนยันตัวตน)
@@ -636,6 +640,13 @@ async function boot(){
   if (DEEPLINK === undefined) {
     DEEPLINK = readDeepLink();
     if (DEEPLINK && DEEPLINK.go === 'register') { REG_DL = String(DEEPLINK.c).toUpperCase() === 'BLITZ' ? DEEPLINK : null; DEEPLINK = null; }
+    /* ★ เปิดจากการ์ดในกลุ่ม + เครื่องนี้เคยเปิดหน้าอนุมัติแล้ว → วาดรายการครั้งก่อนทันที ระหว่างรอ LIFF/เซิร์ฟเวอร์ แล้วค่อยอัปเดตทับ
+       (กติกา snapshot เดียวกับแอปแอดมิน) · ปุ่มตัดสินถูกล็อกจนกว่าข้อมูลสดมา (apOpenSheet) · ตัดสินผิดจากข้อมูลเก่าก็ไม่เสียหาย
+       เพราะ decideStaffApproval ตรวจ expectStatus ที่ backend */
+    if (DEEPLINK && DEEPLINK.go === 'approvals') {
+      const sn = lsGet('apsnap', null);
+      if (sn && sn.me && Array.isArray(sn.data)) openApprovals({ uid: DEEPLINK.u, from: 'boot', snap: sn });
+    }
   }
   try {
     // โหมดทดสอบ (UAT เท่านั้น): เปิดในเบราว์เซอร์ธรรมดาด้วย ?devLineUserId=... แทน LINE — production ไม่มีทางเข้านี้
@@ -650,19 +661,27 @@ async function boot(){
       IN_LIFF = true;
       ID_TOKEN = liff.getIDToken() || '';
       if (!ID_TOKEN) { liff.logout(); liff.login({ redirectUri: location.href }); return; }   // ล็อกอินค้างจากรุ่นก่อนที่ยังไม่มี openid
-      const p = await liff.getProfile();
-      ME.lineUserId = p.userId; ME.name = p.displayName; ME.pictureUrl = p.pictureUrl || '';
+      /* ★ อ่านตัวตนจาก ID token ที่ถอดแล้ว (ทันที ไม่ต้องยิงเน็ต) แทน liff.getProfile() ที่เป็นคำขอไป LINE อีกรอบ
+         — token ได้มาแล้วด้านบน และ backend ยึด `sub` ของ token นี้เป็นตัวตนจริงอยู่แล้ว · ไม่มีข้อมูลใน token ค่อยถอยไปใช้ getProfile */
+      let dec = null; try { dec = liff.getDecodedIDToken(); } catch (e) {}
+      if (dec && dec.sub) { ME.lineUserId = dec.sub; ME.name = dec.name || ''; ME.pictureUrl = dec.picture || ''; }
+      else { const p = await liff.getProfile(); ME.lineUserId = p.userId; ME.name = p.displayName; ME.pictureUrl = p.pictureUrl || ''; }
     }
     // ผู้อนุมัติกดปุ่มจากการ์ดในกลุ่ม → เข้าหน้าอนุมัติก่อนเสมอ (เขาอาจไม่ใช่พนักงานขายเลย จึงต้องมาก่อนด่าน checkUser)
     if (DEEPLINK && DEEPLINK.go === 'approvals') {
       const dl = DEEPLINK; DEEPLINK = null;
-      setLoad('กำลังตรวจสอบสิทธิ์อนุมัติ...');
+      if (AP.fromSnap && AP.snapOwner && AP.snapOwner !== ME.lineUserId) { AP.rows = []; AP.fromSnap = false; }   // snapshot เป็นของคนอื่นในเครื่องเดียวกัน → ทิ้ง ไม่โชว์
+      if (!AP.fromSnap) setLoad('กำลังเปิดหน้าอนุมัติ...');
       try {
-        const c = await api('getApproverContext', {}, 30000);
-        if (c && c.success && c.isApprover) { AP.ctx = c; ME.isApprover = true; return openApprovals({ uid: dl.u, from: 'boot' }); }
-        if (c && c.success) toast('บัญชี LINE นี้ไม่มีสิทธิ์อนุมัติผู้ใช้งาน', 'err');
-        else if (c && c.message) toast(c.message, 'err');
-      } catch (e) { toast('ตรวจสิทธิ์อนุมัติไม่ได้: ' + e.message, 'err'); }
+        /* ★ คำขอเดียวตอบทั้งสิทธิ์และรายการ (listStaffApprovals ส่ง `me` มาด้วย) — เดิมถาม getApproverContext ก่อนแล้วค่อยถามรายการ
+           สองคำขอเรียงกัน จ่ายค่าคงที่ ~1.6 วิซ้ำสองรอบ (ผู้ใช้แจ้งว่าหน้าอนุมัติเปิดช้า 25 พ.ย. 2026) */
+        const r = await api('listStaffApprovals', { view: 'pending', uid: dl.u }, 30000);
+        if (r && r.success && r.me) { ME.isApprover = true; return openApprovals({ uid: dl.u, from: 'boot', prefetched: r }); }
+        if (r && r.notApprover) toast('บัญชี LINE นี้ไม่มีสิทธิ์อนุมัติผู้ใช้งาน', 'err');
+        else if (r && r.message) toast(r.message, 'err');
+      } catch (e) { toast('เปิดหน้าอนุมัติไม่ได้: ' + e.message, 'err'); }
+      // ไหลต่อเข้าแอปปกติ — ถ้าเมื่อกี้วาด snapshot ไปแล้วต้องเลิกโชว์หน้าอนุมัติก่อน
+      if (AP.fromSnap) { AP.fromSnap = false; AP.rows = []; setLoad('กำลังตรวจสอบสิทธิ์...'); }
       // ไม่มีสิทธิ์/ตรวจไม่ได้ → ไหลต่อเข้าแอปตามปกติ (ไม่ทิ้งให้ติดหน้าโหลด)
     }
     setLoad('กำลังตรวจสอบสิทธิ์...');
@@ -737,7 +756,7 @@ function enterApp(){
 /* ══════════════ อนุมัติผู้ใช้งาน (ผู้อนุมัติเท่านั้น) — backend/61_staff_approval.gs ══════════════
    ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ของคนกดทุกครั้ง · ที่นี่แค่ "โชว์/ซ่อนปุ่ม" และวาดหน้าจอ
    ★ ค่าตั้งต้นของบทบาทตอนอนุมัติ = van_sales (เจ้าของระบบสั่ง: blitz = ขายหาร้านใหม่ ต้องเก็บเงินสด) */
-const AP = { ctx: null, tab: 'pending', filter: 'all', tenantId: '', q: '', rows: [], counts: { pending: 0, approved: 0, rejected: 0 }, focusUid: '', from: 'app', loaded: false, sheet: null };
+const AP = { ctx: null, tab: 'pending', filter: 'all', tenantId: '', q: '', rows: [], counts: { pending: 0, approved: 0, rejected: 0 }, focusUid: '', from: 'app', loaded: false, sheet: null, live: false, fromSnap: false, snapOwner: '' };
 const AP_ROLES = [['van_sales', 'พนักงานขับรถ (เงินสด)'], ['credit_sales', 'พนักงานเครดิต']];
 const pad2 = n => String(n).padStart(2, '0');
 const ymdLocal = d => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
@@ -774,18 +793,36 @@ function paintApproverCard(c){
 async function openApprovals(opts){
   opts = opts || {};
   AP.from = opts.from || 'app'; AP.focusUid = opts.uid || ''; AP.tab = 'pending'; AP.filter = 'all'; AP.q = ''; AP.tenantId = '';
-  AP.rows = []; AP.loaded = false;
+  AP.fromSnap = !!opts.snap; AP.live = !opts.snap;
+  if (opts.snap) { AP.snapOwner = opts.snap.owner || ''; AP.ctx = opts.snap.me; AP.rows = opts.snap.data || []; AP.counts = opts.snap.counts || AP.counts; AP.loaded = true; }
+  else { AP.rows = []; AP.loaded = false; }
+  if (opts.prefetched) AP.ctx = opts.prefetched.me || AP.ctx;
   show('scr-approve');
   // เปิดจากลิงก์ในกลุ่ม = ไม่มีแอปให้กลับไป ปุ่มกลับเปลี่ยนเป็นไปตรวจสอบสิทธิ์ใช้งานของตัวเองต่อ
   $('ap-back').textContent = AP.from === 'boot' ? 'ไปหน้าแอป ›' : '‹ กลับ';
   $('ap-q').value = '';
+  apPaintHeader();
+  apPaintTabs();
+  if (opts.snap) { $('ap-stale').classList.remove('hidden'); apRenderFocus(null); apRender(null); return; }   // วาดของเก่าทันที — ของสดตามมาจาก boot()
+  if (opts.prefetched) { apApply(opts.prefetched); return; }
+  await apLoad();
+}
+function apPaintHeader(){
   const tenants = (AP.ctx && AP.ctx.tenants) || [];
   const sel = $('ap-tenant');
   sel.classList.toggle('hidden', tenants.length < 2);
   sel.innerHTML = '<option value="">ทุกตัวแทนที่ดูแล (' + tenants.length + ')</option>' + tenants.map(t => '<option value="' + esc(t.tenantId) + '">' + esc(t.name) + '</option>').join('');
+  sel.value = AP.tenantId || '';
   $('ap-sub').textContent = AP.ctx ? (AP.ctx.name || '') + (AP.ctx.all ? ' · ทุกตัวแทน' : tenants.length === 1 ? ' · ' + tenants[0].name : ' · ' + tenants.length + ' ตัวแทน') : '';
-  apPaintTabs();
-  await apLoad();
+}
+/* รับผลจาก listStaffApprovals (ไม่ว่าจะมาจาก apLoad หรือคำขอแรกของลิงก์ลึก) — จุดเดียวที่เปลี่ยนสถานะหน้าจอ + เก็บ snapshot */
+function apApply(r){
+  AP.rows = r.data || []; AP.counts = r.counts || AP.counts; AP.loaded = true; AP.live = true; AP.fromSnap = false;
+  if (r.me) { AP.ctx = r.me; apPaintHeader(); }
+  $('ap-stale').classList.add('hidden');
+  apPaintTabs(); apRenderFocus(r.focus); apRender(r);
+  // เก็บเฉพาะมุมมองรออนุมัติแบบไม่กรอง (มุมมองที่เปิดจากลิงก์เสมอ) · ไม่เก็บเกิน 50 แถว กัน localStorage โตไม่รู้จบ
+  if (AP.tab === 'pending' && !AP.tenantId && !AP.q) lsSet('apsnap', { owner: ME.lineUserId, ts: Date.now(), me: AP.ctx, counts: AP.counts, data: AP.rows.slice(0, 50) });
 }
 function closeApprovals(){
   apCloseSheet();
@@ -818,8 +855,7 @@ async function apLoad(){
       if (r && r.notApprover) toast(r.message, 'err');
       return;
     }
-    AP.rows = r.data || []; AP.counts = r.counts || AP.counts; AP.loaded = true;
-    apPaintTabs(); apRenderFocus(r.focus); apRender(r);
+    apApply(r);
   } catch (e) { list.innerHTML = '<div class="empty">เชื่อมต่อไม่ได้: ' + esc(e.message) + '</div>'; }
   finally { pressBusy(btn, false); }
 }
@@ -875,6 +911,7 @@ function apFindRow(uid){
   return AP.rows.find(x => x.lineUserId === uid) || null;
 }
 async function apOpenSheet(uid, mode){
+  if (!AP.live) { toast('กำลังเชื่อมต่อ รอสักครู่แล้วกดอีกครั้ง', 'err'); return; }   // ยังเป็นรายการของครั้งก่อน (snapshot) — ปุ่มตัดสินเปิดเมื่อข้อมูลสดมาแล้วเท่านั้น
   let u = apFindRow(uid);
   if (!u) {   // เปิดจากแบนเนอร์ของลิงก์ แต่ไม่ได้อยู่ในแท็บที่เปิดอยู่ → ถามเฉพาะคนนี้
     try { const r = await api('listStaffApprovals', { view: 'history', uid: uid }); u = r && r.focus; } catch (e) {}

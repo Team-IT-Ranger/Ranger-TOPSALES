@@ -29,7 +29,8 @@ var SHEET_CACHE_TABLES = {
   free_goods_sets: 1, free_goods_items: 1, customer_lists: 1, customer_list_members: 1, help_articles: 1,
   // price_list_change_log ไม่แคช — เป็นตารางประวัติ ต้องเห็นของใหม่ทันที
   distribution_channels: 1, payment_types: 1, discount_rules: 1,
-  vendors: 1, warehouses: 1, approval_flows: 1, approval_flow_steps: 1, gl_accounts: 1
+  vendors: 1, warehouses: 1, approval_flows: 1, approval_flow_steps: 1, gl_accounts: 1,
+  staff_approvers: 1   // รายชื่อผู้อนุมัติเพิ่ม (61_staff_approval.gs) — เปลี่ยนน้อย อ่านทุกคำขอของผู้อนุมัติ · เขียนผ่าน centralAppendMany/deleteRowsWhere ล้างแคชเอง
 };
 var _objMemo = {};
 

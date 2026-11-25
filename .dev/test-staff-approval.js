@@ -214,6 +214,9 @@ liff.data.find(rw => rw[0] === 'Uyes1')[liff.data[0].indexOf('decided_by_name')]
 addLiff({ line_user_id: 'Urej1', display_name: 'ถูกปฏิเสธ', role: 'van_sales', tenant_id: 'BDC', status: 'Rejected', decided_at: '2026-11-24 09:00:00', decided_by_name: 'อุลตร้า' });
 r = act('Ubdcadmin', 'listStaffApprovals', { view: 'pending' });
 eq('★ รออนุมัติของ BDC เห็นเฉพาะ BDC (Upend2 ของนครนายกไม่โผล่)', r.data.map(x => x.lineUserId).sort(), ['Unew1', 'Upend1']);
+eq('★ รายการส่ง `me` มาด้วย (หน้าอนุมัติเปิดคำขอเดียว ไม่ต้องถามสิทธิ์แยก): ชื่อ · ตัวแทนที่ดูแล · จำนวนที่รออยู่', [r.me.name, r.me.tenants.map(t => t.tenantId), r.me.pendingCount, r.me.all], ['แอดมิน BDC', ['BDC'], 2, false]);
+eq('  Ultra Admin: me.all = true และได้รายการตัวแทนที่เปิดอยู่ทั้งหมดให้เลือกกรอง', (() => { const m = act('Uultra', 'listStaffApprovals', { view: 'pending' }).me; return [m.all, m.tenants.map(t => t.tenantId).sort()]; })(), [true, ['BDC', 'CBI', 'NKN', 'TNKI']]);
+eq('  คนที่ไม่ใช่ผู้อนุมัติไม่ได้ me (ไม่รั่วข้อมูลสิทธิ์)', act('Uyes1', 'listStaffApprovals', {}).me, undefined);
 eq('  นับยอดแต่ละแท็บมาให้ (ป้ายตัวเลขบนแท็บ)', r.counts, { pending: 2, approved: 1, rejected: 1 });
 eq('  ชื่อสังกัดมาเป็นชื่อ ไม่ใช่รหัส', r.data[0].tenantName, 'บีดีซี ตะวันออก');
 r = act('Ubdcadmin', 'listStaffApprovals', { view: 'history' });

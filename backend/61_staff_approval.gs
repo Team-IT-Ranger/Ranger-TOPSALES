@@ -202,19 +202,23 @@ function _handleApproverActionCore(lineUserId, action, payload) {
 }
 
 /** ถามเฉยๆ ว่าเป็นผู้อนุมัติไหม — คนทั่วไปได้ isApprover:false ไม่ใช่ error (แอปถามทุกครั้งที่เปิด ต้องเงียบ) */
-function getApproverContext(ctx) {
-  if (!ctx) return { success: true, isApprover: false };
-  var names = _saTenantNames();
+/** สรุปผู้อนุมัติ: ชื่อ · ดูแลตัวแทนไหนบ้าง · มีกี่คำขอรออยู่ — getApproverContext และ listStaffApprovals ใช้ตัวเดียวกัน */
+function _saMe(ctx, names, pendingCount) {
   var tenants = ctx.all
     ? centralObjects('tenants').filter(function(t) { return isFlagOn(t.is_active); }).map(function(t) { return String(t.tenant_id); })
     : Object.keys(ctx.tenants);
+  return { name: ctx.name, all: ctx.all, pendingCount: pendingCount,
+    tenants: tenants.map(function(t) { return { tenantId: t, name: names[t] || t }; })
+      .sort(function(a, b) { return String(a.name).localeCompare(String(b.name), 'th'); }) };
+}
+function getApproverContext(ctx) {
+  if (!ctx) return { success: true, isApprover: false };
   var pending = 0;
   centralObjects('liff_users').forEach(function(u) {
     if (_saNorm(u.status) === SA_ST_PENDING && _saInScope(ctx, u.tenant_id)) pending++;
   });
-  return { success: true, isApprover: true, name: ctx.name, all: ctx.all, pendingCount: pending,
-    tenants: tenants.map(function(t) { return { tenantId: t, name: names[t] || t }; })
-      .sort(function(a, b) { return String(a.name).localeCompare(String(b.name), 'th'); }) };
+  var me = _saMe(ctx, _saTenantNames(), pending);
+  return { success: true, isApprover: true, name: me.name, all: me.all, pendingCount: pending, tenants: me.tenants };
 }
 
 function _saRowOut(u, names) {
@@ -268,7 +272,9 @@ function listStaffApprovals(ctx, payload) {
     return tb - ta;                 // ใหม่สุดก่อน · ไม่มีเวลา (ของเก่าก่อนมีฟีเจอร์นี้) ไปท้ายสุด
   });
   var total = rows.length;
-  return { success: true, view: view, counts: counts, total: total, truncated: total > SA_LIST_LIMIT,
+  /* ★ ส่ง `me` มากับรายการเลย (25 พ.ย. 2026 — ผู้ใช้แจ้งว่าหน้าอนุมัติเปิดช้า) — เดิมแอปถาม getApproverContext ก่อนแล้วค่อยถามรายการ
+     สองคำขอเรียงกัน = จ่ายค่าคงที่ ~1.6 วิ ซ้ำสองรอบ · ตอนนี้คำขอเดียวตอบได้ทั้งสิทธิ์และรายการ (คนไม่มีสิทธิ์ได้ notApprover เหมือนเดิม) */
+  return { success: true, view: view, counts: counts, total: total, truncated: total > SA_LIST_LIMIT, me: _saMe(ctx, names, counts.pending),
     data: rows.slice(0, SA_LIST_LIMIT).map(function(u) { return _saRowOut(u, names); }), focus: focus };
 }
 
