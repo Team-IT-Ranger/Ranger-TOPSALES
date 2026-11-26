@@ -12,9 +12,9 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,677 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,550 |
-| แอปมือถือ (LIFF) | `frontend-mobile/` | 1,960 |
+| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,796 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,575 |
+| แอปมือถือ (LIFF) | `frontend-mobile/` | 1,990 |
 | ตารางข้อมูล | 72 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 231 แอดมิน |  |
 
@@ -30,7 +30,7 @@
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 260 | AUTH |
 | `05_router.gs` | 358 | ROUTER |
-| `06_bootstrap.gs` | 328 | BOOTSTRAP / DASHBOARD (Mobile App) |
+| `06_bootstrap.gs` | 337 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 413 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 86 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
@@ -70,7 +70,7 @@
 | `43_external_sales_import.gs` | 660 | นำเข้ารายการขายออกจากบริษัท → ใบสั่งซื้อ+ใบรับของของศูนย์ (2026-10-02) |
 | `44_product_categories.gs` | 97 | hit.category && curSub |
 | `45_unit_rescale.gs` | 75 | ปรับ "ขนาดหน่วยฐาน" ของสินค้า — งานครั้งเดียวที่รันจาก Apps Script edi |
-| `46_customer_requests.gs` | 368 | null \|\| v |
+| `46_customer_requests.gs` | 477 | null \|\| v |
 | `47_address_refs.gs` | 133 | ══════════════════════════════════════════════════════════════════════ |
 | `48_delivery_rounds.gs` | 661 | รอบจัดส่ง · ของค้างส่ง (แอดมินศูนย์ขอ 14 ต.ค. 2026) |
 | `49_credit_notes.gs` | 686 | ใบลดหนี้ (Credit Note) · ใบเพิ่มหนี้ (Debit Note) — 15 ต.ค. 2026 |
@@ -86,7 +86,7 @@
 | `59_dashboard_export.gs` | 434 | ส่งยอดขายออกเป็นไฟล์กลางของ Dashboard บริษัท (CSV ต่อตัวแทน) |
 | `60_sales_facts.gs` | 245 | ยอดขายรายบรรทัด — แหล่งความจริงชุดเดียวของทั้งระบบ |
 | `61_staff_approval.gs` | 564 | อนุมัติผู้ใช้งานแอปมือถือผ่าน LINE (25 พ.ย. 2026) |
-| `62_blitz.gs` | 520 | แคมเปญ BLITZ RANGER (26 พ.ย. 2026) |
+| `62_blitz.gs` | 521 | แคมเปญ BLITZ RANGER (26 พ.ย. 2026) |
 | `99_dev_tools.gs` | 478 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -595,13 +595,13 @@
 |---|---|---|
 | `.dev/test-address-refs.js` | หน่วย (ไม่ยิงเน็ต) | 116 |
 | `.dev/test-barcode.js` | หน่วย (ไม่ยิงเน็ต) | 111 |
-| `.dev/test-blitz.js` | หน่วย (ไม่ยิงเน็ต) | 250 |
+| `.dev/test-blitz.js` | หน่วย (ไม่ยิงเน็ต) | 251 |
 | `.dev/test-bot-line.js` | หน่วย (ไม่ยิงเน็ต) | 698 |
 | `.dev/test-cancel-guard.js` | หน่วย (ไม่ยิงเน็ต) | 144 |
 | `.dev/test-customer-bulk.js` | หน่วย (ไม่ยิงเน็ต) | 191 |
 | `.dev/test-customer-credit.js` | หน่วย (ไม่ยิงเน็ต) | 224 |
 | `.dev/test-customer-lists.js` | หน่วย (ไม่ยิงเน็ต) | 137 |
-| `.dev/test-customer-requests.js` | หน่วย (ไม่ยิงเน็ต) | 263 |
+| `.dev/test-customer-requests.js` | หน่วย (ไม่ยิงเน็ต) | 282 |
 | `.dev/test-customers.js` | หน่วย (ไม่ยิงเน็ต) | 195 |
 | `.dev/test-dashboard-export.js` | หน่วย (ไม่ยิงเน็ต) | 483 |
 | `.dev/test-docnum.js` | หน่วย (ไม่ยิงเน็ต) | 299 |

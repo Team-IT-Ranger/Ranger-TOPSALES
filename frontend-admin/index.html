@@ -1464,7 +1464,7 @@
           <div class="form-card">
             <div class="form-grid g2">
               <div class="field"><label>ลูกค้า</label><select id="son-customer" onchange="sonCustomerChanged()"><option value="">— เลือกลูกค้า —</option></select></div>
-              <div class="field"><label>ชำระเงิน</label><select id="son-pay"></select></div>
+              <div class="field"><label>ชำระเงิน</label><select id="son-pay" onchange="sonReapplyUnits()"></select></div>
               <div class="field"><label>การจัดส่ง</label><select id="son-fulfill" onchange="sonFulfillChanged()">
                 <option value="office_delivery">รอสำนักงานจัดส่ง (ไม่ตัดสต็อกรถ)</option>
                 <option value="immediate">ตัดสต็อกรถทันที (ต้องเลือกพนักงาน)</option>
@@ -3656,7 +3656,8 @@ function renderCustRequests(){
       '<td class="wrap"><div>'+esc(q.name)+'</div>' +
         (q.address ? '<div class="form-hint">'+esc(q.address)+'</div>' : '') +
         (q.taxId ? '<div class="form-hint">เลขภาษี '+esc(q.taxId)+'</div>' : '') +
-        (q.customerCode ? '<div class="form-hint">รหัสร้าน '+esc(q.customerCode)+'</div>' : '') +
+        (q.customerCode ? '<div class="form-hint">รหัสร้าน '+esc(q.customerCode)+
+          (q.status === 'pending' ? ' <span class="tag tag-warn">เซลส์เปิดให้ขายเงินสดไปแล้ว · เครดิตรออนุมัติ</span>' : '')+'</div>' : '') +
         (q.rejectReason ? '<div class="form-hint">เหตุผล: '+esc(q.rejectReason)+'</div>' : '') + '</td>' +
       '<td class="wrap">'+esc(q.contactName||'-')+'<div class="form-hint">'+esc(q.phone||'-')+'</div></td>' +
       '<td>'+esc(q.shopTypeName||'-')+'</td>' +
@@ -6033,8 +6034,29 @@ async function ensureStaffCache(){
 }
 function sonFulfillChanged(){
   document.getElementById('son-staff-field').style.display = document.getElementById('son-fulfill').value === 'immediate' ? '' : 'none';
+  sonReapplyUnits();
 }
-async function sonRowProductChanged(sel){
+/* ★ หน่วยขายเริ่มต้น (เจ้าของระบบสั่ง 26 พ.ย. 2026): เงินสด = แพ็ค · เครดิต = ลัง
+   ★ แพ็คขายได้เฉพาะ "ลงของจากรถ (immediate) + เงินสด" — ฝั่งแอดมินเซิร์ฟเวอร์ถือว่า isVan = immediate (19_sales_admin.gs)
+     เงินสดแต่ส่งจากสำนักงานจึงตั้งต้นที่ลัง ไม่งั้นโดนปฏิเสธ PACK_VAN_ONLY ทุกบรรทัด · ไม่มีหน่วยนั้น → ลัง → หน่วยฐาน
+   ★ แถวที่ผู้ใช้เลือกหน่วยเองแล้ว (data-touched) ไม่ถูกเปลี่ยนตามวิธีชำระ */
+function sonDefaultUnitValue(units){
+  const pay = ((document.getElementById('son-pay') || {}).value || ''), credit = /credit/i.test(pay);
+  const van = ((document.getElementById('son-fulfill') || {}).value === 'immediate');
+  const find = k => units.find(u => { const c = String(u.unit_code).toUpperCase(); return k === 'PK' ? (c === 'PK' || c === 'PACK') : (c === 'CT' || c === 'CASE'); });
+  if (!credit && van) { const u = find('PK'); if (u) return u.unit_code; }
+  const c = find('CT');
+  return c ? c.unit_code : null;
+}
+function sonReapplyUnits(){
+  document.querySelectorAll('#son-rows .son-row').forEach(row => {
+    const us = row.querySelector('.son-unit'), pid = row.querySelector('.son-prod').value;
+    if (!us || !pid || us.dataset.touched === '1' || !PRODUCT_UNITS_CACHE[pid]) return;
+    const v = sonDefaultUnitValue(PRODUCT_UNITS_CACHE[pid]);
+    if (v != null && [...us.options].some(o => o.value === v)) us.value = v;
+  });
+}
+async function sonRowProductChanged(sel, applyDefault){
   const row = sel.closest('.son-row'), pid = sel.value, unitSel = row.querySelector('.son-unit');
   if (!pid) { unitSel.innerHTML = ''; return; }
   const p = productsCache.find(x => String(x.record_id) === String(pid));
@@ -6047,13 +6069,16 @@ async function sonRowProductChanged(sel){
   const baseOpt = '<option value="'+esc(p.unit)+'">'+esc(p.unit)+' (หน่วยฐาน)</option>';
   const extraOpts = PRODUCT_UNITS_CACHE[pid].map(u => '<option value="'+esc(u.unit_code)+'">'+esc(u.unit_label)+' (×'+esc(u.unit_factor)+' '+esc(p.unit)+')</option>').join('');
   unitSel.innerHTML = baseOpt + extraOpts;
+  unitSel.dataset.touched = '';
+  unitSel.onchange = () => { unitSel.dataset.touched = '1'; };
+  if (applyDefault) { const v = sonDefaultUnitValue(PRODUCT_UNITS_CACHE[pid]); if (v != null && [...unitSel.options].some(o => o.value === v)) unitSel.value = v; }
 }
 function sonAddRow(){
   const opts = productsCache.filter(p => isOn(p.is_active))
     .map(p => '<option value="'+p.record_id+'">'+(p.product_code ? esc(p.product_code)+' — ' : '')+esc(p.name)+'</option>').join('');
   const d = document.createElement('div');
   d.className = 'son-row'; d.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
-  d.innerHTML = '<select class="son-prod" style="flex:1;min-width:0" onchange="sonRowProductChanged(this)"><option value="">— เลือกสินค้า —</option>'+opts+'</select>' +
+  d.innerHTML = '<select class="son-prod" style="flex:1;min-width:0" onchange="sonRowProductChanged(this, true)"><option value="">— เลือกสินค้า —</option>'+opts+'</select>' +
     '<select class="son-unit" style="width:170px"></select>' +
     '<input type="number" class="son-qty" min="1" value="1" style="width:80px">' +
     '<button class="btn btn-sm" onclick="this.parentNode.remove()">✕</button>';
@@ -6181,7 +6206,7 @@ async function sedAddRow(it){
     .map(p => '<option value="'+p.record_id+'">'+(p.product_code ? esc(p.product_code)+' — ' : '')+esc(p.name)+'</option>').join('');
   const d = document.createElement('div');
   d.className = 'son-row'; d.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
-  d.innerHTML = '<select class="son-prod" style="flex:1;min-width:0" onchange="sonRowProductChanged(this)"><option value="">— เลือกสินค้า —</option>'+opts+'</select>' +
+  d.innerHTML = '<select class="son-prod" style="flex:1;min-width:0" onchange="sonRowProductChanged(this, true)"><option value="">— เลือกสินค้า —</option>'+opts+'</select>' +
     '<select class="son-unit" style="width:170px"></select>' +
     '<input type="number" class="son-qty" min="1" value="1" style="width:80px">' +
     '<button class="btn btn-sm" onclick="this.parentNode.remove()">✕</button>';

@@ -53,10 +53,11 @@ const ctx = {
   _requirePermission: () => null,
   _effectiveTenantId: (s, p) => (s && s.tenant_id) || (p && p.tenantId) || null,
   _salesTenantId: (s, p) => (s && s.tenant_id) || (p && p.tenantId) || null,
-  customerListsOf: () => []
+  customerListsOf: () => [],
+  isCreditPayment: c => ['credit_term', 'credit'].indexOf(String(c || '').toLowerCase()) >= 0
 };
 vm.createContext(ctx);
-for (const f of ['17_pricing.gs', '33_customers.gs', '36_price_rules.gs', '38_package_distribution.gs', '46_customer_requests.gs']) {
+for (const f of ['17_pricing.gs', '33_customers.gs', '36_price_rules.gs', '38_package_distribution.gs', '06_bootstrap.gs', '46_customer_requests.gs']) {
   vm.runInContext(B(f), ctx, { filename: f });
 }
 
@@ -79,8 +80,17 @@ eq('ส่งคำขอได้ และได้เลขอ้างอิ
 eq('  คำขอเข้าคิวสถานะ "รออนุมัติ" ผูกกับตัวแทนและคนขอ',
   [sheets.customer_requests[0].status, sheets.customer_requests[0].tenant_id, sheets.customer_requests[0].requested_by],
   ['pending', 'T1', 'U-sales']);
-eq('  ★ ยังไม่สร้างแถวในทะเบียนลูกค้า (คำขอที่ยังไม่อนุมัติต้องไม่โผล่ให้เปิดบิลใส่ได้)',
-  sheets.customers.length, 0);
+eq('  ★★ เปิดร้านให้ขายเงินสดได้ทันที: สร้างลูกค้าจริง 1 แถว สถานะ "ระงับเครดิต" (ขายสดได้ เครดิตไม่ได้) + ตราชั่วคราว',
+  [sheets.customers.length, sheets.customers[0].status, sheets.customers[0].payment_type, Number(sheets.customers[0].credit_limit), String(sheets.customers[0].group_id),
+   JSON.parse(sheets.customers[0].attributes).provisional], [1, 'blocked', 'cash', 0, '7', true]);
+eq('  ผูกคำขอกับร้านที่เปิดให้ทันที (customer_id/รหัสร้าน)', [sheets.customer_requests[0].customer_id === sheets.customers[0].record_id, !!sheets.customer_requests[0].customer_code], [true, true]);
+eq('  ★ ร้านที่เปิดให้ ขายเงินสดผ่านด่าน แต่ขายเครดิตไม่ผ่าน', [ctx.customerSaleGate(sheets.customers[0], 'cash'), ctx.customerSaleGate(sheets.customers[0], 'credit_term').success], [null, false]);
+eq('  ★ ร้านที่เปิดให้ หาชุดราคาเจอจริง (ขายได้จริง ไม่ใช่แค่ผ่านด่าน)', !!ctx.resolvePriceListForCustomer(sheets.customers[0]), true);
+eq('  คำตอบกลับพร้อมร้านให้แอปใส่ในรายการได้เลย (รูปเดียวกับ bootstrap) + ตราชั่วคราว',
+  [r.quickOpened, r.customer.creditBlocked, r.customer.provisional, r.customer.paymentType, r.customer.code === r.customerCode], [true, true, true, 'cash', true]);
+eq('  ล้างแคช bootstrap ของเซลส์ (ร้านใหม่โผล่ในรายการตอนเปิดแอปรอบหน้า)', cacheCleared.indexOf('bootstrap:U-sales') !== -1, true);
+r = ctx.submitCustomerRequest(SALES, GOOD);
+eq('★ ร้านเดียวกัน (ชื่อ+เลขภาษีตรงกันทั้งคู่) ส่งซ้ำ = ปฏิเสธ ไม่เปิดร้านซ้ำ · บอกรหัสร้านเดิม', [r.success, /ร้านนี้มีในระบบแล้ว/.test(r.message || ''), sheets.customers.length], [false, true, 1]);
 
 r = ctx.submitCustomerRequest(SALES, Object.assign({}, GOOD, { name: '' }));
 eq('ไม่กรอกชื่อร้าน = ปฏิเสธ', [r.success, r.message], [false, 'กรุณาระบุชื่อร้าน']);
@@ -94,7 +104,7 @@ eq('ไม่กรอกเลขผู้เสียภาษีเลย = �
 r = ctx.submitCustomerRequest(SALES, Object.assign({}, GOOD, { paymentType: 'credit', creditLimit: 0 }));
 eq('★ ขอเป็นร้านเครดิตแต่ไม่บอกวงเงิน = ปฏิเสธ (แอดมินตัดสินใจไม่ได้ ต้องโทรกลับมาถาม)', r.success, false);
 
-r = ctx.submitCustomerRequest(SALES, Object.assign({}, GOOD, { paymentType: 'credit', creditLimit: 30000 }));
+r = ctx.submitCustomerRequest(SALES, Object.assign({}, GOOD, { name: 'ร้านป้าแดง สาขา 2', paymentType: 'credit', creditLimit: 30000 }));
 eq('ขอเครดิตพร้อมวงเงิน = ผ่าน', r.success, true);
 
 r = ctx.submitCustomerRequest(SALES, Object.assign({}, GOOD, { shopTypeId: '99' }));
@@ -103,23 +113,32 @@ eq('ประเภทร้านที่ไม่มีจริง = ปฏ�
 eq('ตัวเลือกประเภทร้านมีเฉพาะที่เปิดใช้งาน (ค้าส่งถูกปิดไว้)',
   ctx.listShopTypesMobile(SALES, {}).shopTypes.map(t => t.name), ['มินิมาร์ท', 'โชห่วย']);
 
+console.log('\n── เปิดร้านทันทีไม่ได้ (ไม่มีชุดราคา) → เหลือเป็นคำขอปกติ ──');
+reset();
+sheets.package_tenants = [{ record_id: 1, package_type: 'price_list', package_id: 50, tenant_id: 'T9' }];   // ชุดราคาถูกจ่ายให้ตัวแทนอื่น
+r = ctx.submitCustomerRequest(SALES, GOOD);
+eq('★ ไม่มีกลุ่มที่ขายได้จริง → คำขอผ่าน แต่ไม่เปิดร้านทันที (ดีกว่าสร้างร้านที่เปิดบิลไม่ได้แล้วบอกเซลส์ว่าขายได้) พร้อมบอกเหตุผล',
+  [r.success, r.quickOpened, sheets.customers.length, !!r.quickWhy, sheets.customer_requests[0].status], [true, false, 0, true, 'pending']);
+
 console.log('\n── แอดมินอนุมัติ ──');
 reset();
 ctx.submitCustomerRequest(SALES, GOOD);
 
 r = ctx.approveCustomerRequest(ADMIN, { requestId: 1 });
 eq('★★ ไม่เลือกกลุ่มราคา = อนุมัติไม่ได้ (ร้านไม่มีกลุ่ม = เปิดบิลไม่ได้ แต่ดูเหมือนแถวปกติ)', r.success, false);
-eq('  และต้องยังไม่สร้างลูกค้า', sheets.customers.length, 0);
+eq('  และต้องไม่สร้างลูกค้าเพิ่ม (มีแต่ร้านชั่วคราวเดิมแถวเดียว)', sheets.customers.length, 1);
 
 r = ctx.approveCustomerRequest(ADMIN, { requestId: 1, groupId: 9 });
 eq('★★ เลือกกลุ่มที่ไม่มีชุดราคาที่ใช้งานอยู่ = อนุมัติไม่ได้ พร้อมบอกเหตุผล',
   [r.success, !!r.needsPriceList], [false, true]);
-eq('  ★ สำคัญ: ล้มแล้วต้องไม่ทิ้งแถวลูกค้าค้างไว้ (ตรวจก่อนเขียนเสมอ)', sheets.customers.length, 0);
+eq('  ★ สำคัญ: ล้มแล้วต้องไม่ทิ้งแถวลูกค้าเพิ่ม และร้านชั่วคราวเดิมต้องไม่ถูกแตะ (ยังระงับเครดิต กลุ่มเดิม)', [sheets.customers.length, sheets.customers[0].status, String(sheets.customers[0].group_id)], [1, 'blocked', '7']);
 eq('  คำขอยังอยู่ในคิว รออนุมัติเหมือนเดิม', sheets.customer_requests[0].status, 'pending');
 
 r = ctx.approveCustomerRequest(ADMIN, { requestId: 1, groupId: 7 });
 eq('อนุมัติด้วยกลุ่มที่มีชุดราคาจริง = ผ่าน และได้รหัสร้าน', [r.success, !!r.customerCode], [true, true]);
-eq('  สร้างลูกค้า 1 แถว ผูกตัวแทน กลุ่มราคา และประเภทร้านครบ',
+eq('★★ ร้านที่เปิดให้ขายสดไปแล้ว → อนุมัติ = ยกระดับร้านเดิม (ไม่สร้างซ้ำ): สถานะ active ตราชั่วคราวหายไป รหัสร้านเดิม',
+  [sheets.customers.length, sheets.customers[0].status, JSON.parse(sheets.customers[0].attributes || '{}').provisional, sheets.customer_requests[0].customer_code === sheets.customers[0].customer_code], [1, 'active', undefined, true]);
+eq('  ผูกตัวแทน กลุ่มราคา และประเภทร้านครบ',
   [sheets.customers.length, sheets.customers[0].tenant_id, String(sheets.customers[0].group_id), String(sheets.customers[0].shop_type_id)],
   [1, 'T1', '7', '1']);
 eq('  ★ ร้านที่สร้างต้องหาชุดราคาเจอจริง (ไม่ใช่แค่ผ่านตอนตรวจ)',
@@ -182,7 +201,7 @@ eq('ตีกลับโดยไม่บอกเหตุผล = ปฏิ�
 r = ctx.rejectCustomerRequest(ADMIN, { requestId: 1, reason: 'เลขผู้เสียภาษีไม่ตรงกับชื่อร้าน' });
 eq('ตีกลับพร้อมเหตุผล = ผ่าน', [r.success, sheets.customer_requests[0].status], [true, 'rejected']);
 eq('  เหตุผลถูกเก็บไว้ให้เซลส์อ่าน', sheets.customer_requests[0].reject_reason, 'เลขผู้เสียภาษีไม่ตรงกับชื่อร้าน');
-eq('  ไม่สร้างลูกค้า', sheets.customers.length, 0);
+eq('  ★ ร้านชั่วคราวที่เปิดให้ขายสดไปแล้วถูกปิดใช้งาน (ขายต่อไม่ได้) แต่ไม่ถูกลบ — บิลที่ขายไปแล้วยังอ้างร้านนี้', [sheets.customers.length, sheets.customers[0].status, String(sheets.customers[0].is_active)], [1, 'inactive', 'FALSE']);
 
 const OTHER_ADMIN = { adminUserId: 10, displayName: 'แอดมินตัวแทนอื่น', tenant_id: 'T2' };
 reset();

@@ -430,13 +430,14 @@ function _bzBuildDashboard(camp, fresh) {
     });
   }
 
-  // ร้านเปิดใหม่ = คำขอเปิดร้านที่ผู้ป้อนบิล/สมาชิกของทีมยื่น และแอดมินอนุมัติแล้วในช่วงแคมเปญ
+  // ร้านเปิดใหม่ = คำขอเปิดร้านที่ผู้ป้อนบิล/สมาชิกของทีมยื่นในช่วงแคมเปญ — นับตั้งแต่ "วันที่ยื่น" ไม่รอแอดมินอนุมัติ
+  // (26 พ.ย. 2026: ร้านใหม่ขายเงินสดได้ทันทีโดยไม่ต้องรอแอดมิน จึงนับทันทีด้วย) · คำขอที่ถูกตีกลับไม่นับ
   var lineToTeam = {};
   Object.keys(T).forEach(function(k) { T[k].lineIds.forEach(function(l) { lineToTeam[l] = T[k]; }); });
   centralObjects('customer_requests').forEach(function(r) {
-    if (String(r.status) !== CR_APPROVED || String(r.tenant_id) !== tenantId) return;
+    if (String(r.status) === CR_REJECTED || String(r.tenant_id) !== tenantId) return;
     var t = lineToTeam[String(r.requested_by || '')];
-    var d = _bzD(r.decided_at);
+    var d = _bzD(r.requested_at);
     if (t && (!s || d >= s) && (!e || d <= e)) t.newShops++;
   });
 

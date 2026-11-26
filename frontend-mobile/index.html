@@ -1431,7 +1431,20 @@ const custName = id => { const c = DATA.customers.find(x => String(x.id) === Str
 // หน่วยขายของสินค้า: หน่วยฐาน (factor 1) + หน่วยเพิ่ม (หีบ/แพ็ค ฯลฯ จาก product_units)
 const unitsOf = p => [{ unitCode: '', unitLabel: p.unit || 'ชิ้น', unitFactor: 1, price: p.price }].concat(p.units || []);
 const unitOf = (p, code) => unitsOf(p).find(u => u.unitCode === code) || unitsOf(p)[0];
-const UNIT_PICK = {};   // productId → unitCode ที่เลือกไว้บนการ์ด
+const UNIT_PICK = {};   // productId → unitCode ที่ "ผู้ใช้เลือกเอง" บนการ์ด (ไม่มี = ใช้ค่าเริ่มต้นตามวิธีชำระ ดู defaultUnit)
+/* ★ หน่วยขายเริ่มต้น (เจ้าของระบบสั่ง 26 พ.ย. 2026): ขายเงินสด = แพ็ค · ขายเครดิต = ลัง ทุกสินค้า
+   ★ แพ็คขายได้เฉพาะ "หน่วยรถ (van_sales) + เงินสด" (PACK_VAN_ONLY / PACK_CASH_ONLY ที่เซิร์ฟเวอร์) — บทบาทอื่นถึงจะเงินสดก็ตั้งต้นที่ลัง
+     ไม่งั้นเซลส์กดเพิ่มทีไรโดนปฏิเสธทีนั้น · สินค้าที่ไม่มีหน่วยนั้น → ถอยไปลัง → หน่วยฐาน · ผู้ใช้เลือกหน่วยเองแล้วจะไม่ถูกเปลี่ยนตามวิธีชำระ */
+const isPackCode = c => /^(PK|PACK)$/i.test(String(c || ''));
+const isCaseCode = c => /^(CT|CASE)$/i.test(String(c || ''));
+function defaultUnit(p){
+  if (!p) return '';
+  const us = p.units || [], credit = (PAY === 'credit_term' || PAY === 'credit');
+  if (!credit && ME.role === 'van_sales') { const k = us.find(u => isPackCode(u.unitCode)); if (k) return k.unitCode; }
+  const c = us.find(u => isCaseCode(u.unitCode));
+  return c ? c.unitCode : '';
+}
+const curUnit = pid => UNIT_PICK[pid] != null ? UNIT_PICK[pid] : defaultUnit(prodById(pid));
 
 /* แถบ "ร้านนี้ค้างอยู่เท่าไหร่" — อ่านจาก DATA.customers ที่ bootstrap ส่งมา
    ★ ตัวเลขนี้เก่าได้ถึง 10 นาที (อายุแคช bootstrap) จึงใช้ "เพื่อให้เห็น" เท่านั้น
@@ -1442,10 +1455,15 @@ function renderCustDebt(){
   const c = DATA.customers.find(x => Number(x.id) === id);
   const debt = c ? Number(c.debt) || 0 : 0, overdue = c ? Number(c.debtOverdue) || 0 : 0;
   const limit = c ? Number(c.creditLimit) || 0 : 0;
-  if (!c || (!debt && !limit)) { box.style.display = 'none'; return; }
+  /* ★ ร้านที่เซลส์เปิดเองหน้างาน (รอแอดมินอนุมัติ) / ร้านที่ถูกระงับเครดิต → บอกตั้งแต่ตอนเลือกร้านว่าขายได้เฉพาะเงินสด
+     ไม่ต้องรอไปโดนปฏิเสธตอนกดบันทึก (เซิร์ฟเวอร์กั้นอยู่แล้ว — ที่นี่แค่บอกให้รู้ก่อน) */
+  const flag = c && c.provisional ? '🆕 ร้านใหม่ รอแอดมินอนุมัติ — <b>ขายเงินสดได้ทันที</b> · เครดิตยังไม่ได้'
+             : (c && c.creditBlocked ? '<b>ถูกระงับเครดิต</b> — ขายได้เฉพาะเงินสด' : '');
+  if (!c || (!debt && !limit && !flag)) { box.style.display = 'none'; return; }
   const left = limit ? limit - debt : null;
   const parts = [];
-  parts.push(debt ? 'ค้างชำระ <b>฿' + baht(debt) + '</b>' + (c.debtDocs ? ' (' + c.debtDocs + ' ใบ)' : '') : 'ไม่มียอดค้าง');
+  if (flag) parts.push(flag);
+  if (debt || limit) parts.push(debt ?'ค้างชำระ <b>฿' + baht(debt) + '</b>' + (c.debtDocs ? ' (' + c.debtDocs + ' ใบ)' : '') : 'ไม่มียอดค้าง');
   if (overdue) parts.push('เลยกำหนด <b>฿' + baht(overdue) + '</b>');
   /* ★ เกินวงเงินแล้วต้องเขียนว่า "เกินวงเงิน" ไม่ใช่ "เหลือ -12,000" — เครื่องหมายลบหลังสัญลักษณ์เงิน
      อ่านพลาดง่ายที่สุดตอนยืนหน้าร้าน และคำว่า "เหลือ" กับยอดติดลบขัดกันในตัวเอง */
@@ -1503,6 +1521,7 @@ function setPay(v){
   document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   if (v === 'credit_term' || v === 'credit') setFulfil('office');
   syncDelivField();
+  renderProducts();      // หน่วยเริ่มต้นเปลี่ยนตามวิธีชำระ (เงินสด=แพ็ค · เครดิต=ลัง) — การ์ดที่ผู้ใช้ยังไม่เลือกหน่วยเองต้องวาดใหม่
   cartChanged();
 }
 const cartQty = (pid, code) => { const c = CART.find(x => String(x.productId) === String(pid) && x.unitCode === code); return c ? c.qty : 0; };
@@ -1517,7 +1536,7 @@ function renderProducts(){
   const list = DATA.products.filter(p => !q || String(p.name).toLowerCase().includes(q) || String(p.code || '').toLowerCase().includes(q));
   if (!list.length) { box.innerHTML = '<div class="empty">ไม่พบสินค้า</div>'; return; }
   box.innerHTML = list.slice(0, 80).map(p => {
-    const code = UNIT_PICK[p.id] != null ? UNIT_PICK[p.id] : '', u = unitOf(p, code), n = cartQty(p.id, code);
+    const code = curUnit(p.id), u = unitOf(p, code), n = cartQty(p.id, code);
     return '<div class="prod"><div class="nm">'+pcode(p.code)+esc(p.name)+'</div>' +
       '<div class="sub">บนรถ <span class="'+(p.vanStock < 3 ? 'low' : 'ok')+'">'+esc(p.vanStock)+'</span> '+esc(p.unit)+(baseUsed(p.id) ? ' · ในตะกร้า '+baseUsed(p.id)+' '+esc(p.unit) : '')+'</div>' +
       '<div class="ctl"><select onchange="pickUnit(\''+esc(p.id)+'\', this.value)">' + unitsOf(p).map(x => '<option value="'+esc(x.unitCode)+'"'+(x.unitCode === u.unitCode ? ' selected' : '')+'>'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</option>').join('') + '</select>' +
@@ -1525,9 +1544,9 @@ function renderProducts(){
   }).join('') + (list.length > 80 ? '<div class="empty">แสดง 80 รายการแรก — พิมพ์ค้นหาเพื่อหาตัวอื่น</div>' : '');
 }
 function pickUnit(pid, code){ UNIT_PICK[pid] = code; renderProducts(); }
-function bump(pid, d){ const code = UNIT_PICK[pid] || ''; setQty(pid, cartQty(pid, code) + d); }
+function bump(pid, d){ const code = curUnit(pid); setQty(pid, cartQty(pid, code) + d); }
 function setQty(pid, v){
-  const code = UNIT_PICK[pid] || '', p = prodById(pid); if (!p) return;
+  const code = curUnit(pid), p = prodById(pid); if (!p) return;
   let qty = Math.max(0, parseInt(v) || 0);
   if (!OFFICE) {                      // ขายจากรถ: ห้ามเกินของบนรถ (นับเป็นหน่วยฐานรวมทุกหน่วย)
     const f = unitOf(p, code).unitFactor, other = baseUsed(pid) - cartQty(pid, code) * f;
@@ -1887,14 +1906,25 @@ async function submitCust(){
     if (!r.success) return toast(r.message, 'err');
     // ใส่เข้ารายการในเครื่องเลย ไม่ต้องโหลด bootstrap ใหม่ทั้งก้อน (กติกาข้อ 4)
     (DATA.customerRequests = DATA.customerRequests || []).unshift({
-      id: r.requestId, requestNo: r.requestNo, name, status: 'pending', statusLabel: 'รออนุมัติ',
-      customerCode: '', rejectReason: '' });
+      id: r.requestId, requestNo: r.requestNo, name, status: 'pending', statusLabel: r.quickOpened ? 'รออนุมัติเครดิต' : 'รออนุมัติ',
+      customerCode: r.customerCode || '', rejectReason: '' });
+    /* ★ เปิดร้านให้ขายเงินสดได้ทันที (26 พ.ย. 2026) — ร้านกลับมาพร้อมคำตอบ ใส่เข้ารายการลูกค้าเลยแล้วเลือกให้ในหน้าขาย
+       ไม่ต้องรอแอดมินอนุมัติ/โหลดใหม่ · เครดิตยังไม่ได้จนกว่าแอดมินอนุมัติ (ร้านถูกตั้งเป็น "ระงับเครดิต" ไว้ชั่วคราว) */
+    if (r.quickOpened && r.customer) {
+      DATA.customers = (DATA.customers || []).filter(c => Number(c.id) !== Number(r.customer.id));
+      DATA.customers.unshift(r.customer);
+    }
     saveBootCache();
     ['c-name', 'c-addr', 'c-tax', 'c-contact', 'c-phone', 'c-credit'].forEach(id => { $(id).value = ''; });
     $('c-pay').value = 'cash'; syncCustPay(); $('c-shoptype').value = '';
     CUST_GPS = { lat: '', lng: '' }; $('c-gps').textContent = 'ยังไม่จับพิกัด';
-    toggleAddCust(false); renderCustRequests();
-    toast('ส่งคำขอ ' + r.requestNo + ' ให้แอดมินแล้ว', 'ok');
+    toggleAddCust(false); renderCustRequests(); renderCustomers();
+    if (r.quickOpened && r.customer) {
+      $('s-cust-q').value = '';
+      renderCustSelect(); $('s-cust').value = String(r.customer.id); if (PAY !== 'cash') setPay('cash'); else cartChanged();
+      gotoTab('sell');
+    }
+    toast(r.message || ('ส่งคำขอ ' + r.requestNo + ' ให้แอดมินแล้ว'), 'ok');
   } catch (e) { toast('ส่งคำขอไม่ได้: ' + e.message, 'err'); }
   finally { btn.disabled = false; }
 }

@@ -113,6 +113,16 @@ function submitCustomerRequest(user, payload) {
     return { success: false, message: 'ประเภทร้านค้าไม่ถูกต้อง' };
   }
 
+  // ร้านเดียวกันจริงๆ (ชื่อตรง + เลขภาษีตรง) มีในระบบแล้ว → ไม่เปิดซ้ำ บอกรหัสร้านเดิมให้ไปขายที่ร้านนั้น
+  // ★ เปิดร้านทันทีแล้ว ร้านซ้ำคือข้อมูลจริงในทะเบียน ไม่ใช่แค่คำขอที่แอดมินปัดทิ้งได้ — จับเฉพาะกรณีที่ชัวร์ (ชื่อ+เลขภาษีตรงกันทั้งคู่)
+  if (taxId) {
+    var dup = null;
+    centralObjects('customers').forEach(function(c) {
+      if (String(c.tenant_id) === String(user.tenantId) && String(c.tax_id || '') === taxId && _crStr(c.name) === name) dup = c;
+    });
+    if (dup) return { success: false, message: 'ร้านนี้มีในระบบแล้ว (' + (dup.customer_code || '') + ') — เลือกร้านเดิมในหน้าขายได้เลย' };
+  }
+
   return _withDocLock(function() {
     var id = centralNextId('customer_requests');
     var now = nowStr();
@@ -129,9 +139,78 @@ function submitCustomerRequest(user, payload) {
       created_at: now, updated_at: now
     };
     centralAppend('customer_requests', row);
-    return { success: true, requestId: id, requestNo: row.request_no,
-      message: 'ส่งคำขอเปิดร้าน ' + row.request_no + ' ให้แอดมินแล้ว' };
+
+    /* ★★ เปิดร้านให้ขายเงินสดได้ทันที ไม่ต้องรอแอดมิน (เจ้าของระบบสั่ง 26 พ.ย. 2026)
+       แอดมินอนุมัติเฉพาะเรื่อง "ขายเป็นร้านเครดิต/ตั้งกลุ่มจริง" — ระหว่างรอ ร้านนี้ขายเงินสดได้เลย
+       ทำโดยสร้างลูกค้าจริงตอนนี้ด้วยสถานะ "ระงับเครดิต" (blocked) ซึ่งระบบมีอยู่แล้ว: ขายสดได้ เปิดบิลเชื่อไม่ได้
+       (customerSaleGate) + ติดตราชั่วคราวไว้ใน attributes ให้แอดมินเห็นว่าใครอนุมัติแล้วใครยัง
+       ★ ถ้าหากลุ่มราคาชั่วคราวไม่ได้ (ตัวแทนนี้ไม่มีชุดราคาที่ใช้งานอยู่) → ไม่เปิดให้ขายทันที เหลือเป็นคำขอปกติ
+         ดีกว่าสร้างร้านที่เปิดบิลไม่ได้แล้วบอกเซลส์ว่าขายได้ */
+    var quick = _crOpenProvisional(user, row);
+    if (!quick.ok) {
+      return { success: true, requestId: id, requestNo: row.request_no, quickOpened: false, quickWhy: quick.why,
+        message: 'ส่งคำขอเปิดร้าน ' + row.request_no + ' ให้แอดมินแล้ว — ' + quick.why };
+    }
+    cacheClear('bootstrap', user.lineUserId);
+    return { success: true, requestId: id, requestNo: row.request_no, quickOpened: true,
+      customer: mobileCustomerRow(quick.customer, null), customerCode: quick.customer.customer_code,
+      message: 'เปิดร้าน ' + quick.customer.customer_code + ' แล้ว — ขายเงินสดได้ทันที · ขายเครดิตต้องรอแอดมินอนุมัติ' };
   });
+}
+
+/** ลูกค้าคนนี้เป็น "ร้านชั่วคราวที่เซลส์เปิดเอง รอแอดมินอนุมัติ" ไหม */
+function customerIsProvisional(c) {
+  var a = customerAttributes(c);
+  return !!(a && a.provisional === true);
+}
+
+/**
+ * กลุ่มราคาชั่วคราวของร้านที่เปิดสดๆ: ในบรรดากลุ่มที่ "มีชุดราคาใช้งานอยู่จริง" ของตัวแทนนี้ เอากลุ่มที่ร้านเดิมของตัวแทนใช้มากที่สุด
+ * (ตัวแทนที่ร้านเกือบทั้งหมดอยู่กลุ่มเดียว = ได้กลุ่มนั้น) · ไม่มีเลย = null
+ * ★ ใช้ _crGroupChoicesFor ตัวเดียวกับด่านอนุมัติ — กลุ่มที่ได้จึงขายได้จริงแน่ๆ ไม่ใช่เดาจากชื่อ
+ */
+function _crProvisionalGroup(tenantId) {
+  var choices = _crGroupChoicesFor(tenantId);
+  if (!choices.length) return null;
+  var ok = {};
+  choices.forEach(function(c) { ok[String(c.id)] = 1; });
+  var cnt = {}, best = null, bestN = 0;
+  centralObjects('customers').forEach(function(c) {
+    if (String(c.tenant_id) !== String(tenantId) || !isNotOff(c.is_active)) return;
+    var g = String(c.group_id || '');
+    if (!ok[g]) return;
+    cnt[g] = (cnt[g] || 0) + 1;
+    if (cnt[g] > bestN) { bestN = cnt[g]; best = g; }
+  });
+  return Number(best || choices[0].id);
+}
+
+/** สร้างลูกค้าชั่วคราวจากคำขอ — คืน { ok, customer } หรือ { ok:false, why } · ไม่โยน error (ห้ามทำให้คำขอล้มทั้งใบ) */
+function _crOpenProvisional(user, reqRow) {
+  try {
+    var tenantId = user.tenantId;
+    var groupId = _crProvisionalGroup(tenantId);
+    if (!groupId) return { ok: false, why: 'ตัวแทนนี้ยังไม่มีชุดราคาที่ใช้งานอยู่ จึงเปิดให้ขายทันทีไม่ได้ — รอแอดมินอนุมัติก่อน' };
+    var built = buildCustomerFields({
+      name: reqRow.name, address: reqRow.address, taxId: reqRow.tax_id, contactName: reqRow.contact_name, phone: reqRow.phone,
+      paymentType: 'cash', creditLimit: 0, shopTypeId: reqRow.shop_type_id, lat: reqRow.lat, lng: reqRow.lng, note: reqRow.note,
+      groupId: groupId, salesmanLineUserId: reqRow.requested_by,
+      status: CUSTOMER_STATUS_BLOCKED,
+      attributes: { provisional: true, requestNo: reqRow.request_no }
+    }, { tenantId: tenantId, actor: reqRow.requested_by });
+    if (!built.ok) return { ok: false, why: built.message };
+    var probe = {};
+    for (var k in built.fields) if (Object.prototype.hasOwnProperty.call(built.fields, k)) probe[k] = built.fields[k];
+    probe.tenant_id = tenantId;
+    if (!resolvePriceListForCustomer(probe)) return { ok: false, why: 'ยังหาชุดราคาให้ร้านนี้ไม่ได้ — รอแอดมินอนุมัติก่อน' };
+    built.fields.record_id = centralNextId('customers');
+    centralAppend('customers', built.fields);
+    centralUpdate('customer_requests', reqRow.record_id, { customer_id: built.fields.record_id, customer_code: built.fields.customer_code, group_id: groupId });
+    return { ok: true, customer: built.fields };
+  } catch (e) {
+    Logger.log('_crOpenProvisional ล้มเหลว: ' + (e.stack || e.message));
+    return { ok: false, why: 'เปิดให้ขายทันทีไม่สำเร็จ (' + e.message + ') — รอแอดมินอนุมัติก่อน' };
+  }
 }
 
 /**
@@ -303,12 +382,27 @@ function approveCustomerRequest(session, payload) {
 
     var custPayload = _crCustomerPayload(req, payload);
     custPayload.groupId = groupId;
-    var built = buildCustomerFields(custPayload, { tenantId: tenantId, actor: session.adminUserId });
+
+    /* ★ ร้านที่เซลส์เปิดเองหน้างานไปแล้ว (ขายเงินสดได้อยู่แล้ว) → อนุมัติ = "ยกระดับ" ร้านเดิม ไม่สร้างร้านใหม่ซ้ำ
+       (บิลที่ขายไปแล้วผูกกับร้านนี้ ถ้าสร้างใหม่ ประวัติการขายจะค้างอยู่กับร้านชั่วคราวที่ไม่มีใครดูแล) */
+    var existing = null;
+    if (req.customer_id) centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(req.customer_id)) existing = c; });
+    var built;
+    if (existing) {
+      custPayload.status = CUSTOMER_STATUS_ACTIVE;
+      var attrs = customerAttributes(existing) || {};
+      delete attrs.provisional; delete attrs.requestNo;      // ตราชั่วคราวหมดหน้าที่แล้ว · ข้อมูลอื่นใน attributes ต้องอยู่ต่อ
+      custPayload.attributes = attrs;
+      built = buildCustomerFields(custPayload, { tenantId: tenantId, existing: existing, actor: session.adminUserId });
+    } else {
+      built = buildCustomerFields(custPayload, { tenantId: tenantId, actor: session.adminUserId });
+    }
     if (!built.ok) return { success: false, message: built.message };
 
     /* ★★ ลองหาชุดราคาด้วยแถวที่ "ยังไม่ได้เขียน" — resolvePriceListForCustomer รับ object ไม่ใช่ id
        จึงตรวจได้ก่อนสร้างจริง · ไม่เจอ = ไม่อนุมัติ ดีกว่าสร้างร้านที่เปิดบิลไม่ได้แล้วบอกเซลส์ว่าขายได้ */
     var probe = {};
+    if (existing) for (var k0 in existing) if (Object.prototype.hasOwnProperty.call(existing, k0)) probe[k0] = existing[k0];
     for (var k in built.fields) if (Object.prototype.hasOwnProperty.call(built.fields, k)) probe[k] = built.fields[k];
     probe.tenant_id = tenantId;
     if (!resolvePriceListForCustomer(probe)) {
@@ -317,8 +411,14 @@ function approveCustomerRequest(session, payload) {
                + 'กรุณาเลือกกลุ่มอื่น หรือเปิดใช้งาน/จ่ายชุดราคาให้ตัวแทนก่อน แล้วค่อยอนุมัติ' };
     }
 
-    built.fields.record_id = centralNextId('customers');
-    centralAppend('customers', built.fields);
+    if (existing) {
+      centralUpdate('customers', existing.record_id, built.fields);
+      built.fields.record_id = existing.record_id;
+      built.fields.customer_code = existing.customer_code;
+    } else {
+      built.fields.record_id = centralNextId('customers');
+      centralAppend('customers', built.fields);
+    }
 
     var now = nowStr();
     centralUpdate('customer_requests', req.record_id, {
@@ -355,6 +455,15 @@ function rejectCustomerRequest(session, payload) {
       return { success: false, message: 'คำขอนี้ไม่ใช่ของตัวแทนที่กำลังดูแลอยู่' };
     }
     var now = nowStr();
+    /* ★ ร้านชั่วคราวที่เปิดให้ขายสดไปแล้ว → ปิดการใช้งาน (ขายต่อไม่ได้) แต่ไม่ลบ — บิลที่ขายไปแล้วยังอ้างร้านนี้อยู่ */
+    if (req.customer_id) {
+      var cust = null;
+      centralObjects('customers').forEach(function(c) { if (String(c.record_id) === String(req.customer_id)) cust = c; });
+      if (cust && customerIsProvisional(cust)) {
+        var off = buildCustomerFields({ status: CUSTOMER_STATUS_INACTIVE }, { tenantId: req.tenant_id, existing: cust, actor: session.adminUserId });
+        if (off.ok) centralUpdate('customers', cust.record_id, off.fields);
+      }
+    }
     centralUpdate('customer_requests', req.record_id, {
       status: CR_REJECTED, reject_reason: reason,
       decided_by: session.adminUserId || '', decided_by_name: session.displayName || session.username || '',

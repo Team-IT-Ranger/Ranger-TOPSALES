@@ -3,6 +3,27 @@
  * user: { lineUserId, tenantId, role, name } — ดู resolveUser() ใน 05_router.gs
  */
 
+/**
+ * รูปร่างของลูกค้าที่ส่งให้แอปมือถือ — ใช้ทั้งใน bootstrap และตอบกลับหลังเปิดร้านใหม่ (ให้แอปใส่ร้านเข้ารายการได้ทันทีโดยไม่โหลดใหม่)
+ * ต้องเป็นรูปเดียวกันเสมอ ไม่งั้นร้านที่เปิดสดๆ กับร้านที่โหลดมาทีหลังหน้าตาไม่เหมือนกัน
+ * d = สรุปหนี้ค้างของร้าน (customerOutstandingMap) หรือ null = ไม่มีหนี้
+ */
+function mobileCustomerRow(c, d) {
+  return {
+    id: parseInt(c.record_id), code: c.customer_code || '', name: customerFullName(c), groupId: parseInt(c.group_id) || 0,
+    phone: c.phone || '', address: c.address || '',
+    lat: parseFloat(c.lat) || 0, lng: parseFloat(c.lng) || 0,
+    // เครดิตประจำร้าน + สถานะ: แอปมือถือใช้ตั้งค่าเริ่มต้นช่องชำระเงิน และกันการเปิดบิลเชื่อให้ร้านที่ถูกระงับ
+    paymentType: c.payment_type || 'cash', termsDays: parseInt(c.payment_terms_days) || 0,
+    creditBlocked: String(c.status || '').toLowerCase() === CUSTOMER_STATUS_BLOCKED,
+    // ★ ร้านที่เซลส์เปิดเองหน้างาน ยังรอแอดมินอนุมัติ — ขายเงินสดได้ทันที เครดิตยังไม่ได้ (46_customer_requests.gs)
+    provisional: customerIsProvisional(c),
+    creditLimit: parseFloat(c.credit_limit) || 0,
+    // ไม่มีหนี้ = ส่ง 0 ทั้งคู่ (ไม่ส่ง object ว่างมาให้แอปต้องเช็ค null ทุกจุด)
+    debt: d ? d.outstanding : 0, debtOverdue: d ? d.overdue : 0, debtDocs: d ? d.docs : 0
+  };
+}
+
 function getBootstrap(user) {
   var cached = cacheGet('bootstrap', user.lineUserId);
   if (cached) return cached;
@@ -47,19 +68,7 @@ function getBootstrap(user) {
 
   var customers = centralObjects('customers')
     .filter(function(c) { return String(c.tenant_id) === String(user.tenantId) && isNotOff(c.is_active); })
-    .map(function(c) {
-      var d = debtMap[String(c.record_id)] || null;
-      return {
-      id: parseInt(c.record_id), code: c.customer_code || '', name: customerFullName(c), groupId: parseInt(c.group_id) || 0,
-      phone: c.phone || '', address: c.address || '',
-      lat: parseFloat(c.lat) || 0, lng: parseFloat(c.lng) || 0,
-      // เครดิตประจำร้าน + สถานะ: แอปมือถือใช้ตั้งค่าเริ่มต้นช่องชำระเงิน และกันการเปิดบิลเชื่อให้ร้านที่ถูกระงับ
-      paymentType: c.payment_type || 'cash', termsDays: parseInt(c.payment_terms_days) || 0,
-      creditBlocked: String(c.status || '').toLowerCase() === CUSTOMER_STATUS_BLOCKED,
-      creditLimit: parseFloat(c.credit_limit) || 0,
-      // ไม่มีหนี้ = ส่ง 0 ทั้งคู่ (ไม่ส่ง object ว่างมาให้แอปต้องเช็ค null ทุกจุด)
-      debt: d ? d.outstanding : 0, debtOverdue: d ? d.overdue : 0, debtDocs: d ? d.docs : 0
-    }; });
+    .map(function(c) { return mobileCustomerRow(c, debtMap[String(c.record_id)] || null); });
 
   var rules = _activeRules();
 

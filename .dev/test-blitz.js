@@ -35,7 +35,7 @@ const ctx = {
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'uat' }) },
   CacheService: { getScriptCache: () => ({ get: () => null, put: () => {}, remove: () => {} }) },
   getConfig: () => ({ LIFF_ID: '2010417493-TEST' }),
-  ADMIN_STATUS_ACTIVE: 'active', OWNER_TENANT_ID: 'TNKI', SA_ST_YES: 'yes', CR_APPROVED: 'approved',
+  ADMIN_STATUS_ACTIVE: 'active', OWNER_TENANT_ID: 'TNKI', SA_ST_YES: 'yes', CR_APPROVED: 'approved', CR_REJECTED: 'rejected',
   _saNorm: s => String(s || '').trim().toLowerCase(),
   _saExpired: d => !!d && String(d) < '2026-10-02',
   _todayStr: () => '2026-10-02', nowStr: () => '2026-10-02 10:00:00',
@@ -196,10 +196,11 @@ T.order_items = [
   { order_id: 4, product_id: 101, base_qty: 120, is_free: 0 }   // บิลยกเลิก → ไม่นับ
 ];
 C.customer_requests = [
-  { tenant_id: 'T1', status: 'approved', requested_by: 'U7', decided_at: '2026-11-28 12:00:00' },   // ทีม A ในช่วงแคมเปญ
-  { tenant_id: 'T1', status: 'approved', requested_by: 'U7', decided_at: '2026-11-27 12:00:00' },   // ก่อนแคมเปญ → ไม่นับ
-  { tenant_id: 'T1', status: 'pending', requested_by: 'U7', decided_at: '' },                      // ยังไม่อนุมัติ → ไม่นับ
-  { tenant_id: 'T1', status: 'approved', requested_by: 'Ucc', decided_at: '2026-11-28 12:00:00' }   // คนนอกทีม → ไม่นับ
+  { tenant_id: 'T1', status: 'approved', requested_by: 'U7', requested_at: '2026-11-28 12:00:00' },   // ทีม A ในช่วงแคมเปญ (อนุมัติแล้ว)
+  { tenant_id: 'T1', status: 'pending', requested_by: 'U7', requested_at: '2026-11-28 13:00:00' },    // ★ ยังรออนุมัติ แต่ขายสดได้แล้ว → นับทันที
+  { tenant_id: 'T1', status: 'rejected', requested_by: 'U7', requested_at: '2026-11-28 14:00:00' },   // ตีกลับ → ไม่นับ
+  { tenant_id: 'T1', status: 'approved', requested_by: 'U7', requested_at: '2026-11-27 12:00:00' },   // ก่อนแคมเปญ → ไม่นับ
+  { tenant_id: 'T1', status: 'approved', requested_by: 'Ucc', requested_at: '2026-11-28 12:00:00' }   // คนนอกทีม → ไม่นับ
 ];
 C.blitz_teams.find(t => t.code === 'A').target_sales = 5000;
 C.blitz_teams.find(t => t.code === 'A').target_shops = 4;
@@ -210,7 +211,7 @@ eq('จำนวนบิลทีม A (ไม่นับร่าง/ยก�
 eq('★ จำนวนร้านทีม A นับร้านไม่ซ้ำ (10 ซื้อสองบิล → 10, 11) = 2', dA.shops, 2);
 eq('  ลังทีม A = 2 + 0.5 (ของแถมไม่นับ · บิลยกเลิกไม่นับ)', dA.cases, 2.5);
 eq('★ บิลร่างแยกต่างหาก (ไว้ตามให้ยืนยัน) ไม่ปนในยอด', [dA.drafts, dA.draftSales], [1, 700]);
-eq('ร้านเปิดใหม่ = คำขอที่อนุมัติแล้วในช่วงแคมเปญ ของคนในทีมเท่านั้น', dA.newShops, 1);
+eq('★ ร้านเปิดใหม่ = คำขอของคนในทีมในช่วงแคมเปญ นับตั้งแต่วันยื่น (รออนุมัติก็นับ · ตีกลับ/นอกช่วง/นอกทีมไม่นับ)', dA.newShops, 2);
 eq('ยอดเฉลี่ยต่อบิล', dA.avgBill, Math.round(3500 / 3 * 100) / 100);
 eq('ยอดรายวันของทีม A', dA.byDay, { '2026-11-28': 1500, '2026-11-29': 2000 });
 eq('ทีม B: ยอด/ร้าน/ลัง', [dB.sales, dB.shops, dB.cases], [4000, 2, 2]);
