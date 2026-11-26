@@ -1261,8 +1261,8 @@
               รวมกันมาที่นี่ที่เดียว — เลือกว่าจะตั้งเป็นแอดมินหรือพนักงานขาย แก้สังกัดที่เลือกผิดมาได้ในหน้าต่างเดียวกัน</p>
             <div id="pending-list"></div>
           </div>
-          <div style="margin-bottom:10px"><button class="btn" onclick="openBlitzLinkModal()">🚀 ลิงก์สมัคร Sales Blitz (QR)</button>
-            <span class="form-hint" style="display:inline;margin-left:8px">สร้างลิงก์/QR เฉพาะทีมชั่วคราว — คนสมัครผ่านลิงก์นี้จะถูกติดป้าย "Sales Blitz" ให้ผู้อนุมัติเห็นชัด</span></div>
+          <div style="margin-bottom:10px"><button class="btn" onclick="openBlitzLinkModal()">🚀 ลิงก์สมัคร BLITZ RANGER (QR)</button>
+            <span class="form-hint" style="display:inline;margin-left:8px">สร้างลิงก์/QR เฉพาะทีมชั่วคราว — คนสมัครผ่านลิงก์นี้จะถูกติดป้าย "BLITZ RANGER" ให้ผู้อนุมัติเห็นชัด</span></div>
           <div id="ud-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
           <div class="table-wrap"><table>
             <thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สังกัด</th><th>บทบาท / สิทธิ์</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead>
@@ -2358,6 +2358,23 @@
         <!-- ═══ วงเงินเครดิตและหนี้ค้าง (56_customer_credit.gs) ═══
              ★ หน้านี้ทำสองหน้าที่ในที่เดียวโดยตั้งใจ: ตั้งนโยบาย (ด้านบน) กับดูว่าใครค้างอยู่ (ด้านล่าง)
                เพราะคนที่จะตัดสินใจว่าจะกั้นหรือไม่กั้น ต้องเห็นก่อนว่าถ้ากั้นแล้วใครจะเปิดบิลไม่ได้ -->
+        <!-- ═══ แคมเปญ BLITZ RANGER (62_blitz.gs) ═══ -->
+        <section class="view" id="view-blitz">
+          <div class="view-head">
+            <div><h1>แคมเปญ BLITZ RANGER</h1>
+              <p>แข่งยอดขายและจำนวนร้านเป็นทีม · ทุกบิลของทีมใช้ <b>ราคาเงินสดเสมอ</b> แม้เลือกชำระเครดิต · สต็อกผูกกับ <b>ทีม</b> ไม่ผูกกับตัวคน</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
+              <select id="bza-tenant" onchange="bzaPickTenant()" class="hidden"></select>
+              <select id="bza-camp" onchange="bzaPickCampaign()"></select>
+              <button class="btn" id="bza-edit" onclick="bzaCampaignModal(true)">แก้ไขแคมเปญ</button>
+              <button class="btn btn-primary" onclick="bzaCampaignModal(false)">+ สร้างแคมเปญ</button>
+            </div>
+          </div>
+          <div id="bza-info"></div>
+          <div class="filetabs" id="bza-tabs"></div>
+          <div id="bza-body"></div>
+        </section>
+
         <section class="view" id="view-creditcontrol">
           <div class="view-head">
             <div><h1>วงเงินเครดิตและหนี้ค้าง</h1>
@@ -2500,7 +2517,7 @@ const baht = n => (parseFloat(n) || 0).toLocaleString('th-TH', {minimumFractionD
      3) action ที่สร้างของใหม่แนบ requestId ไปด้วย — เซิร์ฟเวอร์ทำครั้งเดียวต่อ id ถึงคำขอจะไปถึงสองรอบ
         (กรณีเน็ตหลุดหลังบันทึกสำเร็จแล้วผู้ใช้กดใหม่ — ชั้น 1-2 กันไม่ได้ ดู 35_idempotency.gs)
    เพิ่ม action ใหม่ที่เขียนข้อมูล = ใส่ใน MUTATING_ACTIONS ด้วยเสมอ ลืมแล้วไม่พัง แต่เสียการกันซ้ำเงียบๆ */
-const MUTATING_ACTIONS = new Set(['recordSaleAdmin','cancelSalesOrderAdmin','updateSalesOrderStatus','ensureSaleDocNo','saveDeliveryRound',
+const MUTATING_ACTIONS = new Set(['saveBlitzCampaign','saveBlitzTeam','saveBlitzMember','removeBlitzMember','issueBlitzTeamStock','returnBlitzTeamStock','recordSaleAdmin','cancelSalesOrderAdmin','updateSalesOrderStatus','ensureSaleDocNo','saveDeliveryRound',
   'addCustomerAdmin','updateCustomerAdmin','addCustomerGroup','addProduct','updateProduct','uploadProductImage',
   'createPriceList','clonePriceList','savePriceListLine','deletePriceListLine','savePriceListBillPromos',
   'setPriceListStatus','deletePriceList','importExpressProducts','importExpressCustomers',
@@ -3142,6 +3159,11 @@ const NAV_GROUPS = [
         soon:'รายงานการขายแยกลูกค้า', desc:'ยอดซื้อรายร้าน จัดอันดับ ร้านที่หายไป'},
       {n:'1.8.3', label:'รายงานการขายแยกสินค้า', view:'v-rep-prod', mod:'sales_report', ready:true, scope:'both',
         soon:'รายงานการขายแยกสินค้า', desc:'ยอดขายรายสินค้า/กลุ่มสินค้า ก่อนภาษี'}
+    ]},
+    /* ★ แคมเปญ BLITZ RANGER (26 พ.ย. 2026 — 62_blitz.gs) ตั้งค่าแคมเปญ/ทีม/สมาชิก · เบิก-คืนสต็อกทีม · ผู้อำนวยการ+ลิงก์ · แดชบอร์ด
+       ใช้สิทธิ์โมดูล staff เดียวกับการอนุมัติผู้ใช้ (เป็นงานของคนคุมทีมงานขาย) — ปุ่มเบิก/คืนสต็อกตรวจสิทธิ์ inventory ที่ backend อีกชั้น */
+    { n:'1.9', label:'แคมเปญ BLITZ RANGER', items:[
+      {n:'1.9.1', label:'ทีม สมาชิก สต็อก และแดชบอร์ด', view:'blitz', mod:'staff', ready:true, scope:'both'}
     ]}
   ]},
   { n:'2', icon:'cart', label:'งานซื้อ', subs:[
@@ -3748,7 +3770,7 @@ const LOADERS = {
   externalgrhistory: loadExternalGrHistory,
   apbills: loadApBills, arinvoices: loadArInvoices, adjnotes: loadAdjNotes,
   acctsettings: loadAcctSettings, vatreport: loadVatReport, billingnotes: loadBillingNotes,
-  creditcontrol: loadCreditControl,
+  creditcontrol: loadCreditControl, blitz: loadBlitzAdmin,
   goodsreturns: loadGoodsReturns, glbooks: loadGlBooks,
   companysettings: loadCompanySettings, roles: loadRoles,
   'v-rep-staff': loadRepStaff, 'v-rep-cust': loadRepCust, 'v-rep-prod': loadRepProd,
@@ -8796,7 +8818,7 @@ async function openBlitzLinkModal(){
     tenantField = '<div class="field"><label>ตัวแทนที่ทีมนี้สังกัด</label><select id="bz-tenant">' + tenantOptions('', '— เลือกตัวแทน —') + '</select></div>';
   }
   plModal(
-    '<h3>ลิงก์สมัคร Sales Blitz</h3>'+
+    '<h3>ลิงก์สมัคร BLITZ RANGER</h3>'+
     '<p class="form-hint">สร้างลิงก์และ QR เฉพาะสำหรับทีมชั่วคราว — แจกในกลุ่ม LINE ของทีมหรือพิมพ์ติดหน้างานก็ได้ คนสมัครต้องรอผู้อนุมัติกดอนุมัติก่อนถึงจะใช้แอปได้</p>'+
     tenantField +
     '<div id="bz-out"></div>'+
@@ -8826,7 +8848,7 @@ function blitzPoster(qrcode, url, tenantName){
   g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
   g.fillStyle = '#6D4AFF'; g.fillRect(0, 0, W, 200);
   g.fillStyle = '#fff'; g.textAlign = 'center';
-  g.font = '700 74px ' + FONT; g.fillText('SALES BLITZ', W / 2, 98);
+  g.font = '700 74px ' + FONT; g.fillText('BLITZ RANGER', W / 2, 98);
   g.font = '400 36px ' + FONT; g.fillText('สมัครใช้งานแอปขาย — ทีมเสริม', W / 2, 160);
   g.fillStyle = '#1B2433'; g.font = '700 48px ' + FONT;
   g.fillText(tenantName || '', W / 2, 282);
@@ -8852,15 +8874,281 @@ function blitzCopy(){
 }
 function blitzDownload(){
   if (!BZ) return;
-  const a = document.createElement('a'); a.href = BZ.dataUrl; a.download = 'sales-blitz-qr-' + String(BZ.tenantName || '').replace(/[^\w\u0E00-\u0E7F-]+/g, '_') + '.png';
+  const a = document.createElement('a'); a.href = BZ.dataUrl; a.download = 'blitz-ranger-qr-' + String(BZ.tenantName || '').replace(/[^\w\u0E00-\u0E7F-]+/g, '_') + '.png';
   document.body.appendChild(a); a.click(); a.remove();
 }
 function blitzPrint(){
   if (!BZ) return;
   const w = window.open('', '_blank');   // เรียกจากการกดปุ่มโดยตรง (ไม่ผ่าน callback ของ API) จึงไม่โดนบล็อกเป็นป๊อปอัป
   if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — ดาวน์โหลดภาพแล้วพิมพ์แทน', true); return; }
-  w.document.write('<!doctype html><meta charset="utf-8"><title>Sales Blitz QR</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0}img{width:100%;display:block}</style><img src="'+BZ.dataUrl+'" onload="setTimeout(function(){window.print()},200)">');
+  w.document.write('<!doctype html><meta charset="utf-8"><title>BLITZ RANGER QR</title><style>@page{size:A5 portrait;margin:0}html,body{margin:0}img{width:100%;display:block}</style><img src="'+BZ.dataUrl+'" onload="setTimeout(function(){window.print()},200)">');
   w.document.close();
+}
+/* ══════════ แคมเปญ BLITZ RANGER — หน้าตั้งค่า (26 พ.ย. 2026 · backend/62_blitz.gs) ══════════
+   ข้อมูลทั้งหน้ามาจาก getBlitzAdmin คำขอเดียว · แก้อะไรแล้วโหลดใหม่ทั้งหน้า (ข้อมูลน้อย ไม่คุ้มเขียนแพตช์ cache ทีละจุด)
+   สต็อกทีมใช้ตารางเดียวกับสต็อกรถ — ทีมเป็น "ผู้ถือสต็อก" รายหนึ่ง */
+const BZA = { tenantId: '', campaignId: '', data: null, tab: 'teams', dash: null };
+const BZA_ROLE = { seller: 'ผู้ป้อนบิล', member: 'สมาชิก', director: 'ผู้อำนวยการ' };
+const BZA_TABS = [['teams', 'ทีมและสมาชิก'], ['stock', 'สต็อกทีม'], ['director', 'ผู้อำนวยการและลิงก์'], ['dash', 'แดชบอร์ด']];
+async function loadBlitzAdmin(){
+  const sel = document.getElementById('bza-tenant');
+  const eff = EFFECTIVE_TENANT_ID();
+  if (eff) { BZA.tenantId = eff; sel.classList.add('hidden'); }
+  else {
+    if (!tenantsCache.length) await loadTenantsQuiet();
+    sel.classList.remove('hidden');
+    sel.innerHTML = tenantOptions(BZA.tenantId, '— เลือกตัวแทน —');
+    if (!BZA.tenantId && sel.value) BZA.tenantId = sel.value;
+  }
+  await bzaReload();
+}
+function bzaPickTenant(){ BZA.tenantId = document.getElementById('bza-tenant').value; BZA.campaignId = ''; bzaReload(); }
+function bzaPickCampaign(){ BZA.campaignId = document.getElementById('bza-camp').value; BZA.dash = null; bzaReload(); }
+async function bzaReload(){
+  const body = document.getElementById('bza-body');
+  if (!BZA.tenantId) { body.innerHTML = '<div class="form-card"><p class="form-hint">เลือกตัวแทนที่ทำแคมเปญก่อน (แคมเปญทำในเขตของตัวแทนรายหนึ่ง)</p></div>'; return; }
+  if (!BZA.data) body.innerHTML = tnkWait(160, 'กำลังโหลด…', 56);
+  const r = await callApi('getBlitzAdmin', { tenantId: BZA.tenantId, campaignId: BZA.campaignId });
+  if (!r.success) { body.innerHTML = '<div class="form-card"><p class="form-hint">'+esc(r.message)+'</p></div>'; return; }
+  BZA.data = r;
+  if (r.campaign) BZA.campaignId = r.campaign.id;
+  bzaRender();
+}
+function bzaRender(){
+  const d = BZA.data, c = d.campaign;
+  const cs = document.getElementById('bza-camp');
+  cs.innerHTML = d.campaigns.length ? d.campaigns.map(x => '<option value="'+esc(x.id)+'"'+(c && x.id === c.id ? ' selected' : '')+'>'+esc(x.name)+' ('+esc(x.startDate)+' → '+esc(x.endDate)+')'+(x.running ? ' ● กำลังเดิน' : x.status === 'closed' ? ' · ปิดแล้ว' : '')+'</option>').join('') : '<option>ยังไม่มีแคมเปญ</option>';
+  document.getElementById('bza-edit').style.display = c ? '' : 'none';
+  document.getElementById('bza-info').innerHTML = c
+    ? '<div class="form-card" style="margin-bottom:12px"><b>'+esc(c.name)+'</b> · '+esc(d.tenantName)+' · '+esc(c.startDate)+' ถึง '+esc(c.endDate)+' ' +
+      (c.running ? '<span class="pill ok">กำลังเดินอยู่</span>' : c.status === 'closed' ? '<span class="pill off">ปิดแล้ว</span>' : '<span class="pill">ยังไม่ถึง/หมดช่วงวันที่</span>') +
+      '<br><span class="form-hint" style="margin:6px 0 0;display:block">ราคาเงินสดเสมอ: <b>'+(c.cashPrice ? 'เปิด' : 'ปิด')+'</b> · ผู้ป้อนบิลของทีมขายได้เฉพาะในช่วงวันที่นี้ — พ้นช่วงนี้กลับไปขายปกติเองโดยไม่ต้องแก้อะไร</span></div>'
+    : '<div class="form-card"><p class="form-hint">ยังไม่มีแคมเปญของตัวแทนนี้ — กด "+ สร้างแคมเปญ" ระบบจะสร้างทีม A–E ให้เลย</p></div>';
+  document.getElementById('bza-tabs').innerHTML = c ? BZA_TABS.map(t =>
+    '<button type="button" class="ftab'+(BZA.tab === t[0] ? ' on' : '')+'" style="--tt:var(--blue)" onclick="bzaTab(\''+t[0]+'\')">'+esc(t[1])+'</button>').join('') : '';
+  if (!c) { document.getElementById('bza-body').innerHTML = ''; return; }
+  const body = document.getElementById('bza-body');
+  if (BZA.tab === 'teams') body.innerHTML = bzaTeamsHtml();
+  else if (BZA.tab === 'stock') body.innerHTML = bzaStockHtml();
+  else if (BZA.tab === 'director') body.innerHTML = bzaDirectorHtml();
+  else bzaDashLoad();
+}
+function bzaTab(t){ BZA.tab = t; bzaRender(); }
+
+/* ── แท็บ 1: ทีมและสมาชิก ── */
+function bzaTeamsHtml(){
+  const d = BZA.data;
+  return '<div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">' + d.teams.map(t => {
+    const mem = d.members.filter(m => m.teamId === t.id);
+    const seller = mem.filter(m => m.role === 'seller')[0];
+    const others = mem.filter(m => m.role !== 'seller');
+    return '<div class="form-card" style="margin:0">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">'+esc(t.name)+'</h3>' +
+        '<button class="btn btn-sm" onclick="bzaTeamModal('+t.id+')">เป้า/ชื่อทีม</button></div>' +
+      '<div class="form-hint" style="margin:4px 0 10px">เป้ายอดขาย '+(t.targetSales ? baht(t.targetSales) : '—')+' · เป้าจำนวนร้าน '+(t.targetShops || '—')+'</div>' +
+      '<div style="margin-bottom:8px"><b>ผู้ป้อนบิล:</b> '+(seller ? esc(seller.name)+' <button class="btn btn-sm" onclick="bzaRemoveMember('+seller.id+')">ถอด</button>'
+        : '<span style="color:var(--bad,#B3261E)">ยังไม่มี — ทีมนี้ยังเปิดบิลไม่ได้</span>')+'</div>' +
+      '<div style="margin-bottom:10px"><b>สมาชิก:</b> '+(others.length ? others.map(m => '<span class="tag" style="margin:2px">'+esc(m.name)+' <a href="#" onclick="bzaRemoveMember('+m.id+');return false" title="ถอด">✕</a></span>').join('') : '<span class="form-hint" style="display:inline">—</span>')+'</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-primary" onclick="bzaMemberModal('+t.id+',\'seller\')">'+(seller ? 'เปลี่ยนผู้ป้อนบิล' : '+ ตั้งผู้ป้อนบิล')+'</button>' +
+      '<button class="btn btn-sm" onclick="bzaMemberModal('+t.id+',\'member\')">+ สมาชิก</button></div></div>';
+  }).join('') + '</div>' +
+  '<p class="form-hint">★ ทีมละ <b>1 คน</b> ที่ป้อนบิลในแอป (ต้องเป็นพนักงานที่อนุมัติแล้วที่เมนู 9.4.1) — สมาชิกที่เหลือไม่ต้องมีบัญชีแอป ใส่เป็นชื่อไว้ดูรายชื่อทีมเฉยๆ · พนักงานประจำที่ถูกมอบหมายมาทำแคมเปญก็ตั้งเป็นผู้ป้อนบิลได้เหมือนกัน</p>';
+}
+function bzaCampaignModal(edit){
+  const c = edit && BZA.data.campaign ? BZA.data.campaign : {};
+  plModal('<h3>'+(edit ? 'แก้ไขแคมเปญ' : 'สร้างแคมเปญใหม่')+'</h3>' +
+    plField('ชื่อแคมเปญ', '<input id="bzc-name" value="'+esc(c.name || 'BLITZ RANGER')+'">') +
+    '<div class="form-grid g2">' + plField('วันเริ่ม', '<input type="date" id="bzc-s" value="'+esc(c.startDate || '')+'">') +
+      plField('วันสิ้นสุด', '<input type="date" id="bzc-e" value="'+esc(c.endDate || '')+'">') + '</div>' +
+    '<div class="toggle-row"><input type="checkbox" id="bzc-cash"'+(c.cashPrice === false ? '' : ' checked')+'><label for="bzc-cash">ทุกบิลของทีมใช้ราคาเงินสดเสมอ (แม้เลือกชำระเครดิต)</label></div>' +
+    (edit ? '<div class="toggle-row"><input type="checkbox" id="bzc-closed"'+(c.status === 'closed' ? ' checked' : '')+'><label for="bzc-closed">ปิดแคมเปญ (ผู้ป้อนบิลกลับไปขายปกติทันที)</label></div>' : '') +
+    '<p class="form-hint">สร้างใหม่ระบบจะสร้างทีม A–E ให้เลย · แคมเปญที่เปิดอยู่สองอันซ้อนช่วงวันที่กันไม่ได้ (ในตัวแทนเดียวกัน)</p>' +
+    plModalActions('plBusy(() => bzaSaveCampaign('+(edit ? 1 : 0)+'))', '✓ บันทึก'));
+}
+async function bzaSaveCampaign(edit){
+  const r = await callApi('saveBlitzCampaign', { tenantId: BZA.tenantId, id: edit ? BZA.campaignId : '',
+    name: document.getElementById('bzc-name').value.trim(), startDate: document.getElementById('bzc-s').value, endDate: document.getElementById('bzc-e').value,
+    cashPrice: document.getElementById('bzc-cash').checked, status: (document.getElementById('bzc-closed') || {}).checked ? 'closed' : 'active' });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose(); toast(r.message);
+  BZA.campaignId = r.id; BZA.data = null; bzaReload();
+}
+function bzaTeamModal(id){
+  const t = BZA.data.teams.filter(x => Number(x.id) === Number(id))[0]; if (!t) return;
+  plModal('<h3>ทีม '+esc(t.code)+'</h3>' + plField('ชื่อทีม', '<input id="bzt-name" value="'+esc(t.name)+'">') +
+    '<div class="form-grid g2">' + plField('เป้ายอดขาย (บาท ก่อนภาษี)', '<input type="number" min="0" id="bzt-ts" value="'+(t.targetSales || '')+'">') +
+      plField('เป้าจำนวนร้าน', '<input type="number" min="0" id="bzt-th" value="'+(t.targetShops || '')+'">') + '</div>' +
+    '<p class="form-hint">เป้าแสดงเป็นแถบความคืบหน้าบนแดชบอร์ดของผู้อำนวยการ · เว้นว่าง = ไม่มีเป้า</p>' +
+    plModalActions('plBusy(() => bzaSaveTeam('+id+'))', '✓ บันทึก'));
+}
+async function bzaSaveTeam(id){
+  const r = await callApi('saveBlitzTeam', { id: id, name: document.getElementById('bzt-name').value.trim(),
+    targetSales: document.getElementById('bzt-ts').value, targetShops: document.getElementById('bzt-th').value });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose(); toast(r.message); BZA.data = null; bzaReload();
+}
+function bzaPeopleOptions(role){
+  const tid = BZA.tenantId;
+  /* ผู้ป้อนบิล/สมาชิก = คนของตัวแทนนี้เท่านั้น (แอดมินบริษัทไม่ใช่คนขายหน้างาน) · ผู้อำนวยการ = ใครก็ได้ที่ผูก LINE แล้ว */
+  const list = BZA.data.people.filter(p => role === 'director' ? true : (p.tenantId === tid && p.sub === 'พนักงานขาย'));
+  return '<option value="">— เลือกรายชื่อ —</option>' + list.map(p => '<option value="'+esc(p.lineUserId)+'" data-name="'+esc(p.name)+'">'+esc(p.name)+' · '+esc(p.sub)+'</option>').join('');
+}
+function bzaMemberModal(teamId, role){
+  const t = BZA.data.teams.filter(x => Number(x.id) === Number(teamId))[0];
+  const seller = role === 'seller';
+  plModal('<h3>'+(seller ? 'ตั้งผู้ป้อนบิล' : 'เพิ่มสมาชิก')+' — '+esc(t.name)+'</h3>' +
+    plField('เลือกจากรายชื่อพนักงานที่อนุมัติแล้ว', '<select id="bzm-pick" onchange="bzaPickPerson()">'+bzaPeopleOptions(role)+'</select>') +
+    (seller ? '<p class="form-hint">ผู้ป้อนบิลต้องเป็นพนักงานที่ได้รับอนุมัติใช้แอปแล้วเท่านั้น (เมนู 9.4.1) — เขาคือคนเดียวที่เปิดบิลของทีมนี้ในแอป</p>'
+            : plField('หรือพิมพ์ชื่อเอง (สมาชิกที่ไม่มีบัญชีแอป)', '<input id="bzm-name" placeholder="ชื่อ-นามสกุล">')) +
+    '<input type="hidden" id="bzm-role" value="'+role+'"><input type="hidden" id="bzm-team" value="'+teamId+'">' +
+    plModalActions('plBusy(() => bzaSaveMember(false))', '✓ บันทึก'));
+}
+function bzaPickPerson(){ /* ชื่อมาจากรายชื่อตอนบันทึกเอง — ไม่ต้องเติมช่องชื่อ กันชื่อเก่าค้างเมื่อเปลี่ยนคน */ const n = document.getElementById('bzm-name'); if (n && document.getElementById('bzm-pick').value) n.value = ''; }
+async function bzaSaveMember(replace){
+  const pick = document.getElementById('bzm-pick'), nm = document.getElementById('bzm-name');
+  const role = document.getElementById('bzm-role').value, teamId = document.getElementById('bzm-team').value;
+  const lid = pick.value, name = nm ? nm.value.trim() : '';
+  if (!lid && !name) { plModalErr(role === 'seller' ? 'เลือกพนักงานก่อน' : 'เลือกรายชื่อหรือพิมพ์ชื่อ'); return; }
+  const r = await callApi('saveBlitzMember', { campaignId: BZA.campaignId, teamId: teamId, role: role, lineUserId: lid, name: name, replace: !!replace });
+  if (r.needReplace) {
+    if (!confirm(r.message)) return;
+    return bzaSaveMember(true);
+  }
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose(); toast(r.message); BZA.data = null; bzaReload();
+}
+async function bzaRemoveMember(id){
+  if (!confirm('ถอดรายการนี้ออกจากทีม?')) return;
+  const r = await callApi('removeBlitzMember', { id: id });
+  if (!r.success) { toast(r.message, true); return; }
+  toast(r.message); BZA.data = null; bzaReload();
+}
+
+/* ── แท็บ 2: สต็อกทีม ── */
+function bzaStockHtml(){
+  const d = BZA.data;
+  return '<p class="form-hint" style="margin-top:0">เบิกของจากคลังกลางเข้า<b>ทีม</b> · ผู้ป้อนบิลขายจากสต็อกทีมนี้ (เปลี่ยนคนป้อนบิลกลางวันได้ของไม่หาย) · ปิดวันกด "รับคืน" เพื่อเอาของที่เหลือกลับคลัง</p>' +
+  '<div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' + d.teams.map(t => {
+    const tot = t.stock.reduce((a, s) => a + s.qty, 0);
+    return '<div class="form-card" style="margin:0"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">'+esc(t.name)+'</h3>' +
+      '<span>'+(t.stock.length ? t.stock.length+' รายการ · '+repQty(tot)+' ชิ้น' : '<span class="form-hint" style="display:inline">ยังไม่มีของ</span>')+'</span></div>' +
+      (t.stock.length ? '<div class="table-wrap" style="margin:8px 0"><table><thead><tr><th>สินค้า</th><th style="text-align:right">คงเหลือ (ชิ้น)</th></tr></thead><tbody>' +
+        t.stock.map(s => '<tr><td class="wrap"><span class="mono-data">'+esc(s.code)+'</span> '+esc(s.name)+'</td><td class="num">'+repQty(s.qty)+'</td></tr>').join('') + '</tbody></table></div>' : '') +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-sm btn-primary" onclick="bzaIssueModal('+t.id+')">+ เบิกของให้ทีม</button>' +
+      (t.stock.length ? '<button class="btn btn-sm" onclick="bzaReturnModal('+t.id+')">รับคืนของ</button>' : '') + '</div></div>';
+  }).join('') + '</div>';
+}
+let BZA_ISSUE_ROWS = 0;
+async function bzaIssueModal(teamId){
+  const tok = plModalWait('เบิกของให้ทีม', 'กำลังโหลดรายการสินค้า…');
+  await ensureProductsForSale();
+  if (plModalStale(tok)) return;
+  BZA_ISSUE_ROWS = 0;
+  const t = BZA.data.teams.filter(x => Number(x.id) === Number(teamId))[0];
+  plModal('<h3>เบิกของให้ '+esc(t.name)+'</h3><div id="bzi-rows"></div>' +
+    '<button class="btn btn-sm" onclick="bzaIssueAddRow()">+ เพิ่มสินค้า</button>' +
+    '<p class="form-hint">เลือกหน่วยที่เบิกได้ (ลัง/แพ็ค/ชิ้น) ระบบแปลงเป็นหน่วยฐานให้ · ถ้าเปิดการเชื่อมสต็อกรถกับคลังกลางไว้ (เมนู 5.9.1) ของจะถูกตัดจากคลังกลางจริง และปฏิเสธทั้งใบถ้าคลังมีของไม่พอ</p>' +
+    plModalActions('plBusy(() => bzaIssueSave('+teamId+'))', '✓ เบิก'));
+  bzaIssueAddRow();
+}
+function bzaIssueAddRow(){
+  const i = BZA_ISSUE_ROWS++;
+  const opts = '<option value="">— เลือกสินค้า —</option>' + productsCache.filter(p => isOn(p.is_active)).map(p =>
+    '<option value="'+esc(p.record_id)+'">'+esc(p.product_code || '')+' · '+esc(p.name)+'</option>').join('');
+  document.getElementById('bzi-rows').insertAdjacentHTML('beforeend',
+    '<div style="display:grid;grid-template-columns:1fr 90px 90px;gap:8px;margin-bottom:8px"><select id="bzi-p'+i+'">'+opts+'</select>' +
+    '<input type="number" min="1" id="bzi-q'+i+'" placeholder="จำนวน"><select id="bzi-u'+i+'"><option value="CT">ลัง</option><option value="PK">แพ็ค</option><option value="PC">ชิ้น</option></select></div>');
+}
+async function bzaIssueSave(teamId){
+  const items = [];
+  for (let i = 0; i < BZA_ISSUE_ROWS; i++) {
+    const p = document.getElementById('bzi-p'+i).value, q = parseFloat(document.getElementById('bzi-q'+i).value) || 0;
+    if (p && q > 0) items.push({ productId: p, qty: q, unitCode: document.getElementById('bzi-u'+i).value });
+  }
+  if (!items.length) { plModalErr('เลือกสินค้าและใส่จำนวนอย่างน้อย 1 รายการ'); return; }
+  const r = await callApi('issueBlitzTeamStock', { teamId: teamId, items: items });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose(); toast(r.message); BZA.data = null; bzaReload();
+}
+function bzaReturnModal(teamId){
+  const t = BZA.data.teams.filter(x => Number(x.id) === Number(teamId))[0];
+  plModal('<h3>รับคืนของจาก '+esc(t.name)+'</h3>' +
+    '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th style="text-align:right">ทีมถืออยู่</th><th style="text-align:right">คืนครั้งนี้ (ชิ้น)</th></tr></thead><tbody>' +
+    t.stock.map((s, i) => '<tr><td class="wrap">'+esc(s.name)+'</td><td class="num">'+repQty(s.qty)+'</td><td><input type="number" min="0" max="'+s.qty+'" id="bzr-q'+i+'" value="'+s.qty+'" data-pid="'+esc(s.productId)+'" style="width:110px;text-align:right"></td></tr>').join('') +
+    '</tbody></table></div><p class="form-hint">ใส่จำนวนที่รับคืนจริง (ตั้งต้นคืนทั้งหมด) — ของเข้าคลังกลางด้วยต้นทุนที่ทีมพกมา</p>' +
+    plModalActions('plBusy(() => bzaReturnSave('+teamId+', '+t.stock.length+'))', '✓ รับคืน'));
+}
+async function bzaReturnSave(teamId, n){
+  const items = [];
+  for (let i = 0; i < n; i++) { const el = document.getElementById('bzr-q'+i), q = parseFloat(el.value) || 0; if (q > 0) items.push({ productId: el.getAttribute('data-pid'), qty: q }); }
+  if (!items.length) { plModalErr('ไม่มีรายการคืน'); return; }
+  const r = await callApi('returnBlitzTeamStock', { teamId: teamId, items: items });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose(); toast(r.message); BZA.data = null; bzaReload();
+}
+
+/* ── แท็บ 3: ผู้อำนวยการและลิงก์ ── */
+function bzaDirectorHtml(){
+  const d = BZA.data, dirs = d.members.filter(m => m.role === 'director');
+  return '<div class="form-card"><h3>ผู้อำนวยการโครงการ</h3>' +
+    '<p class="form-hint">คนที่ดูแดชบอร์ดเปรียบเทียบทีมบนมือถือได้ · <b>ไม่ต้องสมัครเป็นพนักงานขาย</b> แค่ผูก LINE ก็พอ — ถ้ายังไม่เคยเข้าระบบ ให้เขาพิมพ์ <code>id</code> ในแชทกับบอทเพื่อดู LINE User ID แล้วนำมากรอกที่นี่</p>' +
+    (dirs.length ? '<div style="margin:8px 0">' + dirs.map(m => '<span class="tag" style="margin:2px">'+esc(m.name)+' <a href="#" onclick="bzaRemoveMember('+m.id+');return false" title="ถอด">✕</a></span>').join('') + '</div>' : '<p class="form-hint">ยังไม่ได้ตั้งผู้อำนวยการ (super_admin ที่ผูก LINE ดูแดชบอร์ดได้เสมอ)</p>') +
+    '<button class="btn btn-primary btn-sm" onclick="bzaDirectorModal()">+ เพิ่มผู้อำนวยการ</button></div>' +
+  '<div class="form-card"><h3>ลิงก์เปิดแดชบอร์ดในแอป</h3>' +
+    (d.viewerLink ? '<div style="display:flex;gap:8px"><input id="bzv-url" readonly value="'+esc(d.viewerLink)+'" style="flex:1;min-width:0;font-size:12px"><button class="btn btn-sm" onclick="bzaCopyViewer()">คัดลอก</button><button class="btn btn-sm" onclick="bzaViewerQr()">แสดง QR</button></div><div id="bzv-qr"></div>' : '<p class="form-hint">ยังไม่ได้ตั้ง LIFF_ID ของระบบนี้</p>') +
+    (d.env && d.env !== 'prod' ? '<p class="form-hint" style="background:#FCEEDA;color:#7A4E10;border-radius:8px;padding:8px 10px"><b>⚠ ลิงก์นี้เป็นของระบบทดสอบ ('+esc(d.env.toUpperCase())+')</b> — อย่าส่งให้ผู้อำนวยการใช้งานจริง</p>' : '') +
+    '<p class="form-hint">ผู้อำนวยการเปิดลิงก์นี้ในแอป LINE → เห็นแดชบอร์ดทันที (ผูกกับ LINE ของเขา คนอื่นเปิดแล้วไม่เห็นอะไร)</p></div>' +
+  '<div class="form-card"><h3>QR ให้ทีมเสริมสมัครใช้แอป</h3><p class="form-hint">ทีมชั่วคราวที่ยังไม่มีบัญชี — สร้างลิงก์/QR สมัครได้ที่ เมนู 9.4.1 ผู้ใช้งานและอนุมัติ → ปุ่ม "🚀 ลิงก์สมัคร BLITZ RANGER (QR)" · คนสมัครต้องรอผู้อนุมัติกดอนุมัติ แล้วค่อยมาตั้งเป็นผู้ป้อนบิลของทีมที่หน้านี้</p>' +
+    '<button class="btn" onclick="gotoView(\'adminusers\')">ไปที่เมนู 9.4.1</button></div>';
+}
+function bzaDirectorModal(){
+  plModal('<h3>เพิ่มผู้อำนวยการโครงการ</h3>' +
+    plField('เลือกจากคนที่ผูก LINE แล้ว', '<select id="bzm-pick">'+bzaPeopleOptions('director')+'</select>') +
+    '<p class="form-hint" style="text-align:center;margin:4px 0">— หรือ —</p>' +
+    plField('LINE User ID (สำหรับคนที่ยังไม่เคยเข้าระบบ)', '<input id="bzm-uid" placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="font-family:monospace;font-size:12px">') +
+    plField('ชื่อ', '<input id="bzm-name" placeholder="เช่น คุณ Zaleng">') +
+    plModalActions('plBusy(() => bzaSaveDirector())', '✓ บันทึก'));
+}
+async function bzaSaveDirector(){
+  const pick = document.getElementById('bzm-pick').value, uid = document.getElementById('bzm-uid').value.trim(), name = document.getElementById('bzm-name').value.trim();
+  const lid = uid || pick;
+  if (!lid) { plModalErr('เลือกรายชื่อ หรือกรอก LINE User ID'); return; }
+  const r = await callApi('saveBlitzMember', { campaignId: BZA.campaignId, role: 'director', lineUserId: lid, name: name });
+  if (!r.success) { plModalErr(r.message); return; }
+  plModalClose(); toast(r.message); BZA.data = null; bzaReload();
+}
+function bzaCopyViewer(){
+  const i = document.getElementById('bzv-url'); i.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject()).then(() => toast('คัดลอกลิงก์แล้ว')).catch(() => { document.execCommand('copy'); toast('คัดลอกลิงก์แล้ว'); });
+}
+async function bzaViewerQr(){
+  const qrcode = await loadQrLib().catch(e => e);
+  if (qrcode instanceof Error) { toast(qrcode.message, true); return; }
+  const q = qrcode(0, 'M'); q.addData(BZA.data.viewerLink); q.make();
+  document.getElementById('bzv-qr').innerHTML = '<div style="text-align:center;margin:10px 0">' + q.createImgTag(6, 12) + '</div>';
+}
+
+/* ── แท็บ 4: แดชบอร์ด (ภาพรวมบนหน้าแอดมิน — ตัวเดียวกับที่ผู้อำนวยการเห็นบนมือถือ แต่เป็นตาราง) ── */
+async function bzaDashLoad(refresh){
+  const body = document.getElementById('bza-body');
+  if (!BZA.dash) body.innerHTML = tnkWait(160, 'กำลังคำนวณยอดแต่ละทีม…', 56);
+  const r = await callApi('getBlitzDashboardAdmin', { tenantId: BZA.tenantId, campaignId: BZA.campaignId, refresh: !!refresh });
+  if (BZA.tab !== 'dash') return;
+  if (!r.success) { body.innerHTML = '<div class="form-card"><p class="form-hint">'+esc(r.message)+'</p></div>'; return; }
+  BZA.dash = r;
+  const t = r.totals;
+  body.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="form-hint" style="margin:0">'+esc(r.basis)+' · ณ '+esc(r.asOf)+(r.cached ? ' (แคช 45 วิ)' : '')+'</span><button class="btn btn-sm" onclick="bzaDashLoad(true)">รีเฟรช</button></div>' +
+    '<div class="kpi-row"><div class="kpi k-sales"><div class="lbl">ยอดขายรวม (ก่อนภาษี)</div><div class="val">'+baht(t.sales)+'</div></div>' +
+    '<div class="kpi k-doc"><div class="lbl">จำนวนบิล</div><div class="val">'+repQty(t.bills)+'</div></div>' +
+    '<div class="kpi k-people"><div class="lbl">จำนวนร้านที่ซื้อ</div><div class="val">'+repQty(t.shops)+'</div></div>' +
+    '<div class="kpi k-stock"><div class="lbl">ลังที่ขาย</div><div class="val">'+repQty(t.cases)+'</div></div>' +
+    '<div class="kpi k-pending"><div class="lbl">บิลร่างค้าง (ยังไม่ยืนยัน)</div><div class="val">'+repQty(t.drafts)+'</div></div></div>' +
+    '<div class="table-wrap"><table><thead><tr><th>ทีม</th><th>ผู้ป้อนบิล</th><th style="text-align:right">ยอดขาย</th><th>อันดับยอด</th><th style="text-align:right">ร้าน</th><th>อันดับร้าน</th><th style="text-align:right">ร้านใหม่</th><th style="text-align:right">บิล</th><th style="text-align:right">ลัง</th><th style="text-align:right">เฉลี่ย/บิล</th><th style="text-align:right">ร่างค้าง</th></tr></thead><tbody>' +
+    r.teams.slice().sort((a, b) => a.rankSales - b.rankSales || a.code.localeCompare(b.code)).map(x =>
+      '<tr><td><b>'+esc(x.name)+'</b></td><td class="wrap">'+esc(x.seller || '—')+'</td><td class="num">'+baht(x.sales)+(x.targetSales ? ' <span class="form-hint" style="display:inline">/ '+baht(x.targetSales)+'</span>' : '')+'</td><td>#'+x.rankSales+'</td>' +
+      '<td class="num">'+x.shops+(x.targetShops ? ' <span class="form-hint" style="display:inline">/ '+x.targetShops+'</span>' : '')+'</td><td>#'+x.rankShops+'</td><td class="num">'+x.newShops+'</td><td class="num">'+x.bills+'</td><td class="num">'+repQty(x.cases)+'</td><td class="num">'+baht(x.avgBill)+'</td><td class="num">'+x.drafts+'</td></tr>').join('') +
+    '</tbody></table></div>';
 }
 async function confirmApproveStaff(lineUserId){
   const u = pendingLiffRows().find(x => x.lineUserId === lineUserId);

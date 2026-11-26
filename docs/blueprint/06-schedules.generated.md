@@ -2,7 +2,7 @@
      เพิ่ม action / ตาราง / โมดูล / เอกสารใหม่แล้ว รันตัวนี้ซ้ำ แบบจะตามเอง -->
 # แผ่น 06 — รายการประกอบแบบ (สร้างจากโค้ด)
 
-> สร้างเมื่อ 2026-10-17 จากโค้ดใน repo นี้ · `node .dev/gen-blueprint.js` เพื่อสร้างใหม่
+> สร้างเมื่อ 2026-11-26 จากโค้ดใน repo นี้ · `node .dev/gen-blueprint.js` เพื่อสร้างใหม่
 > · `node .dev/gen-blueprint.js --check` เพื่อเช็คว่าแบบยังตรงกับโค้ดอยู่
 
 แผ่นนี้ตอบคำถาม **"มีอะไรอยู่บ้าง"** · ส่วน **"ทำไมและห้ามแตะอะไร"** อยู่ในแผ่น
@@ -12,11 +12,11 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 58 ไฟล์ `.gs` | 16,213 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 11,788 |
-| แอปมือถือ (LIFF) | `frontend-mobile/` | 1,406 |
-| ตารางข้อมูล | 66 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
-| Action | 18 มือถือ + 213 แอดมิน |  |
+| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,677 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,550 |
+| แอปมือถือ (LIFF) | `frontend-mobile/` | 1,960 |
+| ตารางข้อมูล | 72 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
+| Action | 18 มือถือ + 231 แอดมิน |  |
 
 ## B. ไฟล์ backend — ผังพื้นแบบละเอียด
 
@@ -24,30 +24,30 @@
 
 | ไฟล์ | บรรทัด | หัวเรื่องในไฟล์ |
 |---|---|---|
-| `00_setup_sheets.gs` | 557 | SETUP: CENTRAL SHEET |
-| `01_config.gs` | 23 | CONFIG |
-| `02_helpers.gs` | 446 | SHEET ACCESS LAYER |
+| `00_setup_sheets.gs` | 589 | SETUP: CENTRAL SHEET |
+| `01_config.gs` | 26 | CONFIG |
+| `02_helpers.gs` | 474 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
-| `04_auth.gs` | 226 | AUTH |
-| `05_router.gs` | 323 | ROUTER |
-| `06_bootstrap.gs` | 312 | BOOTSTRAP / DASHBOARD (Mobile App) |
-| `07_sales.gs` | 402 | SALES (Mobile App — Cash Van) |
-| `08_stock.gs` | 73 | VAN STOCK (Mobile App) |
+| `04_auth.gs` | 260 | AUTH |
+| `05_router.gs` | 358 | ROUTER |
+| `06_bootstrap.gs` | 328 | BOOTSTRAP / DASHBOARD (Mobile App) |
+| `07_sales.gs` | 413 | SALES (Mobile App — Cash Van) |
+| `08_stock.gs` | 86 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
-| `10_master_data.gs` | 436 | MASTER DATA |
+| `10_master_data.gs` | 449 | MASTER DATA |
 | `11_promotions.gs` | 198 | PROMOTION ENGINE |
 | `12_docnum.gs` | 354 | DOCUMENT NUMBER CONTROL (ต่อตัวแทน) |
-| `13_tenants.gs` | 512 | TENANT ONBOARDING (บริษัทเจ้าของสินค้าเท่านั้น) |
+| `13_tenants.gs` | 516 | TENANT ONBOARDING (บริษัทเจ้าของสินค้าเท่านั้น) |
 | `14_permissions.gs` | 164 | RBAC (Admin App) |
 | `15_import_export_express.gs` | 229 | เชื่อมโปรแกรม EXPRESS (Export/Import ไฟล์) |
 | `16_admin_users.gs` | 149 | จัดการบัญชีแอดมิน (Admin App) |
 | `17_pricing.gs` | 553 | ชุดราคาและส่วนลด (ใบรายการขายตามกลุ่มลูกค้า × ช่วงเวลา) |
-| `18_pricing_engine.gs` | 423 | เครื่องยนต์คิดราคา (ใช้ทั้งตอนขายจริง recordSale และหน้า "ทดลองคิดราคา |
-| `19_sales_admin.gs` | 474 | SALES (Admin App) |
-| `20_purchasing_master.gs` | 312 | งานซื้อ: ข้อมูลตั้งต้น (ผู้ขาย / คลัง / สายอนุมัติ) |
+| `18_pricing_engine.gs` | 502 | เครื่องยนต์คิดราคา (ใช้ทั้งตอนขายจริง recordSale และหน้า "ทดลองคิดราคา |
+| `19_sales_admin.gs` | 505 | SALES (Admin App) |
+| `20_purchasing_master.gs` | 439 | งานซื้อ: ข้อมูลตั้งต้น (ผู้ขาย / คลัง / สายอนุมัติ) |
 | `21_purchase_requisition.gs` | 252 | ใบขอซื้อ (Purchase Requisition) |
-| `22_purchase_order.gs` | 538 | ใบสั่งซื้อ (PO) และการรับของเข้าคลัง (GR) |
-| `23_accounting.gs` | 827 | บัญชี: แยกประเภท (GL) / เจ้าหนี้ (AP) / ลูกหนี้ (AR) |
+| `22_purchase_order.gs` | 545 | ใบสั่งซื้อ (PO) และการรับของเข้าคลัง (GR) |
+| `23_accounting.gs` | 868 | บัญชี: แยกประเภท (GL) / เจ้าหนี้ (AP) / ลูกหนี้ (AR) |
 | `24_drive_layout.gs` | 137 | ที่เก็บไฟล์ฐานข้อมูลบน Google Drive |
 | `25_company.gs` | 87 | ข้อมูลบริษัทเจ้าของสินค้า (ตั้งค่าระบบ) |
 | `26_roles.gs` | 185 | บทบาทและสิทธิ์ผู้ใช้งาน (กลุ่มเมนู "ผู้ใช้งานและสิทธิ์") |
@@ -55,33 +55,39 @@
 | `28_units.gs` | 125 | หน่วยนับมาตรฐานของระบบ |
 | `29_admin_signup.gs` | 289 | ลงทะเบียนผู้ใช้ใหม่ + รออนุมัติ (Admin App) |
 | `30_admin_line_login.gs` | 110 | เข้าสู่ระบบแอปแอดมินด้วย LINE |
-| `31_sales_rollup.gs` | 83 | สรุปยอดขายรายวัน (rollup) |
+| `31_sales_rollup.gs` | 108 | สรุปยอดขายรายวัน (rollup) |
 | `32_admin_bootstrap.gs` | 37 | เปิดแอปแอดมินด้วยคำขอเดียว |
 | `33_customers.gs` | 309 | ทะเบียนลูกค้า (customer master) |
-| `34_sales_status.gs` | 879 | สถานะบิลขาย |
+| `34_sales_status.gs` | 887 | สถานะบิลขาย |
 | `35_idempotency.gs` | 84 | กันบันทึกซ้ำ (idempotency) |
 | `36_price_rules.gs` | 451 | สิทธิ์เข้าถึงชุดราคา (price list eligibility) |
 | `37_customer_bulk.gs` | 129 | จัดกลุ่มลูกค้าเป็นชุด (bulk assign) |
 | `38_package_distribution.gs` | 220 | การจ่ายชุดราคา/โปรโมชั่นให้ตัวแทน (package distribution) |
 | `39_free_goods.gs` | 274 | ชุดแถม (free goods) |
 | `40_customer_lists.gs` | 170 | รายชื่อร้านค้า (customer lists) |
-| `41_sales_reports.gs` | 386 | รายงานการขาย (เมนู 1.8.1 / 1.8.2 / 1.8.3) |
+| `41_sales_reports.gs` | 413 | รายงานการขาย (เมนู 1.8.1 / 1.8.2 / 1.8.3) |
 | `42_help_center.gs` | 88 | คู่มือใช้งานระบบ (Help Center) — module 8 |
-| `43_external_sales_import.gs` | 543 | นำเข้ารายการขายออกจากบริษัท → ใบสั่งซื้อ+ใบรับของของศูนย์ (2026-10-02) |
+| `43_external_sales_import.gs` | 660 | นำเข้ารายการขายออกจากบริษัท → ใบสั่งซื้อ+ใบรับของของศูนย์ (2026-10-02) |
 | `44_product_categories.gs` | 97 | hit.category && curSub |
 | `45_unit_rescale.gs` | 75 | ปรับ "ขนาดหน่วยฐาน" ของสินค้า — งานครั้งเดียวที่รันจาก Apps Script edi |
 | `46_customer_requests.gs` | 368 | null \|\| v |
 | `47_address_refs.gs` | 133 | ══════════════════════════════════════════════════════════════════════ |
-| `48_delivery_rounds.gs` | 649 | รอบจัดส่ง · ของค้างส่ง (แอดมินศูนย์ขอ 14 ต.ค. 2026) |
-| `49_credit_notes.gs` | 451 | ใบลดหนี้ (Credit Note) · ใบเพิ่มหนี้ (Debit Note) — 15 ต.ค. 2026 |
-| `50_cogs.gs` | 289 | ต้นทุนขาย (COGS) |
-| `51_tax_reports.gs` | 211 | รายงานภาษีขาย / ภาษีซื้อ (สำหรับยื่น ภ.พ.30) |
-| `52_cash_sales_gl.gs` | 131 | ลงบัญชีการขายสด |
+| `48_delivery_rounds.gs` | 661 | รอบจัดส่ง · ของค้างส่ง (แอดมินศูนย์ขอ 14 ต.ค. 2026) |
+| `49_credit_notes.gs` | 686 | ใบลดหนี้ (Credit Note) · ใบเพิ่มหนี้ (Debit Note) — 15 ต.ค. 2026 |
+| `50_cogs.gs` | 293 | ต้นทุนขาย (COGS) |
+| `51_tax_reports.gs` | 219 | รายงานภาษีขาย / ภาษีซื้อ (สำหรับยื่น ภ.พ.30) |
+| `52_cash_sales_gl.gs` | 228 | ลงบัญชีการขายสด |
 | `53_billing_notes.gs` | 198 | ใบวางบิล (Billing Note) |
-| `54_goods_returns.gs` | 303 | ใบรับคืนสินค้า (Goods Return Note) |
-| `55_van_stock_link.gs` | 183 | เชื่อมสต็อกรถกับคลังกลาง + ต้นทุนขายของการขายจากรถ |
+| `54_goods_returns.gs` | 383 | ใบรับคืนสินค้า (Goods Return Note) |
+| `55_van_stock_link.gs` | 184 | เชื่อมสต็อกรถกับคลังกลาง + ต้นทุนขายของการขายจากรถ |
 | `56_customer_credit.gs` | 290 | วงเงินเครดิตและหนี้ค้างของลูกค้า |
-| `99_dev_tools.gs` | 282 | DEV TOOLS (Apps Script Editor เท่านั้น) |
+| `57_user_tenants.gs` | 252 | ผู้รับผิดชอบตัวแทน (admin_user_tenants) |
+| `58_tax_invoices.gs` | 165 | ทะเบียนใบกำกับภาษี (ขาย) |
+| `59_dashboard_export.gs` | 434 | ส่งยอดขายออกเป็นไฟล์กลางของ Dashboard บริษัท (CSV ต่อตัวแทน) |
+| `60_sales_facts.gs` | 245 | ยอดขายรายบรรทัด — แหล่งความจริงชุดเดียวของทั้งระบบ |
+| `61_staff_approval.gs` | 564 | อนุมัติผู้ใช้งานแอปมือถือผ่าน LINE (25 พ.ย. 2026) |
+| `62_blitz.gs` | 520 | แคมเปญ BLITZ RANGER (26 พ.ย. 2026) |
+| `99_dev_tools.gs` | 478 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
 
@@ -128,8 +134,9 @@
 | `applyCustomerBulkAssign` | `37_customer_bulk.gs` | customers:edit | กันกดซ้ำ |
 | `approveAdminUser` | `29_admin_signup.gs` | users_roles:edit | กันกดซ้ำ |
 | `approveCustomerRequest` | `46_customer_requests.gs` | customers:edit | กันกดซ้ำ · requestId |
+| `backfillCashSaleGl` | `52_cash_sales_gl.gs` | accounting:edit | กันกดซ้ำ |
 | `backfillCustomerAreas` | `47_address_refs.gs` | customers:edit | กันกดซ้ำ |
-| `backfillGrJournals` | `23_accounting.gs` | — |  |
+| `backfillGrJournals` | `23_accounting.gs` | — | กันกดซ้ำ |
 | `backfillUserAffiliations` | `13_tenants.gs` | — | กันกดซ้ำ |
 | `cancelBillingNote` | `53_billing_notes.gs` | accounting:edit | กันกดซ้ำ |
 | `cancelGoodsReceipt` | `22_purchase_order.gs` | inventory:edit | กันกดซ้ำ |
@@ -166,6 +173,7 @@
 | `ensureSaleDocNo` | `34_sales_status.gs` | sales:edit | กันกดซ้ำ |
 | `explainCustomerPricing` | `36_price_rules.gs` | pricing:view |  |
 | `exportExpressSales` | `15_import_export_express.gs` | sales_report:view |  |
+| `exportSalesDashboard` | `59_dashboard_export.gs` | — |  |
 | `getAccountingSettings` | `50_cogs.gs` | accounting:view |  |
 | `getAdminBootstrap` | `32_admin_bootstrap.gs` | — |  |
 | `getAdminDashboard` | `06_bootstrap.gs` | sales_report:view |  |
@@ -176,6 +184,9 @@
 | `getArDebitNote` | `49_credit_notes.gs` | — |  |
 | `getBalanceSheet` | `23_accounting.gs` | accounting:view |  |
 | `getBillingNote` | `53_billing_notes.gs` | accounting:view |  |
+| `getBlitzAdmin` | `62_blitz.gs` | staff:view |  |
+| `getBlitzDashboardAdmin` | `62_blitz.gs` | staff:view |  |
+| `getBlitzRegisterLink` | `61_staff_approval.gs` | staff:edit |  |
 | `getCompanyProfile` | `25_company.gs` | — |  |
 | `getCreditSettings` | `56_customer_credit.gs` | customers:view |  |
 | `getCustomerAdmin` | `10_master_data.gs` | customers:view |  |
@@ -205,6 +216,7 @@
 | `importExpressProducts` | `15_import_export_express.gs` | products:edit | กันกดซ้ำ |
 | `importExternalSalesInvoices` | `43_external_sales_import.gs` | purchasing:edit | กันกดซ้ำ · requestId |
 | `importPriceList` | `17_pricing.gs` | pricing:edit | กันกดซ้ำ |
+| `issueBlitzTeamStock` | `62_blitz.gs` | inventory:edit | กันกดซ้ำ |
 | `issuePurchaseOrder` | `22_purchase_order.gs` | purchasing:edit | กันกดซ้ำ |
 | `linkAdminLineId` | `29_admin_signup.gs` | — | กันกดซ้ำ |
 | `listAddressRefs` | `47_address_refs.gs` | customers:view |  |
@@ -225,6 +237,7 @@
 | `listCustomersAdmin` | `10_master_data.gs` | customers:view |  |
 | `listDistributionChannels` | `10_master_data.gs` | settings:view |  |
 | `listDocSeries` | `12_docnum.gs` | docnum:view |  |
+| `listExternalGoodsReceiptHistory` | `43_external_sales_import.gs` | inventory:view |  |
 | `listFreeGoodsSets` | `39_free_goods.gs` | promotions:view |  |
 | `listGlAccounts` | `23_accounting.gs` | accounting:view |  |
 | `listGoodsReceipts` | `22_purchase_order.gs` | inventory:view |  |
@@ -250,13 +263,17 @@
 | `listSalesOrdersAdmin` | `19_sales_admin.gs` | sales:view |  |
 | `listShopTypes` | `46_customer_requests.gs` | — |  |
 | `listStaffAdmin` | `10_master_data.gs` | staff:view |  |
+| `listStaffApprovers` | `61_staff_approval.gs` | staff:view |  |
 | `listStockLedger` | `22_purchase_order.gs` | inventory:view |  |
+| `listTaxInvoices` | `58_tax_invoices.gs` | accounting:view |  |
+| `listTenantResponsibilities` | `57_user_tenants.gs` | users_roles:view |  |
 | `listTenants` | `13_tenants.gs` | tenants:view |  |
 | `listUnconfirmedUnits` | `10_master_data.gs` | products:view |  |
 | `listUninvoicedSalesOrders` | `23_accounting.gs` | accounting:view |  |
 | `listVendors` | `20_purchasing_master.gs` | vendors:view |  |
 | `listWarehouseStock` | `22_purchase_order.gs` | inventory:view |  |
 | `listWarehouses` | `20_purchasing_master.gs` | inventory:view |  |
+| `mergeDuplicateWarehouses` | `20_purchasing_master.gs` | — | กันกดซ้ำ |
 | `message` | **หาไม่เจอ** | — |  |
 | `migrateOwnerTenantCode` | `13_tenants.gs` | — | กันกดซ้ำ |
 | `migratePackageAssignments` | `38_package_distribution.gs` | — | กันกดซ้ำ |
@@ -279,15 +296,20 @@
 | `recordSaleAdmin` | `19_sales_admin.gs` | sales:edit | กันกดซ้ำ · requestId |
 | `rejectAdminUser` | `29_admin_signup.gs` | users_roles:edit | กันกดซ้ำ |
 | `rejectCustomerRequest` | `46_customer_requests.gs` | customers:edit | กันกดซ้ำ |
+| `removeBlitzMember` | `62_blitz.gs` | staff:edit | กันกดซ้ำ |
 | `removeCustomerListMember` | `40_customer_lists.gs` | customers:edit | กันกดซ้ำ |
 | `repairDraftOrderCodes` | `34_sales_status.gs` | — | กันกดซ้ำ |
 | `resetAdminUserPasswordByAdmin` | `16_admin_users.gs` | users_roles:edit | กันกดซ้ำ |
+| `returnBlitzTeamStock` | `62_blitz.gs` | inventory:edit | กันกดซ้ำ |
 | `salesReportBills` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByCustomer` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByProduct` | `41_sales_reports.gs` | sales_report:view |  |
 | `salesReportByStaff` | `41_sales_reports.gs` | sales_report:view |  |
 | `saveAccountingSettings` | `50_cogs.gs` | accounting:edit | กันกดซ้ำ |
 | `saveApprovalFlow` | `20_purchasing_master.gs` | purchasing:edit | กันกดซ้ำ |
+| `saveBlitzCampaign` | `62_blitz.gs` | staff:edit | กันกดซ้ำ |
+| `saveBlitzMember` | `62_blitz.gs` | staff:edit | กันกดซ้ำ |
+| `saveBlitzTeam` | `62_blitz.gs` | staff:edit | กันกดซ้ำ |
 | `saveCompanyProfile` | `25_company.gs` | settings:edit | กันกดซ้ำ |
 | `saveCreditSettings` | `56_customer_credit.gs` | customers:edit | กันกดซ้ำ |
 | `saveCustomerList` | `40_customer_lists.gs` | customers:edit | กันกดซ้ำ |
@@ -304,6 +326,8 @@
 | `savePurchaseOrder` | `22_purchase_order.gs` | purchasing:edit | กันกดซ้ำ · requestId |
 | `savePurchaseRequisition` | `21_purchase_requisition.gs` | purchasing:edit | กันกดซ้ำ · requestId |
 | `saveRole` | `26_roles.gs` | users_roles:edit | กันกดซ้ำ |
+| `saveStaffApprover` | `61_staff_approval.gs` | staff:edit | กันกดซ้ำ |
+| `saveTenantResponsibilities` | `57_user_tenants.gs` | users_roles:edit | กันกดซ้ำ |
 | `saveVendor` | `20_purchasing_master.gs` | vendors:edit | กันกดซ้ำ |
 | `saveWarehouse` | `20_purchasing_master.gs` | inventory:edit | กันกดซ้ำ |
 | `setDocCounter` | `12_docnum.gs` | docnum:edit | กันกดซ้ำ |
@@ -334,7 +358,7 @@
 
 พื้นผิวที่คนนอกยิงถึง — **เพิ่มที่นี่ต้องคิดเรื่องการกรอกข้อมูลขยะและการสวมรอยเสมอ**
 
-`adminLogin` · `adminLoginWithLine` · `adminLogout` · `checkUser` · `lineExchangeCode` · `lineLoginUrl` · `listActiveTenants` · `registerAdminUser` · `registerAdminUserWithLine` · `registerUser`
+`adminLogin` · `adminLoginWithLine` · `adminLogout` · `checkUser` · `getApproverContext` · `lineExchangeCode` · `lineLoginUrl` · `listActiveTenants` · `registerAdminUser` · `registerAdminUserWithLine` · `registerUser`
 
 ## D. ตารางข้อมูล
 
@@ -347,6 +371,7 @@
 | ชีต | คอลัมน์ | แคช | รายชื่อคอลัมน์ |
 |---|---|---|---|
 | `accounting_settings` | 9 |  | `record_id` `tenant_id` `cost_method` `cogs_from` `cash_sales` `cash_from` `van_issue` `updated_at` `updated_by` |
+| `admin_user_tenants` | 6 |  | `record_id` `admin_user_id` `tenant_id` `created_at` `created_by` `line_user_id` |
 | `admin_users` | 10 |  | `record_id` `username` `password_hash` `salt` `display_name` `role_code` `tenant_id` `status` `created_at` `line_user_id` |
 | `ap_bills` | 18 |  | `record_id` `tenant_id` `bill_no` `vendor_invoice_no` `vendor_id` `po_id` `gr_id` `bill_date` `due_date` `subtotal_ex_vat` `vat_amount` `total` `paid_amount` `status` `journal_id` `note` `created_by` `created_at` |
 | `ap_payment_allocations` | 4 |  | `record_id` `payment_id` `bill_id` `amount` |
@@ -362,6 +387,9 @@
 | `ar_receipts` | 13 |  | `record_id` `tenant_id` `receipt_no` `customer_id` `receipt_date` `amount` `method` `bank_account` `note` `status` `journal_id` `created_by` `created_at` |
 | `billing_note_items` | 7 |  | `record_id` `note_id` `invoice_id` `invoice_no` `invoice_date` `due_date` `amount` |
 | `billing_notes` | 12 |  | `record_id` `tenant_id` `note_no` `customer_id` `note_date` `due_date` `invoice_count` `total` `status` `note` `created_by` `created_at` |
+| `blitz_campaigns` | 10 | ✓ | `record_id` `code` `name` `tenant_id` `start_date` `end_date` `status` `cash_price` `created_at` `created_by` |
+| `blitz_members` | 7 | ✓ | `record_id` `campaign_id` `team_id` `line_user_id` `name` `role` `created_at` |
+| `blitz_teams` | 6 | ✓ | `record_id` `campaign_id` `code` `name` `target_sales` `target_shops` |
 | `central_doc_counters` | 3 |  | `doc_type` `period_key` `last_number` |
 | `company_profile` | 18 | ✓ | `record_id` `name` `legal_name` `tax_id` `branch_code` `address` `phone` `email` `website` `logo_url` `bank_name` `bank_account_no` `bank_account_name` `note` `updated_at` `updated_by` `vat_rate` `default_vat_type` |
 | `credit_settings` | 6 |  | `record_id` `tenant_id` `mode` `overdue_days` `updated_at` `updated_by` |
@@ -379,11 +407,11 @@
 | `gl_journal_lines` | 9 |  | `record_id` `journal_id` `line_no` `account_code` `description` `debit` `credit` `party_type` `party_id` |
 | `gl_journals` | 14 |  | `record_id` `tenant_id` `journal_no` `journal_date` `source` `ref_type` `ref_id` `memo` `status` `total_debit` `total_credit` `created_by` `created_at` `voided_at` |
 | `goods_receipts` | 13 |  | `record_id` `tenant_id` `gr_no` `po_id` `vendor_id` `warehouse_id` `receive_date` `note` `status` `journal_id` `created_by` `created_at` `source_ref` |
-| `goods_return_items` | 13 |  | `record_id` `return_id` `order_item_id` `product_id` `unit_code` `unit_factor` `qty` `base_qty` `condition` `restock` `unit_price` `amount` `tax_status` |
+| `goods_return_items` | 14 |  | `record_id` `return_id` `order_item_id` `product_id` `unit_code` `unit_factor` `qty` `base_qty` `condition` `restock` `unit_price` `amount` `tax_status` `warehouse_id` |
 | `goods_returns` | 18 |  | `record_id` `tenant_id` `return_no` `sales_order_id` `order_code` `customer_id` `return_date` `reason_code` `reason` `item_count` `amount` `restock_qty` `scrap_qty` `credit_note_id` `status` `note` `received_by` `created_at` |
 | `gr_items` | 10 |  | `record_id` `gr_id` `po_item_id` `product_id` `qty` `unit_code` `unit_factor` `base_qty` `unit_cost` `amount` |
 | `help_articles` | 10 | ✓ | `record_id` `code` `category` `title` `summary` `body` `sort_order` `is_active` `updated_at` `updated_by` |
-| `liff_users` | 6 |  | `line_user_id` `display_name` `role` `tenant_id` `status` `last_login` |
+| `liff_users` | 13 |  | `line_user_id` `display_name` `role` `tenant_id` `status` `last_login` `requested_at` `expires_at` `decided_by` `decided_by_name` `decided_at` `decision_note` `campaign` |
 | `package_tenants` | 6 | ✓ | `record_id` `package_type` `package_id` `tenant_id` `assigned_at` `assigned_by` |
 | `payment_types` | 4 | ✓ | `record_id` `code` `name` `is_active` |
 | `po_items` | 12 |  | `record_id` `po_id` `line_no` `pr_item_id` `product_id` `description` `qty` `unit_code` `unit_factor` `unit_price` `amount` `received_qty` |
@@ -403,15 +431,17 @@
 | `purchase_requisitions` | 15 |  | `record_id` `tenant_id` `pr_no` `requester_user_id` `department` `need_by_date` `note` `status` `flow_id` `current_step` `total_ex_vat` `created_at` `submitted_at` `decided_at` `closed_at` |
 | `role_permissions` | 4 | ✓ | `role_code` `module_code` `can_view` `can_edit` |
 | `roles` | 5 | ✓ | `role_code` `role_label` `is_system` `tenant_id` `description` |
-| `sales_daily` | 6 |  | `record_id` `tenant_id` `sale_date` `bills` `revenue` `updated_at` |
+| `sales_daily` | 7 |  | `record_id` `tenant_id` `sale_date` `bills` `revenue` `revenue_ex_vat` `updated_at` |
 | `shop_types` | 5 |  | `record_id` `code` `name` `description` `is_active` |
+| `staff_approval_log` | 13 |  | `record_id` `line_user_id` `display_name` `tenant_id` `from_status` `to_status` `role` `expires_at` `by_line_user_id` `by_name` `note` `channel` `created_at` |
+| `staff_approvers` | 6 | ✓ | `record_id` `admin_user_id` `line_user_id` `tenant_id` `created_at` `created_by` |
 | `stock_ledger` | 13 |  | `record_id` `tenant_id` `warehouse_id` `product_id` `change_qty` `balance_after` `unit_cost` `move_type` `ref_type` `ref_id` `note` `created_by` `created_at` |
 | `stock_reservations` | 9 |  | `record_id` `tenant_id` `warehouse_id` `product_id` `qty` `order_id` `status` `created_at` `released_at` |
 | `subdistricts` | 5 |  | `id` `name` `name_en` `district_id` `zipcode` |
 | `tenants` | 17 | ✓ | `tenant_id` `name` `sheet_file_id` `region` `is_active` `created_at` `address` `tax_id` `branch_code` `phone` `email` `logo_url` `bank_name` `bank_account_no` `bank_account_name` `is_house` `customer_account` |
 | `vendors` | 17 | ✓ | `record_id` `tenant_id` `vendor_code` `name` `tax_id` `branch_code` `contact_name` `phone` `email` `address` `payment_terms_days` `credit_limit` `bank_name` `bank_account_no` `is_active` `note` `created_at` |
 | `warehouse_stock` | 7 |  | `record_id` `tenant_id` `warehouse_id` `product_id` `qty` `avg_cost` `updated_at` |
-| `warehouses` | 8 | ✓ | `record_id` `tenant_id` `code` `name` `address` `is_active` `is_default` `created_at` |
+| `warehouses` | 9 | ✓ | `record_id` `tenant_id` `code` `name` `address` `is_active` `is_default` `created_at` `purpose` |
 
 ### D.2 ชีตในไฟล์ของตัวแทน (`TENANT_SHEET_TABS` — `13_tenants.gs`)
 
@@ -427,7 +457,7 @@
 | `order_discounts` | 8 | `record_id` `order_id` `rule_id` `rule_name` `type` `value` `free_product_id` `free_qty` |
 | `order_items` | 14 | `record_id` `order_id` `product_id` `unit_code` `unit_factor` `qty` `base_qty` `price` `line_total` `unit_discount` `line_discount` `list_price_ex_vat` `is_free` `tax_status` |
 | `order_status_log` | 10 | `record_id` `order_id` `from_status` `to_status` `from_payment` `to_payment` `note` `changed_by` `changed_by_role` `changed_at` |
-| `sales_orders` | 40 | `record_id` `order_code` `customer_id` `subtotal` `discount` `total` `payment_method` `fulfillment_type` `status` `sale_by` `lat` `lng` `map` `note` `created_at` `payment_status` `paid_amount` `delivered_at` `paid_at` `updated_at` `updated_by` `requested_delivery_date` `delivery_order_no` `delivery_order_at` `picking_no` `picking_at` `receipt_no` `receipt_at` `tax_invoice_no` `tax_invoice_at` `center_edited_at` `center_edited_by` `ship_round_no` `backorder_lines` `apply_vat` `vat_type` `vat_rate` `subtotal_ex_vat` `vat_amount` `exempt_amount` |
+| `sales_orders` | 44 | `record_id` `order_code` `customer_id` `subtotal` `discount` `total` `payment_method` `fulfillment_type` `status` `sale_by` `lat` `lng` `map` `note` `created_at` `payment_status` `paid_amount` `delivered_at` `paid_at` `updated_at` `updated_by` `requested_delivery_date` `delivery_order_no` `delivery_order_at` `picking_no` `picking_at` `receipt_no` `receipt_at` `tax_invoice_no` `tax_invoice_at` `center_edited_at` `center_edited_by` `ship_round_no` `backorder_lines` `campaign_id` `team_id` `stock_holder` `price_basis` `apply_vat` `vat_type` `vat_rate` `subtotal_ex_vat` `vat_amount` `exempt_amount` |
 | `stock_counts` | 7 | `record_id` `line_user_id` `product_id` `system_qty` `counted_qty` `diff_qty` `created_at` |
 | `stock_movements` | 7 | `record_id` `line_user_id` `product_id` `change_qty` `type` `ref_id` `created_at` |
 | `van_stock` | 4 | `line_user_id` `product_id` `qty` `avg_cost` |
@@ -510,8 +540,8 @@
 | เลข | เมนู | view | โมดูล | ฝั่ง | สถานะ |
 |---|---|---|---|---|---|
 | 1.1.1 | งานขาย › เอกสารการขาย › ใบสั่งขาย | `salesorders` | `sales` | ทั้งสองฝั่ง | ใช้งานได้ |
-| 1.1.2 | งานขาย › เอกสารการขาย › ใบลดหนี้ / เพิ่มหนี้ | `adjnotes` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
-| 1.1.3 | งานขาย › เอกสารการขาย › ใบรับคืนสินค้า | `goodsreturns` | `sales` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 1.1.2 | งานขาย › เอกสารการขาย › ใบรับคืนสินค้า | `goodsreturns` | `sales` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 1.1.3 | งานขาย › เอกสารการขาย › ใบลดหนี้ / เพิ่มหนี้ | `adjnotes` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.2.1 | งานขาย › ราคาขาย / ส่วนลด › กำหนดชุดตารางราคาขาย | `pricelists` | `pricing` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.2.2 | งานขาย › ราคาขาย / ส่วนลด › กำหนดชุดส่วนลดการขาย | `promotions` | `promotions` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.3.1 | งานขาย › ส่งเสริมการขาย › ชุดแถม (ของแถม) | `freegoods` | `promotions` | ทั้งสองฝั่ง | ใช้งานได้ |
@@ -527,6 +557,7 @@
 | 1.8.1 | งานขาย › รายงานขาย › รายงานการขายแยกพนักงาน | `v-rep-staff` | `sales_report` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.8.2 | งานขาย › รายงานขาย › รายงานการขายแยกลูกค้า | `v-rep-cust` | `sales_report` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 1.8.3 | งานขาย › รายงานขาย › รายงานการขายแยกสินค้า | `v-rep-prod` | `sales_report` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 1.9.1 | งานขาย › แคมเปญ BLITZ RANGER › ทีม สมาชิก สต็อก และแดชบอร์ด | `blitz` | `staff` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 2.1.1 | งานซื้อ › ใบขอซื้อ › รายการใบขอซื้อ (PR) | `purchasereqs` | `purchasing` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 2.2.1 | งานซื้อ › ใบสั่งซื้อ › รายการใบสั่งซื้อ (PO) | `purchaseorders` | `purchasing` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 2.3.1 | งานซื้อ › ข้อมูลผู้ขาย › ผู้ขาย | `vendors` | `vendors` | ทั้งสองฝั่ง | ใช้งานได้ |
@@ -539,11 +570,14 @@
 | 4.2.2 | คลังสินค้า › รับ / จ่ายสินค้า › ใบเบิกจ่ายสินค้าออก | `v-issue` | `inventory` | ทั้งสองฝั่ง | **ยังไม่ได้ทำ** |
 | 4.3.1 | คลังสินค้า › นำเข้าจากรายการขายออกของบริษัท › ตรวจ/นำเข้ารายการใหม่ | `externalsalesimport` | `purchasing` | บริษัท | ใช้งานได้ |
 | 4.3.2 | คลังสินค้า › นำเข้าจากรายการขายออกของบริษัท › ใบรับของรอตรวจรับ | `pendinggoodsreceipts` | `inventory` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 4.3.3 | คลังสินค้า › นำเข้าจากรายการขายออกของบริษัท › ประวัติใบรับของที่นำเข้า | `externalgrhistory` | `inventory` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 4.7.1 | คลังสินค้า › ตั้งค่าคลัง › ทะเบียนคลังสินค้า | `warehouses` | `inventory` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 4.8.1 | คลังสินค้า › รายงานเคลื่อนไหวสินค้า › รายงานเคลื่อนไหวสินค้า | `v-stockledger` | `inventory` | ทั้งสองฝั่ง | **ยังไม่ได้ทำ** |
 | 5.1.1 | งานบัญชีการเงิน › บัญชีทั่วไป › สมุดรายวัน / งบทดลอง | `glbooks` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.2.1 | งานบัญชีการเงิน › เจ้าหนี้ › ใบแจ้งหนี้และการจ่าย | `apbills` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
-| 5.3.1 | งานบัญชีการเงิน › ลูกหนี้ › ใบแจ้งหนี้และการรับชำระ | `arinvoices` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
-| 5.3.2 | งานบัญชีการเงิน › ลูกหนี้ › ใบวางบิล | `billingnotes` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 5.3.1 | งานบัญชีการเงิน › ลูกหนี้ › รายการใบกำกับภาษี | `taxinvoices` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 5.3.2 | งานบัญชีการเงิน › ลูกหนี้ › ใบแจ้งหนี้และการรับชำระ | `arinvoices` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
+| 5.3.3 | งานบัญชีการเงิน › ลูกหนี้ › ใบวางบิล | `billingnotes` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.8.1 | งานบัญชีการเงิน › รายงานภาษี › รายงานภาษีขาย / ภาษีซื้อ (ภ.พ.30) | `vatreport` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 5.9.1 | งานบัญชีการเงิน › ตั้งค่าทางบัญชี › วิธีตัดต้นทุนขาย | `acctsettings` | `accounting` | ทั้งสองฝั่ง | ใช้งานได้ |
 | 8.1.1 | คู่มือใช้งานระบบ › คู่มือใช้งานระบบ › คู่มือใช้งานระบบ | `helpcenter` | `` | ทั้งสองฝั่ง | ใช้งานได้ |
@@ -561,14 +595,18 @@
 |---|---|---|
 | `.dev/test-address-refs.js` | หน่วย (ไม่ยิงเน็ต) | 116 |
 | `.dev/test-barcode.js` | หน่วย (ไม่ยิงเน็ต) | 111 |
+| `.dev/test-blitz.js` | หน่วย (ไม่ยิงเน็ต) | 250 |
+| `.dev/test-bot-line.js` | หน่วย (ไม่ยิงเน็ต) | 698 |
+| `.dev/test-cancel-guard.js` | หน่วย (ไม่ยิงเน็ต) | 144 |
 | `.dev/test-customer-bulk.js` | หน่วย (ไม่ยิงเน็ต) | 191 |
 | `.dev/test-customer-credit.js` | หน่วย (ไม่ยิงเน็ต) | 224 |
 | `.dev/test-customer-lists.js` | หน่วย (ไม่ยิงเน็ต) | 137 |
 | `.dev/test-customer-requests.js` | หน่วย (ไม่ยิงเน็ต) | 263 |
 | `.dev/test-customers.js` | หน่วย (ไม่ยิงเน็ต) | 195 |
+| `.dev/test-dashboard-export.js` | หน่วย (ไม่ยิงเน็ต) | 483 |
 | `.dev/test-docnum.js` | หน่วย (ไม่ยิงเน็ต) | 299 |
 | `.dev/test-drive-layout.js` | หน่วย (ไม่ยิงเน็ต) | 126 |
-| `.dev/test-external-sales-import.js` | หน่วย (ไม่ยิงเน็ต) | 321 |
+| `.dev/test-external-sales-import.js` | หน่วย (ไม่ยิงเน็ต) | 572 |
 | `.dev/test-flags.js` | หน่วย (ไม่ยิงเน็ต) | 89 |
 | `.dev/test-free-goods.js` | หน่วย (ไม่ยิงเน็ต) | 187 |
 | `.dev/test-help-center.js` | หน่วย (ไม่ยิงเน็ต) | 79 |
@@ -580,21 +618,25 @@
 | `.dev/test-price-rules.js` | หน่วย (ไม่ยิงเน็ต) | 221 |
 | `.dev/test-pricelist-edit.js` | หน่วย (ไม่ยิงเน็ต) | 206 |
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
-| `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 343 |
+| `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 406 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
-| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 1,568 |
-| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 256 |
+| `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 2,061 |
+| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 320 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
-| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 884 |
-| `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 197 |
+| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 887 |
+| `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 213 |
 | `.dev/test-sheet-cache.js` | หน่วย (ไม่ยิงเน็ต) | 114 |
+| `.dev/test-staff-approval.js` | หน่วย (ไม่ยิงเน็ต) | 365 |
 | `.dev/test-unit-rescale.js` | หน่วย (ไม่ยิงเน็ต) | 56 |
 | `.dev/test-user-promotion.js` | หน่วย (ไม่ยิงเน็ต) | 136 |
+| `.dev/test-user-tenants.js` | หน่วย (ไม่ยิงเน็ต) | 196 |
 | `.dev/uat-ar-adjust-notes-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 165 |
 | `.dev/uat-cash-and-billing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 159 |
+| `.dev/uat-cash-credit-note-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 127 |
 | `.dev/uat-cogs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 161 |
 | `.dev/uat-credit-limit-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 190 |
+| `.dev/uat-credit-note-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 177 |
 | `.dev/uat-delivery-rounds-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 144 |
 | `.dev/uat-draft-code-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 121 |
 | `.dev/uat-draft-code-real-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 68 |

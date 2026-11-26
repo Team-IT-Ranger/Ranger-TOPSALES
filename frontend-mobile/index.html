@@ -233,6 +233,26 @@
   .chips{ display:flex; flex-wrap:wrap; gap:6px; }
   .chip{ border:1px solid var(--border); background:var(--surface-2); color:var(--ink-soft); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600; }
   .chip.on{ background:var(--blue-soft); color:var(--blue); border-color:#B7CBF3; }
+  /* ★ แดชบอร์ด BLITZ RANGER ของผู้อำนวยการ (26 พ.ย. 2026) — อ่านง่ายในแวบเดียวบนจอเล็ก: ตัวเลขใหญ่ · แท่งเทียบทีม · อันดับ */
+  .bz-head{ background:linear-gradient(135deg,#4A2FD0,#6D4AFF); color:#fff; border-radius:16px; padding:14px 16px; margin-bottom:12px; }
+  .bz-head b{ font-size:18px; } .bz-head .muted{ color:#DCD3FF; }
+  .bz-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:12px; }
+  .bz-kpi{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:10px 12px; box-shadow:var(--shadow-sm); }
+  .bz-kpi .v{ font-size:22px; font-weight:800; line-height:1.15; } .bz-kpi .l{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .bz-kpi.big{ grid-column:1 / -1; } .bz-kpi.big .v{ font-size:28px; color:#1F8A5F; }
+  .bz-team{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px; box-shadow:var(--shadow-sm); cursor:pointer; }
+  .bz-team .top{ display:flex; align-items:center; gap:10px; }
+  .bz-rank{ width:34px; height:34px; border-radius:50%; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; flex:none; }
+  .bz-team.r1 .bz-rank{ background:#FFE9A8; } .bz-team.r2 .bz-rank{ background:#E3E8F0; } .bz-team.r3 .bz-rank{ background:#F3D3B5; }
+  .bz-team .nm{ flex:1; min-width:0; } .bz-team .nm b{ display:block; } .bz-team .val{ font-size:20px; font-weight:800; text-align:right; }
+  .bz-bar{ height:10px; background:var(--surface-2); border-radius:6px; margin:8px 0 4px; overflow:hidden; }
+  .bz-bar i{ display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,#6D4AFF,#2B63D9); }
+  .bz-bar.tgt i{ background:linear-gradient(90deg,#1F8A5F,#5CC48F); }
+  .bz-sub{ display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12.5px; color:var(--ink-soft); }
+  .bz-hours{ display:flex; align-items:flex-end; gap:3px; height:84px; margin:6px 0 2px; }
+  .bz-hours div{ flex:1; background:linear-gradient(180deg,#6D4AFF,#2B63D9); border-radius:3px 3px 0 0; min-height:2px; }
+  .bz-hl{ display:flex; gap:3px; font-size:10px; color:var(--ink-faint); } .bz-hl span{ flex:1; text-align:center; overflow:hidden; }
+  .bz-banner{ background:#EEE9FF; color:#3A2399; border:1px solid #D5CBFF; border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:13.5px; line-height:1.55; }
   .sheet-bg{ position:fixed; inset:0; background:rgba(15,27,45,.45); z-index:80; display:flex; align-items:flex-end; justify-content:center; }
   .sheet{ background:var(--surface); width:100%; max-width:560px; border-radius:18px 18px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-height:92vh; overflow:auto; box-shadow:0 -10px 30px -12px rgba(15,27,45,.4); }
   .sheet h3{ font-size:16px; margin:0 0 4px; }
@@ -310,6 +330,22 @@
 </div>
 <div class="sheet-bg hidden" id="ap-sheet-bg" onclick="if(event.target===this)apCloseSheet()"><div class="sheet" id="ap-sheet"></div></div>
 
+<!-- ═══ แดชบอร์ด BLITZ RANGER (ผู้อำนวยการโครงการ) ═══
+     เปิดจากลิงก์ ?go=blitz หรือการ์ดในหน้าแรก · ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ทุกครั้ง (62_blitz.gs) ไม่ใช่จากลิงก์
+     ผู้อำนวยการไม่ต้องเป็นพนักงานขายที่อนุมัติแล้ว -->
+<div class="app hidden" id="scr-blitz">
+  <div class="top">
+    <button class="btn btn-sm" id="bz-back" onclick="closeBlitz()">‹ กลับ</button>
+    <div class="who"><b>BLITZ RANGER</b><span class="muted" id="bz-sub">-</span></div>
+    <button class="btn btn-sm" id="bz-refresh" onclick="bzLoad(true)">รีเฟรช</button>
+  </div>
+  <div class="screen active" style="padding-bottom:24px">
+    <div class="note hidden" id="bz-stale" style="margin-bottom:8px">กำลังอัปเดตข้อมูลล่าสุด… (ตัวเลขด้านล่างเป็นของครั้งก่อน)</div>
+    <div id="bz-body"></div>
+  </div>
+</div>
+<div class="sheet-bg hidden" id="bz-sheet-bg" onclick="if(event.target===this)bzCloseSheet()"><div class="sheet" id="bz-sheet"></div></div>
+
 <!-- ═══ แอปหลัก ═══ -->
 <div class="app hidden" id="scr-app">
   <div class="top">
@@ -324,6 +360,12 @@
   <!-- หน้าแรก -->
   <section class="screen" id="tab-home">
     <!-- ผู้อนุมัติเท่านั้น (getApproverContext) — ซ่อนเป็นค่าเริ่มต้น แล้วโชว์เมื่อ backend ยืนยันสิทธิ์แล้ว -->
+    <!-- BLITZ RANGER: ป้ายทีมของผู้ป้อนบิล + ทางเข้าแดชบอร์ดของผู้อำนวยการ (ซ่อนเป็นค่าเริ่มต้น — bootstrap บอกว่าใคร) -->
+    <div class="bz-banner hidden" id="home-blitz-team"></div>
+    <div class="card hidden" id="home-blitz" style="margin-bottom:12px">
+      <div class="row" style="border-top:none;padding:0"><span><b>แดชบอร์ด BLITZ RANGER</b><br><span class="muted">เทียบยอดขายและจำนวนร้านของแต่ละทีม</span></span>
+        <button class="btn btn-primary btn-sm" onclick="openBlitz({ from: 'app' })">เปิด</button></div>
+    </div>
     <div class="card hidden" id="home-approve" style="margin-bottom:12px">
       <div class="row" style="border-top:none;padding:0"><span><b>อนุมัติผู้ใช้งาน</b><br><span class="muted" id="home-approve-sub">-</span></span>
         <button class="btn btn-primary btn-sm" onclick="openApprovals({ from: 'app' })">เปิด</button></div>
@@ -354,6 +396,7 @@
 
   <!-- ขาย -->
   <section class="screen" id="tab-sell">
+    <div class="bz-banner hidden" id="sell-blitz-team"></div>
     <!-- ★ แถบบอกว่ากำลังแก้ใบไหนอยู่ + ทางออก (2 ต.ค. 2026 เจ้าของระบบแจ้ง)
          ไม่มีแถบนี้ เซลส์จะไม่รู้ว่าตะกร้าที่เห็นคือใบร่างเดิมที่ยกมา แล้วเผลอกดบันทึกทับใบนั้น
          ทั้งที่ตั้งใจจะเปิดใบใหม่ · และถอยออกจากโหมดแก้ไขไม่ได้เลยถ้าเปลี่ยนใจ -->
@@ -507,7 +550,7 @@ const LSK = k => 'srm_' + ENV + '_' + k;           // แยก key ตามส
 const lsGet = (k, def) => { try { const v = localStorage.getItem(LSK(k)); return v == null ? def : JSON.parse(v); } catch (e) { return def; } };
 const lsSet = (k, v) => { try { localStorage.setItem(LSK(k), JSON.stringify(v)); } catch (e) {} };
 function toast(msg, kind){ const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200); }
-function show(id){ ['scr-loading','scr-register','scr-pending','scr-app','scr-approve'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+function show(id){ ['scr-loading','scr-register','scr-pending','scr-app','scr-approve','scr-blitz'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
 function setLoad(txt, spin = true, extraHtml = ''){ if (spin && typeof AP !== 'undefined' && AP.fromSnap) return; /* กำลังโชว์หน้าอนุมัติจาก snapshot อยู่ — ข้อความ "กำลังโหลด" ห้ามทับ (ข้อความผิดพลาดยังโชว์ตามปกติ) */ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
 
 let ME = { lineUserId: '', name: '', pictureUrl: '', role: '', tenantId: '' };
@@ -647,6 +690,11 @@ async function boot(){
       const sn = lsGet('apsnap', null);
       if (sn && sn.me && Array.isArray(sn.data)) openApprovals({ uid: DEEPLINK.u, from: 'boot', snap: sn });
     }
+    // ผู้อำนวยการเปิดแดชบอร์ดซ้ำ → วาดของครั้งก่อนทันที (เหมือนหน้าอนุมัติ) แล้วอัปเดตทับเมื่อข้อมูลสดมา
+    if (DEEPLINK && DEEPLINK.go === 'blitz') {
+      const sn = lsGet('bzsnap', null);
+      if (sn && sn.r && sn.r.campaign) openBlitz({ from: 'boot', snap: sn });
+    }
   }
   try {
     // โหมดทดสอบ (UAT เท่านั้น): เปิดในเบราว์เซอร์ธรรมดาด้วย ?devLineUserId=... แทน LINE — production ไม่มีทางเข้านี้
@@ -684,6 +732,19 @@ async function boot(){
       if (AP.fromSnap) { AP.fromSnap = false; AP.rows = []; setLoad('กำลังตรวจสอบสิทธิ์...'); }
       // ไม่มีสิทธิ์/ตรวจไม่ได้ → ไหลต่อเข้าแอปตามปกติ (ไม่ทิ้งให้ติดหน้าโหลด)
     }
+    // ผู้อำนวยการ BLITZ RANGER เปิดลิงก์แดชบอร์ด → ก่อนด่าน checkUser เหมือนหน้าอนุมัติ (เขาอาจไม่เคยเป็นพนักงานขายเลย)
+    if (DEEPLINK && DEEPLINK.go === 'blitz') {
+      const dl = DEEPLINK; DEEPLINK = null;
+      if (BZ.fromSnap && BZ.snapOwner && BZ.snapOwner !== ME.lineUserId) { BZ.r = null; BZ.fromSnap = false; }   // snapshot ของคนอื่นในเครื่องเดียวกัน → ทิ้ง
+      if (!BZ.fromSnap) setLoad('กำลังเปิดแดชบอร์ด...');
+      try {
+        const r = await api('getBlitzDashboard', {}, 30000);
+        if (r && r.success) { ME.isBlitzViewer = true; return openBlitz({ from: 'boot', prefetched: r }); }
+        if (r && r.notViewer) toast('บัญชี LINE นี้ไม่ได้เป็นผู้ดูแดชบอร์ด BLITZ RANGER', 'err');
+        else if (r && r.message) toast(r.message, 'err');
+      } catch (e) { toast('เปิดแดชบอร์ดไม่ได้: ' + e.message, 'err'); }
+      if (BZ.fromSnap) { BZ.fromSnap = false; BZ.r = null; setLoad('กำลังตรวจสอบสิทธิ์...'); }
+    }
     setLoad('กำลังตรวจสอบสิทธิ์...');
     let st;
     try { st = await api('checkUser', { lineUid: ME.lineUserId }, 30000); }
@@ -707,9 +768,9 @@ async function showRegister(){
   show('scr-register');
   $('reg-name').value = ME.name || '';
   const blitz = !!REG_DL;
-  $('reg-title').textContent = blitz ? 'ลงทะเบียนทีม Sales Blitz' : 'ลงทะเบียนพนักงานขาย';
+  $('reg-title').textContent = blitz ? 'ลงทะเบียนทีม BLITZ RANGER' : 'ลงทะเบียนพนักงานขาย';
   const bn = $('reg-blitz'); bn.classList.toggle('hidden', !blitz);
-  if (blitz) bn.innerHTML = '<b>🚀 คำขอของทีม Sales Blitz</b><br>กรอกชื่อ-นามสกุลจริงเพื่อให้ผู้อนุมัติตรวจสอบได้ แล้วกดส่งคำขอ — ใช้งานได้หลังผู้อนุมัติกดอนุมัติแล้วเท่านั้น (ระบบแจ้งผู้อนุมัติให้อัตโนมัติ)';
+  if (blitz) bn.innerHTML = '<b>🚀 คำขอของทีม BLITZ RANGER</b><br>กรอกชื่อ-นามสกุลจริงเพื่อให้ผู้อนุมัติตรวจสอบได้ แล้วกดส่งคำขอ — ใช้งานได้หลังผู้อนุมัติกดอนุมัติแล้วเท่านั้น (ระบบแจ้งผู้อนุมัติให้อัตโนมัติ)';
   try {
     const r = await api('listActiveTenants', {});
     const ts = (r && r.data) || [];
@@ -727,7 +788,7 @@ async function submitRegister(){
   try {
     const r = await api('registerUser', { lineUid: ME.lineUserId, name, schema: tenant, campaign: REG_DL ? 'BLITZ' : '' });
     if (!r.success) { toast(r.message || 'ส่งคำขอไม่สำเร็จ', 'err'); return; }
-    showPending(REG_DL ? 'ส่งคำขอทีม Sales Blitz แล้ว — รอผู้อนุมัติกดอนุมัติ เสร็จแล้วกด "ตรวจสอบอีกครั้ง" ด้านล่าง' : 'ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้');
+    showPending(REG_DL ? 'ส่งคำขอทีม BLITZ RANGER แล้ว — รอผู้อนุมัติกดอนุมัติ เสร็จแล้วกด "ตรวจสอบอีกครั้ง" ด้านล่าง' : 'ส่งคำขอแล้ว แอดมินต้องอนุมัติก่อนจึงจะเริ่มขายได้');
   } catch (e) { toast('ส่งไม่ได้: ' + e.message, 'err'); }
   finally { pressBusy(btn, false); }
 }
@@ -748,10 +809,131 @@ function enterApp(){
   syncDelivField();
   const cached = lsGet('boot_' + ME.lineUserId, null);
   if (cached) DATA = cached.data;
+  paintBlitzCards();
   gotoTab('home');
   if (navigator.onLine) { refreshData(true); checkApprover(); }   // เปิดจาก cache ทันที แล้วค่อยดึงของใหม่เบื้องหลัง
   else paintApproverCard(lsGet('approver_' + ME.lineUserId, null));
 }
+
+/* ══════════════ BLITZ RANGER — ป้ายทีม + แดชบอร์ดผู้อำนวยการ (backend/62_blitz.gs) ══════════════
+   ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ทุกครั้ง · ที่นี่แค่โชว์/ซ่อนและวาด
+   ★ ตัวเลขยอดขายเป็น "ก่อนภาษี" เสมอ (กติกาของระบบ) · เปิดซ้ำวาดจาก snapshot ก่อน แล้วอัปเดตทับ (กติกาความเร็วข้อ 2) */
+const BZ = { r: null, rank: 'sales', from: 'app', live: false, fromSnap: false, snapOwner: '', timer: null, campaignId: '' };
+const bzN = n => Math.round(Number(n) || 0).toLocaleString('th-TH');
+const bzMedal = r => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : String(r);
+/* ป้ายทีมของผู้ป้อนบิล (หน้าแรก + แท็บขาย) และการ์ดทางเข้าแดชบอร์ดของผู้อำนวยการ */
+function paintBlitzCards(){
+  const b = DATA && DATA.blitz;
+  const txt = b ? '🏁 <b>' + esc(b.campaignName) + ' · ' + esc(b.teamName) + '</b><br>ทุกบิลคิด<b>ราคาเงินสด</b>' + (b.forceCash === false ? ' (ปิดอยู่)' : ' แม้เลือกชำระเครดิต') +
+    ' · ขายจาก<b>สต็อกทีม</b>' + (b.endDate ? ' · ถึงวันที่ ' + esc(b.endDate) : '') : '';
+  ['home-blitz-team', 'sell-blitz-team'].forEach(id => { const el = $(id); if (!el) return; el.innerHTML = txt; el.classList.toggle('hidden', !b); });
+  const v = $('home-blitz'); if (v) v.classList.toggle('hidden', !(DATA && DATA.blitzViewer));
+}
+async function openBlitz(opts){
+  opts = opts || {};
+  BZ.from = opts.from || 'app';
+  BZ.fromSnap = !!opts.snap; BZ.live = !opts.snap;
+  if (opts.snap) { BZ.snapOwner = opts.snap.owner || ''; BZ.r = opts.snap.r; }
+  else if (!opts.prefetched) BZ.r = null;
+  show('scr-blitz');
+  $('bz-back').textContent = BZ.from === 'boot' ? 'ไปหน้าแอป ›' : '‹ กลับ';
+  $('bz-stale').classList.toggle('hidden', !opts.snap);
+  if (opts.snap) { bzRender(); bzAutoRefresh(); return; }
+  if (opts.prefetched) { bzApply(opts.prefetched); bzAutoRefresh(); return; }
+  $('bz-body').innerHTML = tnkWait(160, 'กำลังโหลดแดชบอร์ด…', 56);
+  await bzLoad(false);
+  bzAutoRefresh();
+}
+function closeBlitz(){
+  bzCloseSheet(); if (BZ.timer) { clearInterval(BZ.timer); BZ.timer = null; }
+  if (BZ.from === 'boot') { boot(); return; }
+  show('scr-app'); gotoTab('home');
+}
+/* รีเฟรชเองทุก 60 วิขณะเปิดหน้านี้ — ผู้อำนวยการดูหน้าจอค้างไว้ระหว่างงาน ไม่ต้องกดเอง (backend แคช 45 วิ จึงไม่หนักขึ้น) */
+function bzAutoRefresh(){
+  if (BZ.timer) clearInterval(BZ.timer);
+  BZ.timer = setInterval(() => { if (!$('scr-blitz').classList.contains('hidden') && navigator.onLine && !document.hidden) bzLoad(false, true); }, 60000);
+}
+async function bzLoad(refresh, quiet){
+  const btn = $('bz-refresh');
+  if (!quiet) pressBusy(btn, true);
+  try {
+    const r = await api('getBlitzDashboard', { campaignId: BZ.campaignId, refresh: !!refresh }, 30000);
+    if (r && r.success) { bzApply(r); return; }
+    if (!quiet) toast((r && r.message) || 'โหลดแดชบอร์ดไม่สำเร็จ', 'err');
+    if (!BZ.r) $('bz-body').innerHTML = '<div class="card"><div class="muted">' + esc((r && r.message) || 'โหลดไม่สำเร็จ') + '</div></div>';
+  } catch (e) {
+    if (!quiet) toast('โหลดไม่ได้: ' + e.message, 'err');
+    if (!BZ.r) $('bz-body').innerHTML = '<div class="card"><div class="muted">เชื่อมต่อไม่ได้ — ' + esc(e.message) + '</div></div>';
+  } finally { if (!quiet) pressBusy(btn, false); }
+}
+function bzApply(r){
+  BZ.r = r; BZ.live = true; BZ.fromSnap = false; BZ.campaignId = (r.campaign && r.campaign.id) || BZ.campaignId;
+  $('bz-stale').classList.add('hidden');
+  bzRender();
+  lsSet('bzsnap', { owner: ME.lineUserId, ts: Date.now(), r: r });
+}
+function bzPickRank(k){ BZ.rank = k; bzRender(); }
+function bzSortedTeams(){
+  const key = BZ.rank === 'shops' ? 'rankShops' : 'rankSales';
+  return BZ.r.teams.slice().sort((a, b) => a[key] - b[key] || b.sales - a.sales || a.code.localeCompare(b.code));
+}
+function bzRender(){
+  const r = BZ.r; if (!r) return;
+  const t = r.totals, c = r.campaign, byShops = BZ.rank === 'shops';
+  $('bz-sub').textContent = c.name + ' · อัปเดต ' + String(r.asOf || '').slice(11, 16);
+  const teams = bzSortedTeams();
+  const max = Math.max(1, ...teams.map(x => byShops ? x.shops : x.sales));
+  const camps = r.campaigns && r.campaigns.length > 1
+    ? '<select class="inp" style="margin-bottom:10px" onchange="BZ.campaignId=this.value;bzLoad(true)">' + r.campaigns.map(x => '<option value="' + esc(x.id) + '"' + (x.id === c.id ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select>' : '';
+  $('bz-body').innerHTML = camps +
+    '<div class="bz-head"><b>' + esc(c.name) + '</b><br><span class="muted">' + esc(c.startDate) + ' → ' + esc(c.endDate) + ' · ' +
+      (c.running ? '🟢 กำลังแข่งขัน' : c.status === 'closed' ? 'ปิดแล้ว' : 'อยู่นอกช่วงวันที่') + '</span></div>' +
+    '<div class="bz-grid">' +
+      '<div class="bz-kpi big"><div class="v">฿' + bzN(t.sales) + '</div><div class="l">ยอดขายรวมทุกทีม (ก่อนภาษี)' + (t.targetSales ? ' · เป้า ฿' + bzN(t.targetSales) + ' (' + Math.round(t.sales / t.targetSales * 100) + '%)' : '') + '</div></div>' +
+      '<div class="bz-kpi"><div class="v">' + bzN(t.shops) + '</div><div class="l">ร้านที่ซื้อ' + (t.targetShops ? ' · เป้า ' + bzN(t.targetShops) : '') + '</div></div>' +
+      '<div class="bz-kpi"><div class="v">' + bzN(t.bills) + '</div><div class="l">บิล</div></div>' +
+      '<div class="bz-kpi"><div class="v">' + bzN(t.cases) + '</div><div class="l">ลังที่ขาย</div></div>' +
+      '<div class="bz-kpi"><div class="v">' + bzN(t.newShops) + '</div><div class="l">ร้านเปิดใหม่</div></div>' +
+      (t.drafts ? '<div class="bz-kpi" style="grid-column:1/-1;background:var(--orange-soft);border-color:#F0D9B0"><div class="v" style="font-size:18px">' + bzN(t.drafts) + ' ใบ</div><div class="l">บิลร่างที่ทีมยังไม่ยืนยัน (ยังไม่นับในยอด)</div></div>' : '') +
+    '</div>' +
+    '<div class="segrow"><div class="segtog"><button class="' + (byShops ? '' : 'on') + '" onclick="bzPickRank(\'sales\')">จัดอันดับตามยอดขาย</button><button class="' + (byShops ? 'on' : '') + '" onclick="bzPickRank(\'shops\')">ตามจำนวนร้าน</button></div></div>' +
+    teams.map(x => {
+      const rank = byShops ? x.rankShops : x.rankSales, v = byShops ? x.shops : x.sales, tg = byShops ? x.targetShops : x.targetSales;
+      return '<div class="bz-team r' + rank + '" onclick="bzOpenTeam(' + x.id + ')">' +
+        '<div class="top"><div class="bz-rank">' + bzMedal(rank) + '</div><div class="nm"><b>' + esc(x.name) + '</b><span class="muted">' + esc(x.seller || 'ยังไม่มีผู้ป้อนบิล') + '</span></div>' +
+        '<div class="val">' + (byShops ? bzN(v) + ' ร้าน' : '฿' + bzN(v)) + '</div></div>' +
+        '<div class="bz-bar"><i style="width:' + Math.round(v / max * 100) + '%"></i></div>' +
+        (tg ? '<div class="bz-bar tgt" style="margin-top:2px"><i style="width:' + Math.min(100, Math.round(v / tg * 100)) + '%"></i></div><div class="muted">เป้า ' + (byShops ? bzN(tg) + ' ร้าน' : '฿' + bzN(tg)) + ' · ถึงเป้า ' + Math.round(v / tg * 100) + '%</div>' : '') +
+        '<div class="bz-sub"><span>' + (byShops ? '฿' + bzN(x.sales) : bzN(x.shops) + ' ร้าน') + '</span><span>' + bzN(x.bills) + ' บิล</span><span>' + bzN(x.cases) + ' ลัง</span><span>ร้านใหม่ ' + bzN(x.newShops) + '</span>' + (x.drafts ? '<span style="color:var(--orange)">ร่างค้าง ' + x.drafts + '</span>' : '') + '</div></div>';
+    }).join('') +
+    bzHoursHtml(r) +
+    '<p class="muted" style="margin-top:12px">' + esc(r.basis || '') + '</p>';
+}
+function bzHoursHtml(r){
+  const h = r.hourly || []; if (h.length < 2) return '';
+  const mx = Math.max(1, ...h.map(x => x.sales));
+  return '<div class="card" style="margin-top:12px"><b>ยอดขายรายชั่วโมง (ทุกทีม)</b><div class="bz-hours">' +
+    h.map(x => '<div title="' + esc(x.hour) + ' ฿' + bzN(x.sales) + '" style="height:' + Math.max(3, Math.round(x.sales / mx * 100)) + '%"></div>').join('') +
+    '</div><div class="bz-hl">' + h.map(x => '<span>' + esc(String(x.hour).slice(11, 13)) + '</span>').join('') + '</div>' +
+    '<div class="muted" style="margin-top:4px">แกนล่าง = ชั่วโมงของวัน · สูงสุด ฿' + bzN(mx) + '</div></div>';
+}
+function bzOpenTeam(id){
+  const x = BZ.r.teams.filter(t => Number(t.id) === Number(id))[0]; if (!x) return;
+  const days = Object.keys(x.byDay || {}).sort();
+  $('bz-sheet').innerHTML = '<h3>' + esc(x.name) + '</h3><div class="muted">ผู้ป้อนบิล: ' + esc(x.seller || '—') + (x.members.length ? ' · สมาชิก: ' + esc(x.members.join(', ')) : '') + '</div>' +
+    '<div class="bz-grid" style="margin-top:12px"><div class="bz-kpi"><div class="v">฿' + bzN(x.sales) + '</div><div class="l">ยอดขาย #' + x.rankSales + '</div></div>' +
+    '<div class="bz-kpi"><div class="v">' + bzN(x.shops) + '</div><div class="l">ร้านที่ซื้อ #' + x.rankShops + '</div></div>' +
+    '<div class="bz-kpi"><div class="v">' + bzN(x.bills) + '</div><div class="l">บิล</div></div>' +
+    '<div class="bz-kpi"><div class="v">' + bzN(x.cases) + '</div><div class="l">ลัง</div></div>' +
+    '<div class="bz-kpi"><div class="v">฿' + bzN(x.avgBill) + '</div><div class="l">เฉลี่ยต่อบิล</div></div>' +
+    '<div class="bz-kpi"><div class="v">' + bzN(x.newShops) + '</div><div class="l">ร้านเปิดใหม่</div></div></div>' +
+    (days.length ? '<div class="muted" style="margin-bottom:6px">ยอดขายรายวัน</div>' + days.map(d => '<div class="row"><span>' + esc(d) + '</span><b>฿' + bzN(x.byDay[d]) + '</b></div>').join('') : '') +
+    (x.drafts ? '<div class="ap-banner" style="margin-top:10px">มีบิลร่าง ' + x.drafts + ' ใบ (฿' + bzN(x.draftSales) + ') ที่ทีมยังไม่กดยืนยัน — ยังไม่นับในยอด ควรตามให้ยืนยัน</div>' : '') +
+    '<div class="ap-actions" style="margin-top:12px;display:flex"><button class="btn" onclick="bzCloseSheet()">ปิด</button></div>';
+  $('bz-sheet-bg').classList.remove('hidden');
+}
+function bzCloseSheet(){ $('bz-sheet-bg').classList.add('hidden'); }
 
 /* ══════════════ อนุมัติผู้ใช้งาน (ผู้อนุมัติเท่านั้น) — backend/61_staff_approval.gs ══════════════
    ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ของคนกดทุกครั้ง · ที่นี่แค่ "โชว์/ซ่อนปุ่ม" และวาดหน้าจอ
@@ -973,8 +1155,9 @@ async function refreshData(silent){
   try {
     const r = await api('getBootstrap', {});
     if (!r.success) { if (!silent) toast(r.message, 'err'); return false; }
-    DATA = { products: r.products || [], customers: r.customers || [] };
+    DATA = { products: r.products || [], customers: r.customers || [], blitz: r.blitz || null, blitzViewer: !!r.blitzViewer };
     lsSet('boot_' + ME.lineUserId, { ts: Date.now(), data: DATA });
+    paintBlitzCards();
     renderCurrentTab();
     return true;
   } catch (e) { if (!silent) toast('ดึงข้อมูลไม่ได้: ' + e.message, 'err'); return false; }
