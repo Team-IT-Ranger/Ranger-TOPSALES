@@ -37,7 +37,7 @@ var SA_LIST_LIMIT = 300;
    ลิงก์/QR ของทีม blitz พก `c=BLITZ` → แอปมือถือโชว์หัวฟอร์มว่าเป็นทีม Sales Blitz + ล็อกสังกัดตามลิงก์ · registerUser เก็บป้ายไว้ที่ `liff_users.campaign`
    → การ์ดในกลุ่ม LINE/หน้าอนุมัติ/หน้าแอดมิน ติดป้าย "Sales Blitz" ให้ผู้อนุมัติแยกออกจากคนสมัครปกติได้ทันที
    ★ ค่าที่ไม่อยู่ในรายการนี้ถูกทิ้งเป็นว่าง ไม่ใช่เก็บตามที่ส่งมา — ลิงก์สมัครเป็นของสาธารณะ ใครแก้ URL ใส่อะไรมาก็ได้ */
-var SA_CAMPAIGNS = { BLITZ: 'Sales Blitz' };
+var SA_CAMPAIGNS = { BLITZ: 'BLITZ RANGER' };   // ป้ายที่คนเห็น (การ์ดในกลุ่ม · หน้าอนุมัติ · โปสเตอร์ QR) — รหัสภายในยังเป็น BLITZ
 function _saCampaignOf(v) { var k = String(v == null ? '' : v).trim().toUpperCase(); return SA_CAMPAIGNS[k] ? k : ''; }
 
 // ───────────────────────── ตัวช่วยเล็ก ─────────────────────────

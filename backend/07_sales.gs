@@ -30,7 +30,7 @@ function _shapeFreeGoods(raw) {
 
 // ── คิดราคาตะกร้าล้วนๆ ไม่แตะสต็อก/ไม่บันทึกอะไร — ใช้ร่วมกันทั้ง recordSale (มือถือ) และฝั่งแอดมิน (19_sales_admin.gs)
 // rawItems: [{productId, qty, unitCode}]   คืน { success, items, calc, priceListUsed } หรือ { success:false, message, code? }
-function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
+function _priceSaleCart(customerId, rawItems, paymentType, isVan, opts) {
   if (!rawItems || !rawItems.length) return { success: false, message: 'ไม่มีรายการสินค้า' };
 
   var productMap = {};
@@ -112,7 +112,9 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan) {
   if (pricingCtx) {
     var priced = priceCart(pricingCtx,
       items.map(function(it) { return { productId: it.productId, unitCode: it.unitCode, qty: it.qty }; }),
-      { isCredit: isCreditPayment(paymentType), isVan: !!isVan });
+      /* ★ แคมเปญ BLITZ RANGER บังคับ "ราคาเงินสดเสมอ" แม้ชำระเป็นเครดิต (62_blitz.gs · opts.forceCash)
+         ใช้เฉพาะเลือกช่องราคาของชุดราคา — กติกาแพ็ค (ด้านบน) ยังดูวิธีชำระจริงตามเดิม */
+      { isCredit: isCreditPayment(paymentType) && !(opts && opts.forceCash), isVan: !!isVan });
     if (!priced.success) return { success: false, message: priced.message, code: priced.code };
     items.forEach(function(it, i) {
       var pl = priced.lines[i];
@@ -180,7 +182,11 @@ function recordSale(user, payload) {
     if (gate) return gate;
   }
 
-  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales');
+  /* ★ BLITZ RANGER (62_blitz.gs): ผู้ป้อนบิลของทีมในแคมเปญที่เดินอยู่ → ราคาเงินสดเสมอ + ตัด/เช็คสต็อก "ทีม" แทนสต็อกรถตัวเอง
+     คิดครั้งเดียวต้นฟังก์ชันแล้วใช้ตลอด — ราคา สต็อก และตราบนบิลต้องมาจากคำตอบเดียวกัน ไม่งั้นบิลใบเดียวคิดราคาทีมแต่ตัดของคนละที่ */
+  var bz = blitzContextFor(user.lineUserId, user.tenantId);
+  var stockHolder = bz ? bz.stockKey : String(user.lineUserId);
+  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales', { forceCash: !!(bz && bz.forceCash) });
   if (!priced.success) return priced;
   var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;
 
@@ -214,13 +220,13 @@ function recordSale(user, payload) {
   if (fulfillmentType === 'immediate') {
     var allStock = tenantObjects(user.tenantId, 'van_stock');
     var myStock = {};
-    allStock.filter(function(s) { return String(s.line_user_id) === String(user.lineUserId); })
+    allStock.filter(function(s) { return String(s.line_user_id) === stockHolder; })
       .forEach(function(s) { myStock[String(s.product_id)] = parseInt(s.qty) || 0; });
 
     var pids = Object.keys(need);
     for (var ci = 0; ci < pids.length; ci++) {
       var have = myStock[pids[ci]] || 0;
-      if (have < need[pids[ci]]) return { success: false, message: 'สต็อกรถไม่พอ (สินค้า ' + pids[ci] + ' มี ' + have + ')' };
+      if (have < need[pids[ci]]) return { success: false, message: (bz ? 'สต็อกทีม ' + bz.teamCode : 'สต็อกรถ') + 'ไม่พอ (สินค้า ' + pids[ci] + ' มี ' + have + ')' };
     }
   } else {
     // office_delivery: กันของไว้ตั้งแต่เปิดบิล (ยอดจอง — guide ข้อ 1.3) เหตุผลเดียวกับ recordSaleAdmin (19_sales_admin.gs)
@@ -274,7 +280,11 @@ function recordSale(user, payload) {
     picking_no: saleDocs.picking_no || '', picking_at: saleDocs.picking_at || '',
     receipt_no: saleDocs.receipt_no || '', receipt_at: saleDocs.receipt_at || '',
     tax_invoice_no: saleDocs.tax_invoice_no || '', tax_invoice_at: saleDocs.tax_invoice_at || '',
-    sale_by: user.lineUserId, lat: payload.latitude || '', lng: payload.longitude || '',
+    sale_by: user.lineUserId,
+    // ตราแคมเปญ (ภาพนิ่ง) — ว่างทั้งหมดถ้าไม่ใช่บิลแคมเปญ · stock_holder ว่างแปลว่าตัดจากสต็อกรถของ sale_by เหมือนเดิม
+    campaign_id: bz ? bz.campaignId : '', team_id: bz ? bz.teamId : '', stock_holder: bz ? bz.stockKey : '',
+    price_basis: (bz && bz.forceCash && isCreditPayment(payload.paymentType)) ? 'cash' : '',
+    lat: payload.latitude || '', lng: payload.longitude || '',
     map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt,
     // วันนัดส่งโดยประมาณ รับเฉพาะรูปแบบ yyyy-MM-dd และเฉพาะใบนัดส่ง (ขายจากรถส่งของไปแล้ว ไม่มีวันนัด)
     requested_delivery_date: (fulfillmentType === 'office_delivery' && /^\d{4}-\d{2}-\d{2}$/.test(String(payload.requestedDeliveryDate || '')))
@@ -321,7 +331,7 @@ function recordSale(user, payload) {
   });
 
   if (fulfillmentType === 'immediate') {
-    _cutVanStock(user.tenantId, user.lineUserId, need, orderId);
+    _cutVanStock(user.tenantId, stockHolder, need, orderId);
     /* ★ ต้นทุนขายของการขายจากรถ (55_van_stock_link.gs) — ใช้ต้นทุนที่รถพกมาตั้งแต่ตอนเบิก
        ไม่ใช่ต้นทุนคลัง ณ ตอนขาย · ปิดอยู่ก็แค่ข้ามไป ไม่กระทบการบันทึกบิล */
     postVanSaleCogs(user.tenantId, tenantRowById(user.tenantId, 'sales_orders', orderId), need, user.lineUserId);
@@ -382,7 +392,8 @@ function _cutVanStock(tenantId, lineUserId, need, orderId, movementType) {
 // จะได้ {success:true, priceList:null} เปล่าๆ กลับไป ไม่ผ่านเส้นทางโปรโมชั่นเดิม (applyPromotions) เหมือนตอน
 // recordSale จริง — แอปจึงตกไปใช้ราคาตั้งต้นจากเครื่อง (estimate()) ซึ่งอาจต่างจากยอดที่จะออกบิลจริง
 function quoteSale(user, payload) {
-  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales');
+  var bz = blitzContextFor(user.lineUserId, user.tenantId);   // ราคาที่เห็นก่อนกดต้องเป็นชุดเดียวกับที่ recordSale จะบันทึก
+  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales', { forceCash: !!(bz && bz.forceCash) });
   if (!priced.success) return priced;
   var calc = priced.calc, vat = calc.vat;
   return {

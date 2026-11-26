@@ -27,6 +27,7 @@ function sheetView(name) {
   };
 }
 let sheets, dailyBumps, statusLogs, officeStockResult;
+const CENTRAL = {};   // ตารางกลางเพิ่มเติม (blitz_*) — ว่าง = ไม่มีแคมเปญ
 function reset() {
   sheets = {
     sales_orders: [], order_items: [], order_discounts: [], stock_movements: [],
@@ -69,7 +70,7 @@ const ctx = {
   initialPaymentStatus: (pay, ful) => (ful === 'immediate' ? 'paid' : 'unpaid'),
   // ── I/O ที่ recordSale เรียกตรงๆ ──
   ensureTenantSheetsCurrent: () => {},
-  centralObjects: name => (name === 'products' ? PRODUCTS : name === 'customers' ? CUSTOMERS : []),
+  centralObjects: name => (name === 'products' ? PRODUCTS : name === 'customers' ? CUSTOMERS : (CENTRAL[name] || [])),
   customerSaleGate: () => null,   // ไม่บล็อกลูกค้าในชุดทดสอบนี้ (คุมแยกแล้วใน test-customers.js)
   /* ด่านวงเงินเครดิต (56_customer_credit.gs) — ตรรกะของมันมีเทสต์ของตัวเองใน test-customer-credit.js
      ที่นี่ดักไว้เพื่อตรวจ **การต่อสาย**: recordSale เรียกมันไหม · ส่งยอดบิลที่คิดเสร็จแล้วไปหรือเปล่า ·
@@ -110,14 +111,17 @@ const ctx = {
   cacheClearUser: () => {},
   centralUpdate: () => {},
   nowStr: () => '2026-10-02 10:00:00',
+  _todayStr: () => '2026-10-02',
   safeDateStr: v => String(v || ''),
   isFlagOn: v => v === 'TRUE' || v === true,
+  isCreditPayment: c => ['credit_term', 'credit'].indexOf(String(c || '').toLowerCase()) >= 0,
+  isNotOff: v => !(v === false || String(v).toUpperCase() === 'FALSE'),
   _mobileRoleLabel: r => r,
 };
 vm.createContext(ctx);
 // 50/52: recordSale ลงบัญชีขายสดแล้ว (16 ต.ค. 2026) — บน Apps Script ทุกไฟล์อยู่ scope เดียวกัน
 // กล่องทดสอบโหลดเป็นชุดย่อย จึงต้องใส่เอง ไม่งั้น ReferenceError ตอนเรียก postCashSaleGl
-['50_cogs.gs', '52_cash_sales_gl.gs', '55_van_stock_link.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
+['50_cogs.gs', '52_cash_sales_gl.gs', '55_van_stock_link.gs', '62_blitz.gs', '08_stock.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 vm.runInContext(B('07_sales.gs'), ctx, { filename: '07_sales.gs' });
 
 // override หลังโหลดไฟล์ — recordSale เรียก _priceSaleCart() แบบ global lookup ตอนรันจริง ไม่ใช่ closure
@@ -250,6 +254,66 @@ r = ctx.recordSale(U1, { customerId: 1, paymentType: 'credit_term', fulfillmentT
 eq('โหมดเตือน → บันทึกบิลได้ และส่งคำเตือนกลับไปให้พนักงานเห็น',
   [r.success, r.creditWarning], [true, 'ร้านทดสอบ: เกินวงเงินเครดิต']);
 ctx.creditGateResult = null;
+
+/* ══ แคมเปญ BLITZ RANGER (62_blitz.gs) ══
+   ผู้ป้อนบิลของทีม: ราคาเงินสดเสมอ · ตัด "สต็อกทีม" ไม่ใช่สต็อกรถตัวเอง · บิลติดตราแคมเปญ/ทีมเป็นภาพนิ่ง */
+console.log('\n── BLITZ RANGER ──');
+const TEAM_KEY = 'TEAM:1:11';
+function blitzSetup(endDate) {
+  CENTRAL.blitz_campaigns = [{ record_id: 1, code: 'BLITZ-1', name: 'BLITZ RANGER', tenant_id: 'T1', start_date: '2026-10-01', end_date: endDate || '2026-10-03', status: 'active', cash_price: '' }];
+  CENTRAL.blitz_teams = [{ record_id: 11, campaign_id: 1, code: 'A', name: 'Team A' }, { record_id: 12, campaign_id: 1, code: 'B', name: 'Team B' }];
+  CENTRAL.blitz_members = [
+    { record_id: 1, campaign_id: 1, team_id: 11, line_user_id: 'U2', name: 'ผู้ป้อนบิล A', role: 'seller' },
+    { record_id: 2, campaign_id: 1, team_id: 11, line_user_id: 'U3', name: 'สมาชิก A', role: 'member' },
+    { record_id: 3, campaign_id: 1, team_id: '', line_user_id: 'U9', name: 'ผอ.โครงการ', role: 'director' }
+  ];
+}
+const U2 = { tenantId: 'T1', lineUserId: 'U2', role: 'credit_sales', displayName: 'ผู้ป้อนบิล A' };
+let seenOpts = null;
+const stubWithOpts = items => (cid, raw, pay, isVan, opts) => { seenOpts = opts; return stubPriced(items); };
+
+reset(); blitzSetup();
+sheets.van_stock.push({ line_user_id: TEAM_KEY, product_id: '101', qty: 20 });
+ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 2, baseQty: 2, price: 100, lineTotal: 200, unitDiscount: 0, lineDiscount: 0 }]);
+r = ctx.recordSale(U2, { customerId: 1, paymentType: 'credit_term', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 2 }] });
+eq('ผู้ป้อนบิลของทีมขายสำเร็จ', r.success, true);
+eq('★ บังคับราคาเงินสด (forceCash) ส่งเข้าเครื่องคิดราคา แม้ชำระเป็นเครดิต', seenOpts && seenOpts.forceCash, true);
+eq('★ ตัดสต็อก "ทีม" 20→18', sheets.van_stock.find(s => s.line_user_id === TEAM_KEY && s.product_id === '101').qty, 18);
+eq('  ไม่มีสต็อกรถส่วนตัวของ U2 งอกขึ้น', sheets.van_stock.filter(s => s.line_user_id === 'U2').length, 0);
+const bo = sheets.sales_orders[0];
+eq('★ บิลติดตราแคมเปญ/ทีม/ผู้ถือสต็อก เป็นภาพนิ่งลงแถวจริง', [bo.campaign_id, bo.team_id, bo.stock_holder], ['1', '11', TEAM_KEY]);
+eq('  ชำระเครดิตแต่คิดราคาเงินสด → ติดตรา price_basis=cash ไว้อธิบายย้อนหลัง', bo.price_basis, 'cash');
+eq('  sale_by ยังเป็นคนที่กดบันทึกจริง (ไว้ตามว่าใครป้อน)', bo.sale_by, 'U2');
+eq('  สมุดเคลื่อนไหวสต็อกอ้างผู้ถือสต็อกทีม', sheets.stock_movements.some(m => m.line_user_id === TEAM_KEY && m.change_qty === -2), true);
+
+reset(); blitzSetup();
+sheets.van_stock.push({ line_user_id: TEAM_KEY, product_id: '101', qty: 1 });
+ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 5, baseQty: 5, price: 100, lineTotal: 500, unitDiscount: 0, lineDiscount: 0 }]);
+r = ctx.recordSale(U2, { customerId: 1, paymentType: 'cash', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 5 }] });
+eq('★ สต็อกทีมไม่พอ = ปฏิเสธและบอกว่าเป็นสต็อกทีม A', [r.success, /สต็อกทีม A/.test(r.message || '')], [false, true]);
+eq('  ไม่เขียนบิล ไม่แตะสต็อกทีม', [sheets.sales_orders.length, sheets.van_stock.find(s => s.line_user_id === TEAM_KEY).qty], [0, 1]);
+
+reset(); blitzSetup();
+ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 2, baseQty: 2, price: 100, lineTotal: 200, unitDiscount: 0, lineDiscount: 0 }]);
+seenOpts = null;
+r = ctx.recordSale(U1, { customerId: 1, paymentType: 'credit_term', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 2 }] });
+eq('★ พนักงานปกติ (ไม่ได้อยู่ทีม) ไม่ถูกบังคับราคาเงินสด · ตัดสต็อกรถตัวเอง · ไม่มีตรา',
+  [seenOpts && seenOpts.forceCash, sheets.van_stock.find(s => s.line_user_id === 'U1' && s.product_id === '101').qty,
+   sheets.sales_orders[0].campaign_id, sheets.sales_orders[0].stock_holder, sheets.sales_orders[0].price_basis], [false, 48, '', '', '']);
+
+eq('สมาชิกทีม (ไม่ใช่ผู้ป้อนบิล) ไม่มี context', ctx.blitzContextFor('U3', 'T1'), null);
+eq('ผู้อำนวยการไม่มี context การขาย', ctx.blitzContextFor('U9', 'T1'), null);
+eq('แคมเปญของตัวแทนอื่นไม่โดน', ctx.blitzContextFor('U2', 'T2'), null);
+blitzSetup('2026-10-01');   // แคมเปญจบเมื่อวาน
+eq('★ แคมเปญจบแล้ว (เลยวันสิ้นสุด) → ผู้ป้อนบิลกลับไปขายปกติ ไม่มี context', ctx.blitzContextFor('U2', 'T1'), null);
+blitzSetup(); CENTRAL.blitz_campaigns[0].status = 'closed';
+eq('แคมเปญที่ปิดไว้ → ไม่มี context ทั้งที่ยังอยู่ในช่วงวันที่', ctx.blitzContextFor('U2', 'T1'), null);
+blitzSetup(); CENTRAL.blitz_campaigns[0].cash_price = 'FALSE';
+eq('ปิดสวิตช์ราคาเงินสด → ยังเป็นทีม แต่ forceCash=false', ctx.blitzContextFor('U2', 'T1').forceCash, false);
+blitzSetup();
+r = ctx.restockVan(U2, { items: [{ productId: 101, qty: 5 }] });
+eq('★ ผู้ป้อนบิลของทีมเบิกของเข้าทีมเองจากมือถือไม่ได้ (เบิกโดยศูนย์)', [r.success, /เบิกโดยศูนย์/.test(r.message || '')], [false, true]);
+Object.keys(CENTRAL).forEach(k => delete CENTRAL[k]);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

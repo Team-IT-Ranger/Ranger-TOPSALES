@@ -336,19 +336,19 @@ ctx.registerUser({ lineUid: 'Ublitz1', name: 'ทีม blitz คนที่ 1'
 eq('สมัครผ่านลิงก์ blitz (พิมพ์เล็กก็ได้) → เก็บป้าย BLITZ', liffRow('Ublitz1').campaign, 'BLITZ');
 const bc = pushes[pushes.length - 1].body.messages[0];
 ok('★ การ์ดเข้ากลุ่มระบุชัดว่าเป็นทีม Sales Blitz (หัวการ์ด + สี + altText ต่างจากคำขอปกติ)',
-  /ทีม Sales Blitz/.test(JSON.stringify(bc.contents.header)) && bc.contents.header.backgroundColor === '#6D4AFF' && /Sales Blitz/.test(bc.altText), bc);
+  /BLITZ RANGER/.test(JSON.stringify(bc.contents.header)) && bc.contents.header.backgroundColor === '#6D4AFF' && /BLITZ RANGER/.test(bc.altText), bc);
 ctx.registerUser({ lineUid: 'Ublitz2', name: 'ใส่แคมเปญมั่ว', schema: 'BDC', campaign: '<script>' });
 eq('★ แคมเปญที่ไม่รู้จักถูกทิ้งเป็นว่าง (ลิงก์เป็นของสาธารณะ ใครแก้ URL ก็ได้)', liffRow('Ublitz2').campaign, '');
 const normalCard = pushes[pushes.length - 1].body.messages[0];
 ok('  และการ์ดของคนสมัครปกติไม่มีป้าย blitz', !/Blitz/.test(JSON.stringify(normalCard)) && normalCard.contents.header.backgroundColor === '#B4741A', normalCard);
 r = act('Ubdcadmin', 'listStaffApprovals', { view: 'pending' });
 const bl = r.data.find(x => x.lineUserId === 'Ublitz1');
-eq('หน้าอนุมัติเห็นป้าย (แยกจากคนสมัครปกติได้)', [bl.campaign, bl.campaignLabel, r.data.find(x => x.lineUserId === 'Ublitz2').campaign], ['BLITZ', 'Sales Blitz', '']);
+eq('หน้าอนุมัติเห็นป้าย (แยกจากคนสมัครปกติได้)', [bl.campaign, bl.campaignLabel, r.data.find(x => x.lineUserId === 'Ublitz2').campaign], ['BLITZ', 'BLITZ RANGER', '']);
 eq('listStaffAdmin (หน้าเว็บ) ก็ส่งป้ายมา', ctx.listStaffAdmin(ADMIN_SESS, {}).data.find(x => x.lineUserId === 'Ublitz1').campaign, 'BLITZ');
 
 let lk = ctx.getBlitzRegisterLink(ADMIN_SESS, {});
 eq('แอดมินตัวแทน: ได้ลิงก์ของตัวแทนตัวเอง พก c=BLITZ และ t=รหัสตัวแทน',
-  [lk.success, lk.url, lk.tenantName, lk.campaignLabel], [true, 'https://liff.line.me/2010417493-TEST?go=register&c=BLITZ&t=BDC', 'บีดีซี ตะวันออก', 'Sales Blitz']);
+  [lk.success, lk.url, lk.tenantName, lk.campaignLabel], [true, 'https://liff.line.me/2010417493-TEST?go=register&c=BLITZ&t=BDC', 'บีดีซี ตะวันออก', 'BLITZ RANGER']);
 eq('★ แอดมินตัวแทนขอลิงก์ของตัวแทนอื่นไม่ได้ (ส่ง tenantId มาก็ไม่ช่วย)', ctx.getBlitzRegisterLink(ADMIN_SESS, { tenantId: 'NKN' }).tenantId, 'BDC');
 eq('ฝั่งบริษัทไม่เลือกตัวแทน → ขอให้เลือก', (lk = ctx.getBlitzRegisterLink(COMPANY, {}), [lk.success, /เลือกตัวแทน/.test(lk.message)]), [false, true]);
 eq('ฝั่งบริษัทเลือกตัวแทนได้', ctx.getBlitzRegisterLink(COMPANY, { tenantId: 'NKN' }).url, 'https://liff.line.me/2010417493-TEST?go=register&c=BLITZ&t=NKN');

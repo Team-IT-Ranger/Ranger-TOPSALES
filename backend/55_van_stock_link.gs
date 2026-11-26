@@ -135,7 +135,8 @@ function postVanSaleCogs(tenantId, order, need, userId) {
     var refId = _vanCogsRefId(order);
     if (_findCogsJournal(book, refId)) return { posted: false, skipped: 'ลงต้นทุนบิลนี้ไปแล้ว' };
 
-    var onVan = vanStockCost(tenantId, order.sale_by);
+    // ★ สต็อกทีม BLITZ: ต้นทุนที่พกมาอยู่ที่ผู้ถือสต็อกของทีม ไม่ใช่ที่คนป้อนบิล (62_blitz.gs)
+    var onVan = vanStockCost(tenantId, order.stock_holder || order.sale_by);
     var total = 0;
     Object.keys(need || {}).forEach(function(pid) {
       var c = (onVan[String(pid)] || {}).cost || 0;

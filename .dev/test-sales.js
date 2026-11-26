@@ -13,7 +13,7 @@ const ctx = {
   CacheService: { getScriptCache: () => ({ get: () => null, put: () => {}, remove: () => {} }) },
 };
 vm.createContext(ctx);
-for (const f of ['02_helpers.gs', '28_units.gs', '17_pricing.gs', '18_pricing_engine.gs', '11_promotions.gs', '07_sales.gs']) {
+for (const f of ['02_helpers.gs', '28_units.gs', '17_pricing.gs', '18_pricing_engine.gs', '11_promotions.gs', '07_sales.gs', '62_blitz.gs']) {
   vm.runInContext(B(f), ctx, { filename: f });
 }
 
@@ -190,6 +190,22 @@ console.log('\n── _priceSaleCart(): ราคาในทะเบียน�
                                     { product_id: 5, unit_code: 'CT', unit_factor: 60, price: 1200, is_active: 'TRUE' }]), 20);
 
   PRODUCTS.pop(); PRODUCT_UNITS.pop();
+}
+
+/* ══ BLITZ RANGER: ราคาเงินสดเสมอ (62_blitz.gs · opts.forceCash) ══
+   เทสต์ว่า _priceSaleCart "เลือกช่องราคาเครดิตหรือเงินสด" ตามที่แคมเปญบังคับ — ส่งต่อให้ priceCart() ตรงๆ
+   (priceCart มีเทสต์ของตัวเองใน test-pricing-engine.js ว่าเลือกช่องไหนตาม isCredit) */
+console.log('\n── BLITZ: บังคับราคาเงินสด ──');
+{
+  const savedCtx = ctx.getPricingContextForCustomer, savedPrice = ctx.priceCart;
+  let seen = null;
+  ctx.getPricingContextForCustomer = () => ({ list: { name: 'ชุดทดสอบ' } });
+  ctx.priceCart = (c, items, o) => { seen = o; throw new Error('stop'); };
+  const run = opts => { seen = null; try { ctx._priceSaleCart(1, [{ productId: 1, qty: 1, unitCode: 'PC' }], 'credit_term', true, opts); } catch (e) {} return seen; };
+  eq('ชำระเครดิต ไม่มีแคมเปญ → ใช้ช่องราคาเครดิต', run(undefined) && run(undefined).isCredit, true);
+  eq('★ ชำระเครดิต + แคมเปญบังคับเงินสด → ใช้ช่องราคาเงินสด', run({ forceCash: true }).isCredit, false);
+  eq('ชำระเครดิต + opts ว่าง (forceCash=false) → ยังเป็นเครดิต', run({ forceCash: false }).isCredit, true);
+  ctx.getPricingContextForCustomer = savedCtx; ctx.priceCart = savedPrice;
 }
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');

@@ -7,9 +7,12 @@ function getBootstrap(user) {
   var cached = cacheGet('bootstrap', user.lineUserId);
   if (cached) return cached;
 
+  /* ★ ผู้ป้อนบิลของทีม BLITZ เห็น "สต็อกทีม" ในช่องของที่ขายได้ (62_blitz.gs) — คนอื่นเห็นสต็อกรถตัวเองเหมือนเดิม */
+  var bzInfo = blitzMobileInfo(user);
+  var stockHolder = bzInfo.blitz ? blitzStockHolder(user) : String(user.lineUserId);
   var allStock = tenantObjects(user.tenantId, 'van_stock');
   var myStock = {};
-  allStock.filter(function(s) { return String(s.line_user_id) === String(user.lineUserId); })
+  allStock.filter(function(s) { return String(s.line_user_id) === stockHolder; })
     .forEach(function(s) { myStock[String(s.product_id)] = parseInt(s.qty) || 0; });
 
   var unitsByProduct = {};
@@ -69,7 +72,8 @@ function getBootstrap(user) {
   var result = { success: true, products: products, customers: customers, rules: rules,
     shopTypes: _crShopTypes(),
     customerRequests: myReq.requests || [],
-    customerRequestAlerts: myReq.unseenDecided || [] };
+    customerRequestAlerts: myReq.unseenDecided || [],
+    blitz: bzInfo.blitz, blitzViewer: bzInfo.blitzViewer };
   cachePut('bootstrap', user.lineUserId, result, CACHE_TTL);
   return result;
 }

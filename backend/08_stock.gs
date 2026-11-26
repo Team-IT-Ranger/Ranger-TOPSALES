@@ -7,12 +7,25 @@
 function restockVan(user, payload) {
   var items = payload.items || [];
   if (!items.length) return { success: false, message: 'ไม่มีรายการเบิก' };
+  /* ★ ผู้ป้อนบิลของทีม BLITZ ไม่เบิกเอง — สต็อกทีมเบิกจากศูนย์ (เมนูแคมเปญ) ไม่งั้นมีสองทางเข้าของสต็อกเดียวกัน
+     และคนในทีมเบิกของเข้าทีมเกินที่ผู้อำนวยการตั้งใจแจกได้ (62_blitz.gs) */
+  if (blitzContextFor(user.lineUserId, user.tenantId)) return { success: false, message: 'สต็อกของทีม BLITZ เบิกโดยศูนย์ — แจ้งผู้ดูแลแคมเปญให้เบิกให้' };
+  return _restockHolder(user.tenantId, user.lineUserId, items, 'เบิกโดย ' + (user.displayName || user.lineUserId), 'restock');
+}
+
+/**
+ * เบิกของจากคลังกลางเข้า "ผู้ถือสต็อก" หนึ่งราย (รถของพนักงาน หรือสต็อกทีม BLITZ) — แกนเดียวของทั้งสองทาง
+ * items: [{productId, qty (หน่วยฐาน)}] · movementType ลง stock_movements
+ */
+function _restockHolder(tenantId, holder, items, refNote, movementType) {
+  var user = { tenantId: tenantId, lineUserId: holder };
+  if (!items || !items.length) return { success: false, message: 'ไม่มีรายการเบิก' };
 
   /* ★★ ตัดจากคลังกลาง **ก่อน** บวกขึ้นรถ (55_van_stock_link.gs) — ของไม่พอต้องปฏิเสธทั้งใบ
      ตั้งแต่ยังไม่แตะ van_stock ไม่งั้นรถได้ของที่คลังไม่มีจริง แล้วสองที่ไม่ตรงกันตลอดไป
      ★ ปิดอยู่ = คืน cost เป็น null แล้วทุกอย่างทำงานเหมือนเดิมเป๊ะ (ไม่แตะคลัง ไม่เขียนต้นทุน) */
   ensureTenantSheetsCurrent(user.tenantId);
-  var issued = issueVanStockFromWarehouse(user.tenantId, items, user.lineUserId, 'เบิกโดย ' + (user.displayName || user.lineUserId));
+  var issued = issueVanStockFromWarehouse(user.tenantId, items, user.lineUserId, refNote);
   if (!issued.success) return issued;
 
   var sh = tenantSheet(user.tenantId, 'van_stock');
@@ -36,11 +49,11 @@ function restockVan(user, payload) {
     if (issued.cost && issued.cost[String(it.productId)] !== undefined) {
       bumpVanAvgCost(user.tenantId, user.lineUserId, it.productId, qty, issued.cost[String(it.productId)]);
     }
-    tenantAppend(user.tenantId, 'stock_movements', { record_id: tenantNextId(user.tenantId, 'stock_movements'), line_user_id: user.lineUserId, product_id: it.productId, change_qty: qty, type: 'restock', ref_id: '', created_at: nowStr() });
+    tenantAppend(user.tenantId, 'stock_movements', { record_id: tenantNextId(user.tenantId, 'stock_movements'), line_user_id: user.lineUserId, product_id: it.productId, change_qty: qty, type: movementType || 'restock', ref_id: '', created_at: nowStr() });
   });
 
   cacheClear('bootstrap', user.lineUserId);
-  return { success: true, message: 'เบิกของขึ้นรถสำเร็จ' };
+  return { success: true, message: 'เบิกของขึ้นรถสำเร็จ', skippedWarehouse: !!issued.skipped };
 }
 
 function submitCount(user, payload) {

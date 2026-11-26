@@ -84,6 +84,15 @@ var ADMIN_ACTION_MAP = {
   listStaffApprovers:     listStaffApprovers,
   saveStaffApprover:      saveStaffApprover,
   getBlitzRegisterLink:   getBlitzRegisterLink,
+  // แคมเปญ BLITZ RANGER (62_blitz.gs): ตั้งค่า · ทีม · สมาชิก · สต็อกทีม · แดชบอร์ด — ผู้อำนวยการดูผ่าน BLITZ_VIEWER_ACTION_MAP
+  getBlitzAdmin:          getBlitzAdmin,
+  saveBlitzCampaign:      saveBlitzCampaign,
+  saveBlitzTeam:          saveBlitzTeam,
+  saveBlitzMember:        saveBlitzMember,
+  removeBlitzMember:      removeBlitzMember,
+  issueBlitzTeamStock:    issueBlitzTeamStock,
+  returnBlitzTeamStock:   returnBlitzTeamStock,
+  getBlitzDashboardAdmin: getBlitzDashboardAdmin,
 
   listCustomersAdmin:     listCustomersAdmin,
   addCustomerAdmin:       addCustomerAdmin,

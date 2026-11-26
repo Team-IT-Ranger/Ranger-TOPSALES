@@ -29,6 +29,10 @@ var TENANT_SHEET_TABS = {
        ship_round_no  = รอบที่กำลังเตรียมส่งอยู่ (1, 2, 3…)
        backorder_lines = จำนวนบรรทัดที่ยัง "ไม่ได้อยู่ในรอบไหนเลย" = ของค้างส่งที่ยังไม่มีกำหนด */
     'ship_round_no', 'backorder_lines',
+    /* ★ แคมเปญ BLITZ RANGER (26 พ.ย. 2026 — 62_blitz.gs) — ภาพนิ่ง ณ วินาทีที่บันทึกบิล ห้ามคำนวณใหม่
+       campaign_id/team_id = บิลนี้เป็นของแคมเปญ/ทีมไหน · stock_holder = สต็อกที่ถูกตัด (ยกเลิกแล้วต้องคืนเข้าที่เดิม ไม่ใช่ตามตัวคนขาย)
+       price_basis = 'cash' เมื่อแคมเปญบังคับราคาเงินสดทั้งที่ชำระเป็นเครดิต (ไว้อธิบายบิลย้อนหลัง) */
+    'campaign_id', 'team_id', 'stock_holder', 'price_basis',
     // ภาพนิ่งภาษี ณ วันที่ออกบิล — ห้ามคำนวณใหม่ตอนเปิดดู ไม่งั้นวันที่อัตราภาษีเปลี่ยน ใบเก่าทั้งหมดขยับตาม
     // และงบที่ปิดไปแล้วจะเคลื่อน · apply_vat: ใบนี้คิด VAT ไหม · vat_type: inclusive/exclusive ณ ตอนออก
     'apply_vat','vat_type','vat_rate','subtotal_ex_vat','vat_amount','exempt_amount'],

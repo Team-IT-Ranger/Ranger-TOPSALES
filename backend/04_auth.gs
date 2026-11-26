@@ -236,6 +236,14 @@ function doPost(e) {
     return _jsonOutput(_handleApproverActionCore(apId.lineUserId, action, payload));
   }
 
+  // ── 2.6) ผู้อำนวยการโครงการ BLITZ RANGER (แดชบอร์ดในแอปมือถือ): ตัวตน LINE ที่ยืนยันแล้ว แต่ไม่ต้องเป็นพนักงานที่อนุมัติแล้ว
+  //    — ผู้อำนวยการมักไม่เคยขายของ (บางคนยังไม่เคยเข้าระบบ) · สิทธิ์ตัดสินที่ _bzViewerCampaigns ทุกครั้ง (62_blitz.gs)
+  if (BLITZ_VIEWER_ACTION_MAP[action]) {
+    var bzId = resolveLineIdentity(body);
+    if (!bzId.ok) return _jsonOutput({ success: false, message: bzId.message, authError: true, needLogin: !!bzId.needLogin });
+    return _jsonOutput(_handleBlitzViewerCore(bzId.lineUserId, action, payload));
+  }
+
   // ── 3) Admin: ต้องมี token ที่ valid ──
   if (ADMIN_ACTION_MAP[action]) {
     var session = resolveAdminSession(body.token);

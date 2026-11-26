@@ -38,6 +38,12 @@ var CENTRAL_SHEETS = {
      เหมือน admin_user_tenants: เป็นแอดมินกรอก admin_user_id · เป็นพนักงานขายกรอก line_user_id
      ★ คนละตารางกับ admin_user_tenants โดยตั้งใจ — อันนั้นแค่ "ย่อรายการ" ไม่ใช่ "ให้สิทธิ์" (ดูหัวไฟล์ 61_staff_approval.gs) */
   staff_approvers: ['record_id','admin_user_id','line_user_id','tenant_id','created_at','created_by'],
+  /* ★ แคมเปญ BLITZ RANGER (62_blitz.gs) — แคมเปญ → ทีม → สมาชิก · บิลถูกติด campaign_id/team_id ตอนบันทึก (ภาพนิ่ง)
+     cash_price ว่าง = เปิด (บังคับราคาเงินสดทุกบิล) · สต็อกทีมอยู่ใน van_stock ของตัวแทน คีย์ `TEAM:<แคมเปญ>:<ทีม>` */
+  blitz_campaigns: ['record_id','code','name','tenant_id','start_date','end_date','status','cash_price','created_at','created_by'],
+  blitz_teams: ['record_id','campaign_id','code','name','target_sales','target_shops'],
+  // role: seller = ผู้ป้อนบิล (1 คน/ทีม) · member = สมาชิกทีม (line_user_id ว่างได้) · director = ผู้อำนวยการโครงการ (team_id ว่าง)
+  blitz_members: ['record_id','campaign_id','team_id','line_user_id','name','role','created_at'],
   // line_user_id = ตัวตน LINE ที่ผูกกับบัญชีนี้ (กติกา 2026-09-24: ทุกบัญชีของทุกแอปผูกกับ LINE user id เสมอ)
   admin_users: ['record_id','username','password_hash','salt','display_name','role_code','tenant_id','status','created_at','line_user_id'],
   /* ★ ผู้รับผิดชอบตัวแทน (57_user_tenants.gs) — "บัญชีฝั่งบริษัทคนนี้ดูแลตัวแทนรายไหนอยู่"
