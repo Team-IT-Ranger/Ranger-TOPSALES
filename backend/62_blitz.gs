@@ -311,7 +311,8 @@ function _bzBaseQty(productId, qty, unitCode, unitsByProduct) {
   return { ok: false };
 }
 
-/** payload: { teamId, items:[{productId, qty, unitCode?}] } — เบิกจากคลังกลางเข้าสต็อกทีม (ตามหน่วยที่เลือก แปลงเป็นหน่วยฐานให้) */
+/** payload: { teamId, items:[{productId, units:[{unitCode, qty}]}] } (หรือรูปเดิม {productId, qty, unitCode}) — เบิกจากคลังกลางเข้าสต็อกทีม
+ *  (ตามหน่วยที่เลือก แปลงเป็นหน่วยฐานให้ · หลายหน่วยของสินค้าเดียวกันรวมเป็นก้อนเดียว) */
 function issueBlitzTeamStock(session, payload) {
   var err = _requirePermission(session, 'inventory', 'edit'); if (err) return err;
   payload = payload || {};
@@ -322,16 +323,27 @@ function issueBlitzTeamStock(session, payload) {
   if (String(camp.status || 'active') !== 'active') return { success: false, message: 'แคมเปญนี้ปิดแล้ว เบิกของเพิ่มไม่ได้' };
   var unitsByProduct = {};
   centralObjects('product_units').forEach(function(u) { (unitsByProduct[String(u.product_id)] = unitsByProduct[String(u.product_id)] || []).push(u); });
+  /* ★ หนึ่งสินค้าเบิกได้หลายหน่วยในบรรทัดเดียว (ลัง + เศษแพ็ค + เศษชิ้น) — it.units = [{unitCode, qty}, …]
+     · รูปเดิม { productId, qty, unitCode } ยังใช้ได้ (เป็นรายการหน่วยเดียว) · ทุกหน่วยของสินค้าเดียวกันถูก "รวมเป็นหน่วยฐาน"
+       ก่อนส่งต่อ เพราะตัวบวกสต็อกทีมอ่านตารางครั้งเดียวแล้ววนบวกทีละรายการ — ส่งสินค้าเดียวกันสองรายการแยกกันจะเขียนทับกันเอง */
   var items = [];
+  var byProduct = {};
   var bad = null;
   (payload.items || []).forEach(function(it) {
-    var q = parseFloat(it.qty) || 0;
-    if (q <= 0 || bad) return;
-    var c = _bzBaseQty(it.productId, q, it.unitCode, unitsByProduct);
-    if (!c.ok) { bad = 'ไม่พบหน่วย "' + unitLabelOf(it.unitCode) + '" ของสินค้า ' + it.productId; return; }
-    items.push({ productId: String(it.productId), qty: Math.round(c.base) });
+    if (bad) return;
+    var parts = Array.isArray(it.units) ? it.units : [{ unitCode: it.unitCode, qty: it.qty }];
+    parts.forEach(function(pt) {
+      var q = parseFloat(pt.qty) || 0;
+      if (q <= 0 || bad) return;
+      var c = _bzBaseQty(it.productId, q, pt.unitCode, unitsByProduct);
+      if (!c.ok) { bad = 'ไม่พบหน่วย "' + unitLabelOf(pt.unitCode) + '" ของสินค้า ' + it.productId; return; }
+      var pid = String(it.productId);
+      if (!byProduct[pid]) { byProduct[pid] = { productId: pid, base: 0 }; items.push(byProduct[pid]); }
+      byProduct[pid].base += c.base;
+    });
   });
   if (bad) return { success: false, message: bad };
+  items = items.map(function(x) { return { productId: x.productId, qty: Math.round(x.base) }; }).filter(function(x) { return x.qty > 0; });
   if (!items.length) return { success: false, message: 'ไม่มีรายการเบิก' };
   return _withDocLock(function() {
     var r = _restockHolder(String(camp.tenant_id), _bzKey(camp.record_id, team.record_id), items,

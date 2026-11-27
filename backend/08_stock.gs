@@ -21,6 +21,18 @@ function _restockHolder(tenantId, holder, items, refNote, movementType) {
   var user = { tenantId: tenantId, lineUserId: holder };
   if (!items || !items.length) return { success: false, message: 'ไม่มีรายการเบิก' };
 
+  /* ★ สินค้าเดียวกันมาหลายรายการ = รวมเป็นรายการเดียวก่อน — ตัวบวกด้านล่างอ่านตาราง van_stock ครั้งเดียวแล้ววนบวกทีละรายการ
+     รายการที่สองของสินค้าเดียวกันจะอ่านจำนวน "ก่อนบวกรายการแรก" แล้วเขียนทับ ของรายการแรกหายเงียบๆ (หรือต่อแถวซ้ำถ้าสินค้านั้นยังไม่มีแถว) */
+  var mergedQty = {}, mergedFirst = [];
+  items.forEach(function(it) {
+    var q = parseInt(it.qty) || 0, k = String(it.productId);
+    if (q <= 0) return;
+    if (!(k in mergedQty)) { mergedQty[k] = 0; mergedFirst.push(it); }
+    mergedQty[k] += q;
+  });
+  items = mergedFirst.map(function(it) { var o = {}; for (var f in it) o[f] = it[f]; o.qty = mergedQty[String(it.productId)]; return o; });
+  if (!items.length) return { success: false, message: 'ไม่มีรายการเบิก' };
+
   /* ★★ ตัดจากคลังกลาง **ก่อน** บวกขึ้นรถ (55_van_stock_link.gs) — ของไม่พอต้องปฏิเสธทั้งใบ
      ตั้งแต่ยังไม่แตะ van_stock ไม่งั้นรถได้ของที่คลังไม่มีจริง แล้วสองที่ไม่ตรงกันตลอดไป
      ★ ปิดอยู่ = คืน cost เป็น null แล้วทุกอย่างทำงานเหมือนเดิมเป๊ะ (ไม่แตะคลัง ไม่เขียนต้นทุน) */

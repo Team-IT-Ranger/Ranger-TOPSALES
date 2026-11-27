@@ -149,6 +149,23 @@ r = ctx.issueBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ produc
 eq('เบิกให้ทีม สำเร็จ', r.success, true);
 eq('★ แปลงหน่วยเป็นหน่วยฐาน: 2 ลัง×12 = 24 · 3 ชิ้น = 3', calls.restock[0].items, [{ productId: '101', qty: 24 }, { productId: '102', qty: 3 }]);
 eq('  ผู้ถือสต็อก = รหัสทีม (ไม่ใช่ตัวคน)', [calls.restock[0].holder, calls.restock[0].type], ['TEAM:1:' + teamA.record_id, 'blitz_issue']);
+// ── หนึ่งสินค้าเบิกได้หลายหน่วยในบรรทัดเดียว (ฟอร์ม ลัง · แพ็ค · ชิ้น) ──
+calls.restock = [];
+r = ctx.issueBlitzTeamStock(session, { teamId: teamA.record_id, items: [
+  { productId: 101, units: [{ unitCode: 'CT', qty: 5 }, { unitCode: 'PK', qty: 3 }, { unitCode: 'PC', qty: 2 }] },
+  { productId: 102, units: [{ unitCode: 'CT', qty: 0 }, { unitCode: 'PC', qty: 7 }] }] });
+eq('หลายหน่วยในบรรทัดเดียว สำเร็จ', r.success, true);
+eq('★ รวมเป็นหน่วยฐานรายการเดียวต่อสินค้า: 5 ลัง×12 + 3 แพ็ค×4 + 2 ชิ้น = 74 · สินค้า B ช่อง 0 ไม่นับ = 7',
+  calls.restock[0].items, [{ productId: '101', qty: 74 }, { productId: '102', qty: 7 }]);
+eq('  ตัวบวกสต็อกถูกเรียกครั้งเดียว (ไม่แตกเป็นหลายรายการของสินค้าเดียวกัน)', calls.restock.length, 1);
+calls.restock = [];
+r = ctx.issueBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, qty: 1, unitCode: 'CT' }, { productId: 101, qty: 2, unitCode: 'PK' }] });
+eq('★ สินค้าเดียวกันส่งมาแยกหลายรายการ (รูปเดิม) ก็ถูกรวม: 12 + 8 = 20', [r.success, calls.restock[0].items], [true, [{ productId: '101', qty: 20 }]]);
+r = ctx.issueBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, units: [{ unitCode: 'CT', qty: 1 }, { unitCode: 'XX', qty: 1 }] }] });
+eq('★ หลายหน่วยแต่มีหน่วยที่ไม่รู้จักหนึ่งตัว = ปฏิเสธทั้งใบ (ไม่เบิกเฉพาะส่วนที่ถูก)', [r.success, /ไม่พบหน่วย/.test(r.message || '')], [false, true]);
+r = ctx.issueBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, units: [{ unitCode: 'CT', qty: 0 }, { unitCode: 'PC', qty: 0 }] }] });
+eq('ทุกช่องเป็น 0 = ไม่มีรายการเบิก', [r.success, r.message], [false, 'ไม่มีรายการเบิก']);
+calls.restock = [];
 r = ctx.issueBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, qty: 1, unitCode: 'XX' }] });
 eq('★ หน่วยที่ไม่รู้จัก = ปฏิเสธ ไม่เดา (เบิกผิดสิบเท่าแก้ทีหลังยาก)', r.success, false);
 r = ctx.issueBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, qty: 0 }] });

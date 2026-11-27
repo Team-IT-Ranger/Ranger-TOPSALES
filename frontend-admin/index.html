@@ -620,6 +620,13 @@
   /* ★ ต้องตั้ง width เอง — กฎฟอร์มรวมของแอปคือ `.field input{width:100%}` ช่องติ๊กจึงถูกยืดเต็มบรรทัด
      แล้วกล่องติ๊กไปอยู่ชิดขวาสุด ห่างจากชื่อตัวแทนไปคนละฝั่งจอ (เจอตอนตรวจหน้าจอจริง) */
   .tr-pick input{ margin:0; width:auto; flex:0 0 auto; }
+  /* ฟอร์มเบิกของให้ทีม BLITZ — หนึ่งสินค้าหนึ่งบรรทัด: สินค้า | ลัง | แพ็ค | ชิ้น (หัวคอลัมน์อยู่บรรทัดเดียวด้านบน ไม่ซ้ำทุกแถว)
+     ★ ช่องกรอกต้องกว้างพอเห็นเลขหลักพัน (ชิ้นอาจเป็นร้อย) และไม่ถูกกฎฟอร์มรวม .field input{width:100%} ยืดจนล้นคอลัมน์ */
+  .bzi-grid{ display:grid; grid-template-columns:minmax(0,1fr) 84px 84px 84px; gap:8px; margin-bottom:8px; align-items:center; }
+  .bzi-grid input, .bzi-grid select{ margin:0; width:100%; min-width:0; box-sizing:border-box; }
+  .bzi-grid input{ text-align:right; }
+  .bzi-head{ margin-bottom:4px; font-size:12px; font-weight:600; color:var(--ink-soft); }
+  .bzi-head span:not(:first-child){ text-align:right; padding-right:10px; }
   .fieldset{ border:1px dashed var(--border); border-radius:8px; padding:12px 14px; margin-top:4px; }
   .fieldset legend{ font-size:11px; font-weight:700; color:var(--blue); padding:0 6px; letter-spacing:.02em; }
 
@@ -9070,9 +9077,13 @@ async function bzaIssueModal(teamId){
   if (plModalStale(tok)) return;
   BZA_ISSUE_ROWS = 0;
   const t = BZA.data.teams.filter(x => Number(x.id) === Number(teamId))[0];
-  plModal('<h3>เบิกของให้ '+esc(t.name)+'</h3><div id="bzi-rows"></div>' +
+  /* ★ หนึ่งสินค้า = หนึ่งบรรทัด มีช่องจำนวนแยกสามหน่วย (ลัง · แพ็ค · ชิ้น) ใส่พร้อมกันได้ — เบิก "5 ลัง กับเศษ 3 แพ็ค 2 ชิ้น" ไม่ต้องเพิ่มบรรทัดซ้ำ
+     ช่องไหนไม่ใช้ปล่อยว่างหรือ 0 · ระบบฝั่งเซิร์ฟเวอร์รวมเป็นหน่วยฐานให้ (ตัวคูณหน่วยอยู่ที่ product_units ที่เดียว ไม่คำนวณซ้ำที่หน้าเว็บ) */
+  plModal('<h3>เบิกของให้ '+esc(t.name)+'</h3>' +
+    '<div class="bzi-grid bzi-head"><span>สินค้า</span><span>ลัง</span><span>แพ็ค</span><span>ชิ้น</span></div>' +
+    '<div id="bzi-rows"></div>' +
     '<button class="btn btn-sm" onclick="bzaIssueAddRow()">+ เพิ่มสินค้า</button>' +
-    '<p class="form-hint">เลือกหน่วยที่เบิกได้ (ลัง/แพ็ค/ชิ้น) ระบบแปลงเป็นหน่วยฐานให้ · ถ้าเปิดการเชื่อมสต็อกรถกับคลังกลางไว้ (เมนู 5.9.1) ของจะถูกตัดจากคลังกลางจริง และปฏิเสธทั้งใบถ้าคลังมีของไม่พอ</p>' +
+    '<p class="form-hint">ใส่ได้ทั้ง ลัง · แพ็ค · ชิ้น ในบรรทัดเดียวกัน เช่น 5 ลัง 3 แพ็ค 2 ชิ้น (ช่องที่ไม่ใช้ปล่อยว่าง) ระบบแปลงและรวมเป็นหน่วยฐานให้ · จำนวนต้องเป็นจำนวนเต็ม — เศษของลังให้ใส่ในช่องแพ็คหรือชิ้น · ถ้าเปิดการเชื่อมสต็อกรถกับคลังกลางไว้ (เมนู 5.9.1) ของจะถูกตัดจากคลังกลางจริง และปฏิเสธทั้งใบถ้าคลังมีของไม่พอ</p>' +
     plModalActions('plBusy(() => bzaIssueSave('+teamId+'))', '✓ เบิก'));
   bzaIssueAddRow();
 }
@@ -9080,15 +9091,24 @@ function bzaIssueAddRow(){
   const i = BZA_ISSUE_ROWS++;
   const opts = '<option value="">— เลือกสินค้า —</option>' + productsCache.filter(p => isOn(p.is_active)).map(p =>
     '<option value="'+esc(p.record_id)+'">'+esc(p.product_code || '')+' · '+esc(p.name)+'</option>').join('');
+  const qty = (unit, ph) => '<input type="number" min="0" step="1" inputmode="numeric" id="bzi-'+unit+i+'" placeholder="'+ph+'" aria-label="'+ph+'">';
   document.getElementById('bzi-rows').insertAdjacentHTML('beforeend',
-    '<div style="display:grid;grid-template-columns:1fr 90px 90px;gap:8px;margin-bottom:8px"><select id="bzi-p'+i+'">'+opts+'</select>' +
-    '<input type="number" min="1" id="bzi-q'+i+'" placeholder="จำนวน"><select id="bzi-u'+i+'"><option value="CT">ลัง</option><option value="PK">แพ็ค</option><option value="PC">ชิ้น</option></select></div>');
+    '<div class="bzi-grid"><select id="bzi-p'+i+'">'+opts+'</select>' + qty('ct', 'ลัง') + qty('pk', 'แพ็ค') + qty('pc', 'ชิ้น') + '</div>');
 }
 async function bzaIssueSave(teamId){
   const items = [];
+  const UNITS = [['ct', 'CT', 'ลัง'], ['pk', 'PK', 'แพ็ค'], ['pc', 'PC', 'ชิ้น']];
   for (let i = 0; i < BZA_ISSUE_ROWS; i++) {
-    const p = document.getElementById('bzi-p'+i).value, q = parseFloat(document.getElementById('bzi-q'+i).value) || 0;
-    if (p && q > 0) items.push({ productId: p, qty: q, unitCode: document.getElementById('bzi-u'+i).value });
+    const p = document.getElementById('bzi-p'+i).value;
+    const units = [];
+    for (const [k, code, label] of UNITS) {
+      const raw = document.getElementById('bzi-'+k+i).value, q = parseFloat(raw);
+      if (raw === '' || !(q > 0)) continue;
+      if (!Number.isInteger(q)) { plModalErr('จำนวน'+label+'ต้องเป็นจำนวนเต็ม — เศษให้ใส่ในช่องแพ็คหรือชิ้นแทน'); return; }
+      units.push({ unitCode: code, qty: q });
+    }
+    if (units.length && !p) { plModalErr('บรรทัดที่ '+(i+1)+' ใส่จำนวนแล้วแต่ยังไม่ได้เลือกสินค้า'); return; }
+    if (p && units.length) items.push({ productId: p, units: units });
   }
   if (!items.length) { plModalErr('เลือกสินค้าและใส่จำนวนอย่างน้อย 1 รายการ'); return; }
   const r = await callApi('issueBlitzTeamStock', { teamId: teamId, items: items });

@@ -315,5 +315,27 @@ r = ctx.restockVan(U2, { items: [{ productId: 101, qty: 5 }] });
 eq('★ ผู้ป้อนบิลของทีมเบิกของเข้าทีมเองจากมือถือไม่ได้ (เบิกโดยศูนย์)', [r.success, /เบิกโดยศูนย์/.test(r.message || '')], [false, true]);
 Object.keys(CENTRAL).forEach(k => delete CENTRAL[k]);
 
+// ── _restockHolder: สินค้าเดียวกันมาหลายรายการต้องรวมกัน (ตัวบวกอ่านตารางครั้งเดียวแล้ววนบวกทีละรายการ) ──
+{
+  const saved = { issue: ctx.issueVanStockFromWarehouse, clear: ctx.cacheClear };
+  let issuedItems = null;
+  ctx.issueVanStockFromWarehouse = (tid, items) => { issuedItems = items; return { success: true, cost: null, skipped: 'จำลอง' }; };
+  ctx.cacheClear = () => {};
+  reset();   // van_stock ของ U1: 101=50, 102=3
+  r = ctx._restockHolder('T1', 'U1', [{ productId: 101, qty: 3 }, { productId: 101, qty: 4 }, { productId: 102, qty: 2 }], 'ทดสอบ', 'restock');
+  eq('เบิกสินค้าเดียวกันสองรายการ: สำเร็จ', r.success, true);
+  eq('★ จำนวนรวมกันครบ ไม่ใช่รายการหลังเขียนทับรายการแรก: 50+3+4 = 57', sheets.van_stock.find(s => s.line_user_id === 'U1' && s.product_id === '101').qty, 57);
+  eq('  สินค้าอื่นบวกตามปกติ 3+2 = 5', sheets.van_stock.find(s => s.line_user_id === 'U1' && s.product_id === '102').qty, 5);
+  eq('  ตัวตัดคลังกลางได้รับรายการที่รวมแล้ว (ไม่ใช่สามรายการ)', issuedItems.map(x => [String(x.productId), x.qty]), [['101', 7], ['102', 2]]);
+  eq('  บันทึกการเคลื่อนไหวครั้งเดียวต่อสินค้า (ไม่ซ้ำ)', sheets.stock_movements.filter(m => String(m.product_id) === '101').length, 1);
+  reset();
+  r = ctx._restockHolder('T1', 'UNEW', [{ productId: 101, qty: 3 }, { productId: 101, qty: 4 }], 'ทดสอบ', 'restock');
+  eq('★ ผู้ถือที่ยังไม่มีแถวสต็อก + สินค้าเดียวกันสองรายการ → แถวเดียว ไม่ต่อแถวซ้ำ',
+    sheets.van_stock.filter(s => s.line_user_id === 'UNEW').map(s => [s.product_id, s.qty]), [[101, 7]]);
+  r = ctx._restockHolder('T1', 'U1', [{ productId: 101, qty: 0 }], 'ทดสอบ', 'restock');
+  eq('ทุกรายการจำนวน 0 = ไม่มีรายการเบิก', [r.success, r.message], [false, 'ไม่มีรายการเบิก']);
+  ctx.issueVanStockFromWarehouse = saved.issue; ctx.cacheClear = saved.clear;
+}
+
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
