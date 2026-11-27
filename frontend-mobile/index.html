@@ -92,6 +92,9 @@
   .cust-debt.hot b{ color:#8C2F2F; }
   .field-row label{ flex:none; }
   .field-row .inp{ flex:1; min-width:0; padding:8px 10px; font-size:13.5px; }
+  .field-row .btn-newshop{ flex:none; white-space:nowrap; }
+  /* ฟอร์มเปิดร้านที่ถูกย้ายมาอยู่ในหน้าต่างล่าง — ไม่ต้องมีกรอบการ์ดซ้อนในหน้าต่างอีกชั้น */
+  .sheet #c-add{ border:0; padding:0; margin:0 !important; background:transparent; }
   .inp{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:15px; }
   .seg{ display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:3px; gap:3px; }
   .seg button{ flex:1; border:none; background:none; border-radius:8px; padding:8px; font-weight:600; font-size:13.5px; color:var(--ink-soft); }
@@ -329,6 +332,8 @@
   </div>
 </div>
 <div class="sheet-bg hidden" id="ap-sheet-bg" onclick="if(event.target===this)apCloseSheet()"><div class="sheet" id="ap-sheet"></div></div>
+<!-- หน้าต่างเปิดร้านใหม่จากหน้าขาย: ว่างเปล่าไว้ก่อน ฟอร์ม #c-add ถูกย้ายเข้ามาตอนเปิด และย้ายกลับแท็บลูกค้าตอนปิด -->
+<div class="sheet-bg hidden" id="cust-sheet-bg" onclick="if(event.target===this)toggleAddCust(false)"><div class="sheet" id="cust-sheet"></div></div>
 
 <!-- ═══ แดชบอร์ด BLITZ RANGER (ผู้อำนวยการโครงการ) ═══
      เปิดจากลิงก์ ?go=blitz หรือการ์ดในหน้าแรก · ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ทุกครั้ง (62_blitz.gs) ไม่ใช่จากลิงก์
@@ -409,7 +414,10 @@
     <div class="stack" style="margin-bottom:12px">
       <div class="field">
         <div class="field-row"><label for="s-cust-q">ลูกค้า</label>
-          <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()"></div>
+          <input class="inp" id="s-cust-q" placeholder="ค้นหาชื่อร้าน..." oninput="renderCustSelect()">
+          <!-- ★ เปิดร้านใหม่ได้จากหน้าขายเลย ไม่ต้องสลับไปแท็บลูกค้า (27 พ.ย. 2026) — ใช้ฟอร์มตัวเดียวกับแท็บลูกค้า
+               ย้ายมาแสดงในหน้าต่างล่างชั่วคราว (openNewShopFromSell) ไม่ได้ทำฟอร์มชุดที่สอง -->
+          <button type="button" class="btn btn-sm btn-primary btn-newshop" onclick="openNewShopFromSell()">+ เปิดร้านใหม่</button></div>
         <select class="inp" id="s-cust" onchange="cartChanged()"></select>
         <!-- ★ หนี้ค้างของร้าน — ต้องเห็น "ตอนยืนอยู่หน้าร้าน" ไม่ใช่ตอนกลับถึงศูนย์
              ตัวเลขมากับ bootstrap (06_bootstrap.gs) จึงไม่ต้องยิงคำขอเพิ่มตอนเลือกร้าน -->
@@ -490,7 +498,7 @@
     <div style="display:flex;gap:8px;margin-bottom:12px"><input class="inp" id="c-q" placeholder="ค้นหาลูกค้า..." oninput="renderCustomers()"><button class="btn btn-primary" onclick="toggleAddCust(true)">+ ขอเปิดร้าน</button></div>
     <div class="card stack hidden" id="c-add" style="margin-bottom:12px">
       <h3>ขอเปิดร้านใหม่</h3>
-      <div class="muted" style="margin-top:-4px">ส่งให้แอดมินอนุมัติก่อน อนุมัติแล้วจะแจ้งกลับมาที่หน้านี้</div>
+      <div class="muted" style="margin-top:-4px">ขายเงินสดได้ทันทีหลังส่ง · ขายเครดิตได้เมื่อแอดมินอนุมัติ (จะแจ้งกลับมาที่หน้าลูกค้า)</div>
       <input class="inp" id="c-name" placeholder="ชื่อร้าน *">
       <textarea class="inp" id="c-addr" rows="2" placeholder="ที่อยู่ร้าน"></textarea>
       <input class="inp" id="c-tax" inputmode="numeric" maxlength="13" placeholder="เลขผู้เสียภาษี / บัตรประชาชน (13 หลัก)">
@@ -1831,9 +1839,28 @@ function renderCustomers(){
 }
 function toggleAddCust(on){
   $('c-add').classList.toggle('hidden', !on);
-  if (!on) return;
+  if (!on) { custFormHome(); return; }
   fillShopTypes();
   $('c-name').focus();
+}
+/* ★ ฟอร์มเปิดร้านมีชุดเดียว (#c-add อยู่ในแท็บลูกค้า) — เปิดจากหน้าขายด้วยการ "ย้าย" ฟอร์มเดิมมาแสดงในหน้าต่างล่าง
+   แล้วย้ายกลับตอนปิด ไม่ได้คัดลอก: id ซ้ำสองชุดจะทำให้ $('c-name') ชี้ผิดชุด และต้องแก้ฟอร์มสองที่ทุกครั้ง */
+let CUST_FORM_HOME = null;
+function openNewShopFromSell(){
+  const f = $('c-add');
+  if (!CUST_FORM_HOME) CUST_FORM_HOME = { parent: f.parentNode, next: f.nextSibling };
+  $('cust-sheet').appendChild(f);
+  $('cust-sheet-bg').classList.remove('hidden');
+  toggleAddCust(true);
+  /* คำที่พิมพ์ค้นหาไว้แล้วหาไม่เจอ มักเป็นชื่อร้านที่กำลังจะเปิด — ใส่ให้เลย ไม่ต้องพิมพ์ซ้ำ (ไม่ทับที่กรอกค้างไว้) */
+  const q = $('s-cust-q').value.trim();
+  if (q && !$('c-name').value.trim()) $('c-name').value = q;
+}
+function custFormHome(){
+  $('cust-sheet-bg').classList.add('hidden');
+  if (!CUST_FORM_HOME) return;
+  const f = $('c-add');
+  if (f.parentNode !== CUST_FORM_HOME.parent) CUST_FORM_HOME.parent.insertBefore(f, CUST_FORM_HOME.next);
 }
 /* ตัวเลือกประเภทร้านมากับ bootstrap (ไม่ยิงคำขอเพิ่ม) · ว่าง = ยังไม่ได้ seed ชีต shop_types
    ปล่อยให้ส่งคำขอได้ต่อโดยไม่ระบุประเภท ดีกว่าบล็อกเซลส์ที่ยืนอยู่หน้าร้าน */
