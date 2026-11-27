@@ -2,7 +2,7 @@
      เพิ่ม action / ตาราง / โมดูล / เอกสารใหม่แล้ว รันตัวนี้ซ้ำ แบบจะตามเอง -->
 # แผ่น 06 — รายการประกอบแบบ (สร้างจากโค้ด)
 
-> สร้างเมื่อ 2026-11-26 จากโค้ดใน repo นี้ · `node .dev/gen-blueprint.js` เพื่อสร้างใหม่
+> สร้างเมื่อ 2026-11-27 จากโค้ดใน repo นี้ · `node .dev/gen-blueprint.js` เพื่อสร้างใหม่
 > · `node .dev/gen-blueprint.js --check` เพื่อเช็คว่าแบบยังตรงกับโค้ดอยู่
 
 แผ่นนี้ตอบคำถาม **"มีอะไรอยู่บ้าง"** · ส่วน **"ทำไมและห้ามแตะอะไร"** อยู่ในแผ่น
@@ -12,9 +12,9 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,796 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,575 |
-| แอปมือถือ (LIFF) | `frontend-mobile/` | 1,990 |
+| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,820 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,595 |
+| แอปมือถือ (LIFF) | `frontend-mobile/` | 2,019 |
 | ตารางข้อมูล | 72 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 231 แอดมิน |  |
 
@@ -32,7 +32,7 @@
 | `05_router.gs` | 358 | ROUTER |
 | `06_bootstrap.gs` | 337 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 413 | SALES (Mobile App — Cash Van) |
-| `08_stock.gs` | 86 | VAN STOCK (Mobile App) |
+| `08_stock.gs` | 98 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
 | `10_master_data.gs` | 449 | MASTER DATA |
 | `11_promotions.gs` | 198 | PROMOTION ENGINE |
@@ -86,7 +86,7 @@
 | `59_dashboard_export.gs` | 434 | ส่งยอดขายออกเป็นไฟล์กลางของ Dashboard บริษัท (CSV ต่อตัวแทน) |
 | `60_sales_facts.gs` | 245 | ยอดขายรายบรรทัด — แหล่งความจริงชุดเดียวของทั้งระบบ |
 | `61_staff_approval.gs` | 564 | อนุมัติผู้ใช้งานแอปมือถือผ่าน LINE (25 พ.ย. 2026) |
-| `62_blitz.gs` | 521 | แคมเปญ BLITZ RANGER (26 พ.ย. 2026) |
+| `62_blitz.gs` | 533 | แคมเปญ BLITZ RANGER (26 พ.ย. 2026) |
 | `99_dev_tools.gs` | 478 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -595,7 +595,7 @@
 |---|---|---|
 | `.dev/test-address-refs.js` | หน่วย (ไม่ยิงเน็ต) | 116 |
 | `.dev/test-barcode.js` | หน่วย (ไม่ยิงเน็ต) | 111 |
-| `.dev/test-blitz.js` | หน่วย (ไม่ยิงเน็ต) | 251 |
+| `.dev/test-blitz.js` | หน่วย (ไม่ยิงเน็ต) | 268 |
 | `.dev/test-bot-line.js` | หน่วย (ไม่ยิงเน็ต) | 698 |
 | `.dev/test-cancel-guard.js` | หน่วย (ไม่ยิงเน็ต) | 144 |
 | `.dev/test-customer-bulk.js` | หน่วย (ไม่ยิงเน็ต) | 191 |
@@ -621,7 +621,7 @@
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 406 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
 | `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 2,061 |
-| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 320 |
+| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 342 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
 | `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 887 |
