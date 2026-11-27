@@ -190,6 +190,23 @@ eq('★ ปิดการเชื่อมสต็อกรถกับคล
   [r.success, calls.stockIn.length, /ยังไม่ได้บวกคลังกลาง/.test(r.message || '')], [true, 0, true]);
 ctx.__vanIssue = true;
 
+// ── รับคืนหลายหน่วยในบรรทัดเดียว (ฟอร์ม ลัง · แพ็ค · ชิ้น) — สินค้า 101: ลัง=12 แพ็ค=4 ──
+calls.stockIn = [];
+T.van_stock = [{ line_user_id: KEY, product_id: '101', qty: 100, avg_cost: 10 }, { line_user_id: KEY, product_id: '102', qty: 20, avg_cost: 5 }];
+r = ctx.returnBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, units: [{ unitCode: 'CT', qty: 2 }, { unitCode: 'PK', qty: 3 }, { unitCode: 'PC', qty: 5 }] }] });
+eq('★ คืน 2 ลัง 3 แพ็ค 5 ชิ้น = 24+12+5 = 41 หน่วยฐาน: สต็อกทีม 100→59', [r.success, T.van_stock[0].qty], [true, 59]);
+eq('  คืนเข้าคลังกลางครั้งเดียว 41 ชิ้น', [calls.stockIn.length, calls.stockIn[0][3]], [1, 41]);
+r = ctx.returnBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, units: [{ unitCode: 'CT', qty: 4 }, { unitCode: 'PK', qty: 3 }] }] });
+eq('★ รวมหลายหน่วยแล้วเกินที่ทีมถือ (48+12 = 60 > 59) = ปฏิเสธทั้งใบ ไม่คืนเฉพาะส่วนที่ไม่เกิน', [r.success, /คืนเกิน/.test(r.message || ''), T.van_stock[0].qty], [false, true, 59]);
+r = ctx.returnBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, units: [{ unitCode: 'CT', qty: 1 }, { unitCode: 'XX', qty: 1 }] }] });
+eq('หน่วยที่ไม่รู้จัก = ปฏิเสธทั้งใบ', [r.success, /ไม่พบหน่วย/.test(r.message || ''), T.van_stock[0].qty], [false, true, 59]);
+r = ctx.returnBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, units: [{ unitCode: 'CT', qty: 0 }, { unitCode: 'PC', qty: 0 }] }] });
+eq('ทุกช่องเป็น 0 = ไม่มีของให้คืน', [r.success, r.message], [false, 'ไม่มีของให้คืน']);
+r = ctx.returnBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, units: [{ unitCode: 'CT', qty: 1 }, { unitCode: 'PC', qty: 1 }] }, { productId: 102, units: [{ unitCode: 'CT', qty: 3 }] }] });
+eq('คืนหลายสินค้าพร้อมกัน: 101 → 59-13 = 46 · 102 (ลัง=6) → 20-18 = 2', [r.success, T.van_stock.map(x => x.qty)], [true, [46, 2]]);
+r = ctx.returnBlitzTeamStock(session, { teamId: teamA.record_id, items: [{ productId: 101, qty: 6 }] });
+eq('รูปเดิม {productId, qty} (หน่วยฐาน) ยังใช้ได้', [r.success, T.van_stock[0].qty], [true, 40]);
+
 console.log('\n── แดชบอร์ด ──');
 // 4 ใบของทีม A + 2 ใบทีม B + ใบยกเลิก/ปฏิเสธ/ร่าง + ใบที่ไม่ใช่แคมเปญ (ต้องไม่นับ)
 const tA = String(teamA.record_id), tB = String(teamB.record_id);
@@ -258,6 +275,8 @@ T.van_stock = [{ line_user_id: KEY, product_id: '101', qty: 7, avg_cost: 10 }, {
 const ad = ctx.getBlitzAdmin(session, { tenantId: 'T1' });
 eq('เห็นแคมเปญ 5 ทีม และสมาชิก', [ad.success, ad.campaign.name, ad.teams.length, ad.members.length > 0], [true, 'BLITZ RANGER', 5, true]);
 eq('★ สต็อกของทีม A แสดงเฉพาะของทีม ไม่ปนสต็อกรถของคน (U2 99 ชิ้น ไม่โผล่)', ad.teams.find(t => t.code === 'A').stock.map(s => [s.productId, s.qty]), [['101', 7]]);
+eq('★ สต็อกทีมส่งตัวคูณลัง/แพ็คไปด้วย (ไว้แตกยอดเป็น ลัง แพ็ค ชิ้น ที่หน้ารับคืนของ) · สินค้าที่ไม่มีแพ็ค = 0',
+  [ad.teams.find(t => t.code === 'A').stock[0].ctFactor, ad.teams.find(t => t.code === 'A').stock[0].pkFactor], [12, 4]);
 eq('ลิงก์สำหรับผู้อำนวยการ (เปิดหน้าแดชบอร์ดในแอป)', ad.viewerLink, 'https://liff.line.me/2010417493-TEST?go=blitz');
 eq('ตัวแทนอื่นเปิดแคมเปญของ T1 ไม่ได้', ctx.getBlitzAdmin({ adminUserId: '9', tenant_id: 'T2' }, { tenantId: 'T1' }).success, false);
 r = ctx.removeBlitzMember(session, { id: C.blitz_members[0].record_id });

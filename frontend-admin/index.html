@@ -627,6 +627,10 @@
   .bzi-grid input{ text-align:right; }
   .bzi-head{ margin-bottom:4px; font-size:12px; font-weight:600; color:var(--ink-soft); }
   .bzi-head span:not(:first-child){ text-align:right; padding-right:10px; }
+  /* ฟอร์มรับคืน: เพิ่มคอลัมน์ "ทีมถืออยู่" (ลัง แพ็ค ชิ้น) ก่อนช่องกรอกสามช่อง */
+  .bzi-grid.bzr{ grid-template-columns:minmax(0,1fr) 170px 76px 76px 76px; }
+  .bzi-grid.bzr .bzr-have{ text-align:right; font-size:13px; line-height:1.3; }
+  .bzi-grid.bzr input:disabled{ background:var(--ground); cursor:not-allowed; opacity:.7; }
   .fieldset{ border:1px dashed var(--border); border-radius:8px; padding:12px 14px; margin-top:4px; }
   .fieldset legend{ font-size:11px; font-weight:700; color:var(--blue); padding:0 6px; letter-spacing:.02em; }
 
@@ -9115,17 +9119,57 @@ async function bzaIssueSave(teamId){
   if (!r.success) { plModalErr(r.message); return; }
   plModalClose(); toast(r.message); BZA.data = null; bzaReload();
 }
+/* ── รับคืนของ: ฟอร์มเดียวกับตอนเบิก — หนึ่งสินค้าหนึ่งบรรทัด ช่อง ลัง · แพ็ค · ชิ้น ใส่พร้อมกันได้ ──
+   ★ ตัวคูณหน่วย (ctFactor/pkFactor) มาจาก backend (getBlitzAdmin) ใช้แค่ "แตกยอดที่ทีมถืออยู่" ให้อ่านง่าย และเตือนคืนเกินก่อนส่ง
+     การแปลงเป็นหน่วยฐานจริงและการตรวจคืนเกินที่ตัดสินจริงอยู่ที่ backend (returnBlitzTeamStock) ที่เดียว */
+function bzaBreakdown(qty, s){
+  const fx = [['ct', Number(s.ctFactor) || 0], ['pk', Number(s.pkFactor) || 0]].filter(x => x[1] > 1).sort((a, b) => b[1] - a[1]);
+  const out = { ct: 0, pk: 0, pc: 0 }; let rem = Math.max(0, Math.floor(qty));
+  fx.forEach(([k, f]) => { out[k] = Math.floor(rem / f); rem -= out[k] * f; });
+  out.pc = rem; return out;
+}
+function bzaBreakText(b){
+  const p = [];
+  if (b.ct) p.push(repQty(b.ct)+' ลัง'); if (b.pk) p.push(repQty(b.pk)+' แพ็ค'); if (b.pc || !p.length) p.push(repQty(b.pc)+' ชิ้น');
+  return p.join(' ');
+}
 function bzaReturnModal(teamId){
   const t = BZA.data.teams.filter(x => Number(x.id) === Number(teamId))[0];
+  const cell = (k, i, s, v, ph) => { const has = k === 'pc' || (Number(k === 'ct' ? s.ctFactor : s.pkFactor) || 0) > 1;   // ไม่มีหน่วยนี้ในสินค้า = ปิดช่อง กรอกไปก็ถูกปฏิเสธ
+    return '<input type="number" min="0" step="1" inputmode="numeric" id="bzr-'+k+i+'" data-k="'+k+'" value="'+(has && v ? v : '')+'" placeholder="'+(has ? ph : '—')+'" aria-label="'+ph+'"'+(has ? '' : ' disabled')+'>'; };
   plModal('<h3>รับคืนของจาก '+esc(t.name)+'</h3>' +
-    '<div class="table-wrap"><table><thead><tr><th>สินค้า</th><th style="text-align:right">ทีมถืออยู่</th><th style="text-align:right">คืนครั้งนี้ (ชิ้น)</th></tr></thead><tbody>' +
-    t.stock.map((s, i) => '<tr><td class="wrap">'+esc(s.name)+'</td><td class="num">'+repQty(s.qty)+'</td><td><input type="number" min="0" max="'+s.qty+'" id="bzr-q'+i+'" value="'+s.qty+'" data-pid="'+esc(s.productId)+'" style="width:110px;text-align:right"></td></tr>').join('') +
-    '</tbody></table></div><p class="form-hint">ใส่จำนวนที่รับคืนจริง (ตั้งต้นคืนทั้งหมด) — ของเข้าคลังกลางด้วยต้นทุนที่ทีมพกมา</p>' +
-    plModalActions('plBusy(() => bzaReturnSave('+teamId+', '+t.stock.length+'))', '✓ รับคืน'));
+    '<div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-sm" onclick="bzaReturnFill(true)">คืนทั้งหมด</button><button class="btn btn-sm" onclick="bzaReturnFill(false)">ล้างช่อง</button></div>' +
+    '<div class="bzi-grid bzr bzi-head"><span>สินค้า</span><span>ทีมถืออยู่</span><span>คืน ลัง</span><span>แพ็ค</span><span>ชิ้น</span></div>' +
+    t.stock.map((s, i) => { const b = bzaBreakdown(s.qty, s);
+      return '<div class="bzi-grid bzr" data-pid="'+esc(s.productId)+'" data-qty="'+s.qty+'" data-ct="'+(Number(s.ctFactor) || 0)+'" data-pk="'+(Number(s.pkFactor) || 0)+'">' +
+        '<span class="wrap" title="'+esc(s.name)+'"><span class="mono-data">'+esc(s.code)+'</span> '+esc(s.name)+'</span>' +
+        '<span class="bzr-have">'+bzaBreakText(b)+'<br><span class="muted">รวม '+repQty(s.qty)+' ชิ้น</span></span>' +
+        cell('ct', i, s, b.ct, 'ลัง') + cell('pk', i, s, b.pk, 'แพ็ค') + cell('pc', i, s, b.pc, 'ชิ้น') + '</div>'; }).join('') +
+    '<p class="form-hint">ตั้งต้นคืนทั้งหมด (แตกเป็น ลัง/แพ็ค/ชิ้นให้แล้ว) — แก้เป็นจำนวนที่รับคืนจริงได้ ช่องไหนไม่คืนปล่อยว่าง · ของเข้าคลังกลางด้วยต้นทุนที่ทีมพกมา · จำนวนต้องเป็นจำนวนเต็ม และคืนเกินที่ทีมถืออยู่ไม่ได้</p>' +
+    plModalActions('plBusy(() => bzaReturnSave('+teamId+'))', '✓ รับคืน'));
 }
-async function bzaReturnSave(teamId, n){
+function bzaReturnFill(all){
+  document.querySelectorAll('.bzi-grid.bzr[data-pid]').forEach(row => {
+    const s = { ctFactor: row.dataset.ct, pkFactor: row.dataset.pk }, b = all ? bzaBreakdown(Number(row.dataset.qty), s) : { ct: 0, pk: 0, pc: 0 };
+    ['ct', 'pk', 'pc'].forEach(k => { const el = row.querySelector('[data-k="'+k+'"]'); if (el && !el.disabled) el.value = b[k] || ''; });
+  });
+}
+async function bzaReturnSave(teamId){
   const items = [];
-  for (let i = 0; i < n; i++) { const el = document.getElementById('bzr-q'+i), q = parseFloat(el.value) || 0; if (q > 0) items.push({ productId: el.getAttribute('data-pid'), qty: q }); }
+  const LABEL = { ct: 'ลัง', pk: 'แพ็ค', pc: 'ชิ้น' }, CODE = { ct: 'CT', pk: 'PK', pc: 'PC' };
+  for (const row of document.querySelectorAll('.bzi-grid.bzr[data-pid]')) {
+    const units = []; let base = 0;
+    for (const k of ['ct', 'pk', 'pc']) {
+      const el = row.querySelector('[data-k="'+k+'"]'); if (!el || el.disabled || el.value === '') continue;
+      const q = parseFloat(el.value); if (!(q > 0)) continue;
+      if (!Number.isInteger(q)) { plModalErr('จำนวน'+LABEL[k]+'ต้องเป็นจำนวนเต็ม — เศษให้ใส่ในช่องหน่วยที่เล็กกว่า'); return; }
+      units.push({ unitCode: CODE[k], qty: q });
+      base += q * (k === 'ct' ? Number(row.dataset.ct) : k === 'pk' ? Number(row.dataset.pk) : 1);
+    }
+    if (!units.length) continue;
+    if (base > Number(row.dataset.qty)) { plModalErr('คืนเกินที่ทีมถืออยู่ — ' + row.querySelector('.wrap').textContent.trim() + ' ถืออยู่ ' + repQty(row.dataset.qty) + ' ชิ้น แต่ใส่คืนรวม ' + repQty(base) + ' ชิ้น'); return; }
+    items.push({ productId: row.dataset.pid, units: units });
+  }
   if (!items.length) { plModalErr('ไม่มีรายการคืน'); return; }
   const r = await callApi('returnBlitzTeamStock', { teamId: teamId, items: items });
   if (!r.success) { plModalErr(r.message); return; }

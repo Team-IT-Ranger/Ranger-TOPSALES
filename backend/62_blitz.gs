@@ -149,13 +149,24 @@ function getBlitzAdmin(session, payload) {
     .sort(function(a, b) { return String(a.code).localeCompare(String(b.code)); });
   var names = {};
   centralObjects('products').forEach(function(p) { names[String(p.record_id)] = { name: p.name, code: p.product_code }; });
+  /* ตัวคูณหน่วยของแต่ละสินค้า (ลัง/แพ็ค = กี่หน่วยฐาน) ไว้ให้หน้ารับคืนของแตกยอดที่ทีมถืออยู่เป็น "ลัง แพ็ค ชิ้น" ให้คนอ่านออก
+     · หน้าเว็บไม่คิดตัวคูณเอง (ตัวคูณอยู่ที่ product_units ที่เดียว) แค่เอาไปแตกยอดแสดงผล · ไม่มีตัวคูณ = 0 (หน้าเว็บข้ามหน่วยนั้น) */
+  var factorsBy = {};
+  centralObjects('product_units').forEach(function(u) {
+    var f = parseFloat(u.unit_factor) || 0; if (f <= 1) return;
+    var o = (factorsBy[String(u.product_id)] = factorsBy[String(u.product_id)] || { ct: 0, pk: 0 });
+    if (isCaseUnit(u.unit_code) && !o.ct) o.ct = f;
+    else if (isPackUnit(u.unit_code) && !o.pk) o.pk = f;
+  });
   var stockBy = {};
   tenantObjectsIfExists(T.tenantId, 'van_stock').forEach(function(s) {
     var k = String(s.line_user_id || '');
     if (!_bzIsTeamKey(k)) return;
     var q = Number(s.qty) || 0;
     if (!q) return;
-    (stockBy[k] = stockBy[k] || []).push({ productId: String(s.product_id), code: (names[String(s.product_id)] || {}).code || '', name: (names[String(s.product_id)] || {}).name || ('สินค้า ' + s.product_id), qty: q, cost: Number(s.avg_cost) || 0 });
+    var fx = factorsBy[String(s.product_id)] || { ct: 0, pk: 0 };
+    (stockBy[k] = stockBy[k] || []).push({ productId: String(s.product_id), code: (names[String(s.product_id)] || {}).code || '', name: (names[String(s.product_id)] || {}).name || ('สินค้า ' + s.product_id), qty: q, cost: Number(s.avg_cost) || 0,
+      ctFactor: fx.ct, pkFactor: fx.pk });
   });
   out.teams = teams.map(function(t) {
     return { id: String(t.record_id), code: String(t.code || ''), name: String(t.name || ''), targetSales: Number(t.target_sales) || 0,
@@ -353,7 +364,8 @@ function issueBlitzTeamStock(session, payload) {
   });
 }
 
-/** payload: { teamId, all?:true, items?:[{productId, qty}] (หน่วยฐาน) } — คืนของที่เหลือเข้าคลังกลาง (ตอนปิดวัน) */
+/** payload: { teamId, all?:true, items?:[{productId, units:[{unitCode, qty}]}] } — คืนของที่เหลือเข้าคลังกลาง (ตอนปิดวัน)
+ *  รูปเดิม items:[{productId, qty}] (หน่วยฐาน) ยังใช้ได้ · หลายหน่วยของสินค้าเดียวกันรวมเป็นหน่วยฐานก้อนเดียว (แบบเดียวกับตอนเบิก) */
 function returnBlitzTeamStock(session, payload) {
   var err = _requirePermission(session, 'inventory', 'edit'); if (err) return err;
   payload = payload || {};
@@ -361,11 +373,25 @@ function returnBlitzTeamStock(session, payload) {
   if (!team) return { success: false, message: 'ไม่พบทีมนี้' };
   var G = _bzCampaignForSession(session, team.campaign_id); if (G.err) return G.err;
   var camp = G.camp, tenantId = String(camp.tenant_id), key = _bzKey(camp.record_id, team.record_id);
+  var unitsByProduct = {};
+  centralObjects('product_units').forEach(function(u) { (unitsByProduct[String(u.product_id)] = unitsByProduct[String(u.product_id)] || []).push(u); });
   return _withDocLock(function() {
     var have = vanStockCost(tenantId, key);
-    var want = {};
+    var want = {}, bad = null;
     if (payload.all) Object.keys(have).forEach(function(pid) { if (have[pid].qty > 0) want[pid] = have[pid].qty; });
-    else (payload.items || []).forEach(function(it) { var q = Math.floor(parseFloat(it.qty) || 0); if (q > 0) want[String(it.productId)] = (want[String(it.productId)] || 0) + q; });
+    else (payload.items || []).forEach(function(it) {
+      if (bad) return;
+      var parts = Array.isArray(it.units) ? it.units : [{ unitCode: UNIT_PC, qty: it.qty }];   // รูปเดิม = หน่วยฐานตรงๆ
+      parts.forEach(function(pt) {
+        var q = parseFloat(pt.qty) || 0;
+        if (q <= 0 || bad) return;
+        var c = _bzBaseQty(it.productId, q, pt.unitCode, unitsByProduct);
+        if (!c.ok) { bad = 'ไม่พบหน่วย "' + unitLabelOf(pt.unitCode) + '" ของสินค้า ' + it.productId; return; }
+        want[String(it.productId)] = (want[String(it.productId)] || 0) + c.base;
+      });
+    });
+    if (bad) return { success: false, message: bad };
+    Object.keys(want).forEach(function(pid) { want[pid] = Math.floor(want[pid] + 1e-9); if (want[pid] <= 0) delete want[pid]; });   // ปัดลง เหมือนของเดิม — คืนเกินที่ขอไม่ได้
     var pids = Object.keys(want);
     if (!pids.length) return { success: false, message: 'ไม่มีของให้คืน' };
     for (var i = 0; i < pids.length; i++) {
