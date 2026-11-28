@@ -139,6 +139,20 @@
   .step button{ width:38px; height:38px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2); font-size:19px; font-weight:700; }
   .step button.plus{ background:var(--blue); border-color:var(--blue); color:#fff; }
   .step input{ width:48px; text-align:center; padding:8px 2px; border:1px solid var(--border); border-radius:8px; font-weight:700; }
+  /* ★ ช่องจำนวนแยกตามหน่วย ลัง · แพ็ค · ชิ้น ในการ์ดเดียว (เจ้าของระบบสั่ง 28 พ.ย. 2026 — เหมือนฟอร์มเบิกของ)
+     ขาย "5 ลัง 3 แพ็ค 2 ชิ้น" ได้ในการ์ดเดียว ไม่ต้องสลับหน่วยไปมา · หน่วยที่ไม่มีของสินค้านั้นไม่โผล่ */
+  .prod .units{ display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:8px; margin-top:8px; }
+  .uf{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .uf .ul{ font-size:11.5px; font-weight:600; color:var(--ink-soft); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .uf input{ width:100%; box-sizing:border-box; text-align:center; padding:8px 2px; border:1px solid var(--border); border-radius:var(--r-ctl,8px); font-weight:700; font-size:16px; }
+  .uf input:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
+  .uf input.has{ border-color:var(--blue); background:var(--blue-pale); }
+  .uf .ub{ display:flex; gap:4px; }
+  .uf .ub button{ flex:1; height:34px; border-radius:var(--r-ctl,8px); border:1px solid var(--border); background:var(--surface-2); font-size:18px; font-weight:700; }
+  .uf .ub button.plus{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  .uf.off{ opacity:.45; }                      /* แพ็คตอนเลือกเครดิต — ขายไม่ได้ (เซิร์ฟเวอร์ปฏิเสธ) แต่ไม่ซ่อนเพื่อให้รู้ว่ามีหน่วยนี้ */
+  body.density-compact .uf input{ padding:6px 2px; }
+  body.density-compact .uf .ub button{ height:30px; font-size:16px; }
   .low{ color:var(--red); font-weight:700; }
   .ok{ color:var(--green); font-weight:700; }
 
@@ -669,6 +683,33 @@ function getGPS(o){
       e => r({ lat: '', lng: '', map: '', err: (e && e.code) || 0 }), { enableHighAccuracy: true, timeout: o.timeout || 8000, maximumAge: o.fresh ? 0 : 60000 });
   });
 }
+/* ★ พิกัดสำหรับบิลขาย — จับเบื้องหลังล่วงหน้า ไม่รอตอนกดบันทึก (28 พ.ย. 2026, รีวิวความเร็วหน้าขายสำหรับ BLITZ)
+   เดิม submitSale สั่ง await getGPS() ก่อนส่งทุกบิล — ในอาคาร/เพิ่งเปิดแอป เครื่องไม่มีตำแหน่งสดต้องรอได้ถึง 8 วินาที
+   ก่อนที่บิลจะเริ่มส่งด้วยซ้ำ · ตอนนี้: warmGPS() เติมค่าไว้ตอนเปิดหน้าขาย/กลับมาเปิดแอป/หลังบันทึกบิล
+   แล้ว gpsForSale() ใช้ค่าล่าสุดทันที (รอไม่เกิน ~1.5 วินาทีเฉพาะตอนไม่เคยมีค่าเลยหรือค่าเก่ามาก)
+   บิลที่ไม่มีพิกัดยังบันทึกได้ตามเดิม (ผู้ใช้ปฏิเสธสิทธิ์ก็เป็นแบบนั้นอยู่แล้ว) */
+let GPS_LAST = null, GPS_JOB = null, GPS_FAILED_AT = 0;
+const GPS_FRESH_MS = 3 * 60 * 1000, GPS_USABLE_MS = 15 * 60 * 1000, GPS_WAIT_MS = 1000;
+function warmGPS(force){
+  if (GPS_JOB) return GPS_JOB;                                   // กำลังจับอยู่แล้ว — ไม่ยิงซ้อน
+  if (!force && GPS_LAST && Date.now() - GPS_LAST.at < GPS_FRESH_MS) return Promise.resolve(GPS_LAST);
+  GPS_JOB = getGPS({ timeout: 10000 }).then(g => {
+    if (g && g.lat !== '') { GPS_LAST = { lat: g.lat, lng: g.lng, map: g.map, at: Date.now() }; GPS_FAILED_AT = 0; }
+    else GPS_FAILED_AT = Date.now();                              // ไม่ได้ตำแหน่ง (ปฏิเสธ/หมดเวลา) — จดไว้ ไม่ให้ทุกบิลต้องรอซ้ำ
+    return GPS_LAST;
+  }).catch(() => GPS_LAST).finally(() => { GPS_JOB = null; });
+  return GPS_JOB;
+}
+async function gpsForSale(){
+  const blank = { lat: '', lng: '', map: '' };
+  if (GPS_LAST && Date.now() - GPS_LAST.at < GPS_FRESH_MS) { warmGPS(); return GPS_LAST; }   // สดพอ — ใช้เลย
+  const job = warmGPS();                                          // เก่า/ไม่มี — ลองรอสั้นๆ แต่ไม่ให้บิลค้าง
+  if (!GPS_LAST && GPS_FAILED_AT && Date.now() - GPS_FAILED_AT < 120000) return blank;   // เพิ่งจับไม่ได้ (เช่น ปฏิเสธสิทธิ์) — ไม่ต้องรอ
+  const got = await Promise.race([job, new Promise(r => setTimeout(() => r(null), GPS_WAIT_MS))]);
+  const g = got || GPS_LAST;
+  return g && Date.now() - g.at < GPS_USABLE_MS ? g : blank;
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && typeof ME !== 'undefined' && ME && TAB === 'sell') warmGPS(); });
 function updateNet(){ const n = $('net'); if (!n) return; n.textContent = navigator.onLine ? 'ออนไลน์' : 'ออฟไลน์'; n.classList.toggle('off', !navigator.onLine); }
 
 /* ไอคอนเล็กในปุ่ม (ชุดเดียวกับไอคอนแท็บด้านล่าง) — เลี่ยง emoji เพราะหน้าตาต่างกันทุกเครื่อง */
@@ -1429,14 +1470,28 @@ async function apSubmit(decision){
 }
 
 /* ══════════════ ข้อมูลตั้งต้น (สินค้า/ลูกค้า/สต็อกบนรถ) ══════════════ */
+let RERENDER_PENDING = false;
+document.addEventListener('focusout', () => {
+  if (!RERENDER_PENDING) return;
+  setTimeout(() => {      // รอให้โฟกัสย้ายไปช่องถัดไปก่อน — ถ้ายังอยู่ในช่องกรอกของหน้าขายก็รอต่อ
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName) && ae.closest && ae.closest('#tab-sell')) return;
+    RERENDER_PENDING = false; renderCurrentTab();
+  }, 150);
+});
 async function refreshData(silent){
   try {
     const r = await api('getBootstrap', {});
     if (!r.success) { if (!silent) toast(r.message, 'err'); return false; }
     DATA = { products: r.products || [], customers: r.customers || [], blitz: r.blitz || null, blitzViewer: !!r.blitzViewer };
     lsSet('boot_' + ME.lineUserId, { ts: Date.now(), data: DATA });
+    LAST_REFRESH = Date.now();
     paintBlitzCards();
-    renderCurrentTab();
+    /* ★ ผู้ใช้กำลังพิมพ์/เลือกอยู่ในหน้าขาย → อย่าวาดทับ (วาดใหม่ทำให้ช่องที่กำลังกรอกหายและโฟกัสหลุดกลางคัน)
+       ข้อมูลใหม่ถูกเก็บแล้ว · รอจนผู้ใช้ออกจากช่องนั้นค่อยวาด (ดู focusout ท้ายไฟล์) */
+    const ae = document.activeElement;
+    if (TAB === 'sell' && ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName) && ae.closest && ae.closest('#tab-sell')) RERENDER_PENDING = true;
+    else renderCurrentTab();
     return true;
   } catch (e) { if (!silent) toast('ดึงข้อมูลไม่ได้: ' + e.message, 'err'); return false; }
 }
@@ -1460,6 +1515,7 @@ function gotoTab(t){
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   renderCurrentTab();
   if (t === 'home') loadDashboard();
+  if (t === 'sell') warmGPS();     // จับพิกัดรอไว้ก่อนกดบันทึก — บิลไม่ต้องรอ GPS
   scrollTo(0, 0);
 }
 function renderCurrentTab(){
@@ -1711,20 +1767,11 @@ const custName = id => { const c = DATA.customers.find(x => String(x.id) === Str
 // หน่วยขายของสินค้า: หน่วยฐาน (factor 1) + หน่วยเพิ่ม (หีบ/แพ็ค ฯลฯ จาก product_units)
 const unitsOf = p => [{ unitCode: '', unitLabel: p.unit || 'ชิ้น', unitFactor: 1, price: p.price }].concat(p.units || []);
 const unitOf = (p, code) => unitsOf(p).find(u => u.unitCode === code) || unitsOf(p)[0];
-const UNIT_PICK = {};   // productId → unitCode ที่ "ผู้ใช้เลือกเอง" บนการ์ด (ไม่มี = ใช้ค่าเริ่มต้นตามวิธีชำระ ดู defaultUnit)
-/* ★ หน่วยขายเริ่มต้น (เจ้าของระบบสั่ง 26 พ.ย. 2026): ขายเงินสด = แพ็ค · ขายเครดิต = ลัง ทุกสินค้า
-   ★ แพ็คขายได้เฉพาะ "หน่วยรถ (van_sales) + เงินสด" (PACK_VAN_ONLY / PACK_CASH_ONLY ที่เซิร์ฟเวอร์) — บทบาทอื่นถึงจะเงินสดก็ตั้งต้นที่ลัง
-     ไม่งั้นเซลส์กดเพิ่มทีไรโดนปฏิเสธทีนั้น · สินค้าที่ไม่มีหน่วยนั้น → ถอยไปลัง → หน่วยฐาน · ผู้ใช้เลือกหน่วยเองแล้วจะไม่ถูกเปลี่ยนตามวิธีชำระ */
+/* ★ 28 พ.ย. 2026: การ์ดสินค้ามีช่องจำนวนแยกตามหน่วย (ลัง/แพ็ค/ชิ้น) แล้ว — เลิกใช้ dropdown เลือกหน่วยกับ "หน่วยเริ่มต้นตามวิธีชำระ"
+   (เดิมเงินสด=แพ็ค · เครดิต=ลัง ตามที่เจ้าของระบบสั่ง 26 พ.ย.) เพราะทุกหน่วยอยู่ตรงหน้าให้กรอกได้เลย
+   ★ แพ็คขายได้เฉพาะ "หน่วยรถ + เงินสด" (PACK_VAN_ONLY / PACK_CASH_ONLY ที่เซิร์ฟเวอร์ปฏิเสธเอง) */
 const isPackCode = c => /^(PK|PACK)$/i.test(String(c || ''));
 const isCaseCode = c => /^(CT|CASE)$/i.test(String(c || ''));
-function defaultUnit(p){
-  if (!p) return '';
-  const us = p.units || [], credit = (PAY === 'credit_term' || PAY === 'credit');
-  if (!credit && ME.role === 'van_sales') { const k = us.find(u => isPackCode(u.unitCode)); if (k) return k.unitCode; }
-  const c = us.find(u => isCaseCode(u.unitCode));
-  return c ? c.unitCode : '';
-}
-const curUnit = pid => UNIT_PICK[pid] != null ? UNIT_PICK[pid] : defaultUnit(prodById(pid));
 
 /* แถบ "ร้านนี้ค้างอยู่เท่าไหร่" — อ่านจาก DATA.customers ที่ bootstrap ส่งมา
    ★ ตัวเลขนี้เก่าได้ถึง 10 นาที (อายุแคช bootstrap) จึงใช้ "เพื่อให้เห็น" เท่านั้น
@@ -1816,17 +1863,44 @@ function renderProducts(){
   const list = DATA.products.filter(p => !q || String(p.name).toLowerCase().includes(q) || String(p.code || '').toLowerCase().includes(q));
   if (!list.length) { box.innerHTML = '<div class="empty">ไม่พบสินค้า</div>'; return; }
   box.innerHTML = list.slice(0, 80).map(p => {
-    const code = curUnit(p.id), u = unitOf(p, code), n = cartQty(p.id, code);
-    return '<div class="prod"><div class="nm">'+pcode(p.code)+esc(p.name)+'</div>' +
-      '<div class="sub">บนรถ <span class="'+(p.vanStock < 3 ? 'low' : 'ok')+'">'+esc(p.vanStock)+'</span> '+esc(p.unit)+(baseUsed(p.id) ? ' · ในตะกร้า '+baseUsed(p.id)+' '+esc(p.unit) : '')+'</div>' +
-      '<div class="ctl"><select onchange="pickUnit(\''+esc(p.id)+'\', this.value)">' + unitsOf(p).map(x => '<option value="'+esc(x.unitCode)+'"'+(x.unitCode === u.unitCode ? ' selected' : '')+'>'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</option>').join('') + '</select>' +
-      '<div class="step"><button onclick="bump(\''+esc(p.id)+'\',-1)">−</button><input type="number" inputmode="numeric" min="0" value="'+(n || '')+'" placeholder="0" onchange="setQty(\''+esc(p.id)+'\', this.value)"><button class="plus" onclick="bump(\''+esc(p.id)+'\',1)">+</button></div></div></div>';
+    const pid = esc(p.id);
+    return '<div class="prod" data-pid="'+pid+'"><div class="nm">'+pcode(p.code)+esc(p.name)+'</div>' +
+      '<div class="sub">'+prodSubHtml(p)+'</div>' +
+      '<div class="units">' + unitsSorted(p).map(x => {
+        const c = esc(x.unitCode), n = cartQty(p.id, x.unitCode);
+        return '<div class="uf'+(packOff(x) ? ' off' : '')+'" data-code="'+c+'"><div class="ul">'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</div>' +
+          '<input type="number" inputmode="numeric" min="0" class="'+(n ? 'has' : '')+'" data-code="'+c+'" value="'+(n || '')+'" placeholder="0" onchange="setQty(\''+pid+'\',\''+c+'\', this.value)">' +
+          '<div class="ub"><button onclick="bump(\''+pid+'\',\''+c+'\',-1)">−</button><button class="plus" onclick="bump(\''+pid+'\',\''+c+'\',1)">+</button></div></div>';
+      }).join('') + '</div></div>';
   }).join('') + (list.length > 80 ? '<div class="empty">แสดง 80 รายการแรก — พิมพ์ค้นหาเพื่อหาตัวอื่น</div>' : '');
 }
-function pickUnit(pid, code){ UNIT_PICK[pid] = code; renderProducts(); }
-function bump(pid, d){ const code = curUnit(pid); setQty(pid, cartQty(pid, code) + d); }
-function setQty(pid, v){
-  const code = curUnit(pid), p = prodById(pid); if (!p) return;
+/* เรียงหน่วยในการ์ด: ลัง → แพ็ค → หน่วยอื่น → หน่วยฐาน (ชิ้น) · แพ็คขายได้เฉพาะเงินสด (PACK_CASH_ONLY) จึงจางลงตอนเลือกเครดิต */
+function unitsSorted(p){
+  const rank = u => isCaseCode(u.unitCode) ? 0 : isPackCode(u.unitCode) ? 1 : u.unitCode === '' ? 3 : 2;
+  return unitsOf(p).slice().sort((a, b) => rank(a) - rank(b) || b.unitFactor - a.unitFactor);
+}
+const packOff = u => isPackCode(u.unitCode) && (PAY === 'credit_term' || PAY === 'credit');
+/* บรรทัดย่อย "บนรถ … · ในตะกร้า …" — ใช้ทั้งตอนวาดทั้งลิสต์และตอนอัปเดตการ์ดเดียว */
+function prodSubHtml(p){
+  const used = baseUsed(p.id);
+  return 'บนรถ <span class="'+(p.vanStock < 3 ? 'low' : 'ok')+'">'+esc(p.vanStock)+'</span> '+esc(p.unit)+(used ? ' · ในตะกร้า '+used+' '+esc(p.unit) : '');
+}
+/* ★ อัปเดต "การ์ดเดียว" แทนการวาดทั้งลิสต์ใหม่ (28 พ.ย. 2026) — วาดใหม่ทั้งลิสต์ทำให้ช่องจำนวนช่องถัดไปถูกแทนที่
+   ระหว่างที่ผู้ใช้กำลังแตะ: พิมพ์จำนวนในช่อง A แล้วแตะช่อง B → change ของ A วาดลิสต์ใหม่ → ช่อง B หายไปและโฟกัสหลุด
+   ต้องแตะซ้ำอีกครั้ง (ตรวจยืนยันในเบราว์เซอร์แล้ว) · ขายรัวๆ แบบ BLITZ เจออาการนี้ทุกบรรทัด */
+function updateProdCard(pid){
+  const p = prodById(pid); if (!p) return;
+  const el = [...$('s-list').querySelectorAll('.prod[data-pid]')].find(e => e.dataset.pid === String(pid));
+  if (!el) return;                               // สินค้านี้ไม่ได้อยู่ในรายการที่วาดอยู่ (ถูกกรอง/เกิน 80) — ไม่มีอะไรต้องอัปเดต
+  el.querySelectorAll('input[type=number]').forEach(inp => {      // ทุกหน่วยของสินค้านี้ (ลัง/แพ็ค/ชิ้น)
+    const n = cartQty(pid, inp.dataset.code || '');
+    inp.value = n || ''; inp.classList.toggle('has', !!n);
+  });
+  const sub = el.querySelector('.sub'); if (sub) sub.innerHTML = prodSubHtml(p);
+}
+function bump(pid, code, d){ setQty(pid, code, cartQty(pid, code) + d); }
+function setQty(pid, code, v){
+  const p = prodById(pid); if (!p) return;
   let qty = Math.max(0, parseInt(v) || 0);
   if (!OFFICE) {                      // ขายจากรถ: ห้ามเกินของบนรถ (นับเป็นหน่วยฐานรวมทุกหน่วย)
     const f = unitOf(p, code).unitFactor, other = baseUsed(pid) - cartQty(pid, code) * f;
@@ -1835,7 +1909,7 @@ function setQty(pid, v){
   }
   CART = CART.filter(c => !(String(c.productId) === String(pid) && c.unitCode === code));
   if (qty > 0) CART.push({ productId: String(pid), unitCode: code, qty });
-  renderProducts(); cartChanged();
+  updateProdCard(pid); cartChanged();
 }
 // ราคาจริงคิดที่เซิร์ฟเวอร์ (quoteSale ใช้เครื่องยนต์เดียวกับตอนบันทึกบิล) — หน่วง 500ms กันยิงถี่ตอนกด +/−
 // แยก fetchQuote() ออกมาให้ปุ่ม "คำนวณราคา" (2026-09-30, เจ้าของระบบสั่ง — อยากได้จุดยืนยันชัดๆ ก่อนบันทึก
@@ -1980,8 +2054,9 @@ async function submitSale(){
   const btn = $('cb-save'); if (btn.disabled) return;
   const label = btn.innerHTML;   // เก็บ innerHTML เพราะปุ่มมีไอคอน SVG อยู่ข้างใน
   pressBusy(btn, true);
+  const shopId = Number($('s-cust').value) || 0, shopName = custName(shopId);   // afterSale เคลียร์ร้านที่เลือก — จดไว้ก่อนเพื่อบอกในข้อความว่าบิลนี้ลงร้านไหน
   try {
-    const gps = await getGPS();
+    const gps = await gpsForSale();     // ใช้พิกัดที่จับรอไว้แล้ว ไม่รอ GPS ตอนกดบันทึก (ดู warmGPS)
     // ของแถมที่พนักงานติ๊กออก (ของจริงไม่มีบนรถ/ลูกค้าไม่รับ) — ไม่ส่งมาเลย = ได้ของแถมครบตามที่คิดไว้ปกติ
     // (เซิร์ฟเวอร์คำนวณของแถมเองเสมอ payload.freeGoods ใช้แค่ "ตัดออก" ไม่ได้ใช้ "เพิ่มเอง" ดู 07_sales.gs)
     const freeGoods = (QUOTE && QUOTE.success && QUOTE.freeGoods && QUOTE.freeGoods.length)
@@ -2015,8 +2090,14 @@ async function submitSale(){
     /* ★ คำเตือนวงเงินมาจากเซิร์ฟเวอร์ (โหมด "เตือนแต่ขายได้") — บิลบันทึกแล้วจริง
        แต่ต้องบอกให้พนักงานรู้ทันที เพราะเขาคือคนที่จะคุยกับร้านเรื่องเก็บเงิน */
     const warn = r.stockWarning || r.creditWarning || '';
-    toast((isDraft ? 'บันทึกร่างแล้ว' : 'บิล ' + (r.orderCode || '')) + ' · ฿' + baht(r.total) + (warn ? ' — ⚠️ ' + warn : ''), warn ? 'err' : 'ok');
-    refreshData(true);        // สต็อกบนรถเปลี่ยนแล้ว
+    toast((isDraft ? 'บันทึกร่างแล้ว' : 'บิล ' + (r.orderCode || '')) + ' · ' + shopName + ' · ฿' + baht(r.total) + (warn ? ' — ⚠️ ' + warn : ''), warn ? 'err' : 'ok');
+    /* ★ ยอดค้างของร้านปรับในเครื่องเลยสำหรับบิลเครดิต — ไม่ต้องดึงข้อมูลทั้งก้อนใหม่เพื่อให้แถบ "ค้างชำระ" ทันบิลถัดไป
+       (ตัวเลขนี้ใช้เพื่อให้เห็นเท่านั้น เซิร์ฟเวอร์คิดใหม่ทุกครั้งที่บันทึก) */
+    if ((PAY === 'credit_term' || PAY === 'credit') && shopId) {
+      const c = DATA.customers.find(x => Number(x.id) === shopId);
+      if (c) { c.debt = (Number(c.debt) || 0) + (Number(r.total) || 0); c.debtDocs = (Number(c.debtDocs) || 0) + 1; saveBootCache(); }
+    }
+    refreshSoon();            // ★ ไม่ดึง bootstrap ทั้งก้อนทุกบิลอีกแล้ว — สต็อกบนรถหักในเครื่องไปแล้วใน afterSale (ดู refreshSoon)
     /* ★ 1 ต.ค. 2026 เจ้าของระบบสั่ง: บันทึกใบนัดส่งแล้วให้เปิดฉบับร่างให้ดูทันที
        พนักงานจะได้ตรวจความถูกต้องแล้วกด "ยืนยัน" ต่อได้เลยในจังหวะเดียว ไม่ต้องไปตามหาในบิลล่าสุด
        (ใบที่ยังไม่กดยืนยัน = ศูนย์ยังมองไม่เห็น ถ้าไม่พาไปดูตรงนี้มีสิทธิ์ค้างเป็นร่างทิ้งไว้)
@@ -2031,6 +2112,25 @@ function afterSale(){
   EDIT_ORDER_CODE = null; renderEditBanner();   // ออกจากโหมดแก้ไขเมื่อบันทึกเสร็จ
   const dv = $('s-deliv'); if (dv) dv.value = '';   // ไม่ให้บิลถัดไปติดวันนัดส่งของบิลก่อนมา
   CART = []; QUOTE = null; FREE_OFF = new Set(); SELL_MODE = 'pick'; renderProducts(); renderCartBar();
+  /* ★ เริ่มบิลถัดไปจากหน้าว่าง (28 พ.ย. 2026) — เดิมร้านที่เลือกค้างอยู่ บิลถัดไปที่ลืมเปลี่ยนร้านจะลงผิดร้านเงียบๆ
+     (ขายรัวๆ แบบ BLITZ เสี่ยงที่สุด) · ล้างคำค้น + กลับไป "ลูกค้าทั่วไป" · วิธีชำระ/วิธีส่งของคงเดิม (คนขายมักขายแบบเดียวกันต่อเนื่อง)
+     · เปิดคีย์บอร์ดเองเฉพาะเครื่องที่มีเมาส์ — บนมือถือคีย์บอร์ดที่เด้งขึ้นมาจะบังข้อความยืนยันบิล */
+  $('s-cust-q').value = ''; renderCustSelect(); $('s-cust').value = '0'; renderCustDebt();
+  if (TAB === 'sell') {
+    scrollTo(0, 0);
+    if (window.matchMedia && matchMedia('(pointer:fine)').matches) $('s-cust-q').focus();
+  }
+  warmGPS();                // เตรียมพิกัดไว้ให้บิลถัดไปตั้งแต่ตอนนี้ (ข้ามถ้ายังสดอยู่)
+}
+/* ★ ดึงข้อมูลตั้งต้นใหม่แบบ "ไม่ถี่เกิน" หลังบันทึกบิล (28 พ.ย. 2026) — เดิมดึงทั้งก้อนทุกบิล (ลูกค้า 2,039 ราย + ยอดค้าง) และ recordSale
+   ล้างแคชฝั่งเซิร์ฟเวอร์ของผู้ใช้ไว้ จึงคำนวณใหม่หมดทุกรอบ → ขายถี่ๆ คำขอซ้อนกันแย่งเวลาบิลถัดไป
+   ตอนนี้: หักสต็อกบนรถ/ยอดค้างในเครื่องแล้ว จึงดึงใหม่แค่ครั้งเดียวต่อช่วง ห่างกันอย่างน้อย ~3 นาที (และรอ ≥30 วินาทีหลังบิลล่าสุด)
+   เพื่อปรับให้ตรงกับของจริงตอนว่าง · ปุ่ม Sync / ส่งคิวออฟไลน์ ยังดึงทันทีเหมือนเดิม */
+let LAST_REFRESH = 0, refreshTimer = null;
+function refreshSoon(){
+  if (refreshTimer) return;                                      // มีนัดอยู่แล้ว — ไม่ต้องนัดซ้ำ
+  const wait = Math.max(30000, 180000 - (Date.now() - LAST_REFRESH));
+  refreshTimer = setTimeout(() => { refreshTimer = null; if (navigator.onLine) refreshData(true); }, wait);
 }
 
 /* ══════════════ สต็อก ══════════════ */
