@@ -195,7 +195,9 @@ function recordSale(user, payload) {
   /* ★ BLITZ RANGER (62_blitz.gs): ผู้ป้อนบิลของทีมในแคมเปญที่เดินอยู่ → ราคาเงินสดเสมอ (bz คิดไว้ต้นฟังก์ชันแล้ว)
      บิลทีมเป็นบิล office_delivery เสมอ จึงไม่แตะสต็อกรถ/สต็อกทีมเลย */
   var stockHolder = String(user.lineUserId);
-  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales', { forceCash: !!(bz && bz.forceCash) });
+  /* ★ ทีม BLITZ ขายแพ็คได้ (เจ้าของระบบสั่ง 28 พ.ย. 2026) — กติกา "แพ็คเฉพาะ Cash Van" มีไว้กันขายแพ็คผ่านช่องทางที่ไม่ใช่หน้างาน
+     แต่ทีม Blitz ขายหน้างานเหมือนรถและ role ไม่จำเป็นต้องเป็น van_sales · ยังเงินสดเท่านั้น (PACK_CASH_ONLY ดูวิธีชำระจริง) */
+  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales' || !!bz, { forceCash: !!(bz && bz.forceCash) });
   if (!priced.success) return priced;
   var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;
 
@@ -412,7 +414,7 @@ function _cutVanStock(tenantId, lineUserId, need, orderId, movementType) {
 // recordSale จริง — แอปจึงตกไปใช้ราคาตั้งต้นจากเครื่อง (estimate()) ซึ่งอาจต่างจากยอดที่จะออกบิลจริง
 function quoteSale(user, payload) {
   var bz = blitzContextFor(user.lineUserId, user.tenantId);   // ราคาที่เห็นก่อนกดต้องเป็นชุดเดียวกับที่ recordSale จะบันทึก
-  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales', { forceCash: !!(bz && bz.forceCash) });
+  var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales' || !!bz, { forceCash: !!(bz && bz.forceCash) });
   if (!priced.success) return priced;
   var calc = priced.calc, vat = calc.vat;
   return {

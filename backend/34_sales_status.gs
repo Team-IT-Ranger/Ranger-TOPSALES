@@ -764,7 +764,10 @@ function _editSalesOrderCore(session, payload, tenantId) {
   }
   if (!_customerInTenant(order.customer_id, tenantId)) return { success: false, message: 'ไม่พบลูกค้าของใบนี้ในตัวแทนที่เลือก' };
 
-  var priced = _priceSaleCart(order.customer_id, items, order.payment_method, false);
+  /* ★ บิลของทีม BLITZ (ติด campaign_id) ขายแพ็คได้ — ศูนย์แก้รายการหลังรับงานแล้วต้องไม่โดน PACK_VAN_ONLY ทับของที่ทีมขายไปแล้ว
+     และต้องคิดราคาเงินสดเหมือนตอนเปิดบิล (price_basis = 'cash') */
+  var isBlitzOrder = !!String(order.campaign_id || '').trim();
+  var priced = _priceSaleCart(order.customer_id, items, order.payment_method, isBlitzOrder, { forceCash: isBlitzOrder && String(order.price_basis || '') === 'cash' });
   if (!priced.success) return priced;
   var newItems = priced.items, calc = priced.calc, freeGoods = calc.freeGoods;
 

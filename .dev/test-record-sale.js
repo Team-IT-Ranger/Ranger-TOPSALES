@@ -269,8 +269,8 @@ function blitzSetup(endDate) {
   ];
 }
 const U2 = { tenantId: 'T1', lineUserId: 'U2', role: 'credit_sales', displayName: 'ผู้ป้อนบิล A' };
-let seenOpts = null;
-const stubWithOpts = items => (cid, raw, pay, isVan, opts) => { seenOpts = opts; return stubPriced(items); };
+let seenOpts = null, seenVan = null;
+const stubWithOpts = items => (cid, raw, pay, isVan, opts) => { seenOpts = opts; seenVan = isVan; return stubPriced(items); };
 
 /* ★ 28 พ.ย. 2026: ทีมไม่มีสต็อกของตัวเอง — บิลทีมเป็น office_delivery เสมอ ส่งเข้าศูนย์เป็น "รออนุมัติ" ทันที ไม่ตัดสต็อกที่ไหนตอนบันทึก */
 reset(); blitzSetup();
@@ -313,6 +313,23 @@ r = ctx.recordSale(U1, { customerId: 1, paymentType: 'credit_term', fulfillmentT
 eq('★ พนักงานปกติ (ไม่ได้อยู่ทีม) ไม่ถูกบังคับราคาเงินสด · ตัดสต็อกรถตัวเอง · ไม่มีตรา',
   [seenOpts && seenOpts.forceCash, sheets.van_stock.find(s => s.line_user_id === 'U1' && s.product_id === '101').qty,
    sheets.sales_orders[0].campaign_id, sheets.sales_orders[0].stock_holder, sheets.sales_orders[0].price_basis], [false, 48, '', '', '']);
+
+/* ★ แพ็คขายได้เฉพาะ "หน่วยรถ" — ผู้ป้อนบิลทีม BLITZ (role credit_sales) ต้องถือเป็นหน่วยรถด้วย ไม่งั้นโดน PACK_VAN_ONLY
+   (เจ้าของระบบเจอบนมือถือ 28 พ.ย. 2026) · คนที่ไม่ได้อยู่ทีมและ role ไม่ใช่ van_sales ยังขายแพ็คไม่ได้เหมือนเดิม */
+reset(); blitzSetup();
+ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PK', qty: 1, baseQty: 5, price: 50, lineTotal: 50, unitDiscount: 0, lineDiscount: 0 }]);
+seenVan = null;
+ctx.recordSale(U2, { customerId: 1, paymentType: 'cash', fulfillmentType: 'office_delivery', items: [{ productId: 101, unitCode: 'PK', qty: 1 }] });
+eq('★ ผู้ป้อนบิลทีม BLITZ (role ไม่ใช่ van_sales) ส่ง isVan=true → ขายแพ็คได้', seenVan, true);
+seenVan = null;
+ctx.quoteSale(U2, { customerId: 1, paymentType: 'cash', items: [{ productId: 101, unitCode: 'PK', qty: 1 }] });
+eq('  quoteSale (ราคาที่เห็นก่อนกด) ตัดสินแบบเดียวกัน', seenVan, true);
+reset(); blitzSetup();
+CENTRAL.blitz_members = [];   // ไม่ได้อยู่ทีมแล้ว
+seenVan = null;
+ctx.recordSale(U2, { customerId: 1, paymentType: 'cash', fulfillmentType: 'office_delivery', items: [{ productId: 101, unitCode: 'PK', qty: 1 }] });
+eq('  ไม่ได้อยู่ทีมและ role ไม่ใช่ van_sales → isVan=false (กติกาเดิมคงอยู่)', seenVan, false);
+blitzSetup();   // คืนค่าให้เคสถัดไป
 
 eq('สมาชิกทีม (ไม่ใช่ผู้ป้อนบิล) ไม่มี context', ctx.blitzContextFor('U3', 'T1'), null);
 eq('ผู้อำนวยการไม่มี context การขาย', ctx.blitzContextFor('U9', 'T1'), null);
