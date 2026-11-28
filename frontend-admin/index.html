@@ -221,6 +221,12 @@
      (เหตุผลที่น่าจะเป็น: แต่ละแถวกว้างไม่เท่ากัน พอจัดกลางทุกแถว ขอบซ้ายของแต่ละแถวจึงเยื้องกัน
       ตาไม่มีเส้นตั้งให้ยึด ต้องไล่หาจุดเริ่มใหม่ทุกแถว) */
   .view-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; gap:16px; }
+  /* ปุ่มทางลัดมุมขวาหัวแดชบอร์ด (BLITZ RANGER) — สีม่วงเดียวกับแอปมือถือ · สองบรรทัด: ชื่อ + คำอธิบายเล็ก */
+  .dash-shortcuts{ flex:none; display:flex; gap:8px; }
+  .dash-shortcuts.hidden{ display:none; }
+  .btn.btn-blitz{ height:auto; padding:7px 16px; display:flex; flex-direction:column; align-items:flex-start; gap:1px; line-height:1.25; font-weight:700; color:#fff; border-color:#4A2FD0; background:linear-gradient(135deg,#4A2FD0,#6D4AFF); }
+  .btn.btn-blitz:hover{ filter:brightness(1.08); }
+  .btn.btn-blitz small{ font-weight:400; font-size:11px; opacity:.85; }
   /* ปุ่มสลับมุมมองแบบแถบ — โชว์ทั้งสองคำพร้อมกัน ผู้ใช้จะได้รู้ว่ามีสองแบบให้เลือก
      (ปุ่มเดี่ยวที่สลับข้อความไปมาบอกไม่ได้ว่ามีอะไรให้เลือกบ้าง จนกว่าจะกดไปแล้ว) */
   /* ═══ แท็บแฟ้ม — หัวแท็บต่อเนื่องเป็นแผ่นเดียวกับหน้างานข้างล่าง (เจ้าของระบบสั่ง 16 ต.ค. 2026)
@@ -1214,7 +1220,9 @@
 
         <!-- ═══ DASHBOARD ═══ -->
         <section class="view active" id="view-dashboard">
-          <div class="view-head"><div><h1>ภาพรวม</h1><p id="dash-date">กำลังโหลด...</p></div></div>
+          <div class="view-head"><div><h1>ภาพรวม</h1><p id="dash-date">กำลังโหลด...</p></div>
+            <!-- ทางลัดไปเมนูที่ใช้บ่อยช่วงนี้ (BLITZ RANGER) — ซ่อนไว้ก่อน แล้ว paintDashShortcuts() โชว์เมื่อรู้แล้วว่าผู้ใช้มีสิทธิ์เปิดเมนูนั้น -->
+            <div class="dash-shortcuts hidden" id="dash-shortcuts"><button type="button" class="btn btn-blitz" id="dash-blitz-btn" onclick="gotoView('blitz')">🏁 BLITZ RANGER<small>ทีม · สมาชิก · สต็อก · แดชบอร์ด</small></button></div></div>
           <div class="kpi-row kpi-badges" id="dash-kpis"><div class="tnk-wait" style="min-height:96px;flex:1 1 100%"><div data-tnk-spin="56"></div><span class="tnk-cap">กำลังโหลด…</span></div></div>
           <!-- ★ แถวที่สอง: ยอดขายเดือนนี้ นับเฉพาะบิล "จัดส่งสำเร็จ" (เจ้าของระบบสั่ง 17 ต.ค. 2026)
                ใบแรกเป็นยอดรวมทั้งเดือน ใบถัดไปแยกตามพนักงานขาย · กดใบไหนก็ไปหน้ารายงานที่กรองไว้ให้แล้ว -->
@@ -3517,6 +3525,7 @@ function renderNav(){
   }).join('');
   document.getElementById('nav-groups').innerHTML = html;
   renderQuickLists();
+  paintDashShortcuts();   // สิทธิ์/ขอบเขต (บริษัท↔ตัวแทน) เปลี่ยนแล้วเมนูถูกวาดใหม่ — ปุ่มทางลัดบนแดชบอร์ดต้องตามด้วย
 }
 
 function findMeta(view){
@@ -3842,8 +3851,17 @@ async function loadDashboard(){
   const s2 = snapLoad();                       // เก็บตัวเลขล่าสุดไว้ให้รอบหน้าเห็นทันที
   if (s2 && s2.data) { s2.data.dashboard = r; snapSave(s2.data); }
 }
+/* ทางลัดบนหัวแดชบอร์ด — **ตัดสินด้วย navState() ตัวเดียวกับเมนูซ้าย** ไม่เขียนเงื่อนไขสิทธิ์ซ้ำ
+   (เมนูเปลี่ยนสิทธิ์/ขอบเขตเมื่อไหร่ ปุ่มขยับตามเอง · ไม่งั้นปุ่มโชว์แต่กดแล้วเจอ "ไม่มีสิทธิ์") · ไม่ยิงคำขอเพิ่ม (กติกาความเร็วข้อ 1)
+   ★ ต้องเรียกซ้ำเมื่อสิทธิ์/ขอบเขตเปลี่ยน (renderNav) เพราะแดชบอร์ดวาดจาก snapshot ก่อนสิทธิ์สดมาถึง */
+function paintDashShortcuts(){
+  const box = document.getElementById('dash-shortcuts'); if (!box) return;
+  const it = findMeta('blitz');
+  box.classList.toggle('hidden', !(it && MY_PERMS.loaded && navState(it).s === 'ok'));
+}
 function renderDashboard(r, fromSnapshot){
-  const tz = new Date().toLocaleDateString('th-TH', {year:'numeric', month:'long', day:'numeric'});
+  paintDashShortcuts();
+  const tz =new Date().toLocaleDateString('th-TH', {year:'numeric', month:'long', day:'numeric'});
   document.getElementById('dash-date').textContent = tz + (fromSnapshot ? ' · กำลังอัปเดต…' : '');
 
   if (r.scope === 'tenant'){
