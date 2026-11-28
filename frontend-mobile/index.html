@@ -169,6 +169,11 @@
   .pill.bad{ background:var(--red-soft); color:var(--red); }
   .pill.good{ background:var(--green-soft); color:var(--green); }
 
+  /* ★ วงแหวนใหญ่กลางจอระหว่าง "บันทึกข้อมูล" (28 พ.ย. 2026 เจ้าของระบบสั่ง) — คำขอหนึ่งครั้งของ Apps Script ใช้ ~2-6 วินาที
+     ปุ่มเล็กๆ อย่างเดียวไม่พอให้ผู้ขายหน้างานรู้ว่าโปรแกรมกำลังทำงาน (ไม่ใช่ค้าง) แล้วกดซ้ำ · พื้นหลังกันการแตะทะลุด้วย */
+  .save-wait{ position:fixed; inset:0; z-index:95; display:flex; align-items:center; justify-content:center; background:rgba(15,27,45,.42); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
+  .save-wait[hidden]{ display:none; }
+  .save-wait .box{ background:var(--surface); border-radius:20px; padding:28px 36px 22px; min-width:210px; text-align:center; box-shadow:0 18px 48px -12px rgba(0,0,0,.45); }
   .toast{ position:fixed; top:14px; left:50%; transform:translateX(-50%); max-width:92%; background:var(--ink); color:#fff; padding:10px 16px; border-radius:12px; font-size:13.5px; z-index:100; display:none; text-align:center; box-shadow:0 8px 24px -8px rgba(0,0,0,.35); }
   .toast.err{ background:var(--red); }
   .toast.ok{ background:var(--green); }
@@ -625,12 +630,38 @@ const INFLIGHT = new Set();
 const newRequestId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 function pressBusy(btn, on){ if (!btn) return; btn.classList.toggle('is-busy', on); tnkBusy(btn, on); }   // tnkBusy ใส่/เอาวงแหวน และ disable/enable ปุ่มให้ในคำสั่งเดียว
 
+/* วงแหวนกลางจอตอนบันทึก — นับซ้อนได้ (ส่งคิวหลายบิลติดกัน) · รอ 150 ms ก่อนขึ้น คำขอที่เร็วมากไม่กะพริบ
+   ปิดช้า 120 ms กันวงกะพริบระหว่างบิลในคิว · ตาข่ายกันค้าง 80 วิ (เกินเวลารอสูงสุดของ recordSale 60 วิ) */
+const SAVE_LABELS = { recordSale: 'กำลังบันทึกการขาย…', confirmSalesOrder: 'กำลังยืนยันใบสั่งขาย…', cancelMySalesOrder: 'กำลังยกเลิกใบสั่งขาย…',
+  submitCustomerRequest: 'กำลังส่งคำขอเปิดร้านใหม่…', addCustomer: 'กำลังบันทึกร้านค้า…', decideStaffApproval: 'กำลังบันทึกผลอนุมัติ…',
+  restockVan: 'กำลังบันทึกการเบิกของ…', submitCount: 'กำลังบันทึกการนับสต็อก…', checkInVisit: 'กำลังเช็คอิน…' };
+let SAVE_WAIT_N = 0, SAVE_SHOW_T = 0, SAVE_HIDE_T = 0, SAVE_SAFE_T = 0;
+function saveWait(on, action){
+  SAVE_WAIT_N = Math.max(0, SAVE_WAIT_N + (on ? 1 : -1));
+  let el = document.getElementById('save-wait');
+  if (on) {
+    clearTimeout(SAVE_HIDE_T); SAVE_HIDE_T = 0;
+    if (!el) { el = document.createElement('div'); el.id = 'save-wait'; el.className = 'save-wait'; el.hidden = true; document.body.appendChild(el); }
+    if (SAVE_SHOW_T || !el.hidden) return;
+    SAVE_SHOW_T = setTimeout(() => {
+      SAVE_SHOW_T = 0; if (SAVE_WAIT_N <= 0) return;
+      el.innerHTML = '<div class="box">' + tnkWait(0, SAVE_LABELS[action] || 'กำลังบันทึกข้อมูล…', 88) + '<div class="note" style="margin-top:6px">กรุณารอสักครู่ อย่าปิดหรือกดซ้ำ</div></div>';
+      el.hidden = false;
+      clearTimeout(SAVE_SAFE_T); SAVE_SAFE_T = setTimeout(() => { SAVE_WAIT_N = 0; el.hidden = true; }, 80000);
+    }, 150);
+  } else if (SAVE_WAIT_N === 0) {
+    clearTimeout(SAVE_SHOW_T); SAVE_SHOW_T = 0;
+    SAVE_HIDE_T = setTimeout(() => { SAVE_HIDE_T = 0; clearTimeout(SAVE_SAFE_T); if (el) el.hidden = true; }, 120);
+  }
+}
+
 async function api(action, payload, timeoutMs = 45000, retriedAuth = false){
   if (MUTATING.has(action) && !retriedAuth) {
     if (INFLIGHT.has(action)) return { success: false, busy: true, message: 'กำลังบันทึกรายการนี้อยู่ กรุณารอสักครู่' };
     INFLIGHT.add(action);
+    saveWait(true, action);
     try { return await _apiSend(action, payload, timeoutMs, retriedAuth); }
-    finally { INFLIGHT.delete(action); }
+    finally { INFLIGHT.delete(action); saveWait(false); }
   }
   return _apiSend(action, payload, timeoutMs, retriedAuth);
 }
