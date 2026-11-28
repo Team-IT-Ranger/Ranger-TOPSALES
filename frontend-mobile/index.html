@@ -468,10 +468,6 @@
       <div class="row" style="border-top:none;padding:0"><span><b>BLITZ RANGER — ผู้อำนวยการ</b><br><span class="muted">แดชบอร์ด · จัดทีม · อนุมัติผู้สมัคร · ลิงก์สมัคร</span></span>
         <button class="btn btn-primary btn-sm" onclick="openDirector({ from: 'app' })">เปิด</button></div>
     </div>
-    <div class="card hidden" id="home-approve" style="margin-bottom:12px">
-      <div class="row" style="border-top:none;padding:0"><span><b>อนุมัติผู้ใช้งาน</b><br><span class="muted" id="home-approve-sub">-</span></span>
-        <button class="btn btn-primary btn-sm" onclick="openApprovals({ from: 'app' })">เปิด</button></div>
-    </div>
     <h2>ใบสั่งขายวันนี้</h2>
     <div class="kpis">
       <div class="kpi"><div class="v" id="k-bills">-</div><div class="l">บิล</div></div>
@@ -1088,8 +1084,9 @@ function enterApp(){
   if (cached) DATA = cached.data;
   paintBlitzCards();
   gotoTab('home');
-  if (navigator.onLine) { refreshData(true); checkApprover(); }   // เปิดจาก cache ทันที แล้วค่อยดึงของใหม่เบื้องหลัง
-  else paintApproverCard(lsGet('approver_' + ME.lineUserId, null));
+  /* ★ ไม่มีการ์ด "อนุมัติผู้ใช้งาน" บนหน้าแรกแล้ว (เจ้าของระบบสั่ง 28 พ.ย. 2026): ผู้อนุมัติที่ไม่ใช่ผู้อำนวยการ BLITZ ให้อนุมัติผ่านแอปแอดมิน
+     ผู้อำนวยการอนุมัติจากเมนูผู้อำนวยการ · ลิงก์จากการ์ดในกลุ่ม LINE ยังเปิดหน้าอนุมัติได้เหมือนเดิม · จึงไม่ต้องถาม getApproverContext ตอนเปิดแอปอีก */
+  if (navigator.onLine) refreshData(true);   // เปิดจาก cache ทันที แล้วค่อยดึงของใหม่เบื้องหลัง
 }
 
 /* ══════════════ BLITZ RANGER — ป้ายทีม + แดชบอร์ดผู้อำนวยการ (backend/62_blitz.gs) ══════════════
@@ -1105,7 +1102,6 @@ function paintBlitzCards(){
     ' · <b>ลงของให้ร้านได้เลย</b> ไม่ต้องมีของในทีม — ศูนย์ตัดสต็อกและยืนยันรับเงินให้' + (b.endDate ? ' · ถึงวันที่ ' + esc(b.endDate) : '') : '';
   ['home-blitz-team', 'sell-blitz-team'].forEach(id => { const el = $(id); if (!el) return; el.innerHTML = txt; el.classList.toggle('hidden', !b); });
   const v = $('home-blitz'); if (v) v.classList.toggle('hidden', !(DATA && DATA.blitzViewer));
-  if (HOME_APPR) paintApproverCard(HOME_APPR);   // ผู้อำนวยการ → ซ่อนการ์ดอนุมัติบนหน้าแรก (ซ้ำกับเมนูผู้อำนวยการ)
   applyBlitzSellMode();
 }
 /* ★ 28 พ.ย. 2026: ผู้ป้อนบิลทีม BLITZ ไม่มีสต็อกทีมแล้ว — ทั้ง "ลงสินค้า" และ "รอจัดส่ง" เซิร์ฟเวอร์รับเป็นบิลส่งจากสำนักงาน (ตัดคลังหลักตอนศูนย์ยืนยัน)
@@ -1533,27 +1529,6 @@ function apAgo(s){
 function apStamp(s){ return s ? String(s).slice(8, 10) + '/' + String(s).slice(5, 7) + ' ' + String(s).slice(11, 16) : '-'; }
 function apDate(s){ return s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : ''; }
 
-async function checkApprover(){
-  try {
-    const c = await api('getApproverContext', {}, 30000);
-    if (!c || !c.success) return;
-    AP.ctx = c.isApprover ? c : null;
-    ME.isApprover = !!c.isApprover;
-    lsSet('approver_' + ME.lineUserId, c.isApprover ? { pendingCount: c.pendingCount } : null);
-    paintApproverCard(c.isApprover ? c : null);
-  } catch (e) { /* ถามไม่ได้ก็ไม่ต้องทำอะไร — ปุ่มแค่ไม่โผล่ ไม่ใช่ปัญหาของการขาย */ }
-}
-let HOME_APPR = null;   // ผลตรวจสิทธิ์อนุมัติล่าสุด — จำไว้เพื่อวาดการ์ดใหม่เมื่อรู้ว่าเป็นผู้อำนวยการ (ข้อมูล bootstrap มาทีหลัง)
-function paintApproverCard(c){
-  HOME_APPR = c;
-  const card = $('home-approve'); if (!card) return;
-  /* ★ ผู้อำนวยการ BLITZ ไม่โชว์การ์ดนี้บนหน้าแรก (เจ้าของระบบสั่ง 28 พ.ย. 2026) — ทางเข้า "อนุมัติผู้สมัคร" อยู่ในเมนูผู้อำนวยการแล้ว
-     ★ ผู้อนุมัติที่ไม่ใช่ผู้อำนวยการยังต้องเห็นการ์ดนี้ เพราะไม่มีเมนูผู้อำนวยการ — นี่คือทางเข้าเดียวของเขา */
-  const dup = !!(DATA && DATA.blitzViewer);
-  card.classList.toggle('hidden', !c || dup);
-  if (c) $('home-approve-sub').textContent = c.pendingCount ? ('รออนุมัติ ' + c.pendingCount + ' คน') : 'ไม่มีคำขอค้างอยู่';
-}
-
 async function openApprovals(opts){
   opts = opts || {};
   AP.from = opts.from || 'app'; AP.focusUid = opts.uid || ''; AP.tab = 'pending'; AP.filter = 'all'; AP.q = ''; AP.tenantId = '';
@@ -1592,7 +1567,7 @@ function closeApprovals(){
   apCloseSheet();
   if (AP.from === 'director') { openDirector({ from: DR.from }); return; }   // เปิดจากเมนูผู้อำนวยการ → กลับไปที่นั่น (จำนวนคำขอค้างอัปเดตตอนโหลดซ้ำ)
   if (AP.from === 'boot') { boot(); return; }   // ไม่ได้มาจากแอป → ตรวจสิทธิ์ใช้งานของตัวเองต่อ (ผู้อนุมัติที่ไม่ใช่พนักงานจะเห็นหน้าสมัคร)
-  show('scr-app'); gotoTab('home'); checkApprover();
+  show('scr-app'); gotoTab('home');
 }
 function apPaintTabs(){
   $('ap-tab-pending').classList.toggle('on', AP.tab === 'pending');
