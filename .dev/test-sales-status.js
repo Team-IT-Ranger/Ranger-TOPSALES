@@ -130,6 +130,8 @@ const ctx = {
   }
 };
 vm.createContext(ctx);
+// _dOnly ตัวจริงจาก 17_pricing.gs (34_sales_status.gs ใช้แปลงวันที่ของบิลก่อนบวก/หักยอดรายวัน)
+vm.runInContext(B('17_pricing.gs').split('\n').slice(13, 17).join('\n'), ctx, { filename: '17_pricing.gs' });   // ตัวจริงของ function _dOnly (บรรทัด 14-17)
 // 50_cogs.gs: applySaleWarehouseStock เรียก prepareSaleCogs/postSaleCogs แล้ว (16 ต.ค. 2026)
 // บน Apps Script ทุกไฟล์อยู่ scope เดียวกันจึงเห็นกันเสมอ — กล่องทดสอบโหลดเป็นชุดย่อย ต้องใส่เอง
 ['20_purchasing_master.gs', '34_sales_status.gs', '48_delivery_rounds.gs', '50_cogs.gs', '52_cash_sales_gl.gs'].forEach(f => {

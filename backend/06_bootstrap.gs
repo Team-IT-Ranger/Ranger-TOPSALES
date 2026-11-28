@@ -92,8 +92,11 @@ function getDashboard(user) {
   if (cached) return cached;
 
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  /* ★★ เทียบวันที่ด้วย _dOnly() ไม่ใช่ String(created_at).indexOf(today) — Sheets แปลงข้อความเวลาในชีตเป็น Date จริงตอนอ่าน
+     String(Date) ขึ้นต้นด้วย "Sat Nov 28 …" ไม่เคยตรงกับ "2026-11-28" การ์ดบนหน้าแรกจึงเป็น 0 ทั้งที่มีบิลวันนี้แล้ว
+     (เจ้าของระบบเจอบน UAT 28 พ.ย. 2026 · รายการ "บิลล่าสุด" ใช้ safeDateStr อยู่แล้วจึงไม่เป็นอะไร) */
   var orders = tenantObjects(user.tenantId, 'sales_orders')
-    .filter(function(o) { return String(o.sale_by) === String(user.lineUserId) && String(o.created_at).indexOf(today) === 0; });
+    .filter(function(o) { return String(o.sale_by) === String(user.lineUserId) && _dOnly(o.created_at) === today; });
 
   var bills = orders.length;
   /* ★★★ `revenue` = **ยอดขายก่อน VAT** (กติกาเจ้าของระบบ 24 ต.ค. 2026) — พนักงานขายดูเป้าจาก
@@ -104,7 +107,7 @@ function getDashboard(user) {
   var revenueInclVat = _round2(orders.reduce(function(s, o) { return s + (parseFloat(o.total) || 0); }, 0));
 
   var visits = tenantObjects(user.tenantId, 'visits')
-    .filter(function(v) { return String(v.line_user_id) === String(user.lineUserId) && String(v.check_in_at).indexOf(today) === 0; }).length;
+    .filter(function(v) { return String(v.line_user_id) === String(user.lineUserId) && _dOnly(v.check_in_at) === today; }).length;
 
   var orderIds = {};
   orders.forEach(function(o) { orderIds[String(o.record_id)] = true; });

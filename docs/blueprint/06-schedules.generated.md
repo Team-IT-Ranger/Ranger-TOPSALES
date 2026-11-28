@@ -12,7 +12,7 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,971 |
+| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,974 |
 | แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,762 |
 | แอปมือถือ (LIFF) | `frontend-mobile/` | 2,518 |
 | ตารางข้อมูล | 72 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
@@ -30,7 +30,7 @@
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 260 | AUTH |
 | `05_router.gs` | 358 | ROUTER |
-| `06_bootstrap.gs` | 337 | BOOTSTRAP / DASHBOARD (Mobile App) |
+| `06_bootstrap.gs` | 340 | BOOTSTRAP / DASHBOARD (Mobile App) |
 | `07_sales.gs` | 436 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 98 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
@@ -612,6 +612,7 @@
 | `.dev/test-help-center.js` | หน่วย (ไม่ยิงเน็ต) | 79 |
 | `.dev/test-idempotency.js` | หน่วย (ไม่ยิงเน็ต) | 98 |
 | `.dev/test-line-auth.js` | หน่วย (ไม่ยิงเน็ต) | 129 |
+| `.dev/test-mobile-dashboard.js` | หน่วย (ไม่ยิงเน็ต) | 44 |
 | `.dev/test-mobile-sale-detail.js` | หน่วย (ไม่ยิงเน็ต) | 94 |
 | `.dev/test-owner-tenant.js` | หน่วย (ไม่ยิงเน็ต) | 156 |
 | `.dev/test-package-distribution.js` | หน่วย (ไม่ยิงเน็ต) | 210 |
@@ -624,7 +625,7 @@
 | `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 372 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
-| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 887 |
+| `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 889 |
 | `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 228 |
 | `.dev/test-sheet-cache.js` | หน่วย (ไม่ยิงเน็ต) | 114 |
 | `.dev/test-staff-approval.js` | หน่วย (ไม่ยิงเน็ต) | 365 |

@@ -677,7 +677,7 @@ function confirmSalesOrder(user, payload) {
     /* ★ ยอดขายรายวันเริ่มนับตรงนี้ ไม่ใช่ตอนเปิดบิล — ใบร่างยังไม่ใช่การขาย (ตกลงกับเจ้าของระบบ 1 ต.ค. 2026)
        นับเป็นวันที่ "เปิดบิล" ไม่ใช่วันที่ยืนยัน เพื่อให้ยอดของใบเดียวกันอยู่วันเดียวตลอดสายงาน
        (ยกเลิกทีหลังก็หักคืนที่วันเดียวกัน ไม่งั้นยอดสองวันเพี้ยนพร้อมกัน) */
-    bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), 1, parseFloat(order.total) || 0, orderExVat(order));
+    bumpSalesDaily(user.tenantId, _dOnly(order.created_at), 1, parseFloat(order.total) || 0, orderExVat(order));
     // คืนเลขใหม่ไปด้วย — หน้าจอต้องใช้เลขนี้อ้างอิงต่อ (รหัสชั่วคราวใช้ไม่ได้อีกแล้ว)
     return { success: true, status: SO_CONFIRMED, statusLabel: SO_STATUS_LABELS[SO_CONFIRMED],
       orderCode: newCode, previousCode: order.order_code,
@@ -707,7 +707,7 @@ function cancelMySalesOrder(user, payload) {
     /* หักคืนยอดขาย **เฉพาะใบที่เคยถูกนับแล้ว** — ใบร่าง/ใบที่ถูกตีกลับไม่เคยนับ (หรือหักไปแล้ว)
        หักซ้ำจะทำให้ยอดรายวันติดลบสะสมไปเรื่อยๆ · ใช้ saleCountsInDaily() ตัวเดียวกับจุดอื่น */
     if (saleCountsInDaily(from)) {
-      bumpSalesDaily(user.tenantId, String(order.created_at).substring(0, 10), -1, -(parseFloat(order.total) || 0), -orderExVat(order));
+      bumpSalesDaily(user.tenantId, _dOnly(order.created_at), -1, -(parseFloat(order.total) || 0), -orderExVat(order));
     }
     return { success: true, status: SO_CANCELLED, statusLabel: SO_STATUS_LABELS[SO_CANCELLED], message: 'ยกเลิกใบสั่งขายแล้ว' };
   });
