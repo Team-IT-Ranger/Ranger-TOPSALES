@@ -255,6 +255,22 @@
   .bz-hours{ display:flex; align-items:flex-end; gap:3px; height:84px; margin:6px 0 2px; }
   .bz-hours div{ flex:1; background:linear-gradient(180deg,#6D4AFF,#2B63D9); border-radius:3px 3px 0 0; min-height:2px; }
   .bz-hl{ display:flex; gap:3px; font-size:10px; color:var(--ink-faint); } .bz-hl span{ flex:1; text-align:center; overflow:hidden; }
+  /* เมนูผู้อำนวยการ (scr-director) — การ์ดเมนูใหญ่ๆ กดง่ายด้วยนิ้วโป้ง · ผู้อำนวยการใช้แอปมือถืออย่างเดียว */
+  .dr-menu{ display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:10px; box-shadow:var(--shadow-sm); font:inherit; color:var(--ink); cursor:pointer; }
+  .dr-menu .ic{ width:44px; height:44px; border-radius:12px; background:#EEE9FF; display:flex; align-items:center; justify-content:center; font-size:22px; flex:none; }
+  .dr-menu .tx{ flex:1; min-width:0; } .dr-menu .tx b{ display:block; font-size:15px; } .dr-menu .tx span{ font-size:12.5px; color:var(--ink-soft); }
+  .dr-menu .go{ color:var(--ink-faint); font-size:20px; flex:none; }
+  .dr-menu.off{ opacity:.55; cursor:default; }
+  .dr-badge{ background:var(--red,#D64545); color:#fff; border-radius:999px; font-size:12px; font-weight:700; padding:2px 8px; flex:none; }
+  .dr-team{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:10px; box-shadow:var(--shadow-sm); }
+  .dr-team h3{ margin:0 0 6px; font-size:15px; }
+  .dr-person{ display:flex; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--border); font-size:13.5px; }
+  .dr-person .nm{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .dr-person .rl{ font-size:11.5px; font-weight:700; color:#3A2399; background:#EEE9FF; border-radius:999px; padding:2px 8px; flex:none; }
+  .dr-person .x{ border:0; background:transparent; color:var(--ink-faint); font-size:18px; padding:2px 8px; cursor:pointer; }
+  .dr-cand{ display:flex; align-items:center; gap:10px; padding:10px 4px; border-top:1px solid var(--border); font-size:14px; cursor:pointer; }
+  .dr-cand input{ width:auto; flex:none; }
+  .dr-cand small{ display:block; color:var(--ink-soft); font-size:12px; }
   .bz-banner{ background:#EEE9FF; color:#3A2399; border:1px solid #D5CBFF; border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:13.5px; line-height:1.55; }
   .sheet-bg{ position:fixed; inset:0; background:rgba(15,27,45,.45); z-index:80; display:flex; align-items:flex-end; justify-content:center; }
   .sheet{ background:var(--surface); width:100%; max-width:560px; border-radius:18px 18px 0 0; padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-height:92vh; overflow:auto; box-shadow:0 -10px 30px -12px rgba(15,27,45,.4); }
@@ -351,6 +367,21 @@
 </div>
 <div class="sheet-bg hidden" id="bz-sheet-bg" onclick="if(event.target===this)bzCloseSheet()"><div class="sheet" id="bz-sheet"></div></div>
 
+<!-- ═══ เมนูผู้อำนวยการ BLITZ RANGER ═══
+     ผู้อำนวยการใช้แอปมือถือล้วน → รวมทางเข้าทุกอย่างที่ควรเห็นไว้หน้าเดียว: แดชบอร์ด · จัดทีม · อนุมัติผู้สมัคร · ลิงก์สมัคร
+     ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ทุกครั้ง (62_blitz.gs) — ที่นี่แค่โชว์/ซ่อนและวาด -->
+<div class="app hidden" id="scr-director">
+  <div class="top">
+    <button class="btn btn-sm" id="dr-back" onclick="drBack()">‹ กลับ</button>
+    <div class="who"><b id="dr-title">ผู้อำนวยการ BLITZ</b><span class="muted" id="dr-sub">-</span></div>
+    <button class="btn btn-sm" id="dr-refresh" onclick="drRefresh()">รีเฟรช</button>
+  </div>
+  <div class="screen active" style="padding-bottom:24px">
+    <div id="dr-body"></div>
+  </div>
+</div>
+<div class="sheet-bg hidden" id="dr-sheet-bg" onclick="if(event.target===this)drCloseSheet()"><div class="sheet" id="dr-sheet"></div></div>
+
 <!-- ═══ แอปหลัก ═══ -->
 <div class="app hidden" id="scr-app">
   <div class="top">
@@ -368,8 +399,8 @@
     <!-- BLITZ RANGER: ป้ายทีมของผู้ป้อนบิล + ทางเข้าแดชบอร์ดของผู้อำนวยการ (ซ่อนเป็นค่าเริ่มต้น — bootstrap บอกว่าใคร) -->
     <div class="bz-banner hidden" id="home-blitz-team"></div>
     <div class="card hidden" id="home-blitz" style="margin-bottom:12px">
-      <div class="row" style="border-top:none;padding:0"><span><b>แดชบอร์ด BLITZ RANGER</b><br><span class="muted">เทียบยอดขายและจำนวนร้านของแต่ละทีม</span></span>
-        <button class="btn btn-primary btn-sm" onclick="openBlitz({ from: 'app' })">เปิด</button></div>
+      <div class="row" style="border-top:none;padding:0"><span><b>BLITZ RANGER — ผู้อำนวยการ</b><br><span class="muted">แดชบอร์ด · จัดทีม · อนุมัติผู้สมัคร · ลิงก์สมัคร</span></span>
+        <button class="btn btn-primary btn-sm" onclick="openDirector({ from: 'app' })">เปิด</button></div>
     </div>
     <div class="card hidden" id="home-approve" style="margin-bottom:12px">
       <div class="row" style="border-top:none;padding:0"><span><b>อนุมัติผู้ใช้งาน</b><br><span class="muted" id="home-approve-sub">-</span></span>
@@ -558,7 +589,7 @@ const LSK = k => 'srm_' + ENV + '_' + k;           // แยก key ตามส
 const lsGet = (k, def) => { try { const v = localStorage.getItem(LSK(k)); return v == null ? def : JSON.parse(v); } catch (e) { return def; } };
 const lsSet = (k, v) => { try { localStorage.setItem(LSK(k), JSON.stringify(v)); } catch (e) {} };
 function toast(msg, kind){ const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200); }
-function show(id){ ['scr-loading','scr-register','scr-pending','scr-app','scr-approve','scr-blitz'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+function show(id){ ['scr-loading','scr-register','scr-pending','scr-app','scr-approve','scr-blitz','scr-director'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
 function setLoad(txt, spin = true, extraHtml = ''){ if (spin && typeof AP !== 'undefined' && AP.fromSnap) return; /* กำลังโชว์หน้าอนุมัติจาก snapshot อยู่ — ข้อความ "กำลังโหลด" ห้ามทับ (ข้อความผิดพลาดยังโชว์ตามปกติ) */ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
 
 let ME = { lineUserId: '', name: '', pictureUrl: '', role: '', tenantId: '' };
@@ -575,7 +606,7 @@ let DATA = { products: [], customers: [] };
      2) action เดียวกันที่ยังค้างอยู่ ถูกบล็อกก่อนถึง network
      3) บิล/สต็อกแนบ requestId ที่สร้าง "ตอนประกอบข้อมูล" ครั้งเดียว — ส่งซ้ำกี่รอบเซิร์ฟเวอร์ก็บันทึกใบเดียว
         สำคัญมากกับคิวออฟไลน์: บิลในคิวพก requestId เดิมติดตัวไปด้วย การส่งซ้ำจึงไม่เกิดใบที่สอง */
-const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder','submitCustomerRequest','decideStaffApproval']);
+const MUTATING = new Set(['recordSale','restockVan','submitCount','addCustomer','checkInVisit','addVisitNote','addCompetitor','confirmSalesOrder','cancelMySalesOrder','submitCustomerRequest','decideStaffApproval','saveBlitzMemberMobile','removeBlitzMemberMobile']);
 const INFLIGHT = new Set();
 const newRequestId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 function pressBusy(btn, on){ if (!btn) return; btn.classList.toggle('is-busy', on); tnkBusy(btn, on); }   // tnkBusy ใส่/เอาวงแหวน และ disable/enable ปุ่มให้ในคำสั่งเดียว
@@ -762,6 +793,13 @@ async function boot(){
       if (cached && cached.lineUserId === ME.lineUserId) { Object.assign(ME, cached); return enterApp(); }
       return setLoad('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message, false, '<button class="btn btn-primary" onclick="boot()">ลองใหม่</button>');
     }
+    /* ★ ผู้อำนวยการ/ผู้อนุมัติที่ไม่ใช่พนักงานขาย (ไม่มีบัญชีแอปขาย) ต้องเข้าเมนูของตัวเองได้ — เดิมเจอแต่หน้าสมัครพนักงาน
+       ถามเฉพาะคนที่ยังไม่ใช่พนักงานอนุมัติแล้ว: พนักงานปกติไม่จ่ายคำขอเพิ่ม (ของเขารู้จาก bootstrap อยู่แล้ว) */
+    if (!st || !st.exists || String(st.status) !== 'Yes' || st.expired) {
+      setLoad('กำลังตรวจสอบสิทธิ์ผู้ดูแล...');
+      const d = await drProbe();
+      if (d) return openDirector({ from: 'boot', prefetched: d });
+    }
     if (!st || !st.exists) return showRegister();
     if (String(st.status) === 'Rejected') return showPending('คำขอใช้งานไม่ได้รับอนุมัติ — สอบถามผู้อนุมัติของสังกัดคุณ (แจ้ง LINE User ID ด้านล่างได้)', 'ไม่ได้รับอนุมัติ');
     if (String(st.status) !== 'Yes') return showPending('บัญชีรอแอดมินอนุมัติ (สถานะ: ' + (st.status || '-') + ')');
@@ -840,6 +878,7 @@ function paintBlitzCards(){
 async function openBlitz(opts){
   opts = opts || {};
   BZ.from = opts.from || 'app';
+  if (opts.campaignId) { if (BZ.campaignId !== opts.campaignId) BZ.r = null; BZ.campaignId = opts.campaignId; }   // เปิดจากเมนูผู้อำนวยการ → ดูแคมเปญที่เลือกไว้ ไม่ใช่ของครั้งก่อน
   BZ.fromSnap = !!opts.snap; BZ.live = !opts.snap;
   if (opts.snap) { BZ.snapOwner = opts.snap.owner || ''; BZ.r = opts.snap.r; }
   else if (!opts.prefetched) BZ.r = null;
@@ -854,9 +893,12 @@ async function openBlitz(opts){
 }
 function closeBlitz(){
   bzCloseSheet(); if (BZ.timer) { clearInterval(BZ.timer); BZ.timer = null; }
+  if (BZ.from === 'director') { openDirector({ from: DR.from }); return; }   // กลับเมนูผู้อำนวยการ (วาดของเดิมทันที แล้วอัปเดตเบื้องหลัง)
   if (BZ.from === 'boot') { boot(); return; }
   show('scr-app'); gotoTab('home');
 }
+/* ปุ่ม "เมนูผู้อำนวยการ" บนหัวแดชบอร์ด — เปิดจากลิงก์ ?go=blitz แล้วอยากไปจัดทีม/อนุมัติต่อโดยไม่ต้องหาทางเข้าเอง */
+function bzToDirector(){ if (BZ.timer) { clearInterval(BZ.timer); BZ.timer = null; } bzCloseSheet(); openDirector({ from: BZ.from === 'boot' ? 'boot' : 'app' }); }
 /* รีเฟรชเองทุก 60 วิขณะเปิดหน้านี้ — ผู้อำนวยการดูหน้าจอค้างไว้ระหว่างงาน ไม่ต้องกดเอง (backend แคช 45 วิ จึงไม่หนักขึ้น) */
 function bzAutoRefresh(){
   if (BZ.timer) clearInterval(BZ.timer);
@@ -894,7 +936,7 @@ function bzRender(){
   const max = Math.max(1, ...teams.map(x => byShops ? x.shops : x.sales));
   const camps = r.campaigns && r.campaigns.length > 1
     ? '<select class="inp" style="margin-bottom:10px" onchange="BZ.campaignId=this.value;bzLoad(true)">' + r.campaigns.map(x => '<option value="' + esc(x.id) + '"' + (x.id === c.id ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select>' : '';
-  $('bz-body').innerHTML = camps +
+  $('bz-body').innerHTML = (BZ.from === 'director' ? '' : '<button type="button" class="btn btn-sm" style="margin-bottom:10px" onclick="bzToDirector()">☰ เมนูผู้อำนวยการ (จัดทีม · อนุมัติ)</button>') + camps +
     '<div class="bz-head"><b>' + esc(c.name) + '</b><br><span class="muted">' + esc(c.startDate) + ' → ' + esc(c.endDate) + ' · ' +
       (c.running ? '🟢 กำลังแข่งขัน' : c.status === 'closed' ? 'ปิดแล้ว' : 'อยู่นอกช่วงวันที่') + '</span></div>' +
     '<div class="bz-grid">' +
@@ -942,6 +984,174 @@ function bzOpenTeam(id){
   $('bz-sheet-bg').classList.remove('hidden');
 }
 function bzCloseSheet(){ $('bz-sheet-bg').classList.add('hidden'); }
+
+/* ══════════════ เมนูผู้อำนวยการ BLITZ — หน้าแรก + จัดทีมจากมือถือ (backend/62_blitz.gs) ══════════════
+   ★ ผู้อำนวยการใช้แอปมือถือล้วน จึงรวมทางเข้าไว้หน้าเดียว: แดชบอร์ด · จัดทีม · อนุมัติผู้สมัคร · ลิงก์สมัคร
+   ★ มือถือตั้งได้แค่ "ผู้ป้อนบิล" กับ "สมาชิก" — ตั้ง/ถอดผู้อำนวยการ เบิก-คืนสต็อก แก้แคมเปญ ยังเป็นงานหน้าแอดมิน (ขอบเขตที่เจ้าของระบบเลือก)
+   ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ทุกครั้ง · ที่นี่แค่โชว์/ซ่อนปุ่ม */
+const DR = { home: null, teams: null, view: 'menu', campaignId: '', from: 'app', pick: null };
+function drCamp(){ const cs = (DR.home && DR.home.campaigns) || []; return cs.filter(c => c.id === DR.campaignId)[0] || cs.filter(c => c.running)[0] || cs[0] || null; }
+/* ถามตอนเปิดแอปเฉพาะคนที่ "ยังไม่ใช่พนักงานที่อนุมัติแล้ว" — พนักงานปกติรู้อยู่แล้วจาก bootstrap (DATA.blitzViewer) ไม่จ่ายคำขอเพิ่ม
+   คืน home เมื่อเป็นผู้อำนวยการหรือผู้อนุมัติ · นอกนั้นคืน null เงียบๆ (ถามไม่ได้ก็ไม่ขวางการสมัคร/รออนุมัติ) */
+async function drProbe(){
+  try {
+    const r = await api('getBlitzDirectorHome', {}, 30000);
+    return (r && r.success && (r.isViewer || (r.approver && r.approver.isApprover))) ? r : null;
+  } catch (e) { return null; }
+}
+async function openDirector(opts){
+  opts = opts || {};
+  DR.from = opts.from || 'app'; DR.view = 'menu'; DR.teams = null;
+  show('scr-director');
+  $('dr-back').classList.toggle('hidden', DR.from === 'boot');   // ไม่ใช่พนักงาน = ไม่มีแอปให้กลับไป (กลับแล้วจะวนมาที่นี่อีก)
+  if (opts.prefetched) { drApplyHome(opts.prefetched); return; }
+  if (!DR.home) { const sn = lsGet('drsnap', null); if (sn && sn.owner === ME.lineUserId && sn.home) DR.home = sn.home; }
+  if (DR.home) drRender(); else $('dr-body').innerHTML = tnkWait(160, 'กำลังโหลดเมนู…', 56);
+  await drLoadHome(true);
+}
+async function drLoadHome(quiet){
+  const btn = $('dr-refresh'); if (!quiet) pressBusy(btn, true);
+  try {
+    const r = await api('getBlitzDirectorHome', {}, 30000);
+    if (r && r.success) { drApplyHome(r); return; }
+    if (!DR.home) $('dr-body').innerHTML = '<div class="card"><div class="muted">' + esc((r && r.message) || 'โหลดไม่สำเร็จ') + '</div></div>';
+  } catch (e) {
+    if (!quiet) toast('โหลดไม่ได้: ' + e.message, 'err');
+    if (!DR.home) $('dr-body').innerHTML = '<div class="card"><div class="muted">เชื่อมต่อไม่ได้ — ' + esc(e.message) + '</div></div>';
+  } finally { if (!quiet) pressBusy(btn, false); }
+}
+function drApplyHome(r){
+  DR.home = r; ME.isBlitzViewer = !!r.isViewer; ME.isApprover = !!(r.approver && r.approver.isApprover);
+  if (!drCamp() || (DR.campaignId && !r.campaigns.some(c => c.id === DR.campaignId))) DR.campaignId = '';
+  lsSet('drsnap', { owner: ME.lineUserId, ts: Date.now(), home: r });
+  drRender();
+}
+function drRender(){ if (DR.view === 'teams') drRenderTeams(); else drRenderMenu(); }
+function drBack(){
+  drCloseSheet();
+  if (DR.view === 'teams') { DR.view = 'menu'; drRender(); return; }
+  show('scr-app'); gotoTab('home');
+}
+function drRefresh(){ if (DR.view === 'teams') drLoadTeams(false); else drLoadHome(false); }
+function drMenuBtn(ic, title, sub, onclick, badge, off){
+  return '<button type="button" class="dr-menu' + (off ? ' off' : '') + '"' + (off ? '' : ' onclick="' + onclick + '"') + '><span class="ic">' + ic + '</span>' +
+    '<span class="tx"><b>' + title + '</b><span>' + sub + '</span></span>' + (badge ? '<span class="dr-badge">' + badge + '</span>' : '') + (off ? '' : '<span class="go">›</span>') + '</button>';
+}
+function drRenderMenu(){
+  const h = DR.home; if (!h) return;
+  const c = drCamp(), ap = h.approver || {};
+  $('dr-title').textContent = 'ผู้อำนวยการ BLITZ';
+  $('dr-sub').textContent = c ? c.name : 'ผู้อนุมัติ';
+  let html = '';
+  if (h.isViewer && c) {
+    if (h.campaigns.length > 1) html += '<select class="inp" style="margin-bottom:10px" onchange="DR.campaignId=this.value;DR.teams=null;drRender()">' +
+      h.campaigns.map(x => '<option value="' + esc(x.id) + '"' + (x.id === c.id ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select>';
+    html += '<div class="bz-head"><b>' + esc(c.name) + '</b><br><span class="muted">' + esc(c.tenantName) + ' · ' + esc(c.startDate) + ' → ' + esc(c.endDate) + ' · ' +
+      (c.running ? '🟢 กำลังแข่งขัน' : c.status === 'closed' ? 'ปิดแล้ว' : 'อยู่นอกช่วงวันที่') + '</span></div>';
+    html += drMenuBtn('📊', 'แดชบอร์ด', 'ยอดขาย · จำนวนร้าน · อันดับทีม', "openBlitz({ from: 'director', campaignId: '" + esc(c.id) + "' })");
+    html += drMenuBtn('👥', 'จัดทีม', 'ตั้งผู้ป้อนบิล · สมาชิกของแต่ละทีม A–E', 'drOpenTeams()');
+  }
+  if (ap.isApprover) html += drMenuBtn('✅', 'อนุมัติผู้สมัคร', ap.pendingCount ? 'มีคำขอรออนุมัติ ' + ap.pendingCount + ' คน' : 'ไม่มีคำขอค้างอยู่', "openApprovals({ from: 'director' })", ap.pendingCount || '');
+  else if (h.isViewer) html += drMenuBtn('✅', 'อนุมัติผู้สมัคร', 'ยังไม่มีสิทธิ์อนุมัติ — แจ้งผู้ดูแลระบบให้ตั้งคุณเป็นผู้อนุมัติ (เมนูผู้ใช้งาน)', '', '', true);
+  if (h.isViewer && c) html += drMenuBtn('🔗', 'ลิงก์ให้ทีมลงทะเบียน', 'ส่งลิงก์/QR ให้สมาชิกสมัคร แล้วกดอนุมัติ → จัดเข้าทีม', 'drShareLink()');
+  $('dr-body').innerHTML = html;
+}
+async function drOpenTeams(){
+  DR.view = 'teams'; drRender();
+  if (!DR.teams) $('dr-body').innerHTML = tnkWait(160, 'กำลังโหลดทีม…', 56);
+  await drLoadTeams(true);
+}
+async function drLoadTeams(quiet){
+  const c = drCamp(); if (!c) return;
+  const btn = $('dr-refresh'); if (!quiet) pressBusy(btn, true);
+  try {
+    const r = await api('getBlitzTeamsMobile', { campaignId: c.id }, 30000);
+    if (r && r.success) { DR.teams = r; if (DR.view === 'teams') drRenderTeams(); return r; }
+    if (!DR.teams && DR.view === 'teams') $('dr-body').innerHTML = '<div class="card"><div class="muted">' + esc((r && r.message) || 'โหลดไม่สำเร็จ') + '</div></div>';
+    else toast((r && r.message) || 'โหลดไม่สำเร็จ', 'err');
+  } catch (e) {
+    if (!DR.teams && DR.view === 'teams') $('dr-body').innerHTML = '<div class="card"><div class="muted">เชื่อมต่อไม่ได้ — ' + esc(e.message) + '</div></div>';
+    else if (!quiet) toast('โหลดไม่ได้: ' + e.message, 'err');
+  } finally { if (!quiet) pressBusy(btn, false); }
+  return null;
+}
+function drRenderTeams(){
+  const t = DR.teams; if (!t) return;
+  const closed = t.campaign.status !== 'active';
+  $('dr-title').textContent = 'จัดทีม';
+  $('dr-sub').textContent = t.campaign.name;
+  let html = closed ? '<div class="ap-banner">แคมเปญนี้ปิดแล้ว — แก้ทีมไม่ได้</div>' : '';
+  html += '<div class="note" style="margin-bottom:10px">แต่ละทีมมี<b>ผู้ป้อนบิลได้คนเดียว</b> (คนที่ขายในแอป) · สมาชิกคนอื่นไม่ต้องมีบัญชี ใส่เป็นชื่อได้ · ' +
+    'ผู้ป้อนบิลต้องเป็นพนักงานที่ได้รับอนุมัติแล้ว (ถ้ายังไม่มีชื่อในรายการ ส่งลิงก์ให้ลงทะเบียนก่อน)</div>';
+  html += t.teams.map(x => {
+    const person = (p, role) => '<div class="dr-person"><span class="nm">' + esc(p.name || p.lineUserId) + '</span><span class="rl">' + role + '</span>' +
+      (closed ? '' : '<button class="x" aria-label="ถอดออก" onclick="drRemove(\'' + esc(p.id) + '\')">✕</button>') + '</div>';
+    return '<div class="dr-team"><h3>ทีม ' + esc(x.code) + (x.name && x.name !== 'ทีม ' + x.code ? ' · ' + esc(x.name) : '') + '</h3>' +
+      (x.seller ? person(x.seller, 'ผู้ป้อนบิล') : '<div class="muted" style="padding:6px 0">ยังไม่มีผู้ป้อนบิล</div>') +
+      x.members.map(m => person(m, 'สมาชิก')).join('') +
+      (closed ? '' : '<div class="ap-actions" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="drOpenPick(\'' + esc(x.id) + '\',\'seller\')">' + (x.seller ? 'เปลี่ยนผู้ป้อนบิล' : 'ตั้งผู้ป้อนบิล') + '</button>' +
+        '<button class="btn btn-sm" onclick="drOpenPick(\'' + esc(x.id) + '\',\'member\')">+ สมาชิก</button></div>') + '</div>';
+  }).join('');
+  $('dr-body').innerHTML = html;
+}
+function drOpenPick(teamId, role){
+  const t = DR.teams; if (!t) return;
+  const team = t.teams.filter(x => x.id === teamId)[0]; if (!team) return;
+  const byId = {}; t.teams.forEach(x => { byId[x.id] = x; });
+  DR.pick = { teamId: teamId, role: role };
+  const rows = t.candidates.map((c, i) => {
+    const a = c.assigned, at = a && byId[a.teamId];
+    const hint = a ? 'ตอนนี้อยู่ทีม ' + esc(at ? at.code : '?') + ' (' + (a.role === 'seller' ? 'ผู้ป้อนบิล' : 'สมาชิก') + ') — เลือกแล้วจะย้ายมาทีมนี้' : '';
+    return '<label class="dr-cand"><input type="radio" name="dr-c" value="' + i + '" onchange="$(\'dr-name\')&&($(\'dr-name\').value=\'\')"><span>' + esc(c.name || c.lineUserId) + (hint ? '<small>' + hint + '</small>' : '') + '</span></label>';
+  }).join('');
+  $('dr-sheet').innerHTML = '<h3>' + (role === 'seller' ? 'ตั้งผู้ป้อนบิล' : 'เพิ่มสมาชิก') + ' · ทีม ' + esc(team.code) + '</h3>' +
+    '<div class="muted">' + (role === 'seller' ? 'เลือกพนักงานที่จะป้อนบิลขายแทนทั้งทีม' : 'เลือกพนักงานที่มีบัญชี หรือพิมพ์ชื่อคนที่ไม่มีบัญชี') + '</div>' +
+    '<div style="margin-top:8px;max-height:46vh;overflow:auto">' + (rows || '<div class="muted" style="padding:10px 0">ยังไม่มีพนักงานที่ได้รับอนุมัติ — ส่งลิงก์ให้ทีมลงทะเบียน แล้วอนุมัติก่อน</div>') + '</div>' +
+    (role === 'member' ? '<div class="field"><label>หรือพิมพ์ชื่อ (ไม่มีบัญชี)</label><input class="inp" id="dr-name" placeholder="ชื่อสมาชิก" oninput="document.querySelectorAll(\'input[name=dr-c]\').forEach(r=>r.checked=false)"></div>' : '') +
+    '<div class="ap-actions" style="margin-top:12px"><button class="btn" onclick="drCloseSheet()">ยกเลิก</button><button class="btn btn-primary" id="dr-save" onclick="drSavePick(false)">บันทึก</button></div>';
+  $('dr-sheet-bg').classList.remove('hidden');
+}
+function drCloseSheet(){ $('dr-sheet-bg').classList.add('hidden'); DR.pick = null; }
+async function drSavePick(replace){
+  const p = DR.pick, t = DR.teams; if (!p || !t) return;
+  const sel = document.querySelector('input[name=dr-c]:checked'), nm = $('dr-name') ? $('dr-name').value.trim() : '';
+  const cand = sel ? t.candidates[Number(sel.value)] : null;
+  if (!cand && !nm) return toast(p.role === 'seller' ? 'เลือกพนักงานก่อน' : 'เลือกพนักงานหรือพิมพ์ชื่อก่อน', 'err');
+  const payload = { campaignId: t.campaign.id, teamId: p.teamId, role: p.role, replace: !!replace };
+  if (cand) { payload.lineUserId = cand.lineUserId; payload.name = cand.name; } else payload.name = nm;
+  const btn = $('dr-save'); pressBusy(btn, true);
+  try {
+    const r = await api('saveBlitzMemberMobile', payload, 30000);
+    if (r && r.needReplace) { pressBusy(btn, false); if (confirm(r.message)) return drSavePick(true); return; }
+    if (!r || !r.success) { toast((r && r.message) || 'บันทึกไม่สำเร็จ', 'err'); return; }
+    toast('บันทึกแล้ว', 'ok'); drCloseSheet(); await drLoadTeams(true);
+  } catch (e) { toast('บันทึกไม่ได้: ' + e.message, 'err'); }
+  finally { pressBusy(btn, false); }
+}
+async function drRemove(id){
+  const t = DR.teams; if (!t) return;
+  let who = ''; t.teams.forEach(x => { [x.seller].concat(x.members).forEach(m => { if (m && m.id === id) who = m.name || m.lineUserId; }); });
+  if (!confirm('ถอด ' + (who || 'รายการนี้') + ' ออกจากทีม?')) return;
+  try {
+    const r = await api('removeBlitzMemberMobile', { id: id }, 30000);
+    if (!r || !r.success) { toast((r && r.message) || 'ถอดไม่สำเร็จ', 'err'); return; }
+    toast('ถอดออกแล้ว', 'ok'); await drLoadTeams(true);
+  } catch (e) { toast('ถอดไม่ได้: ' + e.message, 'err'); }
+}
+/* ลิงก์สมัครอยู่ในคำตอบของ getBlitzTeamsMobile (ต้องใช้ LIFF_ID ของ env นั้นที่ backend) — ยังไม่โหลดก็โหลดก่อนแล้วค่อยเปิด */
+async function drShareLink(){
+  if (!DR.teams) { const r = await drLoadTeams(false); if (!r) return; }
+  const l = DR.teams && DR.teams.registerLink;
+  if (!l) return toast('ยังสร้างลิงก์ไม่ได้ (ฝั่งเซิร์ฟเวอร์ยังไม่ได้ตั้งค่า LIFF) — แจ้งผู้ดูแลระบบ', 'err');
+  $('dr-sheet').innerHTML = '<h3>ลิงก์ให้ทีมลงทะเบียน</h3><div class="muted">ส่งให้สมาชิกเปิดใน LINE · กรอกชื่อจริงแล้วรออนุมัติ (ผู้อนุมัติได้แจ้งเตือนอัตโนมัติ) · อนุมัติแล้วกลับมาจัดเข้าทีมที่เมนู "จัดทีม"</div>' +
+    '<div class="field"><input class="inp mono" id="dr-link" readonly value="' + esc(l) + '" style="font-size:12px" onclick="this.select()"></div>' +
+    '<div class="ap-actions" style="margin-top:12px"><button class="btn" onclick="drCloseSheet()">ปิด</button><button class="btn btn-primary" onclick="drCopyLink()">คัดลอกลิงก์</button></div>';
+  $('dr-sheet-bg').classList.remove('hidden');
+}
+function drCopyLink(){
+  const i = $('dr-link'); i.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject()).then(() => toast('คัดลอกแล้ว', 'ok')).catch(() => { document.execCommand('copy'); toast('คัดลอกแล้ว', 'ok'); });
+}
 
 /* ══════════════ อนุมัติผู้ใช้งาน (ผู้อนุมัติเท่านั้น) — backend/61_staff_approval.gs ══════════════
    ★ สิทธิ์ตัดสินที่ backend จากตัวตน LINE ของคนกดทุกครั้ง · ที่นี่แค่ "โชว์/ซ่อนปุ่ม" และวาดหน้าจอ
@@ -1016,6 +1226,7 @@ function apApply(r){
 }
 function closeApprovals(){
   apCloseSheet();
+  if (AP.from === 'director') { openDirector({ from: DR.from }); return; }   // เปิดจากเมนูผู้อำนวยการ → กลับไปที่นั่น (จำนวนคำขอค้างอัปเดตตอนโหลดซ้ำ)
   if (AP.from === 'boot') { boot(); return; }   // ไม่ได้มาจากแอป → ตรวจสิทธิ์ใช้งานของตัวเองต่อ (ผู้อนุมัติที่ไม่ใช่พนักงานจะเห็นหน้าสมัคร)
   show('scr-app'); gotoTab('home'); checkApprover();
 }

@@ -9034,7 +9034,14 @@ async function bzaSaveTeam(id){
 function bzaPeopleOptions(role){
   const tid = BZA.tenantId;
   /* ผู้ป้อนบิล/สมาชิก = คนของตัวแทนนี้เท่านั้น (แอดมินบริษัทไม่ใช่คนขายหน้างาน) · ผู้อำนวยการ = ใครก็ได้ที่ผูก LINE แล้ว */
-  const list = BZA.data.people.filter(p => role === 'director' ? true : (p.tenantId === tid && p.sub === 'พนักงานขาย'));
+  /* ผู้ป้อนบิล/สมาชิก = เฉพาะแถว "พนักงานขาย" ของตัวแทนนี้ (คนที่มีบัญชีแอดมินด้วยก็โผล่ เพราะ backend ไม่ตัดซ้ำข้ามชนิดแล้ว)
+     ผู้อำนวยการ = ใครก็ได้ที่ผูก LINE · คนเดียวมีสองแถว (แอดมิน + พนักงาน) → ตัดซ้ำตาม LINE id ไม่ให้ชื่อซ้ำในรายการ */
+  const seenDir = {};
+  const list = BZA.data.people.filter(p => {
+    if (role !== 'director') return p.tenantId === tid && p.sub === 'พนักงานขาย';
+    if (seenDir[p.lineUserId]) return false;
+    return (seenDir[p.lineUserId] = true);
+  });
   return '<option value="">— เลือกรายชื่อ —</option>' + list.map(p => '<option value="'+esc(p.lineUserId)+'" data-name="'+esc(p.name)+'">'+esc(p.name)+' · '+esc(p.sub)+'</option>').join('');
 }
 function bzaMemberModal(teamId, role){

@@ -107,19 +107,22 @@ function _bzNameOfLine(lid) {
   return name;
 }
 
-/** คนที่เลือกได้ (ผูก LINE แล้ว): พนักงานแอปมือถือที่อนุมัติแล้ว + แอดมินที่ผูก LINE */
+/** คนที่เลือกได้ (ผูก LINE แล้ว): พนักงานแอปมือถือที่อนุมัติแล้ว + แอดมินที่ผูก LINE
+ *  ★ คนเดียวที่มีทั้งสองบัญชี (LINE เดียวกัน) ต้องโผล่ทั้งสองแถว — ห้ามตัดซ้ำข้ามชนิด: ผู้ป้อนบิลต้องเป็น "พนักงานขาย" (บัญชีที่เปิดบิลในแอปได้จริง)
+ *  เดิมแถวแอดมินมาก่อนแล้วกินแถวพนักงานของ LINE เดียวกันทิ้ง คนนั้นจึงหายจากรายชื่อผู้ป้อนบิล (เจอ 27 พ.ย. 2026) · ตัดซ้ำเฉพาะภายในชนิดเดียวกัน
+ *  (หน้าเว็บตัดซ้ำตาม LINE id เองตอนเลือกผู้อำนวยการ ซึ่งไม่สนชนิดบัญชี) */
 function _bzPeople() {
-  var seen = {}, out = [];
+  var seenAdmin = {}, seenStaff = {}, out = [];
   centralObjects('admin_users').forEach(function(u) {
     var lid = String(u.line_user_id || '').trim();
-    if (!lid || String(u.status) !== ADMIN_STATUS_ACTIVE || seen[lid]) return;
-    seen[lid] = 1;
+    if (!lid || String(u.status) !== ADMIN_STATUS_ACTIVE || seenAdmin[lid]) return;
+    seenAdmin[lid] = 1;
     out.push({ lineUserId: lid, name: String(u.display_name || u.username || lid), sub: 'แอดมิน', tenantId: String(u.tenant_id || '') });
   });
   centralObjects('liff_users').forEach(function(u) {
     var lid = String(u.line_user_id || '').trim();
-    if (!lid || seen[lid] || _saNorm(u.status) !== SA_ST_YES || _saExpired(u.expires_at)) return;
-    seen[lid] = 1;
+    if (!lid || seenStaff[lid] || _saNorm(u.status) !== SA_ST_YES || _saExpired(u.expires_at)) return;
+    seenStaff[lid] = 1;
     out.push({ lineUserId: lid, name: String(u.display_name || lid), sub: 'พนักงานขาย', tenantId: String(u.tenant_id || '') });
   });
   return out.sort(function(a, b) { return String(a.name).localeCompare(String(b.name), 'th'); });
@@ -251,7 +254,12 @@ function saveBlitzMember(session, payload) {
   var err = _requirePermission(session, 'staff', 'edit'); if (err) return err;
   payload = payload || {};
   var G = _bzCampaignForSession(session, payload.campaignId); if (G.err) return G.err;
-  var camp = G.camp;
+  return _bzSaveMemberCore(G.camp, payload);
+}
+/** แกนเดียวของการตั้งสมาชิกทีม — หน้าแอดมิน (saveBlitzMember) และมือถือผู้อำนวยการ (saveBlitzMemberMobile) เรียกตัวเดียวกัน
+ *  กติกาทั้งหมด (ผู้ป้อนบิลต้องอนุมัติแล้ว/ไม่หมดอายุ/ตัวแทนเดียวกับแคมเปญ · 1 คน 1 ทีมต่อแคมเปญ · ทีมละผู้ป้อนบิลคนเดียว) จึงเป็นชุดเดียว
+ *  ★ ฟังก์ชันนี้ไม่ตรวจ "ใครมีสิทธิ์เรียก" — ผู้เรียกต้องตรวจสิทธิ์และหาแคมเปญให้เรียบร้อยก่อนเสมอ */
+function _bzSaveMemberCore(camp, payload) {
   var role = String(payload.role || 'member');
   if (!BZ_ROLES[role]) return { success: false, message: 'บทบาทไม่ถูกต้อง' };
   var lid = String(payload.lineUserId || '').trim();
@@ -300,6 +308,10 @@ function removeBlitzMember(session, payload) {
   centralObjects(BZ_MEMBERS).forEach(function(x) { if (String(x.record_id) === String((payload || {}).id)) m = x; });
   if (!m) return { success: false, message: 'ไม่พบรายการนี้' };
   var G = _bzCampaignForSession(session, m.campaign_id); if (G.err) return G.err;
+  return _bzRemoveMemberCore(m);
+}
+/** แกนเดียวของการถอดสมาชิก — ผู้เรียกตรวจสิทธิ์และตรวจว่าแถวนี้อยู่ในแคมเปญที่ตัวเองดูแลก่อนเสมอ (เหมือน _bzSaveMemberCore) */
+function _bzRemoveMemberCore(m) {
   return _withDocLock(function() {
     deleteRowsWhere(centralSheet(BZ_MEMBERS), 'record_id', m.record_id);
     _bzClearMember(String(m.line_user_id || ''));
@@ -546,10 +558,90 @@ function getBlitzDashboard(lineUserId, payload) {
   out.campaigns = camps.map(function(c) { return { id: String(c.record_id), name: String(c.name || '') }; });
   return out;
 }
-var BLITZ_VIEWER_ACTION_MAP = { getBlitzDashboard: 1 };
+// ───────────────────────── เมนูผู้อำนวยการบนมือถือ + จัดทีมจากมือถือ (ผู้อำนวยการใช้แค่แอปมือถือ) ─────────────────────────
+/* ★ สิทธิ์ตัดสินที่นี่ทุกครั้งจากตัวตน LINE ที่ยืนยันแล้ว (_bzViewerCampaigns) ไม่ใช่จากหน้าจอ · ผู้อำนวยการ "จัดทีม" ได้เฉพาะแคมเปญที่ตัวเองดูแล
+   ★ มือถือตั้งได้แค่ผู้ป้อนบิลกับสมาชิก — ไม่ตั้ง/ถอดผู้อำนวยการ ไม่เบิก-คืนสต็อก ไม่แก้แคมเปญ (ยังเป็นงานหน้าแอดมิน) ตามขอบเขตที่เจ้าของระบบเลือก
+   ★ กติกาการตั้งสมาชิกเป็นชุดเดียวกับหน้าแอดมิน (_bzSaveMemberCore) */
+function _bzTenantName(tenantId) {
+  var name = '';
+  centralObjects('tenants').forEach(function(t) { if (String(t.tenant_id) === String(tenantId) && !name) name = String(t.name || t.display_name || ''); });
+  return name || String(tenantId || '');
+}
+function _bzCampOut(c, today) {
+  return { id: String(c.record_id), name: String(c.name || ''), startDate: _bzD(c.start_date), endDate: _bzD(c.end_date),
+    status: String(c.status || 'active'), running: _bzActive(c, today), tenantId: String(c.tenant_id || ''), tenantName: _bzTenantName(c.tenant_id) };
+}
+/** หน้าแรกของผู้อำนวยการ: แคมเปญที่ดูแล + เป็นผู้อนุมัติผู้สมัครไหม (กี่คำขอค้าง) — คนที่ไม่ใช่ทั้งสองได้ isViewer:false ไม่ใช่ error (แอปถามตอนเปิด ต้องเงียบ) */
+function getBlitzDirectorHome(lineUserId, payload) {
+  var camps = _bzViewerCampaigns(lineUserId), today = _todayStr();
+  var out = { success: true, isViewer: camps.length > 0, campaigns: camps.map(function(c) { return _bzCampOut(c, today); }),
+    approver: { isApprover: false, pendingCount: 0 } };
+  try {
+    var a = getApproverContext(_saApproverCtx(lineUserId));
+    if (a && a.isApprover) out.approver = { isApprover: true, pendingCount: a.pendingCount || 0 };
+  } catch (e) { /* ตรวจสิทธิ์อนุมัติไม่ได้ ไม่ทำให้หน้าแรกล้ม — แค่ไม่โชว์เมนูอนุมัติ */ }
+  return out;
+}
+/** แคมเปญที่ผู้เรียกดูแล — exact:true = ต้องตรงกับ campaignId ที่ส่งมา (ใช้กับการเขียน) · ไม่ exact = เลือกอันที่กำลังแข่งก่อน (ใช้กับการอ่าน) */
+function _bzMobileCamp(lineUserId, campaignId, exact) {
+  var camps = _bzViewerCampaigns(lineUserId);
+  if (!camps.length) return { err: { success: false, notViewer: true, message: 'บัญชี LINE นี้ไม่ได้เป็นผู้อำนวยการของแคมเปญ BLITZ RANGER' } };
+  var pick = null, today = _todayStr();
+  camps.forEach(function(c) { if (String(c.record_id) === String(campaignId || '')) pick = c; });
+  if (!pick && exact) return { err: { success: false, message: 'ไม่พบแคมเปญนี้ หรือคุณไม่ได้ดูแลแคมเปญนี้' } };
+  if (!pick) camps.forEach(function(c) { if (!pick && _bzActive(c, today)) pick = c; });
+  if (!pick) pick = camps[0];
+  return { camp: pick, camps: camps };
+}
+/** payload: { campaignId? } — ทีม A–E · ผู้ป้อนบิล/สมาชิกของแต่ละทีม · รายชื่อพนักงานที่เลือกได้ (อนุมัติแล้ว ตัวแทนเดียวกับแคมเปญ) · ลิงก์สมัครสำหรับแชร์ให้ทีม */
+function getBlitzTeamsMobile(lineUserId, payload) {
+  var G = _bzMobileCamp(lineUserId, (payload || {}).campaignId, false); if (G.err) return G.err;
+  var camp = G.camp, cid = String(camp.record_id), today = _todayStr();
+  var members = centralObjects(BZ_MEMBERS).filter(function(m) { return String(m.campaign_id) === cid; });
+  var teams = centralObjects(BZ_TEAMS).filter(function(t) { return String(t.campaign_id) === cid; })
+    .sort(function(a, b) { return String(a.code).localeCompare(String(b.code)); })
+    .map(function(t) {
+      var mem = members.filter(function(m) { return String(m.team_id) === String(t.record_id) && String(m.role) !== 'director'; });
+      var seller = null; mem.forEach(function(m) { if (String(m.role) === 'seller') seller = m; });
+      var one = function(m) { return { id: String(m.record_id), lineUserId: String(m.line_user_id || ''), name: String(m.name || '') }; };
+      return { id: String(t.record_id), code: String(t.code || ''), name: String(t.name || ''), seller: seller ? one(seller) : null,
+        members: mem.filter(function(m) { return String(m.role) !== 'seller'; }).map(one) };
+    });
+  var assigned = {};
+  members.forEach(function(m) { if (m.line_user_id && String(m.role) !== 'director') assigned[String(m.line_user_id)] = { teamId: String(m.team_id || ''), role: String(m.role) }; });
+  var candidates = _bzPeople().filter(function(p) { return p.sub === 'พนักงานขาย' && String(p.tenantId) === String(camp.tenant_id); })
+    .map(function(p) { return { lineUserId: p.lineUserId, name: p.name, assigned: assigned[p.lineUserId] || null }; });
+  var link = ''; try { link = _saRegisterLink('BLITZ', String(camp.tenant_id)) || ''; } catch (e) {}
+  return { success: true, campaign: _bzCampOut(camp, today), campaigns: G.camps.map(function(c) { return { id: String(c.record_id), name: String(c.name || '') }; }),
+    teams: teams, candidates: candidates, registerLink: link };
+}
+/** payload: { campaignId, teamId, role: seller|member, lineUserId?, name?, replace? } — ตั้งผู้ป้อนบิล/สมาชิกทีม (ย้ายทีมโดยตั้งใหม่ได้ ไม่ต้องถอดก่อน) */
+function saveBlitzMemberMobile(lineUserId, payload) {
+  payload = payload || {};
+  var G = _bzMobileCamp(lineUserId, payload.campaignId, true); if (G.err) return G.err;
+  if (String(G.camp.status || 'active') !== 'active') return { success: false, message: 'แคมเปญนี้ปิดแล้ว แก้ทีมไม่ได้' };
+  var role = String(payload.role || 'member');
+  if (role !== 'seller' && role !== 'member') return { success: false, message: 'ตั้งผู้อำนวยการได้ที่หน้าแอดมินเท่านั้น — จากมือถือตั้งได้เฉพาะผู้ป้อนบิลและสมาชิกทีม' };
+  return _bzSaveMemberCore(G.camp, payload);
+}
+/** payload: { id } — ถอดผู้ป้อนบิล/สมาชิกออกจากทีม (ผู้อำนวยการถอดจากมือถือไม่ได้) */
+function removeBlitzMemberMobile(lineUserId, payload) {
+  var m = null;
+  centralObjects(BZ_MEMBERS).forEach(function(x) { if (String(x.record_id) === String((payload || {}).id)) m = x; });
+  if (!m) return { success: false, message: 'ไม่พบรายการนี้' };
+  var G = _bzMobileCamp(lineUserId, m.campaign_id, true); if (G.err) return G.err;
+  if (String(m.role) === 'director') return { success: false, message: 'ถอดผู้อำนวยการได้ที่หน้าแอดมินเท่านั้น' };
+  if (String(G.camp.status || 'active') !== 'active') return { success: false, message: 'แคมเปญนี้ปิดแล้ว แก้ทีมไม่ได้' };
+  return _bzRemoveMemberCore(m);
+}
+var BLITZ_VIEWER_ACTION_MAP = { getBlitzDashboard: 1, getBlitzDirectorHome: 1, getBlitzTeamsMobile: 1, saveBlitzMemberMobile: 1, removeBlitzMemberMobile: 1 };
 function _handleBlitzViewerCore(lineUserId, action, payload) {
   try {
     if (action === 'getBlitzDashboard') return getBlitzDashboard(lineUserId, payload || {});
+    if (action === 'getBlitzDirectorHome') return getBlitzDirectorHome(lineUserId, payload || {});
+    if (action === 'getBlitzTeamsMobile') return getBlitzTeamsMobile(lineUserId, payload || {});
+    if (action === 'saveBlitzMemberMobile') return saveBlitzMemberMobile(lineUserId, payload || {});
+    if (action === 'removeBlitzMemberMobile') return removeBlitzMemberMobile(lineUserId, payload || {});
     return { success: false, message: 'ไม่พบ action: ' + action };
   } catch (e) {
     Logger.log('ERROR [' + action + ']: ' + (e.stack || e.message));

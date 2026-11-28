@@ -76,6 +76,10 @@ const ctx = {
   vanIssueOn: () => ctx.__vanIssue, __vanIssue: true,
   _saleStockScope: t => t, _ensureScopeWarehouse: () => 'WH1',
   _applyStockIn: (...a) => calls.stockIn.push(a),
+  // ผู้อนุมัติ (61_staff_approval.gs) + ลิงก์สมัคร — ใช้กับเมนูผู้อำนวยการบนมือถือ
+  _saApproverCtx: lid => lid === 'Uapprover' ? { lineUserId: lid } : null,
+  getApproverContext: c => c ? { success: true, isApprover: true, pendingCount: 3 } : { success: true, isApprover: false },
+  _saRegisterLink: (camp, tenant) => 'https://liff.line.me/TEST?go=register&c=' + camp + '&t=' + tenant,
 };
 vm.createContext(ctx);
 vm.runInContext(B('28_units.gs'), ctx, { filename: '28_units.gs' });
@@ -275,12 +279,90 @@ T.van_stock = [{ line_user_id: KEY, product_id: '101', qty: 7, avg_cost: 10 }, {
 const ad = ctx.getBlitzAdmin(session, { tenantId: 'T1' });
 eq('เห็นแคมเปญ 5 ทีม และสมาชิก', [ad.success, ad.campaign.name, ad.teams.length, ad.members.length > 0], [true, 'BLITZ RANGER', 5, true]);
 eq('★ สต็อกของทีม A แสดงเฉพาะของทีม ไม่ปนสต็อกรถของคน (U2 99 ชิ้น ไม่โผล่)', ad.teams.find(t => t.code === 'A').stock.map(s => [s.productId, s.qty]), [['101', 7]]);
+// ── คนเดียวมีทั้งบัญชีแอดมินและบัญชีพนักงาน (LINE เดียวกัน): ต้องโผล่เป็นผู้ป้อนบิลได้ ──
+C.admin_users.push({ record_id: 2, username: 'both', display_name: 'ผู้อำนวยการที่เป็นพนักงานด้วย', role_code: 'super_admin', status: 'active', line_user_id: 'U7', tenant_id: 'TNKI' });
+const adBoth = ctx.getBlitzAdmin(session, { tenantId: 'T1' });
+eq('★ LINE เดียวกัน (แอดมิน + พนักงาน) โผล่ทั้งสองแถว ไม่ถูกแถวแอดมินกินทิ้ง',
+  adBoth.people.filter(p => p.lineUserId === 'U7').map(p => p.sub).sort(), ['พนักงานขาย', 'แอดมิน']);
+eq('  แถวพนักงานของเขายังสังกัดตัวแทน T1 (ฟอร์มเลือกผู้ป้อนบิลกรองจากแถวนี้)', adBoth.people.find(p => p.lineUserId === 'U7' && p.sub === 'พนักงานขาย').tenantId, 'T1');
+eq('  ตัดซ้ำเฉพาะภายในชนิดเดียวกัน — LINE ซ้ำในตารางพนักงานสองแถวยังได้แถวเดียว',
+  (C.liff_users.push(Object.assign({}, C.liff_users.find(u => u.line_user_id === 'U7'))), ctx.getBlitzAdmin(session, { tenantId: 'T1' }).people.filter(p => p.lineUserId === 'U7' && p.sub === 'พนักงานขาย').length), 1);
+r = ctx.saveBlitzMember(session, { campaignId: 1, teamId: teamA.record_id, lineUserId: 'U7', role: 'seller', replace: true });
+eq('★ ตั้งเป็นผู้ป้อนบิลได้ แม้ LINE นี้มีบัญชีแอดมินด้วย (backend ตรวจจากตารางพนักงาน)', r.success, true);
 eq('★ สต็อกทีมส่งตัวคูณลัง/แพ็คไปด้วย (ไว้แตกยอดเป็น ลัง แพ็ค ชิ้น ที่หน้ารับคืนของ) · สินค้าที่ไม่มีแพ็ค = 0',
   [ad.teams.find(t => t.code === 'A').stock[0].ctFactor, ad.teams.find(t => t.code === 'A').stock[0].pkFactor], [12, 4]);
 eq('ลิงก์สำหรับผู้อำนวยการ (เปิดหน้าแดชบอร์ดในแอป)', ad.viewerLink, 'https://liff.line.me/2010417493-TEST?go=blitz');
 eq('ตัวแทนอื่นเปิดแคมเปญของ T1 ไม่ได้', ctx.getBlitzAdmin({ adminUserId: '9', tenant_id: 'T2' }, { tenantId: 'T1' }).success, false);
 r = ctx.removeBlitzMember(session, { id: C.blitz_members[0].record_id });
 eq('ถอดสมาชิกได้', r.success, true);
+
+// ═══ เมนูผู้อำนวยการบนมือถือ + จัดทีมจากมือถือ ═══
+console.log('\n── เมนูผู้อำนวยการ + จัดทีมจากมือถือ ──');
+reset();
+r = ctx.saveBlitzCampaign(session, { tenantId: 'T1', name: 'มือถือ', startDate: '2026-10-01', endDate: '2026-10-05' });
+const mc = String(r.id);
+const mA = C.blitz_teams.find(t => String(t.campaign_id) === mc && t.code === 'A'), mB = C.blitz_teams.find(t => String(t.campaign_id) === mc && t.code === 'B');
+const DIRM = 'U' + 'd'.repeat(32), OUTSIDER = 'U' + 'e'.repeat(32);
+ctx.saveBlitzMember(session, { campaignId: mc, role: 'director', lineUserId: DIRM, name: 'ผู้อำนวยการมือถือ' });
+
+let h = ctx.getBlitzDirectorHome(DIRM, {});
+eq('หน้าแรกของผู้อำนวยการ: เป็นผู้ดูแล · เห็นแคมเปญ · ชื่อตัวแทน · กำลังแข่ง',
+  [h.success, h.isViewer, h.campaigns.map(c => [c.name, c.tenantName, c.running])], [true, true, [['มือถือ', 'ศูนย์ทดสอบ', true]]]);
+h = ctx.getBlitzDirectorHome(OUTSIDER, {});
+eq('★ คนทั่วไปได้ isViewer:false ไม่ใช่ error (แอปถามตอนเปิด ต้องเงียบ)', [h.success, h.isViewer, h.approver.isApprover], [true, false, false]);
+h = ctx.getBlitzDirectorHome('Uapprover', {});
+eq('ผู้อนุมัติที่ไม่ใช่ผู้อำนวยการ: ไม่เห็นแคมเปญ แต่เห็นเมนูอนุมัติพร้อมจำนวนคำขอค้าง', [h.isViewer, h.approver], [false, { isApprover: true, pendingCount: 3 }]);
+
+let tm = ctx.getBlitzTeamsMobile(DIRM, {});
+eq('ทีมของผู้อำนวยการ: 5 ทีม A–E', [tm.success, tm.teams.map(t => t.code)], [true, ['A', 'B', 'C', 'D', 'E']]);
+eq('★ รายชื่อที่เลือกได้ = พนักงานที่อนุมัติแล้ว ไม่หมดอายุ ตัวแทนเดียวกับแคมเปญ (ไม่มีคนรอ/หมดอายุ/ตัวแทนอื่น/แอดมินล้วน)',
+  tm.candidates.map(c => c.lineUserId).sort(), ['U2', 'U7']);
+eq('ลิงก์สมัครสำหรับแชร์ให้ทีม (ผูกตัวแทนของแคมเปญ)', tm.registerLink, 'https://liff.line.me/TEST?go=register&c=BLITZ&t=T1');
+eq('★ คนที่ไม่ใช่ผู้อำนวยการเปิดหน้าจัดทีมไม่ได้', [ctx.getBlitzTeamsMobile(OUTSIDER, {}).success, ctx.getBlitzTeamsMobile(OUTSIDER, {}).notViewer], [false, true]);
+
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mA.record_id, role: 'seller', lineUserId: 'U2' });
+eq('ตั้งผู้ป้อนบิลจากมือถือ สำเร็จ', r.success, true);
+tm = ctx.getBlitzTeamsMobile(DIRM, { campaignId: mc });
+eq('  ทีม A มีผู้ป้อนบิล · รายชื่อบอกว่า U2 ถูกจัดแล้ว', [tm.teams[0].seller && tm.teams[0].seller.name, tm.candidates.find(c => c.lineUserId === 'U2').assigned.role], ['ผู้ป้อนบิล A', 'seller']);
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mA.record_id, role: 'seller', lineUserId: 'U7' });
+eq('★ ทีมมีผู้ป้อนบิลแล้ว → ต้องยืนยันการเปลี่ยน (กติกาเดียวกับหน้าแอดมิน)', [r.success, r.needReplace], [false, true]);
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mA.record_id, role: 'seller', lineUserId: 'U7', replace: true });
+eq('  ยืนยันแล้วเปลี่ยนได้ · คนเดิมลงเป็นสมาชิก', [r.success, C.blitz_members.find(m => m.line_user_id === 'U2').role], [true, 'member']);
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mB.record_id, role: 'seller', lineUserId: 'U2' });
+eq('ย้ายคนไปเป็นผู้ป้อนบิลทีม B ได้โดยไม่ต้องถอดก่อน · ไม่เกิดแถวซ้ำ', [r.success, C.blitz_members.filter(m => m.line_user_id === 'U2').length, C.blitz_members.find(m => m.line_user_id === 'U2').team_id], [true, 1, String(mB.record_id)]);
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mA.record_id, role: 'member', name: 'น้องไม่มีบัญชี' });
+eq('เพิ่มสมาชิกที่ไม่มีบัญชีด้วยชื่อ ได้', [r.success, C.blitz_members.some(m => m.name === 'น้องไม่มีบัญชี' && m.team_id == mA.record_id)], [true, true]);
+
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, role: 'director', lineUserId: OUTSIDER, name: 'ตั้งตัวเองเพิ่ม' });
+eq('★ ตั้งผู้อำนวยการจากมือถือไม่ได้ (เป็นงานหน้าแอดมิน) · ไม่มีแถวงอก', [r.success, C.blitz_members.some(m => m.line_user_id === OUTSIDER)], [false, false]);
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mA.record_id, role: 'seller', lineUserId: 'U4' });
+eq('★ ผู้ป้อนบิลสังกัดตัวแทนอื่น = ปฏิเสธ (แกนกลางเดียวกับหน้าแอดมิน)', [r.success, /ตัวแทนอื่น/.test(r.message || '')], [false, true]);
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mA.record_id, role: 'seller', lineUserId: 'U5' });
+eq('ผู้ป้อนบิลที่ยังไม่อนุมัติ = ปฏิเสธ', [r.success, /ยังไม่ได้รับอนุมัติ/.test(r.message || '')], [false, true]);
+r = ctx.saveBlitzMemberMobile(OUTSIDER, { campaignId: mc, teamId: mA.record_id, role: 'seller', lineUserId: 'U7' });
+eq('★ คนที่ไม่ใช่ผู้อำนวยการสั่งตั้งทีมไม่ได้ แม้รู้รหัสแคมเปญ', [r.success, r.notViewer], [false, true]);
+
+// แคมเปญอื่นของตัวแทนเดียวกัน (ไม่ใช่ที่ผู้อำนวยการคนนี้ดูแล)
+r = ctx.saveBlitzCampaign(session, { tenantId: 'T1', name: 'อีกแคมเปญ', startDate: '2026-10-10', endDate: '2026-10-12' });
+const mc2 = String(r.id), m2A = C.blitz_teams.find(t => String(t.campaign_id) === mc2 && t.code === 'A');
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc2, teamId: m2A.record_id, role: 'seller', lineUserId: 'U7' });
+eq('★ แคมเปญที่ตัวเองไม่ได้เป็นผู้อำนวยการ = ปฏิเสธ (การเขียนต้องตรงแคมเปญเป๊ะ ไม่ตกไปแคมเปญอื่น)', [r.success, C.blitz_members.some(m => String(m.campaign_id) === mc2)], [false, false]);
+r = ctx.saveBlitzMemberMobile(DIRM, { teamId: mA.record_id, role: 'seller', lineUserId: 'U7' });
+eq('การเขียนที่ไม่ส่งรหัสแคมเปญ = ปฏิเสธ (ไม่เดาให้)', r.success, false);
+
+ctx.saveBlitzCampaign(session, { tenantId: 'T1', id: mc, name: 'มือถือ', startDate: '2026-10-01', endDate: '2026-10-05', status: 'closed' });
+r = ctx.saveBlitzMemberMobile(DIRM, { campaignId: mc, teamId: mB.record_id, role: 'member', name: 'หลังปิดแคมเปญ' });
+eq('แคมเปญที่ปิดแล้ว = จัดทีมจากมือถือไม่ได้', [r.success, /ปิดแล้ว/.test(r.message || '')], [false, true]);
+ctx.saveBlitzCampaign(session, { tenantId: 'T1', id: mc, name: 'มือถือ', startDate: '2026-10-01', endDate: '2026-10-05', status: 'active' });
+
+const sellerRow = C.blitz_members.find(m => String(m.campaign_id) === mc && m.role === 'seller');
+const dirRow = C.blitz_members.find(m => m.role === 'director' && String(m.campaign_id) === mc);
+r = ctx.removeBlitzMemberMobile(DIRM, { id: dirRow.record_id });
+eq('★ ถอดผู้อำนวยการจากมือถือไม่ได้', [r.success, C.blitz_members.some(m => m.record_id === dirRow.record_id)], [false, true]);
+r = ctx.removeBlitzMemberMobile(DIRM, { id: sellerRow.record_id });
+eq('ถอดผู้ป้อนบิลออกจากทีมได้', [r.success, C.blitz_members.some(m => m.record_id === sellerRow.record_id)], [true, false]);
+r = ctx.removeBlitzMemberMobile(OUTSIDER, { id: C.blitz_members.find(m => m.role === 'member').record_id });
+eq('★ คนที่ไม่ใช่ผู้อำนวยการถอดใครไม่ได้', [r.success, r.notViewer], [false, true]);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);
