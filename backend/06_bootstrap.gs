@@ -95,8 +95,10 @@ function getDashboard(user) {
   /* ★★ เทียบวันที่ด้วย _dOnly() ไม่ใช่ String(created_at).indexOf(today) — Sheets แปลงข้อความเวลาในชีตเป็น Date จริงตอนอ่าน
      String(Date) ขึ้นต้นด้วย "Sat Nov 28 …" ไม่เคยตรงกับ "2026-11-28" การ์ดบนหน้าแรกจึงเป็น 0 ทั้งที่มีบิลวันนี้แล้ว
      (เจ้าของระบบเจอบน UAT 28 พ.ย. 2026 · รายการ "บิลล่าสุด" ใช้ safeDateStr อยู่แล้วจึงไม่เป็นอะไร) */
-  var orders = tenantObjects(user.tenantId, 'sales_orders')
-    .filter(function(o) { return String(o.sale_by) === String(user.lineUserId) && _dOnly(o.created_at) === today; });
+  /* ★ อ่านเฉพาะ "ท้ายตาราง" จนเลยวันนี้ไปแล้ว — เดิมลากทั้งทะเบียนบิล (ทุกคอลัมน์ ทุกใบที่เคยขาย) มาทุกครั้งที่เปิดหน้าแรก
+     บิลแถวใหม่อยู่ท้ายตารางเสมอ (แก้ในที่เดิม ไม่ย้ายแถว) แถวแรกของช่วงที่อ่านเก่ากว่าวันนี้ = วันนี้ครบแล้ว */
+  var allToday = _tailUntil(user.tenantId, 'sales_orders', 400, function(rows) { return rows.length && _dOnly(rows[0].created_at) < today; });
+  var orders = allToday.filter(function(o) { return String(o.sale_by) === String(user.lineUserId) && _dOnly(o.created_at) === today; });
 
   var bills = orders.length;
   /* ★★★ `revenue` = **ยอดขายก่อน VAT** (กติกาเจ้าของระบบ 24 ต.ค. 2026) — พนักงานขายดูเป้าจาก
@@ -111,7 +113,11 @@ function getDashboard(user) {
 
   var orderIds = {};
   orders.forEach(function(o) { orderIds[String(o.record_id)] = true; });
-  var items = tenantObjects(user.tenantId, 'order_items')
+  /* รายการสินค้าของบิลวันนี้ก็อยู่ท้ายตารางเช่นกัน — อ่านท้ายจนเจอแถวของบิลที่เก่ากว่าบิลแรกของวันนี้ (หรือถึงหัวตาราง)
+     มีบิลวันนี้ 0 ใบ = ไม่ต้องอ่านเลย · (บิลเก่าที่ถูกแก้ร่างทีหลังเขียนแถวใหม่ท้ายตาราง ไม่กระทบบิลวันนี้) */
+  var minOrderId = Infinity;
+  orders.forEach(function(o) { var id = parseInt(o.record_id) || 0; if (id < minOrderId) minOrderId = id; });
+  var items = !orders.length ? [] : _tailUntil(user.tenantId, 'order_items', 800, function(rows) { return rows.length && (parseInt(rows[0].order_id) || 0) < minOrderId; })
     .filter(function(it) { return orderIds[String(it.order_id)] && String(it.is_free) !== '1'; });
 
   var soldMap = {};
@@ -249,8 +255,10 @@ function getRecentSales(user, payload) {
   var custName = {};
   customers.forEach(function(c) { custName[String(c.record_id)] = c.name; });
 
-  var orders = tenantObjects(user.tenantId, 'sales_orders')
-    .filter(function(o) { return String(o.sale_by) === String(user.lineUserId); })
+  /* ★ อ่านท้ายตารางพอให้ได้ของ "ฉัน" ครบ limit ใบ (ขยาย ×4 ถ้ายังไม่ครบ) — เดิมลากทั้งทะเบียนบิลมาทุกครั้งที่เปิดหน้าแรก
+     แถวใหม่อยู่ท้ายตารางเสมอ จึงได้ชุดเดียวกับการเรียงทั้งตารางแล้วตัด limit · ถึงหัวตารางแล้วไม่ครบก็คือครบเท่าที่มี */
+  var mineOf = function(rows) { return rows.filter(function(o) { return String(o.sale_by) === String(user.lineUserId); }); };
+  var orders = mineOf(_tailUntil(user.tenantId, 'sales_orders', 300, function(rows) { return mineOf(rows).length >= limit; }))
     .sort(function(a, b) { return safeDateStr(b.created_at).localeCompare(safeDateStr(a.created_at)); })
     .slice(0, limit)
     .map(function(o) { return {
@@ -275,11 +283,14 @@ function getRecentSales(user, payload) {
 // (ไม่ใช้ getSalesOrderAdmin ของ 19_sales_admin.gs เพราะตัวนั้นตรวจสิทธิ์แบบ session/token ของแอดมิน
 // คนละระบบยืนยันตัวตนกับมือถือที่ใช้ lineUserId — ดูรายละเอียดครบเอกสารทางการ (ผู้ออกบิล ฯลฯ) ยังต้องเปิดแอดมิน)
 function getSaleDetail(user, payload) {
+  /* ★ หาใบเดียวด้วย order_code (tenantRowsWhere อ่านคอลัมน์เดียวก่อน) แทนลากทั้งทะเบียนบิล · รายการสินค้าอ่านครั้งเดียวด้วย order_id
+     (เดิมอ่านตาราง order_items ทั้งก้อน "สองรอบ" ในคำขอเดียว) */
   var order = null;
-  tenantObjects(user.tenantId, 'sales_orders').forEach(function(o) {
-    if (String(o.order_code) === String(payload.orderCode) && String(o.sale_by) === String(user.lineUserId)) order = o;
+  tenantRowsWhere(user.tenantId, 'sales_orders', 'order_code', String(payload.orderCode || '')).forEach(function(o) {
+    if (String(o.sale_by) === String(user.lineUserId)) order = o;
   });
   if (!order) return { success: false, message: 'ไม่พบบิลนี้ หรือไม่ใช่บิลของท่าน' };
+  var orderItemRows = tenantRowsWhere(user.tenantId, 'order_items', 'order_id', order.record_id);
 
   var products = {};
   centralObjects('products').forEach(function(p) { products[String(p.record_id)] = p; });
@@ -288,7 +299,7 @@ function getSaleDetail(user, payload) {
   var cust = customers[String(order.customer_id)];
 
   var vat = _orderVat(order);   // อ่านภาพนิ่งภาษีที่บันทึกไว้ตอนขาย ไม่คำนวณใหม่ (guide VAT ข้อ 4)
-  var items = tenantObjects(user.tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
+  var items = orderItemRows
     .map(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
       var lineTotal = parseFloat(it.line_total) || 0; return {
       productId: it.product_id, code: p ? String(p.product_code || '') : '', name: p ? p.name : '(สินค้าถูกลบ)',
@@ -302,7 +313,7 @@ function getSaleDetail(user, payload) {
     }; });
   // ★ (2) ราคารวมหลังหักส่วนลดสินค้า (ก่อนโปร/ส่วนลดท้ายบิล) ไม่รวมภาษี — ส่วนลดท้ายบิลเป็นเศษที่เหลือ กันปัดเศษไม่ตรงกัน
   var preDiscountExVat = 0;
-  tenantObjects(user.tenantId, 'order_items').filter(function(it) { return String(it.order_id) === String(order.record_id); })
+  orderItemRows
     .forEach(function(it) { var p = products[String(it.product_id)]; var taxStatus = String(it.tax_status || '') || productTaxStatus(p);
       var lt = parseFloat(it.line_total) || 0; preDiscountExVat += taxStatus === TAX_VAT ? lt / (1 + vat.rate) : lt; });
   preDiscountExVat = _round2(preDiscountExVat);

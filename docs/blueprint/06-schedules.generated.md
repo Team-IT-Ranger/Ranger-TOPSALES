@@ -12,9 +12,9 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,974 |
+| Backend (Apps Script) | 64 ไฟล์ `.gs` | 20,045 |
 | แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,762 |
-| แอปมือถือ (LIFF) | `frontend-mobile/` | 2,518 |
+| แอปมือถือ (LIFF) | `frontend-mobile/` | 2,545 |
 | ตารางข้อมูล | 72 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 231 แอดมิน |  |
 
@@ -26,12 +26,12 @@
 |---|---|---|
 | `00_setup_sheets.gs` | 589 | SETUP: CENTRAL SHEET |
 | `01_config.gs` | 26 | CONFIG |
-| `02_helpers.gs` | 474 | SHEET ACCESS LAYER |
+| `02_helpers.gs` | 533 | SHEET ACCESS LAYER |
 | `03_cache.gs` | 47 | CACHE HELPERS |
 | `04_auth.gs` | 260 | AUTH |
 | `05_router.gs` | 358 | ROUTER |
-| `06_bootstrap.gs` | 340 | BOOTSTRAP / DASHBOARD (Mobile App) |
-| `07_sales.gs` | 436 | SALES (Mobile App — Cash Van) |
+| `06_bootstrap.gs` | 351 | BOOTSTRAP / DASHBOARD (Mobile App) |
+| `07_sales.gs` | 437 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 98 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
 | `10_master_data.gs` | 449 | MASTER DATA |
@@ -612,7 +612,7 @@
 | `.dev/test-help-center.js` | หน่วย (ไม่ยิงเน็ต) | 79 |
 | `.dev/test-idempotency.js` | หน่วย (ไม่ยิงเน็ต) | 98 |
 | `.dev/test-line-auth.js` | หน่วย (ไม่ยิงเน็ต) | 129 |
-| `.dev/test-mobile-dashboard.js` | หน่วย (ไม่ยิงเน็ต) | 44 |
+| `.dev/test-mobile-dashboard.js` | หน่วย (ไม่ยิงเน็ต) | 83 |
 | `.dev/test-mobile-sale-detail.js` | หน่วย (ไม่ยิงเน็ต) | 94 |
 | `.dev/test-owner-tenant.js` | หน่วย (ไม่ยิงเน็ต) | 156 |
 | `.dev/test-package-distribution.js` | หน่วย (ไม่ยิงเน็ต) | 210 |
@@ -622,12 +622,13 @@
 | `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 415 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
 | `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 2,061 |
-| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 372 |
+| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 374 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
 | `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 889 |
 | `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 228 |
 | `.dev/test-sheet-cache.js` | หน่วย (ไม่ยิงเน็ต) | 114 |
+| `.dev/test-sheet-write-perf.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
 | `.dev/test-staff-approval.js` | หน่วย (ไม่ยิงเน็ต) | 365 |
 | `.dev/test-unit-rescale.js` | หน่วย (ไม่ยิงเน็ต) | 56 |
 | `.dev/test-user-promotion.js` | หน่วย (ไม่ยิงเน็ต) | 136 |

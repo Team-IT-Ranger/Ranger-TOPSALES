@@ -280,6 +280,37 @@ function tenantRowsWhere(tenantId, tab, colName, value, one) {
   return out;
 }
 
+/**
+ * "ท้ายตาราง n แถวสุดท้าย" — ไว้หาของใหม่ล่าสุด (บิลวันนี้ / บิลล่าสุดของฉัน) โดยไม่ลากทั้งทะเบียนมา
+ * ตารางที่ต่อท้ายตามเวลา (sales_orders, order_items) แถวใหม่อยู่ท้ายเสมอ — บิลแก้ในที่เดิม ไม่ย้ายแถว
+ * คืน { rows: [object...], complete: true เมื่ออ่านถึงแถวแรกของตารางแล้ว (ไม่มีแถวเก่ากว่านี้อีก) }
+ * ★ ผู้เรียกต้องตัดสินเองว่า "พอหรือยัง" แล้วขยาย n ถ้ายัง (ดู _tailUntil) ห้ามถือว่าท้ายตารางครบแล้วโดยไม่เช็ค complete
+ */
+function tenantTailObjects(tenantId, tab, n) {
+  var sh = tenantSheet(tenantId, tab);
+  var last = sh.getLastRow();
+  if (last < 2) return { rows: [], complete: true };
+  var hdr = _sheetHeaders(sh, tenantId + '|' + tab);
+  var from = Math.max(2, last - n + 1);
+  var block = sh.getRange(from, 1, last - from + 1, hdr.length).getValues();
+  var rows = [];
+  for (var i = 0; i < block.length; i++) {
+    if (block[i][0] === '' || block[i][0] === null) continue;   // แถวว่างสนิท (หลักเดียวกับ sheetObjectsOf)
+    rows.push(_rowToObj(hdr, block[i]));
+  }
+  return { rows: rows, complete: from === 2 };
+}
+/** อ่านท้ายตารางทีละ n แถว ขยาย ×4 จนกว่า enough(rows) จะจริง หรือถึงหัวตาราง · คืนแถวเรียงตามชีต (เก่า → ใหม่) */
+function _tailUntil(tenantId, tab, startN, enough) {
+  var n = startN, got;
+  for (var guard = 0; guard < 8; guard++) {
+    got = tenantTailObjects(tenantId, tab, n);
+    if (got.complete || enough(got.rows)) return got.rows;
+    n *= 4;
+  }
+  return tenantObjects(tenantId, tab);   // ขยายหลายรอบแล้วยังไม่พอ → ยอมอ่านทั้งก้อน ดีกว่าตอบไม่ครบ
+}
+
 // ===================== GENERIC SHEET <-> OBJECT =====================
 function sheetObjectsOf(sh) {
   var data = sh.getDataRange().getValues();
@@ -310,8 +341,23 @@ function appendRowsToSheet(sh, objs) {
   try { centralInvalidate(sh.getName()); } catch (e) {}
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   var rows = objs.map(function(o) { return headers.map(function(h) { return o[h] !== undefined ? o[h] : ''; }); });
-  sh.getRange(sh.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+  var start = sh.getLastRow() + 1, need = start + rows.length - 1;
+  /* ★ setValues ไม่ขยายตารางให้เองเหมือน appendRow — ชีตที่แถวเต็มพอดีจะ throw "ช่วงเกินขอบตาราง" ต้องเติมแถวก่อน */
+  if (typeof sh.getMaxRows === 'function' && sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());
+  sh.getRange(start, 1, rows.length, headers.length).setValues(rows);
   return rows.length;
+}
+/**
+ * เติมหลายแถวลงชีตของตัวแทนรวดเดียว + ออก record_id ต่อเนื่องให้ (อ่านเลขถัดไปครั้งเดียว ไม่ใช่ครั้งละแถว)
+ * ★ เดิมบันทึกบิลวน tenantAppend + tenantNextId ต่อบรรทัดสินค้า = ต่อบรรทัดอ่านทั้งตารางหนึ่งรอบ + appendRow หนึ่งครั้ง
+ *   ตาราง order_items โตทุกบิล บิลที่มีหลายรายการจึงช้าลงเรื่อยๆ · record_id ที่ใส่มาแล้วไม่ถูกทับ
+ */
+function tenantAppendMany(tenantId, name, objs) {
+  if (!objs || !objs.length) return 0;
+  var sh = tenantSheet(tenantId, name);
+  var next = nextIdOf(sh);
+  objs.forEach(function(o, i) { if (o.record_id === undefined || o.record_id === '') o.record_id = next + i; });
+  return appendRowsToSheet(sh, objs);
 }
 function centralAppendMany(name, objs) { centralInvalidate(name); return appendRowsToSheet(centralSheet(name), objs); }
 
@@ -445,6 +491,19 @@ function findRowIndexById(sh, recordId) {
 }
 
 function nextIdOf(sh) {
+  /* ★ อ่าน "คอลัมน์ record_id คอลัมน์เดียว" ไม่ใช่ทั้งตาราง — เดิมทุกครั้งที่บันทึกแถวใหม่อ่านทุกเซลล์ของตารางทั้งก้อน
+     (sales_orders ~45 คอลัมน์ × ทุกบิลที่เคยขาย) เพื่อหาเลขที่ใหญ่สุดอย่างเดียว · ตารางเล็ก (<200 แถว) อ่านทั้งก้อนครั้งเดียวถูกกว่า
+     ชีตจำลองในชุดทดสอบที่ไม่มี getRange/getLastRow ตกไปใช้ทางเดิม */
+  try {
+    if (typeof sh.getLastRow === 'function' && typeof sh.getRange === 'function') {
+      var last = sh.getLastRow();
+      if (last >= 200 && String(sh.getRange(1, 1).getValue()) === 'record_id') {
+        var ids = sh.getRange(2, 1, last - 1, 1).getValues(), mx = 0;
+        for (var k = 0; k < ids.length; k++) { var n = parseInt(ids[k][0]) || 0; if (n > mx) mx = n; }
+        return mx + 1;
+      }
+    }
+  } catch (e) { /* อ่านแบบเร็วไม่ได้ → ทางเดิมด้านล่าง */ }
   var data = sh.getDataRange().getValues();
   if (data.length < 2) return 1;
   var idCol = data[0].indexOf('record_id');

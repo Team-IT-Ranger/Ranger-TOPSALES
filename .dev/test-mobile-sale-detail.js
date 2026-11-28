@@ -33,10 +33,10 @@ const ctx = {
   CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
   PropertiesService: { getScriptProperties: () => ({ getProperty: () => '' }) },
   centralObjects: n => (CENTRAL[n] || []).map(o => Object.assign({}, o)),
-  tenantObjects: (tid, n) => sheetOf(n).map(o => Object.assign({}, o)),
   safeDateStr: v => String(v || ''), nowStr: () => '2026-09-30 12:00:00'
 };
 vm.createContext(ctx);
+require('./lib-fake-tenant-sheets').install(ctx, t);   // ชีตจำลอง 2 มิติ + ตัวอ่านจริงจาก 02_helpers.gs (tenantRowsWhere/ท้ายตาราง)
 // 34_sales_status.gs โหลดเพิ่ม 1 ต.ค. 2026 — getSaleDetail ส่งสถานะ + สิทธิ์ยืนยัน/ยกเลิกไปให้มือถือ
 ['18_pricing_engine.gs', '33_customers.gs', '34_sales_status.gs', '06_bootstrap.gs'].forEach(f => vm.runInContext(B(f), ctx, { filename: f }));
 

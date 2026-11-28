@@ -926,6 +926,17 @@ async function boot(){
       } catch (e) { toast('เปิดแดชบอร์ดไม่ได้: ' + e.message, 'err'); }
       if (BZ.fromSnap) { BZ.fromSnap = false; BZ.r = null; setLoad('กำลังตรวจสอบสิทธิ์...'); }
     }
+    /* ★ เครื่องนี้เคยผ่านการอนุมัติแล้ว → เข้าแอปทันที ไม่รอ checkUser (คำขอหนึ่งครั้งไม่เคยต่ำกว่า ~1.6-3 วิ — ค่าคงที่ของ Apps Script)
+       แล้วตรวจสิทธิ์เบื้องหลัง · กติกา "วาดจากของที่จำไว้ก่อนเสมอ" เดียวกับ snapshot ของแอปแอดมิน (CLAUDE.md ความเร็วข้อ 2)
+       ★ ไม่ได้ลดความปลอดภัย: ทุก action ฝั่ง backend ตรวจสิทธิ์ใหม่จากตัวตน LINE เสมอ คนที่ถูกระงับ/หมดอายุแล้วกดอะไรก็ถูกปฏิเสธ
+         ที่ต่างคือเห็นหน้าแอปค้างได้ ~2 วิ ก่อนที่การตรวจเบื้องหลังจะพาไปหน้า "รออนุมัติ/หมดอายุ" */
+    const cachedMe = lsGet('me', null);
+    if (cachedMe && cachedMe.lineUserId === ME.lineUserId && cachedMe.role && navigator.onLine) {
+      Object.assign(ME, cachedMe);
+      enterApp();
+      verifyUserInBackground();
+      return;
+    }
     setLoad('กำลังตรวจสอบสิทธิ์...');
     let st;
     try { st = await api('checkUser', { lineUid: ME.lineUserId }, 30000); }
@@ -951,6 +962,22 @@ async function boot(){
     lsSet('me', ME);
     enterApp();
   } catch (e) { setLoad('ผิดพลาด: ' + e.message, false, '<button class="btn btn-primary" onclick="boot()">ลองใหม่</button>'); }
+}
+/* ตรวจสิทธิ์เบื้องหลังหลังเข้าแอปจากข้อมูลที่จำไว้ (ดู boot) — ไม่ผ่าน = พาไปหน้าที่ถูกต้องทันที · ตรวจไม่ได้ (เน็ตหลุด) = อยู่ต่อ ไม่ทำอะไร */
+async function verifyUserInBackground(){
+  let st;
+  try { st = await api('checkUser', { lineUid: ME.lineUserId }, 30000); } catch (e) { return; }
+  if (!st || !st.exists) { lsSet('me', null); return showRegister(); }
+  if (String(st.status) === 'Rejected') { lsSet('me', null); return showPending('คำขอใช้งานไม่ได้รับอนุมัติ — สอบถามผู้อนุมัติของสังกัดคุณ (แจ้ง LINE User ID ด้านล่างได้)', 'ไม่ได้รับอนุมัติ'); }
+  if (String(st.status) !== 'Yes') { lsSet('me', null); return showPending('บัญชีรอแอดมินอนุมัติ (สถานะ: ' + (st.status || '-') + ')'); }
+  if (st.expired) { lsSet('me', null); return showPending('สิทธิ์การใช้งานหมดอายุแล้ว (ถึงวันที่ ' + (st.expiresAt || '-') + ') — ติดต่อผู้อนุมัติถ้าต้องใช้งานต่อ', 'สิทธิ์หมดอายุแล้ว'); }
+  // ผ่าน — ถ้าบทบาท/สังกัดเปลี่ยนไปจากที่จำไว้ ให้ตามของจริงแล้ววาดหัวหน้าจอใหม่
+  const role = st.role || '', tenant = st.tenantId || '';
+  if (role !== ME.role || tenant !== ME.tenantId || (st.name && st.name !== ME.name)) {
+    ME.role = role; ME.tenantId = tenant; if (st.name) ME.name = st.name;
+    lsSet('me', ME);
+    enterApp();
+  }
 }
 async function showRegister(){
   show('scr-register');

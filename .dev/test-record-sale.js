@@ -88,6 +88,8 @@ const ctx = {
   // recordSale อ่านแถวบิลที่เพิ่งเขียนกลับมาเพื่อส่งให้ postCashSaleGl (52_cash_sales_gl.gs)
   tenantRowById: (tid, n, id) => (sheets[n] || []).filter(r => String(r.record_id) === String(id)).pop() || null,
   tenantAppend: (tid, n, row) => sheets[n].push(Object.assign({}, row)),
+  // ตัวจริงอยู่ 02_helpers.gs (ออก record_id ต่อเนื่องจากเลขถัดไปครั้งเดียว แล้วเขียนก้อนเดียว) — จำลองพฤติกรรมเดียวกัน
+  tenantAppendMany: (tid, n, rows) => { let next = sheets[n].reduce((m, o) => Math.max(m, parseInt(o.record_id) || 0), 0) + 1; rows.forEach((r, i) => { const o = Object.assign({}, r); if (o.record_id === undefined || o.record_id === '') o.record_id = next + i; sheets[n].push(o); }); return rows.length; },
   tenantUpdate: (tid, n, id, patch) => {
     const r = sheets[n].find(x => String(x.record_id) === String(id));
     if (r) Object.assign(r, patch);

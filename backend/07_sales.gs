@@ -332,26 +332,27 @@ function recordSale(user, payload) {
   // แก้ใบร่าง: ล้างบรรทัดเดิมทิ้งก่อนเขียนชุดใหม่ (ไม่งั้นของเก่ากับของใหม่ปนกันอยู่ในใบเดียว)
   if (editing) deleteRowsWhere(tenantSheet(user.tenantId, 'order_items'), 'order_id', orderId);
 
-  items.forEach(function(it) {
-    tenantAppend(user.tenantId, 'order_items', {
-      record_id: tenantNextId(user.tenantId, 'order_items'), order_id: orderId, product_id: it.productId,
-      unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
-      price: it.price, line_total: it.lineTotal, unit_discount: it.unitDiscount || 0, line_discount: it.lineDiscount || 0,
-      list_price_ex_vat: it.listPriceExVat != null ? it.listPriceExVat : '',
-      is_free: 0, tax_status: calc.vat.taxOf(it.productId)
-    });
-  });
+  /* ★ เขียนรายการสินค้า/ของแถม/ส่วนลดเป็นก้อนเดียวต่อตาราง (tenantAppendMany) — เดิมวนทีละแถว แถวละ "อ่านทั้งตารางหาเลขถัดไป + appendRow"
+     บิลที่มีหลายรายการจึงช้า และช้าลงเรื่อยๆ ตามจำนวนบิลที่เคยขาย (ผู้ใช้แจ้งว่ากดบันทึกบิลแล้วรอนาน 28 พ.ย. 2026) */
+  var itemRows = items.map(function(it) { return {
+    order_id: orderId, product_id: it.productId,
+    unit_code: it.unitCode, unit_factor: it.unitFactor, qty: it.qty, base_qty: it.baseQty,
+    price: it.price, line_total: it.lineTotal, unit_discount: it.unitDiscount || 0, line_discount: it.lineDiscount || 0,
+    list_price_ex_vat: it.listPriceExVat != null ? it.listPriceExVat : '',
+    is_free: 0, tax_status: calc.vat.taxOf(it.productId)
+  }; });
   freeGoods.forEach(function(f) {
     var baseQty = Number(f.baseQty) || Number(f.qty) || 0, qty = Number(f.qty) || 0;
-    tenantAppend(user.tenantId, 'order_items', {
-      record_id: tenantNextId(user.tenantId, 'order_items'), order_id: orderId, product_id: f.productId,
+    itemRows.push({
+      order_id: orderId, product_id: f.productId,
       unit_code: f.unitCode || UNIT_PC, unit_factor: qty ? (baseQty / qty) : 1, qty: qty, base_qty: baseQty,
       price: 0, line_total: 0, is_free: 1
     });
   });
-  calc.appliedRules.forEach(function(r) {
-    tenantAppend(user.tenantId, 'order_discounts', { record_id: tenantNextId(user.tenantId, 'order_discounts'), order_id: orderId, rule_id: r.ruleId, rule_name: r.ruleName, type: r.type, value: r.value, free_product_id: '', free_qty: '' });
-  });
+  tenantAppendMany(user.tenantId, 'order_items', itemRows);
+  tenantAppendMany(user.tenantId, 'order_discounts', calc.appliedRules.map(function(r) {
+    return { order_id: orderId, rule_id: r.ruleId, rule_name: r.ruleName, type: r.type, value: r.value, free_product_id: '', free_qty: '' };
+  }));
 
   if (fulfillmentType === 'immediate') {
     _cutVanStock(user.tenantId, stockHolder, need, orderId);
