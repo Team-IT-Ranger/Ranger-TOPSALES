@@ -642,17 +642,23 @@ const lsSet = (k, v) => { try { localStorage.setItem(LSK(k), JSON.stringify(v));
 function toast(msg, kind){ const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200); }
 function show(id){
   ['scr-loading','scr-register','scr-pending','scr-app','scr-approve','scr-blitz','scr-director'].forEach(x => $(x).classList.toggle('hidden', x !== id));
-  /* แถบเมนูหลัก: โชว์ในแอปหลัก · เมนูผู้อำนวยการ · หน้าอนุมัติผู้ใช้งาน (เฉพาะคนที่เป็นพนักงานในแอป)
-     เปิดจาก boot = ไม่ใช่พนักงาน (เข้าจากลิงก์ในกลุ่ม) ไม่มีหน้าแอปให้ไป → ไม่โชว์ · หน้าอนุมัติที่เปิดจากเมนูผู้อำนวยการ ตามค่าของเมนูนั้น */
-  const fromBoot = (typeof DR !== 'undefined' && DR.from === 'boot');
-  const tabsOn = id === 'scr-app' || (id === 'scr-director' && !fromBoot)
-    || (id === 'scr-approve' && typeof AP !== 'undefined' && (AP.from === 'app' || (AP.from === 'director' && !fromBoot)));
+  /* ★ แถบเมนูหลักเป็น app footer — โชว์ทุกหน้าต่างในแอป (แอปหลัก · เมนูผู้อำนวยการ · แดชบอร์ด BLITZ · หน้าอนุมัติ) เจ้าของระบบสั่ง 28 พ.ย. 2026
+     ยกเว้นหน้าที่ยังไม่มีแอปให้กลับไป: โหลด/ลงทะเบียน/รออนุมัติ และผู้ที่ไม่ใช่พนักงานขาย (ผู้อำนวยการ/ผู้อนุมัติที่เข้าจากลิงก์ ไม่มีบทบาทในแอป)
+     รู้ว่าเป็นพนักงานจาก ME.role (หรือที่จำไว้ในเครื่อง) — กดแท็บแล้วเข้า #scr-app ซึ่งต้องมีข้อมูลพนักงาน */
+  const cm = lsGet('me', null);
+  const isStaff = !!(ME.role || (cm && cm.role && cm.lineUserId && cm.lineUserId === ME.lineUserId));
+  const tabsOn = id === 'scr-app' || (isStaff && (id === 'scr-director' || id === 'scr-approve' || id === 'scr-blitz'));
   const tb = $('main-tabs'); if (tb) tb.classList.toggle('hidden', !tabsOn);
   // อยู่แอปหลัก → ไฮไลต์แท็บที่เปิดอยู่ · หน้าอื่น (เมนูผู้อำนวยการ) → ไม่ไฮไลต์ เพราะไม่ได้อยู่หน้าไหนของแอปหลัก
   document.querySelectorAll('#main-tabs button').forEach(b => b.classList.toggle('on', id === 'scr-app' && b.dataset.tab === TAB));
 }
 /* ปุ่มแถบเมนูหลัก — กดจากเมนูผู้อำนวยการแล้วกลับเข้าแอปหลักที่แท็บนั้นเลย */
-function tabNav(t){ if ($('scr-app').classList.contains('hidden')) show('scr-app'); gotoTab(t); }
+function tabNav(t){
+  /* ออกจากแดชบอร์ด BLITZ ด้วยแถบเมนู = ต้องหยุดรีเฟรชอัตโนมัติ 60 วิ ของมันด้วย (closeBlitz ทำให้เฉพาะตอนกด ‹ กลับ) ไม่งั้นค้างยิงคำขอเบื้องหลังตลอดไป */
+  if (typeof BZ !== 'undefined' && BZ.timer) { clearInterval(BZ.timer); BZ.timer = null; }
+  if ($('scr-app').classList.contains('hidden')) show('scr-app');
+  gotoTab(t);
+}
 function setLoad(txt, spin = true, extraHtml = ''){ if (spin && typeof AP !== 'undefined' && AP.fromSnap) return; /* กำลังโชว์หน้าอนุมัติจาก snapshot อยู่ — ข้อความ "กำลังโหลด" ห้ามทับ (ข้อความผิดพลาดยังโชว์ตามปกติ) */ show('scr-loading'); $('load-txt').textContent = txt; $('load-spin').classList.toggle('hidden', !spin); $('load-extra').innerHTML = extraHtml; }
 
 let ME = { lineUserId: '', name: '', pictureUrl: '', role: '', tenantId: '' };
