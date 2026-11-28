@@ -152,11 +152,12 @@
   .uf input:focus{ outline:none; border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-pale); }
   .uf input.has{ border-color:var(--blue); background:var(--blue-pale); }
   .uf .ub{ display:flex; gap:4px; }
-  .uf .ub button{ flex:1; height:34px; border-radius:var(--r-ctl,8px); border:1px solid var(--border); background:var(--surface-2); font-size:18px; font-weight:700; }
-  .uf .ub button.plus{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  /* ★ ปุ่ม −/+ เล็กลง 1 ใน 3 (34→22px) และ + เป็นสีฟ้าซีด — ไม่ให้แย่งความเด่นจากแท็บเมนูล่างที่ active (เจ้าของระบบสั่ง 28 พ.ย. 2026) */
+  .uf .ub button{ flex:1; height:22px; line-height:1; padding:0; border-radius:var(--r-ctl,8px); border:1px solid var(--border); background:var(--surface-2); font-size:14px; font-weight:700; color:var(--ink-soft); }
+  .uf .ub button.plus{ background:var(--blue-pale); border-color:var(--blue-soft); color:var(--blue); }
   .uf.off{ opacity:.45; }                      /* แพ็คตอนเลือกเครดิต — ขายไม่ได้ (เซิร์ฟเวอร์ปฏิเสธ) แต่ไม่ซ่อนเพื่อให้รู้ว่ามีหน่วยนี้ */
   body.density-compact .uf input{ padding:6px 2px; }
-  body.density-compact .uf .ub button{ height:30px; font-size:16px; }
+  body.density-compact .uf .ub button{ height:20px; font-size:13px; }
   .low{ color:var(--red); font-weight:700; }
   .ok{ color:var(--green); font-weight:700; }
 
