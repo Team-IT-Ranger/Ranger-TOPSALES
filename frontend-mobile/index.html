@@ -25,7 +25,7 @@
     --blue:#2B63D9; --blue-soft:#DEE9FD; --blue-pale:#F1F6FE;
     --green:#1F8A5F; --green-soft:#DFF3E9; --red:#C4443C; --red-soft:#FDE7E5; --orange:#B4741A; --orange-soft:#FCEEDA;
     --shadow-sm:0 1px 2px rgba(15,27,45,.05); --shadow-md:0 14px 34px -18px rgba(15,27,45,.4);
-    --r-card:14px; --r-ctl:10px;
+    --r-card:14px; --r-ctl:10px; --file-line:#CFD8E6;
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; background:var(--ground); color:var(--ink); font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif; font-size:15px; }
@@ -111,6 +111,11 @@
   /* ฟอร์มเปิดร้านที่ถูกย้ายมาอยู่ในหน้าต่างล่าง — ไม่ต้องมีกรอบการ์ดซ้อนในหน้าต่างอีกชั้น */
   .sheet #c-add{ border:0; padding:0; margin:0 !important; background:transparent; }
   .inp{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:15px; }
+  /* ★ แท็บแฟ้ม: แท็บที่เลือก = สีเดียวกับแผ่นเนื้อหา + ทับเส้นขอบบนของแผ่น จึงต่อเป็นเนื้อเดียว · แท็บที่ไม่ได้เลือก = เทาเข้มกว่า ถอยลงไปเล็กน้อย */
+  .filetabs{ display:flex; gap:3px; margin:0 6px -1px; position:relative; z-index:1; }
+  .filetabs button{ flex:1; border:1px solid var(--file-line); border-bottom:none; border-radius:11px 11px 0 0; background:#E5EBF4; color:var(--ink-soft); padding:9px 8px 8px; font-weight:600; font-size:13.5px; margin-top:4px; }
+  .filetabs button.on{ background:var(--surface); color:var(--blue); font-weight:700; margin-top:0; padding-top:12px; padding-bottom:9px; border-bottom:1px solid var(--surface); }
+  .filepanel{ background:var(--surface); border:1px solid var(--file-line); border-radius:12px; padding:10px; margin-bottom:12px; }
   .seg{ display:flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:3px; gap:3px; }
   .seg button{ flex:1; border:none; background:none; border-radius:8px; padding:8px; font-weight:600; font-size:13.5px; color:var(--ink-soft); }
   .seg button.on{ background:var(--surface); color:var(--blue); box-shadow:0 1px 3px rgba(0,0,0,.08); }
@@ -526,15 +531,19 @@
     <!-- ★ 2026-09-30 เจ้าของระบบสั่ง: แยก "หน้าเลือกสินค้า" ออกจาก "หน้าตะกร้า" ให้ชัดเจนเหมือนฝั่งแอดมิน
          (เดิมรายการสินค้าทั้งหมดกับของที่เลือกไว้ปนกันในลิสต์เดียว หาของที่เลือกไปแล้วไม่เจอ) — ยังแตะ +/− ไวเหมือนเดิม
          แค่มีปุ่มสลับสองโหมดชัดๆ แทนการต้องกางแถบล่างเพื่อดูว่าเลือกอะไรไปแล้วบ้าง (ดู setSellMode/renderSellMode) -->
-    <div class="seg" id="sell-mode-seg" style="margin-bottom:12px">
+    <!-- ★ แท็บแฟ้ม (เจ้าของระบบสั่ง 28 พ.ย. 2026 — "ดูเป็นปุ่มมากไป"): แท็บที่เลือกต่อเนื่องเป็นเนื้อเดียวกับแผ่นเนื้อหาด้านล่าง
+         รูปแบบเดียวกับแท็บแฟ้มของแอปแอดมิน (หน้าบิลขาย) · id/คลาส .on เดิมครบ renderSellMode() ใช้ต่อได้ -->
+    <div class="filetabs" id="sell-mode-seg">
       <button id="sm-pick" onclick="setSellMode('pick')">+ เพิ่มสินค้า</button>
       <button id="sm-cart" onclick="setSellMode('cart')">ตะกร้า<span id="sm-cart-n"></span></button>
     </div>
-    <div id="sell-pick">
-      <input class="inp" id="s-q" placeholder="ค้นหาสินค้า..." oninput="renderProducts()" style="margin-bottom:10px">
-      <div class="stack" id="s-list"></div>
+    <div class="filepanel">
+      <div id="sell-pick">
+        <input class="inp" id="s-q" placeholder="ค้นหาสินค้า..." oninput="renderProducts()" style="margin-bottom:10px">
+        <div class="stack" id="s-list"></div>
+      </div>
+      <div class="stack hidden" id="sell-cart"></div>
     </div>
-    <div class="stack hidden" id="sell-cart"></div>
     <div style="height:120px"></div>
   </section>
 
