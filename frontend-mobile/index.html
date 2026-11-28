@@ -51,15 +51,15 @@
   .top img,.top .av{ width:36px; height:36px; border-radius:50%; background:var(--blue-soft); object-fit:cover; display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--blue); }
   .top .who{ flex:1; min-width:0; }
   .top .who b{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  /* ★ แถบหัวแอป (28 พ.ย. 2026 เจ้าของระบบสั่งจัดใหม่): โลโก้แอปซ้าย · ชื่อแอปกลาง · สถานะออนไลน์ขวา
-     ชื่อผู้ใช้/บทบาทไปอยู่แถบใต้หัว (.userbar) — ไม่ใช้รูปโปรไฟล์ LINE เป็นโลโก้แล้ว · มาสคอตตัวเดียวกับแอปแอดมิน (ย่อเหลือ 120px) */
+  /* ★ แถบหัวแอป (28 พ.ย. 2026 เจ้าของระบบสั่งจัดใหม่ 2 รอบ): แถบบน = โลโก้แอปซ้าย · ชื่อแอปกลาง · รูปโปรไฟล์+ชื่อผู้ใช้ขวา
+     แถบใต้หัว (.userbar) = บทบาท · สังกัด (ซ้าย) + สถานะออนไลน์ (ขวา) · โลโก้ = มาสคอตตัวเดียวกับแอปแอดมิน (ย่อเหลือ 120px) */
   .top .logo{ width:36px; height:36px; border-radius:10px; background:none; object-fit:contain; flex:0 0 auto; }
   .top .appname{ flex:1; min-width:0; text-align:center; font-weight:700; font-size:15px; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .userbar{ display:flex; align-items:center; gap:9px; padding:8px 16px; background:var(--surface-2); border-bottom:1px solid var(--border); font-size:13px; }
-  .userbar img,.userbar .av{ width:28px; height:28px; border-radius:50%; background:var(--blue-soft); object-fit:cover; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:var(--blue); }
-  .userbar .who{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .userbar .who b{ font-weight:700; }
-  .userbar .who .muted::before{ content:'· '; }
+  .top .mechip{ display:flex; align-items:center; gap:7px; min-width:0; max-width:46%; flex:0 0 auto; }
+  .top .mechip img,.top .mechip .av{ width:32px; height:32px; }
+  .top .mechip b{ font-size:13px; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .userbar{ display:flex; align-items:center; gap:8px; padding:7px 16px; background:var(--surface-2); border-bottom:1px solid var(--border); font-size:13px; }
+  .userbar #me-sub{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .net{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--green-soft); color:var(--green); }
   .net.off{ background:var(--orange-soft); color:var(--orange); }
   .net-busy{ display:inline-flex; align-items:center; flex:0 0 auto; }
@@ -426,15 +426,16 @@
   <div class="top">
     <img class="logo" src="mascot-sr1.png?v=20261128" alt="">
     <div class="appname">Ranger TOPSALES</div>
+    <!-- ผู้ใช้ที่ล็อกอินอยู่ (รูปโปรไฟล์ LINE + ชื่อ) อยู่ขวาของแถบหัว — id เดิมทั้งหมด enterApp() เติมให้ -->
+    <div class="mechip"><img id="me-pic" class="hidden" alt=""><div class="av" id="me-av">?</div><b id="me-name">-</b></div>
+  </div>
+  <!-- แถบใต้หัว: บทบาท · สังกัด (ซ้าย) + สถานะออนไลน์ (ขวา) — จัดตามที่เจ้าของระบบสั่ง 28 พ.ย. 2026 -->
+  <div class="userbar">
+    <span class="muted" id="me-sub">-</span>
     <!-- ★ วงแหวนเล็กข้างป้ายออนไลน์ = กำลังคุยกับเซิร์ฟเวอร์อยู่ (ทำหน้าที่เดียวกับป้าย "กำลังอัปเดต…" ของแอปแอดมิน)
          ★★ ไม่ใช้ tnkNetBusy ที่ลอยมุมขวาล่าง เพราะมุมนั้นมีแถบแท็บล่างกับแถบตะกร้าลอยอยู่แล้ว มันจะทับกัน -->
     <span class="net-busy hidden" id="net-busy" data-tnk-spin="18" aria-hidden="true"></span>
     <span class="net" id="net">ออนไลน์</span>
-  </div>
-  <!-- ผู้ใช้ที่ล็อกอินอยู่ (รูปโปรไฟล์ LINE + ชื่อ + บทบาท · สังกัด) — id เดิมทั้งหมด enterApp() เติมให้ -->
-  <div class="userbar">
-    <img id="me-pic" class="hidden" alt=""><div class="av" id="me-av">?</div>
-    <div class="who"><b id="me-name">-</b> <span class="muted" id="me-sub">-</span></div>
   </div>
 
   <!-- หน้าแรก -->
