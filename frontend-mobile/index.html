@@ -155,6 +155,13 @@
   /* ★ ปุ่ม −/+ เล็กลง 1 ใน 3 (34→22px) และ + เป็นสีฟ้าซีด — ไม่ให้แย่งความเด่นจากแท็บเมนูล่างที่ active (เจ้าของระบบสั่ง 28 พ.ย. 2026) */
   .uf .ub button{ flex:1; height:22px; line-height:1; padding:0; border-radius:var(--r-ctl,8px); border:1px solid var(--border); background:var(--surface-2); font-size:14px; font-weight:700; color:var(--ink-soft); }
   .uf .ub button.plus{ background:var(--blue-pale); border-color:var(--blue-soft); color:var(--blue); }
+  /* ★ บรรทัดราคาขาย/ส่วนลดใต้ช่องจำนวน (เจ้าของระบบสั่ง 28 พ.ย. 2026 — ไว้ตรวจความถูกต้องของราคาที่ระบบคิดให้) ว่าง = ซ่อน */
+  .pq{ margin-top:8px; padding-top:6px; border-top:1px dashed var(--border); font-size:12px; color:var(--ink-soft); }
+  .pq:empty{ display:none; }
+  .pq .l{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; line-height:1.55; }
+  .pq .l b{ color:var(--ink); font-family:'IBM Plex Mono',monospace; font-weight:600; white-space:nowrap; }
+  .pq .d{ color:var(--green); font-weight:600; }
+  .pq .w{ color:var(--ink-faint); }
   .uf.off{ opacity:.45; }                      /* แพ็คตอนเลือกเครดิต — ขายไม่ได้ (เซิร์ฟเวอร์ปฏิเสธ) แต่ไม่ซ่อนเพื่อให้รู้ว่ามีหน่วยนี้ */
   body.density-compact .uf input{ padding:6px 2px; }
   body.density-compact .uf .ub button{ height:20px; font-size:13px; }
@@ -1922,7 +1929,7 @@ function renderProducts(){
         return '<div class="uf'+(packOff(x) ? ' off' : '')+'" data-code="'+c+'"><div class="ul">'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</div>' +
           '<input type="number" inputmode="numeric" min="0" class="'+(n ? 'has' : '')+'" data-code="'+c+'" value="'+(n || '')+'" placeholder="0" onchange="setQty(\''+pid+'\',\''+c+'\', this.value)">' +
           '<div class="ub"><button onclick="bump(\''+pid+'\',\''+c+'\',-1)">−</button><button class="plus" onclick="bump(\''+pid+'\',\''+c+'\',1)">+</button></div></div>';
-      }).join('') + '</div></div>';
+      }).join('') + '</div><div class="pq">' + prodQuoteHtml(p) + '</div></div>';
   }).join('') + (list.length > 80 ? '<div class="empty">แสดง 80 รายการแรก — พิมพ์ค้นหาเพื่อหาตัวอื่น</div>' : '');
 }
 /* เรียงหน่วยในการ์ด: ลัง → แพ็ค → หน่วยอื่น → หน่วยฐาน (ชิ้น) · แพ็คขายได้เฉพาะเงินสด (PACK_CASH_ONLY) จึงจางลงตอนเลือกเครดิต */
@@ -1937,6 +1944,38 @@ function prodSubHtml(p){
   if (isBlitzSeller()) return used ? 'ในตะกร้า ' + used + ' ' + esc(p.unit) : '&nbsp;';   // ทีม BLITZ ไม่มีของบนรถ
   return 'บนรถ <span class="'+(p.vanStock < 3 ? 'low' : 'ok')+'">'+esc(p.vanStock)+'</span> '+esc(p.unit)+(used ? ' · ในตะกร้า '+used+' '+esc(p.unit) : '');
 }
+/* ★ บรรทัดราคาขาย/ส่วนลดของสินค้าที่อยู่ในตะกร้า — อ่านจากผล quoteSale (เครื่องยนต์เดียวกับตอนบันทึกบิล) ไม่คิดเองในแอป
+   มีราคาตั้งจากชุดราคา (listBreakdown) → โชว์แบบไม่รวมภาษีเหมือนหน้าตะกร้า · ไม่มี → ราคารวมภาษีตามที่เซิร์ฟเวอร์ตอบ */
+function prodQuoteHtml(p){
+  const lines = CART.filter(c => String(c.productId) === String(p.id));
+  if (!lines.length) return '';
+  const hasQuote = QUOTE && QUOTE.success && QUOTE.lines && QUOTE.lines.length;
+  if (!hasQuote) {
+    const msg = QUOTE && !QUOTE.success ? (QUOTE.offline ? 'ออฟไลน์ — คิดราคาจริงตอนส่ง' : 'คิดราคาไม่ได้') : (navigator.onLine ? 'กำลังคิดราคา…' : 'ออฟไลน์ — คิดราคาจริงตอนส่ง');
+    return '<div class="l w">' + msg + '</div>';
+  }
+  return lines.map(c => {
+    const u = unitOf(p, c.unitCode);
+    const ql = QUOTE.lines.find(l => String(l.productId) === String(c.productId) && String(l.unitCode) === String(c.unitCode));
+    if (!ql) return '<div class="l w">' + esc(u.unitLabel) + ' ×' + c.qty + ' · กำลังคิดราคา…</div>';
+    const lb = ql.listBreakdown;
+    let price, disc, net, tax;
+    if (lb) { price = lb.unitPriceExVat; disc = lb.unitDiscountExVat || 0; net = lb.netExVat; tax = 'ไม่รวมภาษี'; }
+    else { price = ql.unitPrice; disc = ql.unitDiscount || 0; net = (ql.netTotal != null ? ql.netTotal : ql.lineTotal); tax = 'รวมภาษี'; }
+    return '<div class="l"><span>' + esc(u.unitLabel) + ' ×' + c.qty + ' · ราคา ฿' + baht(price) + '/หน่วย' +
+      (disc ? ' <span class="d">ลด ฿' + baht(disc) + '/หน่วย</span>' : '') +
+      (ql.tierLabel ? ' · ' + esc(ql.tierLabel) : '') + '</span><b>฿' + baht(net) + '</b></div>' +
+      (disc ? '<div class="l w"><span>สุทธิต่อหน่วย ฿' + baht(price - disc) + ' · ส่วนลดรวม ฿' + baht(lb ? lb.discountExVat : disc * c.qty) + '</span><span>' + tax + '</span></div>' : '');
+  }).join('');
+}
+/* คิดราคาใหม่/ได้ผลใหม่ → วาดบรรทัดราคาของทุกการ์ดที่เห็นอยู่ (แตะแค่ .pq ไม่แตะช่องกรอก โฟกัสจึงไม่หลุด) */
+function paintProdQuotes(){
+  const box = $('s-list'); if (!box) return;
+  box.querySelectorAll('.prod[data-pid]').forEach(el => {
+    const p = prodById(el.dataset.pid), q = el.querySelector('.pq');
+    if (p && q) q.innerHTML = prodQuoteHtml(p);
+  });
+}
 /* ★ อัปเดต "การ์ดเดียว" แทนการวาดทั้งลิสต์ใหม่ (28 พ.ย. 2026) — วาดใหม่ทั้งลิสต์ทำให้ช่องจำนวนช่องถัดไปถูกแทนที่
    ระหว่างที่ผู้ใช้กำลังแตะ: พิมพ์จำนวนในช่อง A แล้วแตะช่อง B → change ของ A วาดลิสต์ใหม่ → ช่อง B หายไปและโฟกัสหลุด
    ต้องแตะซ้ำอีกครั้ง (ตรวจยืนยันในเบราว์เซอร์แล้ว) · ขายรัวๆ แบบ BLITZ เจออาการนี้ทุกบรรทัด */
@@ -1949,6 +1988,7 @@ function updateProdCard(pid){
     inp.value = n || ''; inp.classList.toggle('has', !!n);
   });
   const sub = el.querySelector('.sub'); if (sub) sub.innerHTML = prodSubHtml(p);
+  const pq = el.querySelector('.pq'); if (pq) pq.innerHTML = prodQuoteHtml(p);
 }
 function bump(pid, code, d){ setQty(pid, code, cartQty(pid, code) + d); }
 function setQty(pid, code, v){
@@ -2079,6 +2119,7 @@ function renderCartDetail(){
 }
 function renderCartBar(){
   renderEditBanner();
+  paintProdQuotes();
   const bar = $('cartbar');
   bar.classList.toggle('hidden', TAB !== 'sell' || !CART.length);
   if (CART.length) {
