@@ -12,9 +12,9 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,938 |
-| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,743 |
-| แอปมือถือ (LIFF) | `frontend-mobile/` | 2,230 |
+| Backend (Apps Script) | 64 ไฟล์ `.gs` | 19,971 |
+| แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,762 |
+| แอปมือถือ (LIFF) | `frontend-mobile/` | 2,518 |
 | ตารางข้อมูล | 72 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 231 แอดมิน |  |
 
@@ -31,7 +31,7 @@
 | `04_auth.gs` | 260 | AUTH |
 | `05_router.gs` | 358 | ROUTER |
 | `06_bootstrap.gs` | 337 | BOOTSTRAP / DASHBOARD (Mobile App) |
-| `07_sales.gs` | 413 | SALES (Mobile App — Cash Van) |
+| `07_sales.gs` | 436 | SALES (Mobile App — Cash Van) |
 | `08_stock.gs` | 98 | VAN STOCK (Mobile App) |
 | `09_visits.gs` | 31 | VISITS (Mobile App) |
 | `10_master_data.gs` | 449 | MASTER DATA |
@@ -41,8 +41,8 @@
 | `14_permissions.gs` | 164 | RBAC (Admin App) |
 | `15_import_export_express.gs` | 229 | เชื่อมโปรแกรม EXPRESS (Export/Import ไฟล์) |
 | `16_admin_users.gs` | 149 | จัดการบัญชีแอดมิน (Admin App) |
-| `17_pricing.gs` | 553 | ชุดราคาและส่วนลด (ใบรายการขายตามกลุ่มลูกค้า × ช่วงเวลา) |
-| `18_pricing_engine.gs` | 502 | เครื่องยนต์คิดราคา (ใช้ทั้งตอนขายจริง recordSale และหน้า "ทดลองคิดราคา |
+| `17_pricing.gs` | 554 | ชุดราคาและส่วนลด (ใบรายการขายตามกลุ่มลูกค้า × ช่วงเวลา) |
+| `18_pricing_engine.gs` | 508 | เครื่องยนต์คิดราคา (ใช้ทั้งตอนขายจริง recordSale และหน้า "ทดลองคิดราคา |
 | `19_sales_admin.gs` | 505 | SALES (Admin App) |
 | `20_purchasing_master.gs` | 439 | งานซื้อ: ข้อมูลตั้งต้น (ผู้ขาย / คลัง / สายอนุมัติ) |
 | `21_purchase_requisition.gs` | 252 | ใบขอซื้อ (Purchase Requisition) |
@@ -58,7 +58,7 @@
 | `31_sales_rollup.gs` | 108 | สรุปยอดขายรายวัน (rollup) |
 | `32_admin_bootstrap.gs` | 37 | เปิดแอปแอดมินด้วยคำขอเดียว |
 | `33_customers.gs` | 309 | ทะเบียนลูกค้า (customer master) |
-| `34_sales_status.gs` | 887 | สถานะบิลขาย |
+| `34_sales_status.gs` | 890 | สถานะบิลขาย |
 | `35_idempotency.gs` | 84 | กันบันทึกซ้ำ (idempotency) |
 | `36_price_rules.gs` | 451 | สิทธิ์เข้าถึงชุดราคา (price list eligibility) |
 | `37_customer_bulk.gs` | 129 | จัดกลุ่มลูกค้าเป็นชุด (bulk assign) |
@@ -616,16 +616,16 @@
 | `.dev/test-owner-tenant.js` | หน่วย (ไม่ยิงเน็ต) | 156 |
 | `.dev/test-package-distribution.js` | หน่วย (ไม่ยิงเน็ต) | 210 |
 | `.dev/test-price-rules.js` | หน่วย (ไม่ยิงเน็ต) | 221 |
-| `.dev/test-pricelist-edit.js` | หน่วย (ไม่ยิงเน็ต) | 206 |
+| `.dev/test-pricelist-edit.js` | หน่วย (ไม่ยิงเน็ต) | 208 |
 | `.dev/test-pricelist-parser.js` | หน่วย (ไม่ยิงเน็ต) | 16 |
-| `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 406 |
+| `.dev/test-pricing-engine.js` | หน่วย (ไม่ยิงเน็ต) | 415 |
 | `.dev/test-product-categories.js` | หน่วย (ไม่ยิงเน็ต) | 77 |
 | `.dev/test-purchasing-accounting.js` | หน่วย (ไม่ยิงเน็ต) | 2,061 |
-| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 342 |
+| `.dev/test-record-sale.js` | หน่วย (ไม่ยิงเน็ต) | 372 |
 | `.dev/test-roles.js` | หน่วย (ไม่ยิงเน็ต) | 239 |
 | `.dev/test-sale-by-label.js` | หน่วย (ไม่ยิงเน็ต) | 76 |
 | `.dev/test-sales-status.js` | หน่วย (ไม่ยิงเน็ต) | 887 |
-| `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 213 |
+| `.dev/test-sales.js` | หน่วย (ไม่ยิงเน็ต) | 228 |
 | `.dev/test-sheet-cache.js` | หน่วย (ไม่ยิงเน็ต) | 114 |
 | `.dev/test-staff-approval.js` | หน่วย (ไม่ยิงเน็ต) | 365 |
 | `.dev/test-unit-rescale.js` | หน่วย (ไม่ยิงเน็ต) | 56 |
@@ -644,6 +644,6 @@
 | `.dev/uat-pricelist-edit-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 85 |
 | `.dev/uat-purchasing-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 121 |
 | `.dev/uat-sale-docs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 130 |
-| `.dev/uat-sale-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 122 |
+| `.dev/uat-sale-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 124 |
 | `.dev/uat-van-cogs-e2e.js` | ยิง UAT จริง (เขียนข้อมูล) | 156 |
 

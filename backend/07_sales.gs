@@ -84,12 +84,14 @@ function _priceSaleCart(customerId, rawItems, paymentType, isVan, opts) {
        ไม่งั้นบวกเข้าแล้วไม่ถูกถอดออก (หรือกลับกัน) จะเพี้ยนคนละทางแทนที่จะหายเพี้ยน */
     if (customerApplyVat && productTaxStatus(p) === TAX_VAT) unitPrice = _round2(unitPrice * (1 + vatRate));
 
-    // ★ แพ็คขายได้เฉพาะ Cash Van + เงินสด — ต้องเช็คตรงนี้ (ไม่ใช่แค่ใน priceCart) เพราะลูกค้าที่ยังไม่มีชุดราคา
-    // ที่ใช้งานอยู่ (เช่น ตัวแทนที่เพิ่งเปิดใหม่ ยังไม่ได้จ่ายชุดราคาให้) จะข้าม priceCart() ไปใช้ discount_rules
-    // แบบเดิมทั้งหมด ซึ่งไม่มีการเช็คกติกานี้เลย — เจอจริงตอนสร้างตัวแทนทดสอบใหม่แล้วขายแพ็คด้วยเครดิตผ่านฉลุย 2026-09-28
-    if (isPackUnit(unitCode)) {
-      if (!isVan) return { success: false, code: 'PACK_VAN_ONLY', productId: raw.productId, message: 'แพ็คขายได้เฉพาะ Cash Van เท่านั้น' };
-      if (isCreditPayment(paymentType)) return { success: false, code: 'PACK_CASH_ONLY', productId: raw.productId, message: 'แพ็คขายได้เฉพาะเงินสด (ขายเครดิตต้องสั่งเป็นลัง)' };
+    /* ★★ กติกาหน่วยขาย (เจ้าของระบบสั่งสลับ 28 พ.ย. 2026): แพ็คขายได้กับทุกประเภทการขาย (รถ/สำนักงาน · สด/เชื่อ)
+       แต่ "ขายแบบชิ้น" (หน่วยฐาน) อนุญาตเฉพาะ Cash Van = หน่วยรถ + เงินสด — เดิมกลับกัน (แพ็คจำกัด ชิ้นไม่จำกัด)
+       ต้องเช็คตรงนี้ (ไม่ใช่แค่ใน priceCart) เพราะลูกค้าที่ยังไม่มีชุดราคาที่ใช้งานอยู่จะข้าม priceCart() ไปใช้ discount_rules
+       ทีม BLITZ: ผู้ป้อนบิลถือเป็นหน่วยรถ (isVan) และ forceCash = ราคาเงินสดแม้ชำระเครดิต จึงนับเป็นเงินสดด้วย */
+    if (unitCode === UNIT_PC) {
+      var pieceCredit = isCreditPayment(paymentType) && !(opts && opts.forceCash);
+      if (!isVan) return { success: false, code: 'PIECE_VAN_ONLY', productId: raw.productId, message: 'ขายแบบชิ้นได้เฉพาะ Cash Van เท่านั้น — ใช้หน่วยแพ็คหรือลังแทน' };
+      if (pieceCredit) return { success: false, code: 'PIECE_CASH_ONLY', productId: raw.productId, message: 'ขายแบบชิ้นได้เฉพาะเงินสด (ขายเครดิตให้สั่งเป็นแพ็คหรือลัง)' };
     }
 
     items.push({
@@ -195,8 +197,8 @@ function recordSale(user, payload) {
   /* ★ BLITZ RANGER (62_blitz.gs): ผู้ป้อนบิลของทีมในแคมเปญที่เดินอยู่ → ราคาเงินสดเสมอ (bz คิดไว้ต้นฟังก์ชันแล้ว)
      บิลทีมเป็นบิล office_delivery เสมอ จึงไม่แตะสต็อกรถ/สต็อกทีมเลย */
   var stockHolder = String(user.lineUserId);
-  /* ★ ทีม BLITZ ขายแพ็คได้ (เจ้าของระบบสั่ง 28 พ.ย. 2026) — กติกา "แพ็คเฉพาะ Cash Van" มีไว้กันขายแพ็คผ่านช่องทางที่ไม่ใช่หน้างาน
-     แต่ทีม Blitz ขายหน้างานเหมือนรถและ role ไม่จำเป็นต้องเป็น van_sales · ยังเงินสดเท่านั้น (PACK_CASH_ONLY ดูวิธีชำระจริง) */
+  /* ★ ทีม BLITZ ถือเป็นหน่วยรถ (isVan) — ขายหน้างานเหมือนรถ role ไม่จำเป็นต้องเป็น van_sales
+     ตอนนี้ isVan มีผลกับ "ขายแบบชิ้น" เท่านั้น (แพ็คขายได้ทุกประเภทการขายแล้ว 28 พ.ย. 2026) */
   var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales' || !!bz, { forceCash: !!(bz && bz.forceCash) });
   if (!priced.success) return priced;
   var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;

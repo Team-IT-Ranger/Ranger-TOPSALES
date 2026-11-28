@@ -6074,14 +6074,14 @@ function sonFulfillChanged(){
   sonReapplyUnits();
 }
 /* ★ หน่วยขายเริ่มต้น (เจ้าของระบบสั่ง 26 พ.ย. 2026): เงินสด = แพ็ค · เครดิต = ลัง
-   ★ แพ็คขายได้เฉพาะ "ลงของจากรถ (immediate) + เงินสด" — ฝั่งแอดมินเซิร์ฟเวอร์ถือว่า isVan = immediate (19_sales_admin.gs)
-     เงินสดแต่ส่งจากสำนักงานจึงตั้งต้นที่ลัง ไม่งั้นโดนปฏิเสธ PACK_VAN_ONLY ทุกบรรทัด · ไม่มีหน่วยนั้น → ลัง → หน่วยฐาน
+   ★ กติกาหน่วยสลับแล้ว 28 พ.ย. 2026: แพ็คขายได้ทุกประเภทการขาย (สด/เชื่อ · รถ/สำนักงาน) จึงตั้งต้นเงินสด = แพ็คเสมอ
+     ส่วน "ขายแบบชิ้น" (หน่วยฐาน) เฉพาะ "ลงของจากรถ (immediate) + เงินสด" — ฝั่งแอดมินเซิร์ฟเวอร์ถือว่า isVan = immediate (19_sales_admin.gs)
+     ตั้งต้นจึงไม่เคยเลือกหน่วยชิ้นให้เอง · ไม่มีหน่วยนั้น → ลัง → หน่วยฐาน
    ★ แถวที่ผู้ใช้เลือกหน่วยเองแล้ว (data-touched) ไม่ถูกเปลี่ยนตามวิธีชำระ */
 function sonDefaultUnitValue(units){
   const pay = ((document.getElementById('son-pay') || {}).value || ''), credit = /credit/i.test(pay);
-  const van = ((document.getElementById('son-fulfill') || {}).value === 'immediate');
   const find = k => units.find(u => { const c = String(u.unit_code).toUpperCase(); return k === 'PK' ? (c === 'PK' || c === 'PACK') : (c === 'CT' || c === 'CASE'); });
-  if (!credit && van) { const u = find('PK'); if (u) return u.unit_code; }
+  if (!credit) { const u = find('PK'); if (u) return u.unit_code; }
   const c = find('CT');
   return c ? c.unit_code : null;
 }
@@ -7884,7 +7884,7 @@ async function openLineModal(idx){
     '<div class="plm-row head"><span>จาก (หีบ)</span><span>ถึง (ว่าง = ขึ้นไป)</span><span>เงินสด</span><span>เครดิต</span><span></span></div>' +
     '<div id="plm-tiers">' + tiers.map(plmTierRow).join('') + '</div>' +
     '<button class="btn btn-sm" onclick="plmAddTier()">+ เพิ่มขั้น</button>' +
-    '<h4>แพ็ค <span class="unit" style="font-weight:400;color:var(--ink-faint)">ขายเฉพาะรถ Cash Van · เงินสดเท่านั้น</span></h4>' +
+    '<h4>แพ็ค <span class="unit" style="font-weight:400;color:var(--ink-faint)">ขายได้ทุกประเภทการขาย · ราคาแพ็คเดียว</span></h4>' +
     '<div class="plm-row packs head"><span>ชิ้นต่อแพ็ค</span><span>ราคาเงินสด (รวม VAT)</span><span>ราคาตั้ง (ไม่รวม VAT)</span><span></span></div>' +
     '<div id="plm-packs">' + (ln ? ln.packs.map(plmPackRow).join('') : '') + '</div>' +
     '<button class="btn btn-sm" onclick="document.getElementById(\'plm-packs\').insertAdjacentHTML(\'beforeend\', plmPackRow({}))">+ เพิ่มแพ็ค</button>' +

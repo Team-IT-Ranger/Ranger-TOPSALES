@@ -115,8 +115,13 @@ Google Drive ไม่ merge ไฟล์ที่ถูกเขียนพร
     เปิดใช้งานแล้วถูกบันทึก (ใครแก้ แก้อะไร เมื่อไหร่) · ชุดร่างไม่บันทึก (ยังไม่มีใครใช้ราคานั้น)
     · อ่านผ่าน action `listPriceListChanges` · **เพิ่มจุดแก้ราคาใหม่ต้องเรียก `_logPriceChange()` ด้วยเสมอ**
 - A customer/shop belongs to exactly **one** price list at a time (by customer group × period).
-- Van packs (แพ็ค) sell **only via Cash Van, only for cash** — enforced server-side in
-  `priceCart()` (`backend/18_pricing_engine.gs`): `PACK_VAN_ONLY` / `PACK_CASH_ONLY` error codes.
+- **★ Unit rule (reversed 2026-11-28 by the system owner):** packs (แพ็ค, PK) sell through **every sale type**
+  (cash/credit · van/office delivery); **piece (ชิ้น/base unit PC) sells only via Cash Van = van unit + cash** —
+  enforced server-side in `priceCart()` (`backend/18_pricing_engine.gs`) **and** `_priceSaleCart()` (`backend/07_sales.gs`,
+  the no-price-list fallback must check too): `PIECE_VAN_ONLY` / `PIECE_CASH_ONLY`. The old `PACK_VAN_ONLY`/`PACK_CASH_ONLY`
+  codes no longer exist. BLITZ team sellers count as van and `forceCash` counts as cash (so they may sell pieces on credit).
+  Pack price rows carry one price (cash column; credit column is empty) — credit pack sales reuse it instead of NO_PRICE.
+  Old bills with piece lines on office-delivery can no longer be *edited* (`editSalesOrderAdmin` re-prices through the same rule).
 - Price-list tiers are counted by **combined case (หีบ) quantity across products sharing the same
   `line_id`** (e.g. scent variants of the same item share one tier table) — every case in the order
   gets the price of the tier the combined total reaches.

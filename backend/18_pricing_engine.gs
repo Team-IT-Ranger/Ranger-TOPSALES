@@ -336,7 +336,7 @@ function _pricingContextForList(list) {
  * กติกา (จากใบรายการขายจริง):
  *  - ขั้นบันไดนับ "จำนวนหีบรวมของ line เดียวกัน" (สินค้าที่ใช้ตารางขั้นร่วมกัน) แล้วทุกหีบใช้ราคาของขั้นที่ถึง
  *  - ราคาที่ขายคือราคาสุทธิรวม VAT (เงินสด หรือ เครดิตตามวิธีชำระ)
- *  - PACK (แพ็ค) ขายได้เฉพาะ Cash Van + ชำระเงินสด
+ *  - แพ็ค (PK) ขายได้ทุกประเภทการขาย · ชิ้น (หน่วยฐาน) ขายได้เฉพาะ Cash Van + เงินสด (กลับกติกาเดิม 28 พ.ย. 2026)
  *  - โปรระดับบิล: ยอดรวมทั้งบิลไม่รวม VAT ครบขั้นไหน ลดเพิ่ม % ขั้นสูงสุดที่ถึงเพียงขั้นเดียว
  * คืน { success, lines:[{productId,unitCode,unitFactor,qty,unitPrice,lineTotal,tierLabel,lineId}], subtotal, billPercent, billDiscount, total }
  */
@@ -364,6 +364,11 @@ function priceCart(ctx, cart, opts) {
     var c = cart[i], qty = Number(c.qty) || 0;
     var unitCode = normUnitCode(c.unitCode, UNIT_CT);
     if (qty <= 0) return { success: false, message: 'จำนวนสินค้าต้องมากกว่า 0' };
+    /* ★ ขายแบบชิ้น = เฉพาะ Cash Van + เงินสด — เช็คก่อนหาแถวราคา เพื่อให้ได้เหตุผลที่ตรงที่สุด (ชุดราคาไม่มีแถวหน่วยชิ้นอยู่แล้ว) */
+    if (unitCode === UNIT_PC) {
+      if (!opts.isVan) return { success: false, code: 'PIECE_VAN_ONLY', productId: c.productId, message: 'ขายแบบชิ้นได้เฉพาะ Cash Van เท่านั้น — ใช้หน่วยแพ็คหรือลังแทน' };
+      if (opts.isCredit) return { success: false, code: 'PIECE_CASH_ONLY', productId: c.productId, message: 'ขายแบบชิ้นได้เฉพาะเงินสด (ขายเครดิตให้สั่งเป็นแพ็คหรือลัง)' };
+    }
     var rows = byProduct[String(c.productId) + '|' + unitCode];
     if (!rows || !rows.length) {
       return { success: false, code: 'NOT_IN_PRICE_LIST', productId: c.productId,
@@ -372,8 +377,6 @@ function priceCart(ctx, cart, opts) {
 
     var item = null;
     if (isPackUnit(unitCode)) {
-      if (!opts.isVan) return { success: false, code: 'PACK_VAN_ONLY', productId: c.productId, message: 'แพ็คขายได้เฉพาะ Cash Van เท่านั้น' };
-      if (opts.isCredit) return { success: false, code: 'PACK_CASH_ONLY', productId: c.productId, message: 'แพ็คขายได้เฉพาะเงินสด (ขายเครดิตต้องสั่งเป็นลัง)' };
       item = rows[0];
     } else {
       var total = caseQtyByLine[String(rows[0].line_id)] || qty;
@@ -385,6 +388,9 @@ function priceCart(ctx, cart, opts) {
     }
 
     var price = opts.isCredit ? item.credit_price_incl_vat : item.cash_price_incl_vat;
+    /* แถวแพ็คมีราคาเดียว (ราคาแพ็ค = ช่องเงินสด · ช่องเครดิตว่างเสมอ) — ขายแพ็คแบบเครดิตได้แล้ว จึงใช้ราคาแพ็คเดียวกัน
+       ไม่ปฏิเสธว่า "ไม่มีราคาเครดิต" · ลังไม่ใช้ทางลัดนี้ (ลังมีราคาเครดิตของตัวเอง ว่าง = ข้อมูลผิด ต้องฟ้อง) */
+    if (isPackUnit(unitCode) && (price === '' || price === null || price === undefined)) price = item.cash_price_incl_vat;
     if (price === '' || price === null || price === undefined) {
       return { success: false, code: 'NO_PRICE', productId: c.productId, message: 'สินค้า ' + c.productId + ' ไม่มีราคา' + (opts.isCredit ? 'เครดิต' : 'เงินสด') + ' ในชุดราคานี้' };
     }

@@ -41,13 +41,28 @@ const eq = (name, actual, expected) => {
   if (!ok) failed++;
 };
 
-console.log('── _priceSaleCart(): แพ็คขายเฉพาะ Cash Van + เงินสด แม้ไม่มีชุดราคา (fallback ก็ต้องเช็ค) ──');
+console.log('── _priceSaleCart(): แพ็คขายได้ทุกประเภท · ขายแบบชิ้นเฉพาะ Cash Van + เงินสด แม้ไม่มีชุดราคา (fallback ก็ต้องเช็ค) ──');
 
 let r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PK', qty: 2 }], 'cash', false);
-eq('แพ็คนอก Cash Van (isVan=false) ถูกปฏิเสธแม้ลูกค้าไม่มีชุดราคา', [r.success, r.code], [false, 'PACK_VAN_ONLY']);
+eq('★ แพ็คนอก Cash Van (isVan=false) ขายได้แล้ว (กติกาเดิมถูกกลับ 28 พ.ย. 2026)', [r.success, r.code], [true, undefined]);
 
 r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PK', qty: 2 }], 'credit_term', true);
-eq('แพ็คแบบเครดิตถูกปฏิเสธแม้ลูกค้าไม่มีชุดราคา (บั๊กเดิม: ผ่านฉลุย)', [r.success, r.code], [false, 'PACK_CASH_ONLY']);
+eq('★ แพ็คแบบเครดิตขายได้แล้ว', r.success, true);
+
+r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PK', qty: 2 }], 'credit_term', false);
+eq('★ แพ็คเครดิตนอกรถ (สำนักงานจัดส่งเครดิต) ขายได้ — ทุกประเภทการขาย', r.success, true);
+
+r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: '', qty: 3 }], 'cash', false);
+eq('★ ขายแบบชิ้นนอก Cash Van ถูกปฏิเสธ', [r.success, r.code], [false, 'PIECE_VAN_ONLY']);
+
+r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PC', qty: 3 }], 'credit_term', true);
+eq('★ ขายแบบชิ้นด้วยเครดิตถูกปฏิเสธแม้เป็นรถ', [r.success, r.code], [false, 'PIECE_CASH_ONLY']);
+
+r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: '', qty: 3 }], 'cash', true);
+eq('★ ขายแบบชิ้น Cash Van + เงินสด ผ่าน', r.success, true);
+
+r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: '', qty: 3 }], 'credit_term', true, { forceCash: true });
+eq('★ ทีม BLITZ (isVan + forceCash) ขายชิ้นได้แม้ชำระเครดิต — ราคาเงินสดเสมอ', r.success, true);
 
 r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PK', qty: 2 }], 'cash', true);
 // ★ 101 ในข้อมูลจำลองคือราคา "ก่อน VAT" (product_units.price เปลี่ยนความหมาย 3 ต.ค. 2026)
@@ -56,7 +71,7 @@ r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'PK', qty: 2 }], 'cash', tr
 eq('แพ็ค Cash Van เงินสด ผ่านปกติ (ราคาต่อแพ็ค รวม VAT × 2)', [r.success, r.items[0].lineTotal], [true, 216.14]);
 
 r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }], 'credit_term', false);
-eq('ขายเป็นลัง (ไม่ใช่แพ็ค) ด้วยเครดิตนอก Cash Van ยังขายได้ปกติ (กติกานี้จำเพาะแพ็คเท่านั้น)', r.success, true);
+eq('ขายเป็นลังด้วยเครดิตนอก Cash Van ยังขายได้ปกติ (กติกาจำกัดเฉพาะหน่วยชิ้น)', r.success, true);
 
 console.log('\n── quoteSale(): ของแถมต้องผ่านการแปลงร่างเหมือน recordSale เป๊ะ (ruleId/ruleName) ──');
 // บั๊กที่เจอจริง 2026-09-29: quoteSale ไม่เคยผ่าน _shapeFreeGoods() เลย ต่างจาก _priceSaleCart (ที่ recordSale
@@ -126,7 +141,7 @@ console.log('\n── _priceSaleCart(): ราคาในทะเบียน�
     r.calc.vat.subtotalAfterProductDiscountExVat, 1200);
 
   // สินค้ายกเว้นภาษี: ไม่มี VAT ให้บวก ราคาที่เก็บคือราคาที่คิดเงิน
-  r = ctx._priceSaleCart(1, [{ productId: 2, unitCode: '', qty: 1 }], 'cash', false);
+  r = ctx._priceSaleCart(1, [{ productId: 2, unitCode: '', qty: 1 }], 'cash', true);
   eq('สินค้ายกเว้นภาษี ไม่ถูกบวก VAT เข้าไป (500 → 500)',
     [r.success, r.items[0].lineTotal, r.calc.vat.exVat, r.calc.vat.vat], [true, 500, 500, 0]);
 
@@ -136,7 +151,7 @@ console.log('\n── _priceSaleCart(): ราคาในทะเบียน�
     [r.success, r.items[0].lineTotal, r.calc.vat.exVat, r.calc.vat.vat], [true, 1200, 1200, 0]);
 
   // บิลผสม: ของคิดภาษี + ของยกเว้น ในใบเดียวกัน ต้องบวกเฉพาะตัวที่เสียภาษี
-  r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }, { productId: 2, unitCode: '', qty: 1 }], 'cash', false);
+  r = ctx._priceSaleCart(1, [{ productId: 1, unitCode: 'CT', qty: 1 }, { productId: 2, unitCode: '', qty: 1 }], 'cash', true);
   eq('บิลผสม: บวก VAT เฉพาะบรรทัดที่เสียภาษี (1,284 + 500)',
     [r.items[0].lineTotal, r.items[1].lineTotal], [1284, 500]);
   eq('  แยกภาษีถูก: ฐานรายได้ 1,700 · ภาษี 84 · ยกเว้น 500 · ส่วนที่เสียภาษี 1,200',
@@ -161,7 +176,7 @@ console.log('\n── _priceSaleCart(): ราคาในทะเบียน�
   eq('baseUnitPrice(): 1,166.34 ต่อลัง 60 ชิ้น → 19.44 ต่อชิ้น (ไม่ใช่ 1,166.34)',
     ctx.baseUnitPrice(P3, [U3]), 19.44);
 
-  let r = ctx._priceSaleCart(1, [{ productId: 3, unitCode: '', qty: 1 }], 'cash', false);
+  let r = ctx._priceSaleCart(1, [{ productId: 3, unitCode: '', qty: 1 }], 'cash', true);
   eq('★ ขาย 1 ชิ้น ต้องไม่เท่าราคา 1 ลัง (19.44 +VAT = 20.80 — เดิมได้ 1,247.98)',
     [r.success, r.items[0].lineTotal], [true, 20.8]);
   const whole = ctx._priceSaleCart(1, [{ productId: 3, unitCode: 'CT', qty: 1 }], 'cash', false);
@@ -201,7 +216,7 @@ console.log('\n── BLITZ: บังคับราคาเงินสด �
   let seen = null;
   ctx.getPricingContextForCustomer = () => ({ list: { name: 'ชุดทดสอบ' } });
   ctx.priceCart = (c, items, o) => { seen = o; throw new Error('stop'); };
-  const run = opts => { seen = null; try { ctx._priceSaleCart(1, [{ productId: 1, qty: 1, unitCode: 'PC' }], 'credit_term', true, opts); } catch (e) {} return seen; };
+  const run = opts => { seen = null; try { ctx._priceSaleCart(1, [{ productId: 1, qty: 1, unitCode: 'CT' }], 'credit_term', true, opts); } catch (e) {} return seen; };
   eq('ชำระเครดิต ไม่มีแคมเปญ → ใช้ช่องราคาเครดิต', run(undefined) && run(undefined).isCredit, true);
   eq('★ ชำระเครดิต + แคมเปญบังคับเงินสด → ใช้ช่องราคาเงินสด', run({ forceCash: true }).isCredit, false);
   eq('ชำระเครดิต + opts ว่าง (forceCash=false) → ยังเป็นเครดิต', run({ forceCash: false }).isCredit, true);

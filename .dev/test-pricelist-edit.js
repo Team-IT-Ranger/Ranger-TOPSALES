@@ -88,7 +88,9 @@ eq('  แซนดัลวูด 1 + ลาเวนเดอร์ 1 นับ
 p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'PK', qty: 2 }], { isCredit: false, isVan: true });
 eq('  แพ็คขายรถ เงินสด 2 แพ็ค = 202', p.total, 202);
 p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'PK', qty: 2 }], { isCredit: false, isVan: false });
-eq('  แพ็คไม่ใช่รถ → PACK_VAN_ONLY', p.code, 'PACK_VAN_ONLY');
+eq('  แพ็คไม่ใช่รถก็ขายได้ (กติกากลับ 28 พ.ย. 2026)', [p.success, p.total], [true, 202]);
+p = ctx.priceCart(ctxOf(L1), [{ productId: 101, unitCode: 'PC', qty: 2 }], { isCredit: false, isVan: false });
+eq('  ขายแบบชิ้นไม่ใช่รถ → PIECE_VAN_ONLY', p.code, 'PIECE_VAN_ONLY');
 r = ctx.getPriceList(S, { id: L1 });
 const got = r.lines.find(l => l.lineId === xLine);
 eq('  getPriceList อ่านกลับได้รูปแบบเดียวกับที่ save คืน', [got.caseFactor, got.listExVat, got.tiers.map(t => [t.min, t.max, t.cashInclVat]), got.packs[0].unitFactor, got.suggestedPack, got.retailPiece],

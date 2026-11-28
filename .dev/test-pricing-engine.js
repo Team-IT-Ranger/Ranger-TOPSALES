@@ -48,10 +48,19 @@ r = price([{ productId: 101, unitCode: 'PK', qty: 3 }], { isCredit: false, isVan
 eq('แพ็ค Cash Van เงินสด 3 แพ็ค = 303', [r.success, r.lines[0].unitPrice, r.total], [true, 101, 303]);
 
 r = price([{ productId: 101, unitCode: 'PK', qty: 1 }], { isCredit: false, isVan: false });
-eq('แพ็คนอก Cash Van → ปฏิเสธ', [r.success, r.code], [false, 'PACK_VAN_ONLY']);
+eq('★ แพ็คนอก Cash Van ขายได้ (กติกาถูกกลับ 28 พ.ย. 2026)', [r.success, r.lines[0].unitPrice], [true, 101]);
 
-r = price([{ productId: 101, unitCode: 'PK', qty: 1 }], { isCredit: true, isVan: true });
-eq('แพ็คแบบเครดิต → ปฏิเสธ', [r.success, r.code], [false, 'PACK_CASH_ONLY']);
+r = price([{ productId: 101, unitCode: 'PK', qty: 1 }], { isCredit: true, isVan: false });
+eq('★ แพ็คเครดิตขายได้ — แถวแพ็คไม่มีราคาเครดิต จึงใช้ราคาแพ็คเดียวกัน ไม่ใช่ NO_PRICE', [r.success, r.lines[0].unitPrice], [true, 101]);
+
+r = price([{ productId: 101, unitCode: 'PC', qty: 1 }], { isCredit: false, isVan: false });
+eq('★ ขายแบบชิ้นนอก Cash Van → ปฏิเสธ (ก่อนหาแถวราคา ได้เหตุผลตรง)', [r.success, r.code], [false, 'PIECE_VAN_ONLY']);
+
+r = price([{ productId: 101, unitCode: 'PC', qty: 1 }], { isCredit: true, isVan: true });
+eq('★ ขายแบบชิ้นด้วยเครดิต → ปฏิเสธ', [r.success, r.code], [false, 'PIECE_CASH_ONLY']);
+
+r = price([{ productId: 101, unitCode: 'PC', qty: 1 }], { isCredit: false, isVan: true });
+eq('  ขายแบบชิ้น Cash Van เงินสด ผ่านกติกา (ชุดราคานี้ไม่มีแถวชิ้น → NOT_IN_PRICE_LIST ไม่ใช่ PIECE_*)', [r.success, r.code], [false, 'NOT_IN_PRICE_LIST']);
 
 r = price([{ productId: 999, unitCode: 'CT', qty: 1 }], cash);
 eq('สินค้าที่ไม่อยู่ในชุดราคา → ปฏิเสธ (ไม่ขายผิดราคา)', [r.success, r.code], [false, 'NOT_IN_PRICE_LIST']);

@@ -162,7 +162,7 @@
   .pq .l b{ color:var(--ink); font-family:'IBM Plex Mono',monospace; font-weight:600; white-space:nowrap; }
   .pq .d{ color:var(--green); font-weight:600; }
   .pq .w{ color:var(--ink-faint); }
-  .uf.off{ opacity:.45; }                      /* แพ็คตอนเลือกเครดิต — ขายไม่ได้ (เซิร์ฟเวอร์ปฏิเสธ) แต่ไม่ซ่อนเพื่อให้รู้ว่ามีหน่วยนี้ */
+  .uf.off{ opacity:.45; }                      /* ช่อง "ชิ้น" ที่ขายไม่ได้ (ไม่ใช่หน่วยรถ / ชำระเครดิต) — เซิร์ฟเวอร์ปฏิเสธ แต่ไม่ซ่อนเพื่อให้รู้ว่ามีหน่วยนี้ */
   body.density-compact .uf input{ padding:6px 2px; }
   body.density-compact .uf .ub button{ height:20px; font-size:13px; }
   .low{ color:var(--red); font-weight:700; }
@@ -1823,7 +1823,8 @@ const unitsOf = p => [{ unitCode: '', unitLabel: p.unit || 'ชิ้น', unitF
 const unitOf = (p, code) => unitsOf(p).find(u => u.unitCode === code) || unitsOf(p)[0];
 /* ★ 28 พ.ย. 2026: การ์ดสินค้ามีช่องจำนวนแยกตามหน่วย (ลัง/แพ็ค/ชิ้น) แล้ว — เลิกใช้ dropdown เลือกหน่วยกับ "หน่วยเริ่มต้นตามวิธีชำระ"
    (เดิมเงินสด=แพ็ค · เครดิต=ลัง ตามที่เจ้าของระบบสั่ง 26 พ.ย.) เพราะทุกหน่วยอยู่ตรงหน้าให้กรอกได้เลย
-   ★ แพ็คขายได้เฉพาะ "หน่วยรถ + เงินสด" (PACK_VAN_ONLY / PACK_CASH_ONLY ที่เซิร์ฟเวอร์ปฏิเสธเอง) */
+   ★ กติกาหน่วย (เจ้าของระบบสั่งสลับ 28 พ.ย. 2026): แพ็คขายได้ทุกประเภทการขาย · "ขายแบบชิ้น" เฉพาะหน่วยรถ + เงินสด
+     (PIECE_VAN_ONLY / PIECE_CASH_ONLY ที่เซิร์ฟเวอร์ปฏิเสธเอง · ทีม BLITZ ถือเป็นหน่วยรถและราคาเงินสดเสมอ) */
 const isPackCode = c => /^(PK|PACK)$/i.test(String(c || ''));
 const isCaseCode = c => /^(CT|CASE)$/i.test(String(c || ''));
 
@@ -1903,6 +1904,8 @@ function setFulfil(v){
 }
 function setPay(v){
   PAY = v;
+  /* เปลี่ยนเป็นเครดิต → รายการ "ชิ้น" ที่เลือกไว้ขายไม่ได้แล้ว (เฉพาะเงินสด) เอาออกพร้อมบอก ดีกว่าปล่อยให้เซิร์ฟเวอร์ปฏิเสธตอนกดบันทึก */
+  if (CART.some(c => c.unitCode === '') && !canSellPiece()) { CART = CART.filter(c => c.unitCode !== ''); toast(PIECE_MSG + ' — เอารายการชิ้นออกจากตะกร้าแล้ว', 'err'); }
   document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   if ((v === 'credit_term' || v === 'credit') && !isBlitzSeller()) setFulfil('office');   // ทีม BLITZ เครดิตก็ลงของหน้างานได้
   syncDelivField();
@@ -1926,18 +1929,27 @@ function renderProducts(){
       '<div class="sub">'+prodSubHtml(p)+'</div>' +
       '<div class="units">' + unitsSorted(p).map(x => {
         const c = esc(x.unitCode), n = cartQty(p.id, x.unitCode);
-        return '<div class="uf'+(packOff(x) ? ' off' : '')+'" data-code="'+c+'"><div class="ul">'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</div>' +
+        return '<div class="uf'+(pieceOff(x) ? ' off' : '')+'" data-code="'+c+'"><div class="ul">'+esc(x.unitLabel)+(x.unitFactor > 1 ? ' ×'+esc(x.unitFactor) : '')+'</div>' +
           '<input type="number" inputmode="numeric" min="0" class="'+(n ? 'has' : '')+'" data-code="'+c+'" value="'+(n || '')+'" placeholder="0" onchange="setQty(\''+pid+'\',\''+c+'\', this.value)">' +
           '<div class="ub"><button onclick="bump(\''+pid+'\',\''+c+'\',-1)">−</button><button class="plus" onclick="bump(\''+pid+'\',\''+c+'\',1)">+</button></div></div>';
       }).join('') + '</div><div class="pq">' + prodQuoteHtml(p) + '</div></div>';
   }).join('') + (list.length > 80 ? '<div class="empty">แสดง 80 รายการแรก — พิมพ์ค้นหาเพื่อหาตัวอื่น</div>' : '');
 }
-/* เรียงหน่วยในการ์ด: ลัง → แพ็ค → หน่วยอื่น → หน่วยฐาน (ชิ้น) · แพ็คขายได้เฉพาะเงินสด (PACK_CASH_ONLY) จึงจางลงตอนเลือกเครดิต */
+/* เรียงหน่วยในการ์ด: ลัง → แพ็ค → หน่วยอื่น → หน่วยฐาน (ชิ้น) · ช่องชิ้นจางลงเมื่อขายไม่ได้ (ดู pieceOff) */
 function unitsSorted(p){
   const rank = u => isCaseCode(u.unitCode) ? 0 : isPackCode(u.unitCode) ? 1 : u.unitCode === '' ? 3 : 2;
   return unitsOf(p).slice().sort((a, b) => rank(a) - rank(b) || b.unitFactor - a.unitFactor);
 }
-const packOff = u => isPackCode(u.unitCode) && (PAY === 'credit_term' || PAY === 'credit');
+/* ช่อง "ชิ้น" จางลงเมื่อขายไม่ได้ (ไม่ใช่หน่วยรถ หรือชำระเครดิต) — ไม่ซ่อน เพื่อให้รู้ว่ามีหน่วยนี้ · ตัดสินจริงที่เซิร์ฟเวอร์ ตรงนี้กันกดพลาด
+   ทีม BLITZ: ถือเป็นหน่วยรถ และถ้าแคมเปญบังคับราคาเงินสด (forceCash) ชำระเครดิตก็ขายชิ้นได้ */
+const isCreditPay = () => PAY === 'credit_term' || PAY === 'credit';
+const canSellPiece = () => {
+  const blitz = isBlitzSeller();
+  if (!(blitz || (ME && ME.role === 'van_sales'))) return false;
+  return !isCreditPay() || !!(blitz && DATA.blitz && DATA.blitz.forceCash);
+};
+const pieceOff = u => u.unitCode === '' && !canSellPiece();
+const PIECE_MSG = 'ขายแบบชิ้นได้เฉพาะ Cash Van + เงินสด — ใช้หน่วยแพ็คหรือลังแทน';
 /* บรรทัดย่อย "บนรถ … · ในตะกร้า …" — ใช้ทั้งตอนวาดทั้งลิสต์และตอนอัปเดตการ์ดเดียว */
 function prodSubHtml(p){
   const used = baseUsed(p.id);
@@ -1994,6 +2006,7 @@ function bump(pid, code, d){ setQty(pid, code, cartQty(pid, code) + d); }
 function setQty(pid, code, v){
   const p = prodById(pid); if (!p) return;
   let qty = Math.max(0, parseInt(v) || 0);
+  if (qty > 0 && code === '' && !canSellPiece()) { toast(PIECE_MSG, 'err'); updateProdCard(pid); return; }
   if (!OFFICE && !isBlitzSeller()) {  // ขายจากรถ: ห้ามเกินของบนรถ (ทีม BLITZ ไม่มีสต็อกบนรถ) (นับเป็นหน่วยฐานรวมทุกหน่วย)
     const f = unitOf(p, code).unitFactor, other = baseUsed(pid) - cartQty(pid, code) * f;
     const max = Math.floor((p.vanStock - other) / f);

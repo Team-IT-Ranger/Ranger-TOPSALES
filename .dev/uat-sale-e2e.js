@@ -27,7 +27,9 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
     items: [{ productCode: '10189', unitCode: 'CT', qty: 1 }, { productCode: '10190', unitCode: 'CT', qty: 1 }] });
   check('previewPricing: แซนดัลวูด 1 + ลาเวนเดอร์ 1 = 2 หีบรวม → 1,200 ต่อหีบ (2,400)', r.success && r.total === 2400 && r.lines.every(l => l.unitPrice === 1200), r);
   r = await admin('previewPricing', { customerGroupId: bkkGroup.record_id, paymentType: 'cash', isVan: false, items: [{ productCode: '10189', unitCode: 'PK', qty: 1 }] });
-  check('previewPricing: แพ็คนอก Cash Van ถูกปฏิเสธ', !r.success && r.code === 'PACK_VAN_ONLY', r);
+  check('previewPricing: แพ็คนอก Cash Van ขายได้ (กติกากลับ 28 พ.ย. 2026)', r.success, r);
+  r = await admin('previewPricing', { customerGroupId: bkkGroup.record_id, paymentType: 'cash', isVan: false, items: [{ productCode: '10189', unitCode: 'PC', qty: 1 }] });
+  check('previewPricing: ขายแบบชิ้นนอก Cash Van ถูกปฏิเสธ', !r.success && r.code === 'PIECE_VAN_ONLY', r);
 
   // 2) ตัวแทน + ลูกค้า + พนักงานขาย (ของทดสอบบน UAT)
   const tid = 'UATP' + String(Date.now()).slice(-6);
@@ -75,7 +77,7 @@ const check = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + 
   check('recordSale แพ็ค Cash Van เงินสด 2 แพ็ค = 202', sale.success && sale.total === 202, sale);
 
   sale = await mobile('recordSale', { customerId: cust.id, paymentType: 'credit_term', fulfillmentType: 'office_delivery', items: [{ productId: ext.record_id, unitCode: 'PK', qty: 1 }] });
-  check('recordSale แพ็คแบบเครดิต ถูกปฏิเสธ', !sale.success && sale.code === 'PACK_CASH_ONLY', sale);
+  check('recordSale แพ็คแบบเครดิต ขายได้ (กติกากลับ 28 พ.ย. 2026)', sale.success, sale);
 
   sale = await mobile('recordSale', { customerId: cust.id, paymentType: 'cash', items: [{ productId: ext.record_id, unitCode: 'CT', qty: 0 }] });
   check('recordSale จำนวน 0 ถูกปฏิเสธ', !sale.success, sale);
