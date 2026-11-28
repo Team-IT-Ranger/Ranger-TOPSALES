@@ -51,15 +51,17 @@
   .top img,.top .av{ width:36px; height:36px; border-radius:50%; background:var(--blue-soft); object-fit:cover; display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--blue); }
   .top .who{ flex:1; min-width:0; }
   .top .who b{ display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  /* ★ แถบหัวแอป (28 พ.ย. 2026 เจ้าของระบบสั่งจัดใหม่ 2 รอบ): แถบบน = โลโก้แอปซ้าย · ชื่อแอปกลาง · รูปโปรไฟล์+ชื่อผู้ใช้ขวา
-     แถบใต้หัว (.userbar) = บทบาท · สังกัด (ซ้าย) + สถานะออนไลน์ (ขวา) · โลโก้ = มาสคอตตัวเดียวกับแอปแอดมิน (ย่อเหลือ 120px) */
+  /* ★ แถบหัวแอปแถบเดียว (28 พ.ย. 2026 เจ้าของระบบสั่งจัดใหม่ 3 รอบ): ซ้าย โลโก้แอป (มาสคอตตัวเดียวกับแอปแอดมิน ย่อเหลือ 120px)
+     · กลาง ชื่อแอป + บทบาท·สังกัดใต้ชื่อ · ขวา รูปโปรไฟล์+ชื่อผู้ใช้ และป้ายออนไลน์ใต้ชื่อ */
   .top .logo{ width:36px; height:36px; border-radius:10px; background:none; object-fit:contain; flex:0 0 auto; }
-  .top .appname{ flex:1; min-width:0; text-align:center; font-weight:700; font-size:15px; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .top .mechip{ display:flex; align-items:center; gap:7px; min-width:0; max-width:46%; flex:0 0 auto; }
-  .top .mechip img,.top .mechip .av{ width:32px; height:32px; }
+  .top .appname{ flex:1; min-width:0; text-align:center; line-height:1.25; }
+  .top .appname b{ display:block; font-size:15px; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .top .appname .muted{ display:block; font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .top .meblock{ display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex:0 0 auto; max-width:36%; min-width:0; }
+  .top .mechip{ display:flex; align-items:center; gap:6px; min-width:0; max-width:100%; }
+  .top .mechip img,.top .mechip .av{ width:24px; height:24px; font-size:12px; }
   .top .mechip b{ font-size:13px; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .userbar{ display:flex; align-items:center; gap:8px; padding:7px 16px; background:var(--surface-2); border-bottom:1px solid var(--border); font-size:13px; }
-  .userbar #me-sub{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .top .mestatus{ display:flex; align-items:center; gap:5px; }
   .net{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--green-soft); color:var(--green); }
   .net.off{ background:var(--orange-soft); color:var(--orange); }
   .net-busy{ display:inline-flex; align-items:center; flex:0 0 auto; }
@@ -253,7 +255,7 @@
      เหมือนฝั่งแอดมิน (doc-print.js) เพราะบริบทคนละแบบ: อันนี้คือใบสรุปให้คนขับเปิดดู/ส่งลูกค้าดูเอง
      ไม่ใช่เอกสารทางการ 6 แบบของสำนักงาน — ซ่อนทุกอย่างของแอป เหลือแต่ #sd-body ตอนสั่งพิมพ์ */
   @media print {
-    .env-bar, .top, .userbar, .tabs, .cartbar, .no-print { display:none !important; }
+    .env-bar, .top, .tabs, .cartbar, .no-print { display:none !important; }
     .screen{ display:none !important; }
     #tab-saledetail{ display:block !important; padding:0; }
     #tab-saledetail #sd-body{ display:block !important; }
@@ -423,19 +425,20 @@
 
 <!-- ═══ แอปหลัก ═══ -->
 <div class="app hidden" id="scr-app">
+  <!-- ★ แถบหัวแถบเดียว (เจ้าของระบบสั่งจัดใหม่ 3 รอบ 28 พ.ย. 2026): ซ้าย = โลโก้แอป · กลาง = ชื่อแอป + บทบาท·สังกัดใต้ชื่อ · ขวา = รูป+ชื่อผู้ใช้ + ป้ายออนไลน์ใต้ชื่อ
+       id เดิมทั้งหมด (me-pic/me-av/me-name/me-sub/net/net-busy) enterApp()/updateNet() เติมให้ -->
   <div class="top">
     <img class="logo" src="mascot-sr1.png?v=20261128" alt="">
-    <div class="appname">Ranger TOPSALES</div>
-    <!-- ผู้ใช้ที่ล็อกอินอยู่ (รูปโปรไฟล์ LINE + ชื่อ) อยู่ขวาของแถบหัว — id เดิมทั้งหมด enterApp() เติมให้ -->
-    <div class="mechip"><img id="me-pic" class="hidden" alt=""><div class="av" id="me-av">?</div><b id="me-name">-</b></div>
-  </div>
-  <!-- แถบใต้หัว: บทบาท · สังกัด (ซ้าย) + สถานะออนไลน์ (ขวา) — จัดตามที่เจ้าของระบบสั่ง 28 พ.ย. 2026 -->
-  <div class="userbar">
-    <span class="muted" id="me-sub">-</span>
-    <!-- ★ วงแหวนเล็กข้างป้ายออนไลน์ = กำลังคุยกับเซิร์ฟเวอร์อยู่ (ทำหน้าที่เดียวกับป้าย "กำลังอัปเดต…" ของแอปแอดมิน)
+    <div class="appname"><b>Ranger TOPSALES</b><span class="muted" id="me-sub">-</span></div>
+    <div class="meblock">
+      <div class="mechip"><img id="me-pic" class="hidden" alt=""><div class="av" id="me-av">?</div><b id="me-name">-</b></div>
+      <div class="mestatus">
+      <!-- ★ วงแหวนเล็กข้างป้ายออนไลน์ = กำลังคุยกับเซิร์ฟเวอร์อยู่ (ทำหน้าที่เดียวกับป้าย "กำลังอัปเดต…" ของแอปแอดมิน)
          ★★ ไม่ใช้ tnkNetBusy ที่ลอยมุมขวาล่าง เพราะมุมนั้นมีแถบแท็บล่างกับแถบตะกร้าลอยอยู่แล้ว มันจะทับกัน -->
-    <span class="net-busy hidden" id="net-busy" data-tnk-spin="18" aria-hidden="true"></span>
-    <span class="net" id="net">ออนไลน์</span>
+        <span class="net-busy hidden" id="net-busy" data-tnk-spin="18" aria-hidden="true"></span>
+        <span class="net" id="net">ออนไลน์</span>
+      </div>
+    </div>
   </div>
 
   <!-- หน้าแรก -->
