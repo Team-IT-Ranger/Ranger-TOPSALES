@@ -624,8 +624,11 @@ const lsSet = (k, v) => { try { localStorage.setItem(LSK(k), JSON.stringify(v));
 function toast(msg, kind){ const t = $('toast'); t.textContent = msg; t.className = 'toast' + (kind ? ' ' + kind : ''); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => { t.style.display = 'none'; }, 3200); }
 function show(id){
   ['scr-loading','scr-register','scr-pending','scr-app','scr-approve','scr-blitz','scr-director'].forEach(x => $(x).classList.toggle('hidden', x !== id));
-  /* แถบเมนูหลัก: โชว์ในแอปหลัก และในเมนูผู้อำนวยการ (เฉพาะคนที่เป็นพนักงานในแอป — เปิดจาก boot = ไม่ใช่พนักงาน ไม่มีหน้าแอปให้ไป) */
-  const tabsOn = id === 'scr-app' || (id === 'scr-director' && !(typeof DR !== 'undefined' && DR.from === 'boot'));
+  /* แถบเมนูหลัก: โชว์ในแอปหลัก · เมนูผู้อำนวยการ · หน้าอนุมัติผู้ใช้งาน (เฉพาะคนที่เป็นพนักงานในแอป)
+     เปิดจาก boot = ไม่ใช่พนักงาน (เข้าจากลิงก์ในกลุ่ม) ไม่มีหน้าแอปให้ไป → ไม่โชว์ · หน้าอนุมัติที่เปิดจากเมนูผู้อำนวยการ ตามค่าของเมนูนั้น */
+  const fromBoot = (typeof DR !== 'undefined' && DR.from === 'boot');
+  const tabsOn = id === 'scr-app' || (id === 'scr-director' && !fromBoot)
+    || (id === 'scr-approve' && typeof AP !== 'undefined' && (AP.from === 'app' || (AP.from === 'director' && !fromBoot)));
   const tb = $('main-tabs'); if (tb) tb.classList.toggle('hidden', !tabsOn);
   // อยู่แอปหลัก → ไฮไลต์แท็บที่เปิดอยู่ · หน้าอื่น (เมนูผู้อำนวยการ) → ไม่ไฮไลต์ เพราะไม่ได้อยู่หน้าไหนของแอปหลัก
   document.querySelectorAll('#main-tabs button').forEach(b => b.classList.toggle('on', id === 'scr-app' && b.dataset.tab === TAB));
