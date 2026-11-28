@@ -541,7 +541,7 @@
         <option value="credit">ชำระเครดิต</option>
       </select>
       <input class="inp hidden" id="c-credit" inputmode="numeric" placeholder="วงเงินเครดิตที่ขอ (บาท) *">
-      <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" onclick="captureCustGps()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>จับพิกัด</button><span class="muted" id="c-gps">ยังไม่จับพิกัด</span></div>
+      <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" id="c-gps-btn" onclick="captureCustGps(false)"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14s4.4-4 4.4-7a4.4 4.4 0 0 0-8.8 0c0 3 4.4 7 4.4 7z"/><circle cx="8" cy="6.9" r="1.5"/></svg>รีเฟรชพิกัด</button><span class="muted" id="c-gps">จับพิกัดอัตโนมัติตอนเปิดฟอร์ม</span></div>
       <div style="display:flex;gap:8px"><button class="btn" style="flex:1" onclick="toggleAddCust(false)">ยกเลิก</button><button class="btn btn-green" style="flex:2" id="c-save" onclick="submitCust()">ส่งคำขอ</button></div>
     </div>
     <div id="c-reqs" class="stack" style="margin-bottom:12px"></div>
@@ -660,11 +660,13 @@ async function refreshIdToken(){
   } catch (e) { /* อยู่นอก LIFF หรือ SDK มีปัญหา — ปล่อยให้ผู้เรียกแจ้งผู้ใช้เอง */ }
   return false;
 }
-function getGPS(){
+/* o.fresh = ไม่ใช้พิกัดที่เครื่องจำไว้ (ปุ่มรีเฟรช) · o.timeout = มิลลิวินาที · คืน acc (เมตร) กับ err (1=ไม่อนุญาต 2=หาไม่ได้ 3=หมดเวลา 0=เครื่องไม่รองรับ) */
+function getGPS(o){
+  o = o || {};
   return new Promise(r => {
-    if (!navigator.geolocation) return r({ lat: '', lng: '', map: '' });
-    navigator.geolocation.getCurrentPosition(p => r({ lat: p.coords.latitude, lng: p.coords.longitude, map: 'https://maps.google.com/?q=' + p.coords.latitude + ',' + p.coords.longitude }),
-      () => r({ lat: '', lng: '', map: '' }), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+    if (!navigator.geolocation) return r({ lat: '', lng: '', map: '', err: 0 });
+    navigator.geolocation.getCurrentPosition(p => r({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, map: 'https://maps.google.com/?q=' + p.coords.latitude + ',' + p.coords.longitude }),
+      e => r({ lat: '', lng: '', map: '', err: (e && e.code) || 0 }), { enableHighAccuracy: true, timeout: o.timeout || 8000, maximumAge: o.fresh ? 0 : 60000 });
   });
 }
 function updateNet(){ const n = $('net'); if (!n) return; n.textContent = navigator.onLine ? 'ออนไลน์' : 'ออฟไลน์'; n.classList.toggle('off', !navigator.onLine); }
@@ -2109,9 +2111,13 @@ function renderCustomers(){
 }
 function toggleAddCust(on){
   $('c-add').classList.toggle('hidden', !on);
-  if (!on) { custFormHome(); return; }
+  if (!on) { CUST_GPS_TOK++; CUST_GPS_PENDING = null; custFormHome(); return; }
   fillShopTypes();
   $('c-name').focus();
+  /* ★ จับพิกัดให้เองทันทีที่เปิดฟอร์ม (เจ้าของระบบสั่ง 28 พ.ย. 2026) — เซลส์ยืนอยู่หน้าร้านอยู่แล้ว ไม่ต้องกดเอง · ปุ่ม "รีเฟรชพิกัด" ยังอยู่ไว้จับใหม่ถ้าตำแหน่งเพี้ยน
+     ล้างพิกัดเก่าก่อนเสมอ: ฟอร์มที่ยกเลิกไว้ครั้งก่อนอาจเป็นร้านอื่น แล้วพิกัดค้างจะถูกส่งไปกับร้านใหม่เงียบๆ */
+  CUST_GPS = { lat: '', lng: '' };
+  captureCustGps(true);
 }
 /* ★ ฟอร์มเปิดร้านมีชุดเดียว (#c-add อยู่ในแท็บลูกค้า) — เปิดจากหน้าขายด้วยการ "ย้าย" ฟอร์มเดิมมาแสดงในหน้าต่างล่าง
    แล้วย้ายกลับตอนปิด ไม่ได้คัดลอก: id ซ้ำสองชุดจะทำให้ $('c-name') ชี้ผิดชุด และต้องแก้ฟอร์มสองที่ทุกครั้ง */
@@ -2142,7 +2148,22 @@ function fillShopTypes(){
   sel.dataset.filled = String(types.length);
 }
 function syncCustPay(){ $('c-credit').classList.toggle('hidden', $('c-pay').value !== 'credit'); }
-async function captureCustGps(){ $('c-gps').textContent = 'กำลังจับพิกัด...'; const g = await getGPS(); if (g.lat) { CUST_GPS = g; $('c-gps').textContent = 'บันทึกพิกัดแล้ว ' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5); } else $('c-gps').textContent = 'จับพิกัดไม่ได้'; }
+let CUST_GPS_TOK = 0, CUST_GPS_PENDING = null;
+const GPS_ERR = { 0: 'เครื่องนี้ไม่รองรับการจับพิกัด', 1: 'ไม่ได้อนุญาตให้เข้าถึงตำแหน่ง — เปิดสิทธิ์ตำแหน่งให้เบราว์เซอร์/LINE แล้วกดรีเฟรชพิกัด', 2: 'หาตำแหน่งไม่ได้ — ออกที่โล่งหรือเปิด GPS แล้วกดรีเฟรชพิกัด', 3: 'จับพิกัดไม่ทันเวลา — กดรีเฟรชพิกัดอีกครั้ง' };
+/* auto=true: ตอนเปิดฟอร์ม (พิกัดเดิมถูกล้างแล้ว) · false: ปุ่มรีเฟรช — จับสดใหม่ ถ้าไม่สำเร็จใช้พิกัดเดิมที่ได้แล้วต่อ ไม่ทิ้ง
+   ★ ผลที่มาช้าและไม่ใช่ครั้งล่าสุด (หรือฟอร์มถูกปิด/ส่งไปแล้ว) ต้องไม่ทับ — กดรีเฟรชซ้ำหรือเปิดฟอร์มร้านใหม่ไวๆ แล้วพิกัดของครั้งก่อนมาทับ */
+function captureCustGps(auto){
+  const tok = ++CUST_GPS_TOK, btn = $('c-gps-btn'), txt = $('c-gps');
+  btn.disabled = true; txt.textContent = 'กำลังจับพิกัด...';
+  const job = getGPS({ fresh: !auto, timeout: auto ? 12000 : 15000 }).then(g => {
+    if (tok !== CUST_GPS_TOK) return;   // ถูกแทนที่/ปิดฟอร์มแล้ว
+    btn.disabled = false; CUST_GPS_PENDING = null;
+    if (g.lat !== '') { CUST_GPS = { lat: g.lat, lng: g.lng, map: g.map }; txt.textContent = 'ได้พิกัดแล้ว ' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5) + (g.acc ? ' (±' + Math.round(g.acc) + ' ม.)' : ''); }
+    else txt.textContent = (CUST_GPS.lat !== '' ? 'รีเฟรชไม่สำเร็จ ใช้พิกัดเดิม ' + CUST_GPS.lat.toFixed(5) + ', ' + CUST_GPS.lng.toFixed(5) + ' · ' : '') + (GPS_ERR[g.err] || GPS_ERR[2]);
+  });
+  CUST_GPS_PENDING = job;
+  return job;
+}
 
 const CR_PILL = { pending: 'warn', approved: 'good', rejected: 'bad' };
 
@@ -2192,6 +2213,8 @@ async function submitCust(){
   if (taxId && taxId.length !== 13) return toast('เลขผู้เสียภาษี/บัตรประชาชน ต้องมี 13 หลัก', 'err');
 
   const btn = $('c-save'); btn.disabled = true;
+  /* ยังจับพิกัดไม่เสร็จ → รอให้ก่อน (สูงสุด 6 วิ) ไม่งั้นส่งคำขอไปโดยไม่มีพิกัดทั้งที่อีกอึดใจก็ได้ */
+  if (CUST_GPS_PENDING) { toast('รอพิกัดสักครู่...', 'ok'); await Promise.race([CUST_GPS_PENDING, new Promise(r => setTimeout(r, 6000))]); }
   // requestId สร้างตอน "ประกอบข้อมูล" ครั้งเดียวตามกติกา — เน็ตกระตุกแล้วกดซ้ำจะไม่ได้คำขอสองใบ
   // (สร้างใหม่ทุกครั้งที่ยิง = การกันซ้ำไม่ทำงานเลย)
   const payload = { requestId: newRequestId(), name, address: $('c-addr').value.trim(), taxId,
@@ -2214,7 +2237,7 @@ async function submitCust(){
     saveBootCache();
     ['c-name', 'c-addr', 'c-tax', 'c-contact', 'c-phone', 'c-credit'].forEach(id => { $(id).value = ''; });
     $('c-pay').value = 'cash'; syncCustPay(); $('c-shoptype').value = '';
-    CUST_GPS = { lat: '', lng: '' }; $('c-gps').textContent = 'ยังไม่จับพิกัด';
+    CUST_GPS = { lat: '', lng: '' }; $('c-gps').textContent = 'จับพิกัดอัตโนมัติตอนเปิดฟอร์ม';
     toggleAddCust(false); renderCustRequests(); renderCustomers();
     if (r.quickOpened && r.customer) {
       $('s-cust-q').value = '';
