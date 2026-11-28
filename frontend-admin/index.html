@@ -625,6 +625,14 @@
   .bzi-grid{ display:grid; grid-template-columns:minmax(0,1fr) 84px 84px 84px; gap:8px; margin-bottom:8px; align-items:center; }
   .bzi-grid input, .bzi-grid select{ margin:0; width:100%; min-width:0; box-sizing:border-box; }
   .bzi-grid input{ text-align:right; }
+  .bzi-row{ margin-bottom:8px; }
+  .bzi-row .bzi-grid{ margin-bottom:2px; }
+  .bzi-info{ font-size:12px; line-height:1.45; padding-left:2px; }
+  .bzi-info:empty{ display:none; }
+  .bzi-warn{ color:var(--red); font-weight:600; }
+  .bzi-warn.soft{ color:var(--amber); }
+  .bzi-origin{ font-size:12.5px; padding:7px 10px; margin:-2px 0 10px; border-radius:8px; background:var(--accent-soft, #E6EEFB); color:var(--ink); }
+  .bzi-origin.off{ background:var(--amber-soft); color:var(--amber); }
   .bzi-head{ margin-bottom:4px; font-size:12px; font-weight:600; color:var(--ink-soft); }
   .bzi-head span:not(:first-child){ text-align:right; padding-right:10px; }
   /* ฟอร์มรับคืน: เพิ่มคอลัมน์ "ทีมถืออยู่" (ลัง แพ็ค ชิ้น) ก่อนช่องกรอกสามช่อง */
@@ -9075,19 +9083,97 @@ function bzaStockHtml(){
   }).join('') + '</div>';
 }
 let BZA_ISSUE_ROWS = 0;
+/* ── คงเหลือของคลังต้นทาง + เตือนเบิกเกิน (28 พ.ย. 2026) ──
+   ต้นทาง = คลังหลักของตัวแทนที่ทำแคมเปญ (คลังเดียวกับที่ backend ตัดจริงเมื่อเปิดการเชื่อมสต็อก — เมนู 5.9.1)
+   ★ เป็นคำเตือนฝั่งหน้าจอเท่านั้น ตัวตัดสินจริงคือ backend (ปฏิเสธเมื่อเปิดการเชื่อมสต็อกและคลังไม่พอ) · ดึงคงเหลือไม่ได้ = ฟอร์มยังเบิกได้ ไม่มีคำเตือน
+   ★ ตัวคูณหน่วยจาก product_units (cache เดียวกับฟอร์มเปิดบิล) ใช้คำนวณ "เบิกรวมกี่ชิ้น" เพื่อเทียบกับคงเหลือเท่านั้น — การแปลงจริงอยู่ที่ backend */
+let BZA_WH = null;     // { name, by: { productId: { qty, reserved, available } } } หรือ null
+let BZA_UF = {};       // productId → { ct, pk } ตัวคูณลัง/แพ็ค (0 = สินค้านี้ไม่มีหน่วยนั้น)
+async function bzaLoadOriginStock(){
+  try {
+    const p = { tenantId: BZA.tenantId };
+    const [wr, sr] = await Promise.all([callApi('listWarehouses', p), callApi('listWarehouseStock', Object.assign({ nonZeroOnly: true }, p))]);
+    if (!wr || !wr.success || !sr || !sr.success) return null;
+    const ws = (wr.data || []).filter(w => w.sellable && w.isActive !== false);
+    const wh = ws.filter(w => w.isDefault)[0] || ws[0];   // เหมือน _defaultWarehouseId ของ backend: คลังขายที่เป็นคลังหลักก่อน
+    if (!wh) return null;
+    const by = {};
+    (sr.data || []).filter(r => String(r.warehouseId) === String(wh.id)).forEach(r => { by[String(r.productId)] = { qty: Number(r.qty) || 0, reserved: Number(r.reserved) || 0, available: Number(r.available) || 0 }; });
+    return { name: wh.name || 'คลังหลัก', by };
+  } catch (e) { return null; }
+}
+async function bzaUnitsOf(pid){
+  if (!PRODUCT_UNITS_CACHE[pid]) {
+    const r = await callApi('listProductUnits', { productId: pid });
+    if (!r || !r.success) return null;                     // โหลดไม่ได้ไม่จำไว้ จะได้ลองใหม่ครั้งหน้า
+    PRODUCT_UNITS_CACHE[pid] = r.data.filter(u => isOn(u.is_active));
+  }
+  const f = { ct: 0, pk: 0 };
+  PRODUCT_UNITS_CACHE[pid].forEach(u => { const c = normUnitJs(u.unit_code), v = Number(u.unit_factor) || 0;
+    if (v > 1) { if (c === 'CT' && !f.ct) f.ct = v; else if (c === 'PK' && !f.pk) f.pk = v; } });
+  return f;
+}
+async function bzaIssueChanged(i){
+  const pid = document.getElementById('bzi-p'+i).value;
+  if (pid && !BZA_UF[pid]) { const f = await bzaUnitsOf(pid); if (f) BZA_UF[pid] = f; }
+  bzaIssueRefresh();
+}
+function bzaIssueRowBase(i){
+  const pid = document.getElementById('bzi-p'+i).value, f = BZA_UF[pid];
+  const g = k => parseFloat(document.getElementById('bzi-'+k+i).value) || 0;
+  const ct = g('ct'), pk = g('pk'), pc = g('pc');
+  const missing = !f ? '' : (ct > 0 && !f.ct) ? 'ลัง' : (pk > 0 && !f.pk) ? 'แพ็ค' : '';
+  return { i, pid, missing, base: ct * (f ? f.ct : 0) + pk * (f ? f.pk : 0) + pc };
+}
+function bzaIssueNeeds(){   // ยอดเบิกรวมหน่วยฐานต่อสินค้า (สินค้าเดียวกันหลายบรรทัดรวมกัน — backend ก็รวมแบบนี้)
+  const rows = [], need = {};
+  for (let i = 0; i < BZA_ISSUE_ROWS; i++) { const r = bzaIssueRowBase(i); rows.push(r); if (r.pid) need[r.pid] = (need[r.pid] || 0) + r.base; }
+  return { rows, need };
+}
+function bzaIssueInfoHtml(r, needBase){
+  if (!BZA_WH || !r.pid) return '';
+  const f = BZA_UF[r.pid], s = BZA_WH.by[r.pid] || { qty: 0, reserved: 0, available: 0 };
+  const brk = q => f ? bzaBreakText(bzaBreakdown(q, { ctFactor: f.ct, pkFactor: f.pk })) : repQty(q) + ' ชิ้น';
+  let h = '<span class="muted">'+esc(BZA_WH.name)+': คงเหลือ <b>'+brk(s.qty)+'</b>' + (f && (f.ct || f.pk) && s.qty > 0 ? ' (รวม '+repQty(s.qty)+' ชิ้น)' : '') +
+    (s.reserved > 0 ? ' · จองไว้ '+repQty(s.reserved)+' · ขายได้ '+repQty(s.available)+' ชิ้น' : '') + '</span>';
+  if (r.missing) h += ' <span class="bzi-warn">⚠ สินค้านี้ไม่มีหน่วย'+r.missing+' (กรอกแล้วจะถูกปฏิเสธ)</span>';
+  if (needBase > 0) {
+    if (needBase > s.qty) h += ' <span class="bzi-warn">⚠ เบิก '+repQty(needBase)+' ชิ้น เกินที่คลังมี '+repQty(s.qty)+' (ขาด '+repQty(needBase - s.qty)+')</span>';
+    else if (needBase > s.available) h += ' <span class="bzi-warn soft">⚠ เบิก '+repQty(needBase)+' ชิ้น จะกินของที่จองไว้ให้บิลอื่น (ขายได้ '+repQty(s.available)+')</span>';
+  }
+  return h;
+}
+function bzaIssueRefresh(){
+  const { rows, need } = bzaIssueNeeds();
+  rows.forEach(r => { const el = document.getElementById('bzi-i'+r.i); if (el) el.innerHTML = bzaIssueInfoHtml(r, need[r.pid] || 0); });
+}
+function bzaIssueOver(){   // สินค้าที่เบิกเกิน → [{ name, need, qty, available, hard }] · hard = เกินที่คลังมีจริง · ไม่ hard = เกินแค่ "ขายได้" (กินของที่จอง)
+  if (!BZA_WH) return [];
+  const out = [], { need } = bzaIssueNeeds();
+  Object.keys(need).forEach(pid => {
+    const n = need[pid]; if (!(n > 0)) return;
+    const s = BZA_WH.by[pid] || { qty: 0, reserved: 0, available: 0 };
+    if (n <= s.available) return;
+    const p = productsCache.filter(x => String(x.record_id) === String(pid))[0];
+    out.push({ name: (p ? (p.product_code || '') + ' ' + p.name : 'สินค้า ' + pid).trim(), need: n, qty: s.qty, available: s.available, hard: n > s.qty });
+  });
+  return out;
+}
 async function bzaIssueModal(teamId){
-  const tok = plModalWait('เบิกของให้ทีม', 'กำลังโหลดรายการสินค้า…');
-  await ensureProductsForSale();
+  const tok = plModalWait('เบิกของให้ทีม', 'กำลังโหลดรายการสินค้าและคงเหลือของคลังต้นทาง…');
+  const [, wh] = await Promise.all([ensureProductsForSale(), bzaLoadOriginStock()]);
   if (plModalStale(tok)) return;
-  BZA_ISSUE_ROWS = 0;
+  BZA_ISSUE_ROWS = 0; BZA_WH = wh; BZA_UF = {};
   const t = BZA.data.teams.filter(x => Number(x.id) === Number(teamId))[0];
   /* ★ หนึ่งสินค้า = หนึ่งบรรทัด มีช่องจำนวนแยกสามหน่วย (ลัง · แพ็ค · ชิ้น) ใส่พร้อมกันได้ — เบิก "5 ลัง กับเศษ 3 แพ็ค 2 ชิ้น" ไม่ต้องเพิ่มบรรทัดซ้ำ
      ช่องไหนไม่ใช้ปล่อยว่างหรือ 0 · ระบบฝั่งเซิร์ฟเวอร์รวมเป็นหน่วยฐานให้ (ตัวคูณหน่วยอยู่ที่ product_units ที่เดียว ไม่คำนวณซ้ำที่หน้าเว็บ) */
   plModal('<h3>เบิกของให้ '+esc(t.name)+'</h3>' +
+    (BZA_WH ? '<div class="bzi-origin">คลังต้นทาง: <b>'+esc(BZA_WH.name)+'</b> ของ '+esc((BZA.data && BZA.data.tenantName) || 'ตัวแทนที่ทำแคมเปญ')+' · เลือกสินค้าแล้วจะเห็นคงเหลือ และเตือนถ้าเบิกเกิน</div>'
+            : '<div class="bzi-origin off">ดูคงเหลือของคลังต้นทางไม่ได้ในตอนนี้ — ยังเบิกได้ แต่จะไม่มีคำเตือนเบิกเกิน</div>') +
     '<div class="bzi-grid bzi-head"><span>สินค้า</span><span>ลัง</span><span>แพ็ค</span><span>ชิ้น</span></div>' +
     '<div id="bzi-rows"></div>' +
     '<button class="btn btn-sm" onclick="bzaIssueAddRow()">+ เพิ่มสินค้า</button>' +
-    '<p class="form-hint">ใส่ได้ทั้ง ลัง · แพ็ค · ชิ้น ในบรรทัดเดียวกัน เช่น 5 ลัง 3 แพ็ค 2 ชิ้น (ช่องที่ไม่ใช้ปล่อยว่าง) ระบบแปลงและรวมเป็นหน่วยฐานให้ · จำนวนต้องเป็นจำนวนเต็ม — เศษของลังให้ใส่ในช่องแพ็คหรือชิ้น · ถ้าเปิดการเชื่อมสต็อกรถกับคลังกลางไว้ (เมนู 5.9.1) ของจะถูกตัดจากคลังกลางจริง และปฏิเสธทั้งใบถ้าคลังมีของไม่พอ</p>' +
+    '<p class="form-hint">ใส่ได้ทั้ง ลัง · แพ็ค · ชิ้น ในบรรทัดเดียวกัน เช่น 5 ลัง 3 แพ็ค 2 ชิ้น (ช่องที่ไม่ใช้ปล่อยว่าง) ระบบแปลงและรวมเป็นหน่วยฐานให้ · จำนวนต้องเป็นจำนวนเต็ม — เศษของลังให้ใส่ในช่องแพ็คหรือชิ้น · ถ้าเปิดการเชื่อมสต็อกรถกับคลังกลางไว้ (เมนู 5.9.1) ของจะถูกตัดจากคลังกลางจริง และปฏิเสธทั้งใบถ้าคลังมีของไม่พอ · ถ้าปิดอยู่ ระบบเบิกให้โดยไม่ตัดและไม่ตรวจคลัง คำเตือนในฟอร์มนี้จึงเป็นด่านเดียว</p>' +
     plModalActions('plBusy(() => bzaIssueSave('+teamId+'))', '✓ เบิก'));
   bzaIssueAddRow();
 }
@@ -9095,9 +9181,10 @@ function bzaIssueAddRow(){
   const i = BZA_ISSUE_ROWS++;
   const opts = '<option value="">— เลือกสินค้า —</option>' + productsCache.filter(p => isOn(p.is_active)).map(p =>
     '<option value="'+esc(p.record_id)+'">'+esc(p.product_code || '')+' · '+esc(p.name)+'</option>').join('');
-  const qty = (unit, ph) => '<input type="number" min="0" step="1" inputmode="numeric" id="bzi-'+unit+i+'" placeholder="'+ph+'" aria-label="'+ph+'">';
+  const qty = (unit, ph) => '<input type="number" min="0" step="1" inputmode="numeric" id="bzi-'+unit+i+'" placeholder="'+ph+'" aria-label="'+ph+'" oninput="bzaIssueRefresh()">';
   document.getElementById('bzi-rows').insertAdjacentHTML('beforeend',
-    '<div class="bzi-grid"><select id="bzi-p'+i+'">'+opts+'</select>' + qty('ct', 'ลัง') + qty('pk', 'แพ็ค') + qty('pc', 'ชิ้น') + '</div>');
+    '<div class="bzi-row"><div class="bzi-grid"><select id="bzi-p'+i+'" onchange="bzaIssueChanged('+i+')">'+opts+'</select>' + qty('ct', 'ลัง') + qty('pk', 'แพ็ค') + qty('pc', 'ชิ้น') + '</div>' +
+    '<div class="bzi-info" id="bzi-i'+i+'"></div></div>');
 }
 async function bzaIssueSave(teamId){
   const items = [];
@@ -9115,6 +9202,16 @@ async function bzaIssueSave(teamId){
     if (p && units.length) items.push({ productId: p, units: units });
   }
   if (!items.length) { plModalErr('เลือกสินค้าและใส่จำนวนอย่างน้อย 1 รายการ'); return; }
+  /* ★ เตือนเบิกเกินก่อนส่ง — รอตัวคูณหน่วยของสินค้าที่เลือกให้ครบก่อน (พิมพ์เร็วกว่าที่โหลดทัน = ยอดรวมจะต่ำเกินจริงแล้วไม่เตือน) */
+  if (BZA_WH) {
+    for (const it of items) if (!BZA_UF[it.productId]) { const f = await bzaUnitsOf(it.productId); if (f) BZA_UF[it.productId] = f; }
+    bzaIssueRefresh();
+    const over = bzaIssueOver();
+    if (over.length) {
+      const lines = over.map(o => '• ' + o.name + ' — เบิก ' + repQty(o.need) + ' ชิ้น · ' + (o.hard ? 'เกินที่คลังมี (' + repQty(o.qty) + ' ชิ้น ขาด ' + repQty(o.need - o.qty) + ')' : 'เกินที่ขายได้ (' + repQty(o.available) + ' ชิ้น — กินของที่จองไว้ให้บิลอื่น)')).join('\n');
+      if (!confirm('เบิกเกินคลังต้นทาง (' + BZA_WH.name + '):\n' + lines + '\n\nถ้าเปิดการเชื่อมสต็อกกับคลังกลาง (เมนู 5.9.1) ระบบจะปฏิเสธเองเมื่อคลังไม่พอ · ถ้าปิดอยู่จะเบิกให้โดยไม่ตัดคลัง\n\nยืนยันเบิกต่อ?')) return;
+    }
+  }
   const r = await callApi('issueBlitzTeamStock', { teamId: teamId, items: items });
   if (!r.success) { plModalErr(r.message); return; }
   plModalClose(); toast(r.message); BZA.data = null; bzaReload();
