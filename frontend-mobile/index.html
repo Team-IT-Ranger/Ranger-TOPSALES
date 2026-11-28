@@ -971,9 +971,21 @@ const bzMedal = r => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : St
 function paintBlitzCards(){
   const b = DATA && DATA.blitz;
   const txt = b ? '🏁 <b>' + esc(b.campaignName) + ' · ' + esc(b.teamName) + '</b><br>ทุกบิลคิด<b>ราคาเงินสด</b>' + (b.forceCash === false ? ' (ปิดอยู่)' : ' แม้เลือกชำระเครดิต') +
-    ' · ขายจาก<b>สต็อกทีม</b>' + (b.endDate ? ' · ถึงวันที่ ' + esc(b.endDate) : '') : '';
+    ' · <b>ลงของให้ร้านได้เลย</b> ไม่ต้องมีของในทีม — ศูนย์ตัดสต็อกและยืนยันรับเงินให้' + (b.endDate ? ' · ถึงวันที่ ' + esc(b.endDate) : '') : '';
   ['home-blitz-team', 'sell-blitz-team'].forEach(id => { const el = $(id); if (!el) return; el.innerHTML = txt; el.classList.toggle('hidden', !b); });
   const v = $('home-blitz'); if (v) v.classList.toggle('hidden', !(DATA && DATA.blitzViewer));
+  applyBlitzSellMode();
+}
+/* ★ 28 พ.ย. 2026: ผู้ป้อนบิลทีม BLITZ ไม่มีสต็อกทีมแล้ว — บิลเป็น "ส่งจากสำนักงาน" เสมอ (เซิร์ฟเวอร์บังคับ recordSale)
+   หน้าจอจึงซ่อนปุ่มเลือกวิธีส่งของ ไม่เช็คของบนรถ ไม่โชว์ "บนรถ" และไม่มีวันนัดส่ง (ส่งมอบหน้างานแล้ว) */
+const isBlitzSeller = () => !!(DATA && DATA.blitz);
+let BZ_MODE_LAST = null;
+function applyBlitzSellMode(){
+  const bz = isBlitzSeller();
+  const sw = $('s-fulfil'); if (sw) sw.style.display = bz ? 'none' : '';
+  if (bz) setFulfil('office');
+  // วาดลิสต์สินค้าใหม่เฉพาะตอนสถานะ "เป็นทีม BLITZ หรือไม่" เปลี่ยน — ถูกเรียกทุกครั้งที่ดึงข้อมูลใหม่ วาดทับตอนผู้ใช้กำลังกรอกจะทำให้โฟกัสหลุด
+  if (BZ_MODE_LAST !== bz) { BZ_MODE_LAST = bz; if ($('s-list') && DATA && DATA.products) renderProducts(); }
 }
 async function openBlitz(opts){
   opts = opts || {};
@@ -1829,18 +1841,21 @@ function deliveryEta(from){
 /* ช่องวันนัดส่งโผล่เฉพาะโหมด "รอจัดส่ง" — ขายลงจากรถคือส่งของไปแล้ว ไม่มีวันนัด
    เติมค่าประมาณให้เมื่อช่องยังว่างเท่านั้น ไม่ทับวันที่ที่คนขายตั้งเอง (หรือวันที่ของใบที่กำลังแก้) */
 function syncDelivField(){
-  const w = $('s-deliv-wrap'); if (w) w.style.display = OFFICE ? '' : 'none';
+  const show = OFFICE && !isBlitzSeller();     // BLITZ ส่งมอบหน้างานแล้ว ไม่มีวันนัดส่ง
+  const w = $('s-deliv-wrap'); if (w) w.style.display = show ? '' : 'none';
   const dv = $('s-deliv');
-  if (OFFICE && dv && !dv.value) dv.value = deliveryEta();
+  if (show && dv && !dv.value) dv.value = deliveryEta();
 }
 /* เลือกวิธีส่งของ — ไม่เรียก cartChanged() เอง เพราะ setPay() เรียกตัวนี้แล้วเรียก cartChanged() ต่อท้ายอยู่แล้ว
    (ใส่ไว้ในนี้ด้วยจะคิดราคาซ้ำสองรอบทุกครั้งที่สลับเป็นเครดิต) · ปุ่มที่ผู้ใช้กดเองเรียก cartChanged() ต่อเอง */
 function setFulfil(v){
+  if (isBlitzSeller()) v = 'office';           // ทีม BLITZ ไม่มีทางเลือกอื่น (เซิร์ฟเวอร์บังคับอยู่แล้ว)
   OFFICE = (v === 'office');
   document.querySelectorAll('#s-fulfil button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   const n = $('s-fulfil-note');
-  if (n) n.textContent = OFFICE ? 'สำนักงานจัดส่งให้ภายหลัง — ไม่ตัดสต็อกบนรถ'
-                                : 'ลงของจากรถให้ลูกค้าเดี๋ยวนี้ — ตัดสต็อกบนรถทันที';
+  if (n) n.textContent = isBlitzSeller() ? 'ลงของให้ร้านได้เลย — ศูนย์ตัดสต็อกคลังหลักและยืนยันรับเงินให้ภายหลัง'
+    : OFFICE ? 'สำนักงานจัดส่งให้ภายหลัง — ไม่ตัดสต็อกบนรถ'
+             : 'ลงของจากรถให้ลูกค้าเดี๋ยวนี้ — ตัดสต็อกบนรถทันที';
   syncDelivField();
 }
 function setPay(v){
@@ -1883,6 +1898,7 @@ const packOff = u => isPackCode(u.unitCode) && (PAY === 'credit_term' || PAY ===
 /* บรรทัดย่อย "บนรถ … · ในตะกร้า …" — ใช้ทั้งตอนวาดทั้งลิสต์และตอนอัปเดตการ์ดเดียว */
 function prodSubHtml(p){
   const used = baseUsed(p.id);
+  if (isBlitzSeller()) return used ? 'ในตะกร้า ' + used + ' ' + esc(p.unit) : '&nbsp;';   // ทีม BLITZ ไม่มีของบนรถ
   return 'บนรถ <span class="'+(p.vanStock < 3 ? 'low' : 'ok')+'">'+esc(p.vanStock)+'</span> '+esc(p.unit)+(used ? ' · ในตะกร้า '+used+' '+esc(p.unit) : '');
 }
 /* ★ อัปเดต "การ์ดเดียว" แทนการวาดทั้งลิสต์ใหม่ (28 พ.ย. 2026) — วาดใหม่ทั้งลิสต์ทำให้ช่องจำนวนช่องถัดไปถูกแทนที่
@@ -2102,7 +2118,8 @@ async function submitSale(){
        พนักงานจะได้ตรวจความถูกต้องแล้วกด "ยืนยัน" ต่อได้เลยในจังหวะเดียว ไม่ต้องไปตามหาในบิลล่าสุด
        (ใบที่ยังไม่กดยืนยัน = ศูนย์ยังมองไม่เห็น ถ้าไม่พาไปดูตรงนี้มีสิทธิ์ค้างเป็นร่างทิ้งไว้)
        ขายจากรถไม่ต้องเปิด — จบตั้งแต่บันทึกแล้ว ไม่มีอะไรให้ยืนยันต่อ */
-    if (sale.fulfillmentType === 'office_delivery' && r.orderCode && navigator.onLine) openSaleDetail(r.orderCode);
+    // บิล BLITZ ส่งเข้าศูนย์แล้วทันที (ไม่ใช่ร่าง) และขายรัวๆ — ไม่เปิดหน้าบิลคั่นระหว่างบิล
+    if (sale.fulfillmentType === 'office_delivery' && r.orderCode && navigator.onLine && !isBlitzSeller()) openSaleDetail(r.orderCode);
   } finally { pressBusy(btn, false); btn.innerHTML = label; renderCartBar(); }
 }
 function afterSale(){

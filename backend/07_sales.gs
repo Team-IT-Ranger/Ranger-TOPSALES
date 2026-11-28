@@ -174,6 +174,13 @@ function recordSale(user, payload) {
   ensureTenantSheetsCurrent(user.tenantId);   // เหตุผลเดียวกับ recordSaleAdmin (19_sales_admin.gs)
   var fulfillmentType = payload.fulfillmentType === 'office_delivery' ? 'office_delivery' : 'immediate';
 
+  /* ★★ BLITZ RANGER (28 พ.ย. 2026 — เจ้าของระบบสั่ง): ทีมไม่มีสต็อกของตัวเองอีกแล้ว
+     ผู้ป้อนบิลของทีมขายสด/เชื่อแล้ว "ลงของให้ร้านหน้างานเลย" แต่ของออกจากคลังหลักตอนแอดมินศูนย์ยืนยัน
+     (เส้นทางเดียวกับบิลส่งจากสำนักงาน: รับงาน → พร้อมจัดส่ง ตัดคลัง+ออกเอกสาร → รับชำระ) · บังคับที่เซิร์ฟเวอร์
+     ไม่เชื่อค่าที่แอปส่งมา · คิดครั้งเดียวต้นฟังก์ชัน ราคา/สต็อก/ตราบนบิลต้องมาจากคำตอบเดียวกัน */
+  var bz = blitzContextFor(user.lineUserId, user.tenantId);
+  if (bz) fulfillmentType = 'office_delivery';
+
   // สถานะลูกค้าเป็นตัวกั้น: ปิดการใช้งาน = ขายไม่ได้ · ระงับเครดิต = ขายได้เฉพาะเงินสด (ดู 33_customers.gs)
   var custRow = null;
   if (payload.customerId) {
@@ -182,10 +189,9 @@ function recordSale(user, payload) {
     if (gate) return gate;
   }
 
-  /* ★ BLITZ RANGER (62_blitz.gs): ผู้ป้อนบิลของทีมในแคมเปญที่เดินอยู่ → ราคาเงินสดเสมอ + ตัด/เช็คสต็อก "ทีม" แทนสต็อกรถตัวเอง
-     คิดครั้งเดียวต้นฟังก์ชันแล้วใช้ตลอด — ราคา สต็อก และตราบนบิลต้องมาจากคำตอบเดียวกัน ไม่งั้นบิลใบเดียวคิดราคาทีมแต่ตัดของคนละที่ */
-  var bz = blitzContextFor(user.lineUserId, user.tenantId);
-  var stockHolder = bz ? bz.stockKey : String(user.lineUserId);
+  /* ★ BLITZ RANGER (62_blitz.gs): ผู้ป้อนบิลของทีมในแคมเปญที่เดินอยู่ → ราคาเงินสดเสมอ (bz คิดไว้ต้นฟังก์ชันแล้ว)
+     บิลทีมเป็นบิล office_delivery เสมอ จึงไม่แตะสต็อกรถ/สต็อกทีมเลย */
+  var stockHolder = String(user.lineUserId);
   var priced = _priceSaleCart(payload.customerId, payload.items || [], payload.paymentType, user.role === 'van_sales', { forceCash: !!(bz && bz.forceCash) });
   if (!priced.success) return priced;
   var items = priced.items, calc = priced.calc, priceListUsed = priced.priceListUsed;
@@ -252,8 +258,12 @@ function recordSale(user, payload) {
   /* ★ ใบร่างยังไม่กินเลขที่เอกสาร (เจ้าของระบบตกลงไว้ 1 ต.ค. 2026) — ร่างที่ถูกทิ้งจะทำให้เลขเดินข้ามเป็นช่วงๆ
      ซึ่งอธิบายกับสรรพากร/ผู้ตรวจไม่ได้ · ใช้รหัสชั่วคราว `DRAFT-<id>` ไปก่อน แล้วออกเลขจริงตอนกด "ยืนยัน"
      (ดู confirmSalesOrder ใน 34_sales_status.gs) · ขายจากรถออกเลขทันที เพราะจบเป็นการขายตั้งแต่กดบันทึก */
+  /* ★ บิล BLITZ ใบใหม่ข้ามขั้น "ร่าง" ไปเป็น "รออนุมัติ" (confirmed) ทันที — ของส่งถึงมือร้านแล้ว ไม่มีอะไรให้ผู้ขายตรวจซ้ำ
+     และศูนย์ต้องเห็นบิลทันทีเพื่อยืนยัน · ออกเลขที่เอกสารจริงตรงนี้ · แก้ใบร่างเก่าที่ค้างอยู่ยังเป็นร่างเหมือนเดิม */
+  var autoConfirm = !!(bz && !editing);
+  var newStatus = fulfillmentType === 'immediate' ? SO_COMPLETED : (autoConfirm ? SO_CONFIRMED : SO_DRAFT);
   var orderCode = editing ? editing.order_code
-    : (fulfillmentType === 'immediate' ? getNextDocNumber(user.tenantId, 'SO') : ('DRAFT-' + orderId));
+    : ((fulfillmentType === 'immediate' || autoConfirm) ? getNextDocNumber(user.tenantId, 'SO') : ('DRAFT-' + orderId));
   var createdAt = editing ? safeDateStr(editing.created_at) : nowStr();
   /* ★ ขายสดจากรถจบทั้ง "ส่งของ" และ "รับเงิน" ตั้งแต่กดบันทึก จึงต้องมีใบเสร็จ+ใบกำกับภาษีตรงนี้
      (บิลพวกนี้ไม่เคยเดินผ่านสถานะ "พร้อมจัดส่ง" ซึ่งเป็นจุดออกเลขของฝั่งสำนักงาน) ·
@@ -273,7 +283,7 @@ function recordSale(user, payload) {
     apply_vat: vatSplit.applyVat ? 'TRUE' : 'FALSE', vat_type: vatSplit.vatType,
     vat_rate: vatSplit.rate, subtotal_ex_vat: vatSplit.exVat, vat_amount: vatSplit.vat, exempt_amount: vatSplit.exemptAmount,
     payment_method: payload.paymentType || 'cash', fulfillment_type: fulfillmentType,
-    status: fulfillmentType === 'immediate' ? SO_COMPLETED : SO_DRAFT,
+    status: editing ? SO_DRAFT : newStatus,
     payment_status: initialPaymentStatus(payload.paymentType, fulfillmentType),
     paid_amount: initialPaymentStatus(payload.paymentType, fulfillmentType) === 'paid' ? calc.total : 0,
     delivered_at: fulfillmentType === 'immediate' ? createdAt : '', paid_at: '',
@@ -282,17 +292,23 @@ function recordSale(user, payload) {
     tax_invoice_no: saleDocs.tax_invoice_no || '', tax_invoice_at: saleDocs.tax_invoice_at || '',
     sale_by: user.lineUserId,
     // ตราแคมเปญ (ภาพนิ่ง) — ว่างทั้งหมดถ้าไม่ใช่บิลแคมเปญ · stock_holder ว่างแปลว่าตัดจากสต็อกรถของ sale_by เหมือนเดิม
-    campaign_id: bz ? bz.campaignId : '', team_id: bz ? bz.teamId : '', stock_holder: bz ? bz.stockKey : '',
+    // stock_holder ว่างเสมอ — ทีม BLITZ ไม่มีสต็อกของตัวเองแล้ว (ของออกจากคลังหลักตอนศูนย์ยืนยัน) · บิลทีมเก่าที่เคยตัดสต็อกทีมยังคืนเข้า stock_holder เดิมตอนยกเลิก (19_sales_admin.gs)
+    campaign_id: bz ? bz.campaignId : '', team_id: bz ? bz.teamId : '', stock_holder: '',
     price_basis: (bz && bz.forceCash && isCreditPayment(payload.paymentType)) ? 'cash' : '',
     lat: payload.latitude || '', lng: payload.longitude || '',
-    map: payload.googleMap || '', note: priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '', created_at: createdAt,
+    map: payload.googleMap || '',
+    note: (priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '') + (bz ? ((priceListUsed ? ' · ' : '') + 'BLITZ ' + bz.teamCode + ' ส่งมอบหน้างานแล้ว') : ''),
+    created_at: createdAt,
     // วันนัดส่งโดยประมาณ รับเฉพาะรูปแบบ yyyy-MM-dd และเฉพาะใบนัดส่ง (ขายจากรถส่งของไปแล้ว ไม่มีวันนัด)
-    requested_delivery_date: (fulfillmentType === 'office_delivery' && /^\d{4}-\d{2}-\d{2}$/.test(String(payload.requestedDeliveryDate || '')))
-      ? String(payload.requestedDeliveryDate) : ''
+    // บิล BLITZ ส่งมอบหน้างานวันเดียวกับที่เปิดบิล → วันนัด = วันนี้
+    requested_delivery_date: bz ? createdAt.substring(0, 10)
+      : ((fulfillmentType === 'office_delivery' && /^\d{4}-\d{2}-\d{2}$/.test(String(payload.requestedDeliveryDate || '')))
+        ? String(payload.requestedDeliveryDate) : '')
   });
-  logOrderStatus(user.tenantId, orderId, editing ? SO_DRAFT : '', fulfillmentType === 'immediate' ? SO_COMPLETED : SO_DRAFT,
+  logOrderStatus(user.tenantId, orderId, editing ? SO_DRAFT : '', editing ? SO_DRAFT : newStatus,
     '', initialPaymentStatus(payload.paymentType, fulfillmentType),
-    editing ? 'แก้ไขรายการในใบร่างจากแอปมือถือ' : 'เปิดบิลจากแอปมือถือ',
+    editing ? 'แก้ไขรายการในใบร่างจากแอปมือถือ'
+      : (autoConfirm ? 'เปิดบิล BLITZ ' + bz.teamCode + ' จากแอปมือถือ — ส่งมอบหน้างานแล้ว รอศูนย์ยืนยันตัดสต็อกและรับชำระ' : 'เปิดบิลจากแอปมือถือ'),
     user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
 
   /* ยอดสรุปรายวัน: เปิดใบใหม่ = +1 ใบ +ยอด · แก้ใบเดิม = จำนวนใบเท่าเดิม ขยับเฉพาะส่วนต่างของยอด
@@ -301,7 +317,7 @@ function recordSale(user, payload) {
      พนักงานยังแก้/ทิ้งได้ และศูนย์ยังไม่เห็นด้วยซ้ำ · ไปนับตอนกด "ยืนยัน" แทน (confirmSalesOrder)
      ขายจากรถนับทันทีเหมือนเดิม เพราะของถึงมือลูกค้าไปแล้วตั้งแต่กดบันทึก
      แก้ใบร่าง = ไม่ต้องขยับอะไร เพราะยังไม่เคยถูกนับ */
-  if (!editing && fulfillmentType === 'immediate') {
+  if (!editing && (fulfillmentType === 'immediate' || autoConfirm)) {
     bumpSalesDaily(user.tenantId, createdAt.substring(0, 10), 1, calc.total, vatSplit.exVat);
   }
   touchCustomerLastSale(payload.customerId, createdAt);                       // วันที่ซื้อล่าสุด (ไว้หาร้านที่หายไปนาน)

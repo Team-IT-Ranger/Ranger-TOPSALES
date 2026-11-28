@@ -62,7 +62,7 @@ const ctx = {
   console, JSON, String, Number, Object, Array, Date, isNaN, isFinite, parseInt, parseFloat, Math,
   Logger: { log: () => {} },
   // ── ค่าคงที่ที่ปกติมาจาก 34_sales_status.gs / 28_units.gs (ไม่โหลดทั้งไฟล์ — mock เฉพาะที่ recordSale ใช้จริง) ──
-  SO_DRAFT: 'draft', SO_COMPLETED: 'completed',
+  SO_DRAFT: 'draft', SO_COMPLETED: 'completed', SO_CONFIRMED: 'confirmed',
   SO_MOBILE_EDITABLE: ['draft'],
   SO_STATUS_LABELS: { draft: 'ร่าง', completed: 'เสร็จสมบูรณ์', pending_delivery: 'รอจัดส่ง' },
   UNIT_PC: 'PC',
@@ -272,26 +272,32 @@ const U2 = { tenantId: 'T1', lineUserId: 'U2', role: 'credit_sales', displayName
 let seenOpts = null;
 const stubWithOpts = items => (cid, raw, pay, isVan, opts) => { seenOpts = opts; return stubPriced(items); };
 
+/* ★ 28 พ.ย. 2026: ทีมไม่มีสต็อกของตัวเอง — บิลทีมเป็น office_delivery เสมอ ส่งเข้าศูนย์เป็น "รออนุมัติ" ทันที ไม่ตัดสต็อกที่ไหนตอนบันทึก */
 reset(); blitzSetup();
 sheets.van_stock.push({ line_user_id: TEAM_KEY, product_id: '101', qty: 20 });
 ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 2, baseQty: 2, price: 100, lineTotal: 200, unitDiscount: 0, lineDiscount: 0 }]);
 r = ctx.recordSale(U2, { customerId: 1, paymentType: 'credit_term', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 2 }] });
 eq('ผู้ป้อนบิลของทีมขายสำเร็จ', r.success, true);
-eq('★ บังคับราคาเงินสด (forceCash) ส่งเข้าเครื่องคิดราคา แม้ชำระเป็นเครดิต', seenOpts && seenOpts.forceCash, true);
-eq('★ ตัดสต็อก "ทีม" 20→18', sheets.van_stock.find(s => s.line_user_id === TEAM_KEY && s.product_id === '101').qty, 18);
+eq('★ บังคับราคาเงินสด (forceCash) ส่งเข้าเครื่องคิดราคา แม้ชำระเครดิต', seenOpts && seenOpts.forceCash, true);
+eq('★★ แอปส่ง immediate มาก็ถูกบังคับเป็น office_delivery (เซิร์ฟเวอร์ตัดสินเอง)', [r.fulfillmentType, sheets.sales_orders[0].fulfillment_type], ['office_delivery', 'office_delivery']);
+eq('★★ ไม่ตัดสต็อกทีมและไม่แตะสต็อกรถ — ของออกคลังหลักตอนศูนย์ยืนยัน', [sheets.van_stock.find(s => s.line_user_id === TEAM_KEY).qty, sheets.van_stock.find(s => s.line_user_id === 'U1' && s.product_id === '101').qty, sheets.stock_movements.length], [20, 50, 0]);
 eq('  ไม่มีสต็อกรถส่วนตัวของ U2 งอกขึ้น', sheets.van_stock.filter(s => s.line_user_id === 'U2').length, 0);
 const bo = sheets.sales_orders[0];
-eq('★ บิลติดตราแคมเปญ/ทีม/ผู้ถือสต็อก เป็นภาพนิ่งลงแถวจริง', [bo.campaign_id, bo.team_id, bo.stock_holder], ['1', '11', TEAM_KEY]);
+eq('★ ข้ามร่าง → รออนุมัติ (confirmed) ทันที ได้เลขจริง ไม่ใช่ DRAFT-', [bo.status, /^DRAFT-/.test(bo.order_code)], ['confirmed', false]);
+eq('  ยังไม่รับเงิน (ศูนย์ยืนยันทีหลัง) · ยังไม่ออกใบเสร็จ/ใบกำกับ', [bo.payment_status, bo.receipt_no || '', bo.tax_invoice_no || ''], ['unpaid', '', '']);
+eq('★ นับเข้ายอดขายรายวันทันที (ไม่ใช่ร่างแล้ว)', dailyBumps.length, 1);
+eq('★ บิลติดตราแคมเปญ/ทีม เป็นภาพนิ่งลงแถวจริง · stock_holder ว่าง (ไม่มีสต็อกทีม)', [bo.campaign_id, bo.team_id, bo.stock_holder], ['1', '11', '']);
 eq('  ชำระเครดิตแต่คิดราคาเงินสด → ติดตรา price_basis=cash ไว้อธิบายย้อนหลัง', bo.price_basis, 'cash');
 eq('  sale_by ยังเป็นคนที่กดบันทึกจริง (ไว้ตามว่าใครป้อน)', bo.sale_by, 'U2');
-eq('  สมุดเคลื่อนไหวสต็อกอ้างผู้ถือสต็อกทีม', sheets.stock_movements.some(m => m.line_user_id === TEAM_KEY && m.change_qty === -2), true);
+eq('  วันนัดส่ง = วันเปิดบิล (ส่งมอบหน้างานแล้ว) และ note บอกว่าส่งมอบแล้ว', [bo.requested_delivery_date, /ส่งมอบหน้างาน/.test(bo.note)], ['2026-10-02', true]);
+eq('  ประวัติสถานะ: เปิดบิลเข้าสู่ confirmed ครั้งเดียว', [statusLogs.length, statusLogs[0][2], statusLogs[0][3]], [1, '', 'confirmed']);
 
 reset(); blitzSetup();
-sheets.van_stock.push({ line_user_id: TEAM_KEY, product_id: '101', qty: 1 });
-ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 5, baseQty: 5, price: 100, lineTotal: 500, unitDiscount: 0, lineDiscount: 0 }]);
-r = ctx.recordSale(U2, { customerId: 1, paymentType: 'cash', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 5 }] });
-eq('★ สต็อกทีมไม่พอ = ปฏิเสธและบอกว่าเป็นสต็อกทีม A', [r.success, /สต็อกทีม A/.test(r.message || '')], [false, true]);
-eq('  ไม่เขียนบิล ไม่แตะสต็อกทีม', [sheets.sales_orders.length, sheets.van_stock.find(s => s.line_user_id === TEAM_KEY).qty], [0, 1]);
+ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 500, baseQty: 500, price: 100, lineTotal: 50000, unitDiscount: 0, lineDiscount: 0 }]);
+officeStockResult = { success: true, warning: 'ของในคลังไม่พอขาย' };
+r = ctx.recordSale(U2, { customerId: 1, paymentType: 'cash', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 500 }] });
+eq('★ ของในคลังหลักไม่พอ = บันทึกได้ + เตือน ไม่บล็อก (ของส่งมอบไปแล้ว)', [r.success, r.stockWarning], [true, 'ของในคลังไม่พอขาย']);
+officeStockResult = { success: true };
 
 reset(); blitzSetup();
 ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 2, baseQty: 2, price: 100, lineTotal: 200, unitDiscount: 0, lineDiscount: 0 }]);
@@ -312,7 +318,7 @@ blitzSetup(); CENTRAL.blitz_campaigns[0].cash_price = 'FALSE';
 eq('ปิดสวิตช์ราคาเงินสด → ยังเป็นทีม แต่ forceCash=false', ctx.blitzContextFor('U2', 'T1').forceCash, false);
 blitzSetup();
 r = ctx.restockVan(U2, { items: [{ productId: 101, qty: 5 }] });
-eq('★ ผู้ป้อนบิลของทีมเบิกของเข้าทีมเองจากมือถือไม่ได้ (เบิกโดยศูนย์)', [r.success, /เบิกโดยศูนย์/.test(r.message || '')], [false, true]);
+eq('★ ผู้ป้อนบิลของทีมเบิกของเข้าทีมเองจากมือถือไม่ได้ (ทีมไม่ต้องเบิกของแล้ว)', [r.success, /ไม่ต้องเบิก/.test(r.message || '')], [false, true]);
 Object.keys(CENTRAL).forEach(k => delete CENTRAL[k]);
 
 // ── _restockHolder: สินค้าเดียวกันมาหลายรายการต้องรวมกัน (ตัวบวกอ่านตารางครั้งเดียวแล้ววนบวกทีละรายการ) ──

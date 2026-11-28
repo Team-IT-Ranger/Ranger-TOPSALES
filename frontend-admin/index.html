@@ -9096,15 +9096,16 @@ async function bzaRemoveMember(id){
 /* ── แท็บ 2: สต็อกทีม ── */
 function bzaStockHtml(){
   const d = BZA.data;
-  return '<p class="form-hint" style="margin-top:0">เบิกของจากคลังกลางเข้า<b>ทีม</b> · ผู้ป้อนบิลขายจากสต็อกทีมนี้ (เปลี่ยนคนป้อนบิลกลางวันได้ของไม่หาย) · ปิดวันกด "รับคืน" เพื่อเอาของที่เหลือกลับคลัง</p>' +
+  /* ★ 28 พ.ย. 2026: ทีมไม่มีสต็อกของตัวเองแล้ว — ผู้ป้อนบิลลงของให้ร้านหน้างานเลย แล้วศูนย์ตัดสต็อกคลังหลักตอนกดยืนยันบิล
+     (เส้นทางเดียวกับบิลส่งจากสำนักงาน) · จึงถอดปุ่ม "เบิกของให้ทีม" · ปุ่ม "รับคืนของ" ยังอยู่ไว้เคลียร์ของที่เคยเบิกก่อนเปลี่ยนวิธี */
+  return '<p class="form-hint" style="margin-top:0"><b>ทีมไม่ต้องเบิกของแล้ว</b> — ผู้ป้อนบิลขายสด/เครดิตและลงของให้ร้านหน้างานได้เลย บิลเข้าเมนู 1.1.1 (ใบสั่งขาย) เป็น "รออนุมัติ" ให้ศูนย์กดรับงาน → พร้อมจัดส่ง (ตัดสต็อกคลังหลักและออกใบกำกับภาษี) → บันทึกรับชำระ เหมือนบิลส่งจากสำนักงานทุกอย่าง · การ์ดด้านล่างแสดงเฉพาะของที่เคยเบิกให้ทีมไว้ก่อนหน้า กด "รับคืนของ" เพื่อเอากลับคลัง</p>' +
   '<div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">' + d.teams.map(t => {
     const tot = t.stock.reduce((a, s) => a + s.qty, 0);
     return '<div class="form-card" style="margin:0"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">'+esc(t.name)+'</h3>' +
       '<span>'+(t.stock.length ? t.stock.length+' รายการ · '+repQty(tot)+' ชิ้น' : '<span class="form-hint" style="display:inline">ยังไม่มีของ</span>')+'</span></div>' +
       (t.stock.length ? '<div class="table-wrap" style="margin:8px 0"><table><thead><tr><th>สินค้า</th><th style="text-align:right">คงเหลือ (ชิ้น)</th></tr></thead><tbody>' +
         t.stock.map(s => '<tr><td class="wrap"><span class="mono-data">'+esc(s.code)+'</span> '+esc(s.name)+'</td><td class="num">'+repQty(s.qty)+'</td></tr>').join('') + '</tbody></table></div>' : '') +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-sm btn-primary" onclick="bzaIssueModal('+t.id+')">+ เบิกของให้ทีม</button>' +
-      (t.stock.length ? '<button class="btn btn-sm" onclick="bzaReturnModal('+t.id+')">รับคืนของ</button>' : '') + '</div></div>';
+      (t.stock.length ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-sm btn-primary" onclick="bzaReturnModal('+t.id+')">รับคืนของ</button></div>' : '') + '</div>';
   }).join('') + '</div>';
 }
 let BZA_ISSUE_ROWS = 0;

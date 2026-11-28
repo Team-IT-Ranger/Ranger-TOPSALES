@@ -57,10 +57,10 @@ function blitzContextFor(lineUserId, tenantId, today) {
     forceCash: isNotOff(c.cash_price), endDate: _bzD(c.end_date) };
 }
 
-/** รหัสผู้ถือสต็อกของคนนี้ — ผู้ป้อนบิลของทีม = สต็อกทีม · คนอื่น = สต็อกรถของตัวเอง */
+/** รหัสผู้ถือสต็อกของคนนี้ — ★ 28 พ.ย. 2026: ทีม BLITZ ไม่มีสต็อกของตัวเองแล้ว (บิลทีมเป็นบิลส่งจากสำนักงาน ของออกคลังหลักตอนศูนย์ยืนยัน)
+ *  จึงคืนสต็อกรถของตัวเองเสมอ · ฟังก์ชันเบิก/คืนสต็อกทีมด้านล่างยังอยู่ไว้ให้ศูนย์เคลียร์ของที่เคยเบิกไว้ก่อนเปลี่ยนวิธี */
 function blitzStockHolder(user, ctx) {
-  ctx = ctx === undefined ? blitzContextFor(user.lineUserId, user.tenantId) : ctx;
-  return ctx ? ctx.stockKey : String(user.lineUserId);
+  return String(user.lineUserId);
 }
 
 /** ส่งให้แอปมือถือ (bootstrap) — ป้ายทีม + คนนี้ดูแดชบอร์ดได้ไหม */

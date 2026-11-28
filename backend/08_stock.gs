@@ -9,7 +9,7 @@ function restockVan(user, payload) {
   if (!items.length) return { success: false, message: 'ไม่มีรายการเบิก' };
   /* ★ ผู้ป้อนบิลของทีม BLITZ ไม่เบิกเอง — สต็อกทีมเบิกจากศูนย์ (เมนูแคมเปญ) ไม่งั้นมีสองทางเข้าของสต็อกเดียวกัน
      และคนในทีมเบิกของเข้าทีมเกินที่ผู้อำนวยการตั้งใจแจกได้ (62_blitz.gs) */
-  if (blitzContextFor(user.lineUserId, user.tenantId)) return { success: false, message: 'สต็อกของทีม BLITZ เบิกโดยศูนย์ — แจ้งผู้ดูแลแคมเปญให้เบิกให้' };
+  if (blitzContextFor(user.lineUserId, user.tenantId)) return { success: false, message: 'ทีม BLITZ ไม่ต้องเบิกของ — ขายและลงของให้ร้านได้เลย ศูนย์ตัดสต็อกคลังหลักให้ตอนยืนยันบิล' };
   return _restockHolder(user.tenantId, user.lineUserId, items, 'เบิกโดย ' + (user.displayName || user.lineUserId), 'restock');
 }
 
