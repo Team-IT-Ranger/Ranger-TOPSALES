@@ -976,14 +976,14 @@ function paintBlitzCards(){
   const v = $('home-blitz'); if (v) v.classList.toggle('hidden', !(DATA && DATA.blitzViewer));
   applyBlitzSellMode();
 }
-/* ★ 28 พ.ย. 2026: ผู้ป้อนบิลทีม BLITZ ไม่มีสต็อกทีมแล้ว — บิลเป็น "ส่งจากสำนักงาน" เสมอ (เซิร์ฟเวอร์บังคับ recordSale)
-   หน้าจอจึงซ่อนปุ่มเลือกวิธีส่งของ ไม่เช็คของบนรถ ไม่โชว์ "บนรถ" และไม่มีวันนัดส่ง (ส่งมอบหน้างานแล้ว) */
+/* ★ 28 พ.ย. 2026: ผู้ป้อนบิลทีม BLITZ ไม่มีสต็อกทีมแล้ว — ทั้ง "ลงสินค้า" และ "รอจัดส่ง" เซิร์ฟเวอร์รับเป็นบิลส่งจากสำนักงาน (ตัดคลังหลักตอนศูนย์ยืนยัน)
+   หน้าจอจึงไม่เช็คของบนรถ ไม่โชว์ "บนรถ" ไม่หักสต็อกรถในเครื่อง · ปุ่มเลือกวิธีส่งของยังอยู่ ค่าเริ่มต้น = ลงสินค้า */
 const isBlitzSeller = () => !!(DATA && DATA.blitz);
 let BZ_MODE_LAST = null;
 function applyBlitzSellMode(){
   const bz = isBlitzSeller();
-  const sw = $('s-fulfil'); if (sw) sw.style.display = bz ? 'none' : '';
-  if (bz) setFulfil('office');
+  // ปุ่ม รอจัดส่ง/ลงสินค้า ยังแสดงให้เลือกได้ (เจ้าของระบบสั่ง 28 พ.ย. 2026) · ค่าเริ่มต้นของทีม BLITZ = "ลงสินค้า" (ส่งมอบหน้างาน)
+  if (bz && BZ_MODE_LAST !== true) { setFulfil('immediate'); syncDelivField(); }
   // วาดลิสต์สินค้าใหม่เฉพาะตอนสถานะ "เป็นทีม BLITZ หรือไม่" เปลี่ยน — ถูกเรียกทุกครั้งที่ดึงข้อมูลใหม่ วาดทับตอนผู้ใช้กำลังกรอกจะทำให้โฟกัสหลุด
   if (BZ_MODE_LAST !== bz) { BZ_MODE_LAST = bz; if ($('s-list') && DATA && DATA.products) renderProducts(); }
 }
@@ -1841,7 +1841,7 @@ function deliveryEta(from){
 /* ช่องวันนัดส่งโผล่เฉพาะโหมด "รอจัดส่ง" — ขายลงจากรถคือส่งของไปแล้ว ไม่มีวันนัด
    เติมค่าประมาณให้เมื่อช่องยังว่างเท่านั้น ไม่ทับวันที่ที่คนขายตั้งเอง (หรือวันที่ของใบที่กำลังแก้) */
 function syncDelivField(){
-  const show = OFFICE && !isBlitzSeller();     // BLITZ ส่งมอบหน้างานแล้ว ไม่มีวันนัดส่ง
+  const show = OFFICE;
   const w = $('s-deliv-wrap'); if (w) w.style.display = show ? '' : 'none';
   const dv = $('s-deliv');
   if (show && dv && !dv.value) dv.value = deliveryEta();
@@ -1849,11 +1849,12 @@ function syncDelivField(){
 /* เลือกวิธีส่งของ — ไม่เรียก cartChanged() เอง เพราะ setPay() เรียกตัวนี้แล้วเรียก cartChanged() ต่อท้ายอยู่แล้ว
    (ใส่ไว้ในนี้ด้วยจะคิดราคาซ้ำสองรอบทุกครั้งที่สลับเป็นเครดิต) · ปุ่มที่ผู้ใช้กดเองเรียก cartChanged() ต่อเอง */
 function setFulfil(v){
-  if (isBlitzSeller()) v = 'office';           // ทีม BLITZ ไม่มีทางเลือกอื่น (เซิร์ฟเวอร์บังคับอยู่แล้ว)
   OFFICE = (v === 'office');
   document.querySelectorAll('#s-fulfil button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   const n = $('s-fulfil-note');
-  if (n) n.textContent = isBlitzSeller() ? 'ลงของให้ร้านได้เลย — ศูนย์ตัดสต็อกคลังหลักและยืนยันรับเงินให้ภายหลัง'
+  if (n) n.textContent = isBlitzSeller()
+    ? (OFFICE ? 'รอจัดส่ง — ศูนย์จัดส่งให้ภายหลัง · ศูนย์ตัดสต็อกคลังหลักตอนยืนยัน'
+              : 'ลงของให้ร้านเดี๋ยวนี้ — ไม่ต้องมีของบนรถ ศูนย์ตัดสต็อกคลังหลักและยืนยันรับเงินให้ภายหลัง')
     : OFFICE ? 'สำนักงานจัดส่งให้ภายหลัง — ไม่ตัดสต็อกบนรถ'
              : 'ลงของจากรถให้ลูกค้าเดี๋ยวนี้ — ตัดสต็อกบนรถทันที';
   syncDelivField();
@@ -1861,7 +1862,7 @@ function setFulfil(v){
 function setPay(v){
   PAY = v;
   document.querySelectorAll('#s-pay button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-  if (v === 'credit_term' || v === 'credit') setFulfil('office');
+  if ((v === 'credit_term' || v === 'credit') && !isBlitzSeller()) setFulfil('office');   // ทีม BLITZ เครดิตก็ลงของหน้างานได้
   syncDelivField();
   renderProducts();      // หน่วยเริ่มต้นเปลี่ยนตามวิธีชำระ (เงินสด=แพ็ค · เครดิต=ลัง) — การ์ดที่ผู้ใช้ยังไม่เลือกหน่วยเองต้องวาดใหม่
   cartChanged();
@@ -1918,7 +1919,7 @@ function bump(pid, code, d){ setQty(pid, code, cartQty(pid, code) + d); }
 function setQty(pid, code, v){
   const p = prodById(pid); if (!p) return;
   let qty = Math.max(0, parseInt(v) || 0);
-  if (!OFFICE) {                      // ขายจากรถ: ห้ามเกินของบนรถ (นับเป็นหน่วยฐานรวมทุกหน่วย)
+  if (!OFFICE && !isBlitzSeller()) {  // ขายจากรถ: ห้ามเกินของบนรถ (ทีม BLITZ ไม่มีสต็อกบนรถ) (นับเป็นหน่วยฐานรวมทุกหน่วย)
     const f = unitOf(p, code).unitFactor, other = baseUsed(pid) - cartQty(pid, code) * f;
     const max = Math.floor((p.vanStock - other) / f);
     if (qty > max) { qty = Math.max(0, max); toast('บนรถมีไม่พอ — ได้สูงสุด ' + qty + ' ' + unitOf(p, code).unitLabel, 'err'); }
@@ -2124,7 +2125,7 @@ async function submitSale(){
 }
 function afterSale(){
   // ตัดสต็อกบนรถในเครื่องทันที (ไม่รอ refresh) — ขายออฟไลน์ต่อได้โดยไม่เกินของจริง
-  if (!OFFICE) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
+  if (!OFFICE && !isBlitzSeller()) CART.forEach(c => { const p = prodById(c.productId); if (p) p.vanStock -= c.qty * unitOf(p, c.unitCode).unitFactor; });
   lsSet('boot_' + ME.lineUserId, Object.assign(lsGet('boot_' + ME.lineUserId, { ts: Date.now() }), { data: DATA }));
   EDIT_ORDER_CODE = null; renderEditBanner();   // ออกจากโหมดแก้ไขเมื่อบันทึกเสร็จ
   const dv = $('s-deliv'); if (dv) dv.value = '';   // ไม่ให้บิลถัดไปติดวันนัดส่งของบิลก่อนมา

@@ -179,6 +179,9 @@ function recordSale(user, payload) {
      (เส้นทางเดียวกับบิลส่งจากสำนักงาน: รับงาน → พร้อมจัดส่ง ตัดคลัง+ออกเอกสาร → รับชำระ) · บังคับที่เซิร์ฟเวอร์
      ไม่เชื่อค่าที่แอปส่งมา · คิดครั้งเดียวต้นฟังก์ชัน ราคา/สต็อก/ตราบนบิลต้องมาจากคำตอบเดียวกัน */
   var bz = blitzContextFor(user.lineUserId, user.tenantId);
+  /* "ลงสินค้า" (ค่าเริ่มต้น) = ส่งมอบให้ร้านหน้างานแล้ว · "รอจัดส่ง" = ศูนย์ส่งให้ทีหลัง — ทั้งสองทางสต็อกเดินเส้นเดียวกัน (ตัดคลังหลักตอนศูนย์ยืนยัน)
+     ต่างกันแค่บันทึกบนบิล/วันนัดส่ง · ปุ่มบนแอปส่ง immediate/office_delivery มา เซิร์ฟเวอร์อ่านเป็น "เจตนา" แล้วบังคับเป็น office_delivery */
+  var bzOnSite = !!(bz && fulfillmentType === 'immediate');
   if (bz) fulfillmentType = 'office_delivery';
 
   // สถานะลูกค้าเป็นตัวกั้น: ปิดการใช้งาน = ขายไม่ได้ · ระงับเครดิต = ขายได้เฉพาะเงินสด (ดู 33_customers.gs)
@@ -297,18 +300,18 @@ function recordSale(user, payload) {
     price_basis: (bz && bz.forceCash && isCreditPayment(payload.paymentType)) ? 'cash' : '',
     lat: payload.latitude || '', lng: payload.longitude || '',
     map: payload.googleMap || '',
-    note: (priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '') + (bz ? ((priceListUsed ? ' · ' : '') + 'BLITZ ' + bz.teamCode + ' ส่งมอบหน้างานแล้ว') : ''),
+    note: (priceListUsed ? ('ชุดราคา: ' + priceListUsed.name) : '') + (bz ? ((priceListUsed ? ' · ' : '') + 'BLITZ ' + bz.teamCode + (bzOnSite ? ' ส่งมอบหน้างานแล้ว' : ' รอจัดส่ง')) : ''),
     created_at: createdAt,
     // วันนัดส่งโดยประมาณ รับเฉพาะรูปแบบ yyyy-MM-dd และเฉพาะใบนัดส่ง (ขายจากรถส่งของไปแล้ว ไม่มีวันนัด)
-    // บิล BLITZ ส่งมอบหน้างานวันเดียวกับที่เปิดบิล → วันนัด = วันนี้
-    requested_delivery_date: bz ? createdAt.substring(0, 10)
+    // บิล BLITZ ที่ลงสินค้าหน้างาน → ส่งมอบวันเดียวกับที่เปิดบิล = วันนัดคือวันนี้ · เลือก "รอจัดส่ง" ใช้วันที่ที่กรอกตามปกติ
+    requested_delivery_date: bzOnSite ? createdAt.substring(0, 10)
       : ((fulfillmentType === 'office_delivery' && /^\d{4}-\d{2}-\d{2}$/.test(String(payload.requestedDeliveryDate || '')))
         ? String(payload.requestedDeliveryDate) : '')
   });
   logOrderStatus(user.tenantId, orderId, editing ? SO_DRAFT : '', editing ? SO_DRAFT : newStatus,
     '', initialPaymentStatus(payload.paymentType, fulfillmentType),
     editing ? 'แก้ไขรายการในใบร่างจากแอปมือถือ'
-      : (autoConfirm ? 'เปิดบิล BLITZ ' + bz.teamCode + ' จากแอปมือถือ — ส่งมอบหน้างานแล้ว รอศูนย์ยืนยันตัดสต็อกและรับชำระ' : 'เปิดบิลจากแอปมือถือ'),
+      : (autoConfirm ? 'เปิดบิล BLITZ ' + bz.teamCode + ' จากแอปมือถือ — ' + (bzOnSite ? 'ส่งมอบหน้างานแล้ว' : 'รอจัดส่ง') + ' รอศูนย์ยืนยันตัดสต็อกและรับชำระ' : 'เปิดบิลจากแอปมือถือ'),
     user.displayName || user.lineUserId, _mobileRoleLabel(user.role));
 
   /* ยอดสรุปรายวัน: เปิดใบใหม่ = +1 ใบ +ยอด · แก้ใบเดิม = จำนวนใบเท่าเดิม ขยับเฉพาะส่วนต่างของยอด

@@ -293,6 +293,13 @@ eq('  วันนัดส่ง = วันเปิดบิล (ส่งม
 eq('  ประวัติสถานะ: เปิดบิลเข้าสู่ confirmed ครั้งเดียว', [statusLogs.length, statusLogs[0][2], statusLogs[0][3]], [1, '', 'confirmed']);
 
 reset(); blitzSetup();
+ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 2, baseQty: 2, price: 100, lineTotal: 200, unitDiscount: 0, lineDiscount: 0 }]);
+r = ctx.recordSale(U2, { customerId: 1, paymentType: 'cash', fulfillmentType: 'office_delivery', requestedDeliveryDate: '2026-10-09', items: [{ productId: 101, unitCode: 'PC', qty: 2 }] });
+eq('★ เลือก "รอจัดส่ง": ยังเป็นบิลสำนักงาน รออนุมัติ ไม่แตะสต็อก แต่ note/วันนัดบอกว่ารอจัดส่ง ไม่ใช่ส่งมอบแล้ว',
+  [r.success, sheets.sales_orders[0].status, sheets.sales_orders[0].requested_delivery_date, /รอจัดส่ง/.test(sheets.sales_orders[0].note), /ส่งมอบหน้างาน/.test(sheets.sales_orders[0].note), sheets.stock_movements.length],
+  [true, 'confirmed', '2026-10-09', true, false, 0]);
+
+reset(); blitzSetup();
 ctx._priceSaleCart = stubWithOpts([{ productId: 101, unitCode: 'PC', qty: 500, baseQty: 500, price: 100, lineTotal: 50000, unitDiscount: 0, lineDiscount: 0 }]);
 officeStockResult = { success: true, warning: 'ของในคลังไม่พอขาย' };
 r = ctx.recordSale(U2, { customerId: 1, paymentType: 'cash', fulfillmentType: 'immediate', items: [{ productId: 101, unitCode: 'PC', qty: 500 }] });
