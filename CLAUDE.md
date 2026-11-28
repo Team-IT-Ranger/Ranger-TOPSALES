@@ -3984,6 +3984,14 @@ On UAT only (user testing on `/admin-uat/`):
 - งานซื้อสำหรับตัวแทนจำหน่าย (2026-09-24): ตัวแทนซื้อของเข้าคลังตัวเองได้ครบสาย PR → อนุมัติ → PO → รับของ →
   สต็อก/ต้นทุนเฉลี่ย โดยข้อมูลแยกด้วย `tenant_id` (ดูหัวข้องานซื้อด้านบน) พร้อมเมนูฝั่งตัวแทนกลุ่ม 5 งานซื้อ
   และกลุ่ม 6 คลังสินค้า
+- **★ แอปมือถือเปิดด้วยเบราว์เซอร์ภายนอกแทนเบราว์เซอร์ในแอป LINE (เจ้าของระบบสั่ง 28 พ.ย. 2026)** — ผู้ขายสลับไปอ่านแชท/กดกลับแล้วหน้าต่าง LIFF ปิด ตะกร้าที่กรอกค้างหาย
+  · `boot()` หลัง `liff.init`: `liff.isInClient()` → `liff.openWindow({url: Endpoint URL + ?go=…เดิม, external:true})` แล้ว `liff.closeWindow()` (หน่วง 1.8 วิ) · หน้าต่างเดิมโชว์ "เปิดในเบราว์เซอร์แล้ว" + ปุ่มเปิดอีกครั้ง/ปิด
+  · **★ ต้องจับ URL (`EXT_URL`) ก่อน `liff.init`** — SDK เขียน URL ทับ ลิงก์ลึก (`go/u/c/t`) หาย · พารามิเตอร์ `liff.*` ไม่ส่งต่อ
+  · **กันวน**: ส่งต่อไปแล้วภายใน 15 วิ (`sessionStorage ext_handoff`) ไม่ส่งต่ออีก · ปิดทั้งระบบได้ที่ `config.js` → `OPEN_EXTERNAL:false` (แก้แล้วบัมป์ `?v=`)
+  · เปิดในแอป LINE (UA มี `Line/`) จะไม่วาด snapshot หน้าอนุมัติ/แดชบอร์ดก่อน เพราะกำลังจะส่งต่อ
+  · **ข้อควรรู้**: ลิงก์/การ์ดจากบอทยังเป็น `liff.line.me/…` จึงเด้งผ่านหน้าต่าง LIFF แวบหนึ่งก่อนส่งต่อ (เลี่ยงไม่ได้) · ในเบราว์เซอร์ภายนอกต้องล็อกอิน LINE ครั้งแรก
+    และเมื่อ ID token หมดอายุ (~1 ชม.) `api()` จะพาไปล็อกอินใหม่ (เหมือนเดิมในแอป LINE แต่ในเบราว์เซอร์ภายนอกอาจเห็นหน้าล็อกอินของ LINE) — **ยังไม่ได้ทดสอบกับ LINE จริง**
+  · **ต้องตรวจว่า Callback/Endpoint ของ LIFF ใน LINE Developers Console เป็นโดเมน pages.dev ตรงกับที่ส่งต่อ** (ตั้งไว้แล้วตามหัวข้อ deploy)
 - LINE LIFF mobile sales app scaffold (2026-09-22): `frontend-mobile/index.html` + `config.js`, deployed
   by the same Pages workflow to `/mobile-uat/` (and `/mobile/` once on `main`). Tested against a mock
   backend only — see `frontend-mobile/README.md` for screens, offline-queue rules and what's missing.

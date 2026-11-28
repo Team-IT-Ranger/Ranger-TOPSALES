@@ -279,7 +279,7 @@
 </style>
 </head>
 <body>
-<script src="config.js?v=20260924"></script>   <!-- ใส่ ?v= ทุกครั้งที่แก้ config.js: เบราว์เซอร์แคชไฟล์นี้ไว้ ถ้าไม่บัมป์ ผู้ใช้เดิมจะยังคุยกับ backend ตัวเก่า -->
+<script src="config.js?v=20261128"></script>   <!-- ใส่ ?v= ทุกครั้งที่แก้ config.js: เบราว์เซอร์แคชไฟล์นี้ไว้ ถ้าไม่บัมป์ ผู้ใช้เดิมจะยังคุยกับ backend ตัวเก่า -->
 <!-- ★★ TNK spinner — วงแหวนมาตรฐานของทุกแอปในเครือ (ต้นฉบับ: repo TNK-AppStore โฟลเดอร์ docs/spinner/)
      ★ ห้ามแก้ spinner.js ในแอป — ต้องเท่ากับต้นฉบับเป๊ะทุกไบต์ (เช็คด้วย md5sum) อยากแก้รูป/สี/ความเร็วให้แจ้งทีมไอที
      ★ ต้องมาก่อนสคริปต์ของแอป เพราะ tnkWait/tnkBusy ถูกเรียกตั้งแต่ตอนวาดหน้าแรก
@@ -716,21 +716,52 @@ function readDeepLink(){
     return go ? { go: go, u: u || '', c: c || '', t: t || '' } : null;
   } catch (e) { return null; }
 }
+/* ══════════════ เปิดด้วยเบราว์เซอร์ภายนอก (ไม่ใช่เบราว์เซอร์ในแอป LINE) ══════════════
+   ★ เหตุผล (เจ้าของระบบสั่ง 28 พ.ย. 2026): ผู้ขายเปิดแอปในหน้าต่าง LIFF ของ LINE แล้วสลับไปอ่านแชท/กดกลับ → หน้าต่างปิด
+     ตะกร้า/บิลที่กรอกค้างอยู่หายโดยไม่ตั้งใจ · เบราว์เซอร์ภายนอก (Chrome/Safari) เป็นแท็บของมันเอง ไม่ถูกปิดตามแชท
+   ★ ทำยังไง: เปิดในแอป LINE (liff.isInClient) → liff.openWindow({external:true}) ไปที่ Endpoint URL ตรงๆ + พก ?go=… เดิมไปด้วย
+     แล้วปิดหน้าต่าง LIFF · ในเบราว์เซอร์ภายนอก liff.init → ล็อกอิน LINE (ผ่านหน้าล็อกอินของ LINE ครั้งแรก) → ได้ ID token เหมือนเดิมทุกอย่าง
+   ★ ต้องจับ URL ไว้ "ก่อน" liff.init — SDK เขียน URL ทับ (พารามิเตอร์ลิงก์ลึกหาย)
+   ★ กันวนซ้ำ: ถ้าเพิ่งส่งต่อไปเมื่อไม่กี่วินาทีก่อน (เช่น เบราว์เซอร์ภายนอกเด้งกลับมา LINE) จะไม่ส่งต่ออีก ใช้ในแอป LINE ต่อ
+   ปิดได้ที่ config.js: OPEN_EXTERNAL:false */
+const LINE_UA = /\bLine\//i.test(navigator.userAgent || '');
+const WANT_EXTERNAL = CFG.OPEN_EXTERNAL !== false;
+let EXT_URL = '';
+function externalUrlNow(){
+  const dl = readDeepLink(), q = new URLSearchParams();
+  if (dl) ['go', 'u', 'c', 't'].forEach(k => { if (dl[k]) q.set(k, dl[k]); });
+  const s = q.toString();
+  return location.origin + location.pathname + (s ? '?' + s : '');
+}
+function handoffExternal(){
+  let last = 0; try { last = Number(sessionStorage.getItem('ext_handoff') || 0); } catch (e) {}
+  if (Date.now() - last < 15000) return false;
+  try { sessionStorage.setItem('ext_handoff', String(Date.now())); } catch (e) {}
+  try { liff.openWindow({ url: EXT_URL || externalUrlNow(), external: true }); } catch (e) { return false; }
+  setLoad('เปิดในเบราว์เซอร์แล้ว', false,
+    '<p class="muted" style="margin:10px 0">ใช้งานต่อในเบราว์เซอร์ที่เด้งขึ้นมา — ไม่ถูกปิดเมื่อสลับไปอ่านแชท LINE</p>' +
+    '<button class="btn btn-primary" onclick="liff.openWindow({ url: EXT_URL, external: true })">เปิดอีกครั้ง</button> ' +
+    '<button class="btn" onclick="try{liff.closeWindow()}catch(e){}">ปิดหน้านี้</button>');
+  setTimeout(() => { try { liff.closeWindow(); } catch (e) {} }, 1800);
+  return true;
+}
 async function boot(){
   if (ENV === 'uat') $('env-bar').classList.remove('hidden');
   if (!CFG.BACKEND_URL) return setLoad('ยังไม่ได้ตั้งค่า backend ของสภาพแวดล้อม ' + String(ENV).toUpperCase(), false);
   if (DEEPLINK === undefined) {
+    EXT_URL = externalUrlNow();
     DEEPLINK = readDeepLink();
     if (DEEPLINK && DEEPLINK.go === 'register') { REG_DL = String(DEEPLINK.c).toUpperCase() === 'BLITZ' ? DEEPLINK : null; DEEPLINK = null; }
     /* ★ เปิดจากการ์ดในกลุ่ม + เครื่องนี้เคยเปิดหน้าอนุมัติแล้ว → วาดรายการครั้งก่อนทันที ระหว่างรอ LIFF/เซิร์ฟเวอร์ แล้วค่อยอัปเดตทับ
        (กติกา snapshot เดียวกับแอปแอดมิน) · ปุ่มตัดสินถูกล็อกจนกว่าข้อมูลสดมา (apOpenSheet) · ตัดสินผิดจากข้อมูลเก่าก็ไม่เสียหาย
        เพราะ decideStaffApproval ตรวจ expectStatus ที่ backend */
-    if (DEEPLINK && DEEPLINK.go === 'approvals') {
+    const SKIP_SNAP = WANT_EXTERNAL && LINE_UA;   // กำลังจะส่งต่อไปเบราว์เซอร์ภายนอก → ไม่ต้องวาดหน้าแล้วทิ้งทันที
+    if (!SKIP_SNAP && DEEPLINK && DEEPLINK.go === 'approvals') {
       const sn = lsGet('apsnap', null);
       if (sn && sn.me && Array.isArray(sn.data)) openApprovals({ uid: DEEPLINK.u, from: 'boot', snap: sn });
     }
     // ผู้อำนวยการเปิดแดชบอร์ดซ้ำ → วาดของครั้งก่อนทันที (เหมือนหน้าอนุมัติ) แล้วอัปเดตทับเมื่อข้อมูลสดมา
-    if (DEEPLINK && DEEPLINK.go === 'blitz') {
+    if (!SKIP_SNAP && DEEPLINK && DEEPLINK.go === 'blitz') {
       const sn = lsGet('bzsnap', null);
       if (sn && sn.r && sn.r.campaign) openBlitz({ from: 'boot', snap: sn });
     }
@@ -744,6 +775,7 @@ async function boot(){
       setLoad('เชื่อมต่อ LINE...');
       await loadLiffSdk();
       await liff.init({ liffId: CFG.LIFF_ID });
+      if (WANT_EXTERNAL && liff.isInClient() && handoffExternal()) return;   // เปิดในแอป LINE → ส่งต่อไปเบราว์เซอร์ภายนอก (ดูคอมเมนต์ด้านบน)
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
       IN_LIFF = true;
       ID_TOKEN = liff.getIDToken() || '';

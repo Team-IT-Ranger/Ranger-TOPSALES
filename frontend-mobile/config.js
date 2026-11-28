@@ -21,5 +21,6 @@
   };
   var h = location.hostname;
   var env = (h.indexOf('uat') !== -1 || h === 'localhost' || h === '127.0.0.1') ? 'uat' : 'prod';
-  window.APP_CONFIG = { ENV: env, BACKEND_URL: BACKENDS[env], LIFF_ID: LIFF_IDS[env] };
+  /* OPEN_EXTERNAL: เปิดจากแอป LINE แล้วส่งต่อไปเบราว์เซอร์ภายนอก (กันหน้าต่างขายถูกปิดตอนสลับไปอ่านแชท) — ตั้ง false เพื่อกลับไปเปิดในแอป LINE */
+  window.APP_CONFIG = { ENV: env, BACKEND_URL: BACKENDS[env], LIFF_ID: LIFF_IDS[env], OPEN_EXTERNAL: true };
 })();
