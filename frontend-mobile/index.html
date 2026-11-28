@@ -425,6 +425,7 @@
       <div class="row"><span>บิลรอส่ง (ออฟไลน์)</span><span id="h-queue">0</span></div>
       <div id="h-queue-list"></div>
       <div class="row"><span>มุมมอง</span><button class="btn btn-sm" id="density-btn" onclick="toggleDensity()">ปกติ</button></div>
+      <div class="row" id="openmode-row"><span>เปิดแอปจาก LINE</span><button class="btn btn-sm" id="openmode-btn" onclick="cycleOpenMode()">ถามทุกครั้ง</button></div>
       <button class="btn btn-primary btn-block" id="sync-btn" style="margin-top:10px" onclick="syncNow()"><svg class="mi" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7"/><path d="M13.4 2.9v3.3H10.1"/></svg>Sync ข้อมูล</button>
     </div>
     <div class="card"><h3>ขายดีวันนี้</h3><div id="h-top"><div class="empty">-</div></div></div>
@@ -723,9 +724,35 @@ function readDeepLink(){
      แล้วปิดหน้าต่าง LIFF · ในเบราว์เซอร์ภายนอก liff.init → ล็อกอิน LINE (ผ่านหน้าล็อกอินของ LINE ครั้งแรก) → ได้ ID token เหมือนเดิมทุกอย่าง
    ★ ต้องจับ URL ไว้ "ก่อน" liff.init — SDK เขียน URL ทับ (พารามิเตอร์ลิงก์ลึกหาย)
    ★ กันวนซ้ำ: ถ้าเพิ่งส่งต่อไปเมื่อไม่กี่วินาทีก่อน (เช่น เบราว์เซอร์ภายนอกเด้งกลับมา LINE) จะไม่ส่งต่ออีก ใช้ในแอป LINE ต่อ
-   ปิดได้ที่ config.js: OPEN_EXTERNAL:false */
+   ★ ผู้ใช้เลือกเองได้ (28 พ.ย. 2026 — ลองบนมือถือจริงแล้วขอให้เป็นทางเลือก): เปิดในแอป LINE ครั้งแรกจะถามว่า "เปิดในแอป LINE ต่อ" หรือ "เปิดในเบราว์เซอร์ภายนอก"
+     ติ๊ก "จำไว้" (ค่าเริ่มต้น) = ไม่ถามอีก · เปลี่ยนภายหลังได้ที่การ์ด "ข้อมูลในเครื่อง" หน้าแรก (open_mode: null=ถาม · inapp · external)
+   ปิดฟีเจอร์ทั้งหมดได้ที่ config.js: OPEN_EXTERNAL:false (ไม่ถามและเปิดในแอป LINE เสมอ) */
 const LINE_UA = /\bLine\//i.test(navigator.userAgent || '');
 const WANT_EXTERNAL = CFG.OPEN_EXTERNAL !== false;
+const OPEN_MODES = { ask: 'ถามทุกครั้ง', inapp: 'ในแอป LINE', external: 'เบราว์เซอร์ภายนอก' };
+const openMode = () => { const m = lsGet('open_mode', null); return (m === 'inapp' || m === 'external') ? m : 'ask'; };
+let OM_RESOLVE = null;
+/* หน้าถามตอนเปิดในแอป LINE ครั้งแรก — คืน 'inapp' | 'external' (บันทึกไว้ถ้าติ๊กจำไว้) */
+function askOpenMode(){
+  return new Promise(res => {
+    OM_RESOLVE = res;
+    setLoad('เปิดแอปขายแบบไหน?', false,
+      '<p class="muted" style="margin:10px 0;line-height:1.6">เบราว์เซอร์ภายนอก (Chrome/Safari) จะไม่ปิดตัวเองเมื่อคุณสลับไปอ่านแชท LINE · ในแอป LINE เร็วกว่าและไม่ต้องล็อกอินซ้ำ แต่ต้องระวังกดปิดโดยไม่ตั้งใจ</p>' +
+      '<div style="display:flex;flex-direction:column;gap:8px"><button class="btn btn-primary btn-block" onclick="pickOpenMode(\'external\')">เปิดในเบราว์เซอร์ภายนอก</button>' +
+      '<button class="btn btn-block" onclick="pickOpenMode(\'inapp\')">เปิดในแอป LINE ต่อ</button></div>' +
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;justify-content:center"><input type="checkbox" id="om-remember" checked style="width:auto"> จำไว้ ไม่ต้องถามอีก (เปลี่ยนได้ที่หน้าแรก)</label>');
+  });
+}
+function pickOpenMode(m){
+  const r = $('om-remember'); if (r && r.checked) lsSet('open_mode', m);
+  const f = OM_RESOLVE; OM_RESOLVE = null; if (f) f(m);
+}
+function cycleOpenMode(){
+  const order = ['ask', 'inapp', 'external'], next = order[(order.indexOf(openMode()) + 1) % 3];
+  lsSet('open_mode', next === 'ask' ? null : next); paintOpenMode();
+  toast('เปิดแอปจาก LINE: ' + OPEN_MODES[next], 'ok');
+}
+function paintOpenMode(){ const b = $('openmode-btn'); if (b) b.textContent = OPEN_MODES[openMode()]; const r = $('openmode-row'); if (r) r.classList.toggle('hidden', !WANT_EXTERNAL); }
 let EXT_URL = '';
 function externalUrlNow(){
   const dl = readDeepLink(), q = new URLSearchParams();
@@ -755,7 +782,7 @@ async function boot(){
     /* ★ เปิดจากการ์ดในกลุ่ม + เครื่องนี้เคยเปิดหน้าอนุมัติแล้ว → วาดรายการครั้งก่อนทันที ระหว่างรอ LIFF/เซิร์ฟเวอร์ แล้วค่อยอัปเดตทับ
        (กติกา snapshot เดียวกับแอปแอดมิน) · ปุ่มตัดสินถูกล็อกจนกว่าข้อมูลสดมา (apOpenSheet) · ตัดสินผิดจากข้อมูลเก่าก็ไม่เสียหาย
        เพราะ decideStaffApproval ตรวจ expectStatus ที่ backend */
-    const SKIP_SNAP = WANT_EXTERNAL && LINE_UA;   // กำลังจะส่งต่อไปเบราว์เซอร์ภายนอก → ไม่ต้องวาดหน้าแล้วทิ้งทันที
+    const SKIP_SNAP = WANT_EXTERNAL && LINE_UA && openMode() !== 'inapp';   // กำลังจะส่งต่อไปเบราว์เซอร์ภายนอก → ไม่ต้องวาดหน้าแล้วทิ้งทันที
     if (!SKIP_SNAP && DEEPLINK && DEEPLINK.go === 'approvals') {
       const sn = lsGet('apsnap', null);
       if (sn && sn.me && Array.isArray(sn.data)) openApprovals({ uid: DEEPLINK.u, from: 'boot', snap: sn });
@@ -775,7 +802,11 @@ async function boot(){
       setLoad('เชื่อมต่อ LINE...');
       await loadLiffSdk();
       await liff.init({ liffId: CFG.LIFF_ID });
-      if (WANT_EXTERNAL && liff.isInClient() && handoffExternal()) return;   // เปิดในแอป LINE → ส่งต่อไปเบราว์เซอร์ภายนอก (ดูคอมเมนต์ด้านบน)
+      if (WANT_EXTERNAL && liff.isInClient()) {   // เปิดในแอป LINE → ถามครั้งแรก/ตามที่ผู้ใช้เลือกไว้ แล้วส่งต่อไปเบราว์เซอร์ภายนอกถ้าเลือก (ดูคอมเมนต์ด้านบน)
+        const mode = openMode() === 'ask' ? await askOpenMode() : openMode();
+        if (mode === 'external' && handoffExternal()) return;
+        setLoad('เชื่อมต่อ LINE...');
+      }
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
       IN_LIFF = true;
       ID_TOKEN = liff.getIDToken() || '';
@@ -887,7 +918,7 @@ function enterApp(){
   syncDelivField();
   const cached = lsGet('boot_' + ME.lineUserId, null);
   if (cached) DATA = cached.data;
-  paintBlitzCards();
+  paintBlitzCards(); paintOpenMode();
   gotoTab('home');
   if (navigator.onLine) { refreshData(true); checkApprover(); }   // เปิดจาก cache ทันที แล้วค่อยดึงของใหม่เบื้องหลัง
   else paintApproverCard(lsGet('approver_' + ME.lineUserId, null));
