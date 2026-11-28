@@ -1105,6 +1105,7 @@ function paintBlitzCards(){
     ' · <b>ลงของให้ร้านได้เลย</b> ไม่ต้องมีของในทีม — ศูนย์ตัดสต็อกและยืนยันรับเงินให้' + (b.endDate ? ' · ถึงวันที่ ' + esc(b.endDate) : '') : '';
   ['home-blitz-team', 'sell-blitz-team'].forEach(id => { const el = $(id); if (!el) return; el.innerHTML = txt; el.classList.toggle('hidden', !b); });
   const v = $('home-blitz'); if (v) v.classList.toggle('hidden', !(DATA && DATA.blitzViewer));
+  if (HOME_APPR) paintApproverCard(HOME_APPR);   // ผู้อำนวยการ → ซ่อนการ์ดอนุมัติบนหน้าแรก (ซ้ำกับเมนูผู้อำนวยการ)
   applyBlitzSellMode();
 }
 /* ★ 28 พ.ย. 2026: ผู้ป้อนบิลทีม BLITZ ไม่มีสต็อกทีมแล้ว — ทั้ง "ลงสินค้า" และ "รอจัดส่ง" เซิร์ฟเวอร์รับเป็นบิลส่งจากสำนักงาน (ตัดคลังหลักตอนศูนย์ยืนยัน)
@@ -1542,9 +1543,14 @@ async function checkApprover(){
     paintApproverCard(c.isApprover ? c : null);
   } catch (e) { /* ถามไม่ได้ก็ไม่ต้องทำอะไร — ปุ่มแค่ไม่โผล่ ไม่ใช่ปัญหาของการขาย */ }
 }
+let HOME_APPR = null;   // ผลตรวจสิทธิ์อนุมัติล่าสุด — จำไว้เพื่อวาดการ์ดใหม่เมื่อรู้ว่าเป็นผู้อำนวยการ (ข้อมูล bootstrap มาทีหลัง)
 function paintApproverCard(c){
+  HOME_APPR = c;
   const card = $('home-approve'); if (!card) return;
-  card.classList.toggle('hidden', !c);
+  /* ★ ผู้อำนวยการ BLITZ ไม่โชว์การ์ดนี้บนหน้าแรก (เจ้าของระบบสั่ง 28 พ.ย. 2026) — ทางเข้า "อนุมัติผู้สมัคร" อยู่ในเมนูผู้อำนวยการแล้ว
+     ★ ผู้อนุมัติที่ไม่ใช่ผู้อำนวยการยังต้องเห็นการ์ดนี้ เพราะไม่มีเมนูผู้อำนวยการ — นี่คือทางเข้าเดียวของเขา */
+  const dup = !!(DATA && DATA.blitzViewer);
+  card.classList.toggle('hidden', !c || dup);
   if (c) $('home-approve-sub').textContent = c.pendingCount ? ('รออนุมัติ ' + c.pendingCount + ' คน') : 'ไม่มีคำขอค้างอยู่';
 }
 
