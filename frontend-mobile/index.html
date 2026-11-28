@@ -308,6 +308,19 @@
   .dr-menu .go{ color:var(--ink-faint); font-size:20px; flex:none; }
   .dr-menu.off{ opacity:.55; cursor:default; }
   .dr-badge{ background:var(--red,#D64545); color:#fff; border-radius:999px; font-size:12px; font-weight:700; padding:2px 8px; flex:none; }
+  /* ติดตามทีมบนแผนที่ (Leaflet + OpenStreetMap) */
+  .trk-map{ height:340px; border-radius:14px; overflow:hidden; border:1px solid var(--border); margin-bottom:12px; background:#E5EBF4; }
+  .trk-pin{ width:30px; height:30px; border-radius:50%; color:#fff; font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.45); }
+  .trk-row{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:10px 12px; margin-bottom:8px; display:flex; gap:10px; align-items:center; }
+  .trk-row .pin{ flex:0 0 auto; }
+  .trk-row .tx{ flex:1; min-width:0; font-size:13px; }
+  .trk-row .tx b{ font-size:14px; }
+  .trk-row .acts{ display:flex; flex-direction:column; gap:5px; flex:0 0 auto; }
+  .trk-age{ font-weight:700; } .trk-age.fresh{ color:var(--green); } .trk-age.mid{ color:var(--orange); } .trk-age.old{ color:var(--ink-faint); }
+  .leaflet-container{ font-family:inherit; }
+  /* สินค้าแคมเปญ BLITZ ปักหมุดไว้บนสุดของหน้าขาย */
+  .pin-label{ font-size:12px; font-weight:700; color:var(--ink-soft); margin:2px 2px 6px; }
+  .prod.pinned{ border-left:4px solid #6D4AFF; }
   .dr-team{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:10px; box-shadow:var(--shadow-sm); }
   .dr-team h3{ margin:0 0 6px; font-size:15px; }
   .dr-person{ display:flex; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--border); font-size:13.5px; }
@@ -658,6 +671,7 @@ function show(id){
   const isStaff = !!(ME.role || (cm && cm.role && cm.lineUserId && cm.lineUserId === ME.lineUserId));
   const tabsOn = id === 'scr-app' || (isStaff && (id === 'scr-director' || id === 'scr-approve' || id === 'scr-blitz'));
   const tb = $('main-tabs'); if (tb) tb.classList.toggle('hidden', !tabsOn);
+  if (id !== 'scr-director' && typeof drTrackStop === 'function') drTrackStop();   // ออกจากหน้าผู้อำนวยการ → หยุดรีเฟรชแผนที่ + ปล่อยแผนที่
   // อยู่แอปหลัก → ไฮไลต์แท็บที่เปิดอยู่ · หน้าอื่น (เมนูผู้อำนวยการ) → ไม่ไฮไลต์ เพราะไม่ได้อยู่หน้าไหนของแอปหลัก
   document.querySelectorAll('#main-tabs button').forEach(b => b.classList.toggle('on', id === 'scr-app' && b.dataset.tab === TAB));
 }
@@ -1231,6 +1245,7 @@ async function drProbe(){
 async function openDirector(opts){
   opts = opts || {};
   DR.from = opts.from || 'app'; DR.view = 'menu'; DR.teams = null;
+  drTrackStop();
   show('scr-director');
   $('dr-back').classList.toggle('hidden', DR.from === 'boot');   // ไม่ใช่พนักงาน = ไม่มีแอปให้กลับไป (กลับแล้วจะวนมาที่นี่อีก)
   if (opts.prefetched) { drApplyHome(opts.prefetched); return; }
@@ -1255,13 +1270,13 @@ function drApplyHome(r){
   lsSet('drsnap', { owner: ME.lineUserId, ts: Date.now(), home: r });
   drRender();
 }
-function drRender(){ if (DR.view === 'teams') drRenderTeams(); else drRenderMenu(); }
+function drRender(){ if (DR.view === 'teams') drRenderTeams(); else if (DR.view === 'track') drRenderTrack(); else drRenderMenu(); }
 function drBack(){
   drCloseSheet();
-  if (DR.view === 'teams') { DR.view = 'menu'; drRender(); return; }
+  if (DR.view === 'teams' || DR.view === 'track') { DR.view = 'menu'; drTrackStop(); drRender(); return; }
   show('scr-app'); gotoTab('home');
 }
-function drRefresh(){ if (DR.view === 'teams') drLoadTeams(false); else drLoadHome(false); }
+function drRefresh(){ if (DR.view === 'teams') drLoadTeams(false); else if (DR.view === 'track') drLoadTrack(false); else drLoadHome(false); }
 function drMenuBtn(ic, title, sub, onclick, badge, off){
   return '<button type="button" class="dr-menu' + (off ? ' off' : '') + '"' + (off ? '' : ' onclick="' + onclick + '"') + '><span class="ic">' + ic + '</span>' +
     '<span class="tx"><b>' + title + '</b><span>' + sub + '</span></span>' + (badge ? '<span class="dr-badge">' + badge + '</span>' : '') + (off ? '' : '<span class="go">›</span>') + '</button>';
@@ -1278,6 +1293,7 @@ function drRenderMenu(){
     html += '<div class="bz-head"><b>' + esc(c.name) + '</b><br><span class="muted">' + esc(c.tenantName) + ' · ' + esc(c.startDate) + ' → ' + esc(c.endDate) + ' · ' +
       (c.running ? '🟢 กำลังแข่งขัน' : c.status === 'closed' ? 'ปิดแล้ว' : 'อยู่นอกช่วงวันที่') + '</span></div>';
     html += drMenuBtn('📊', 'แดชบอร์ด', 'ยอดขาย · จำนวนร้าน · อันดับทีม', "openBlitz({ from: 'director', campaignId: '" + esc(c.id) + "' })");
+    html += drMenuBtn('📍', 'ติดตามทีม (แผนที่)', 'ตำแหน่งล่าสุดของแต่ละทีม · กดนำทางต่อใน Google Maps', 'drOpenTrack()');
     html += drMenuBtn('👥', 'จัดทีม', 'ตั้งผู้ป้อนบิล · สมาชิกของแต่ละทีม A–E', 'drOpenTeams()');
   }
   if (ap.isApprover) html += drMenuBtn('✅', 'อนุมัติผู้สมัคร', ap.pendingCount ? 'มีคำขอรออนุมัติ ' + ap.pendingCount + ' คน' : 'ไม่มีคำขอค้างอยู่', "openApprovals({ from: 'director' })", ap.pendingCount || '');
@@ -1304,6 +1320,119 @@ async function drLoadTeams(quiet){
   } finally { if (!quiet) pressBusy(btn, false); }
   return null;
 }
+/* ═══ ติดตามทีมบนแผนที่ (28 พ.ย. 2026 — เจ้าของระบบสั่ง) ═══
+   ตำแหน่งทีม = พิกัดตอนผู้ป้อนบิลกดบันทึก "บิลใบล่าสุดที่มีพิกัด" ของทีมนั้น (backend: getBlitzTeamLocations) — ไม่ใช่ตำแหน่งสด
+   ★ จึงต้องโชว์ "เมื่อกี่นาทีที่แล้ว" กำกับเสมอ · แผนที่ = Leaflet + OpenStreetMap (ไม่ต้องใช้ API key) โหลดตอนเปิดหน้านี้เท่านั้น
+   ★ โหลดแผนที่ไม่ได้ (เน็ตช้า/ถูกบล็อก) → รายการทีมด้านล่างยังใช้ได้ พร้อมปุ่มนำทาง · รีเฟรชเอง 60 วิ ระหว่างอยู่หน้านี้ */
+const TRK_COLORS = ['#E5484D', '#2B63D9', '#1F8A5F', '#C27A12', '#8E4EC6', '#0891B2'];
+const TRK = { map: null, markers: {}, data: null, timer: null, fitted: false, leaflet: null };
+function ensureLeaflet(){
+  if (window.L && L.map) return Promise.resolve();
+  if (TRK.leaflet) return TRK.leaflet;
+  TRK.leaflet = new Promise((ok, bad) => {
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(css);
+    const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    sc.onload = ok; sc.onerror = () => { TRK.leaflet = null; bad(new Error('โหลดแผนที่ไม่ได้')); };
+    document.head.appendChild(sc);
+  });
+  return TRK.leaflet;
+}
+/* เวลาบิลเก็บเป็นเวลาไทย (yyyy-MM-dd HH:mm:ss) — แปลงด้วย +07:00 ไม่ให้เพี้ยนตามเขตเวลาเครื่อง */
+function trkAge(at){
+  if (!at) return null;
+  const t = new Date(String(at).replace(' ', 'T') + '+07:00').getTime(); if (!t) return null;
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  const text = m < 1 ? 'เมื่อสักครู่' : m < 60 ? m + ' นาทีที่แล้ว' : m < 1440 ? Math.floor(m / 60) + ' ชม. ' + (m % 60) + ' นาทีที่แล้ว' : Math.floor(m / 1440) + ' วันที่แล้ว';
+  return { text: text, hhmm: String(at).substring(11, 16), cls: m < 30 ? 'fresh' : m < 120 ? 'mid' : 'old' };
+}
+/* เปิด Google Maps — ใน LINE ต้องเปิดนอกแอปด้วย liff.openWindow ไม่งั้นนำทางไม่ได้ */
+function openGMaps(url){ try { if (IN_LIFF && typeof liff !== 'undefined' && liff.openWindow) { liff.openWindow({ url: url, external: true }); return; } } catch (e) {} window.open(url, '_blank'); }
+const gmNav = (la, ln) => openGMaps('https://www.google.com/maps/dir/?api=1&destination=' + la + ',' + ln + '&travelmode=driving');
+function drOpenTrack(){
+  DR.view = 'track'; TRK.fitted = false; TRK.data = null; drRender();
+  drLoadTrack(true);
+  if (TRK.timer) clearInterval(TRK.timer);
+  TRK.timer = setInterval(() => { if (DR.view === 'track') drLoadTrack(true); }, 60000);
+}
+function drTrackStop(){
+  if (TRK.timer) { clearInterval(TRK.timer); TRK.timer = null; }
+  if (TRK.map) { try { TRK.map.remove(); } catch (e) {} TRK.map = null; TRK.markers = {}; }
+}
+async function drLoadTrack(quiet){
+  const btn = $('dr-refresh'); if (!quiet) pressBusy(btn, true);
+  try {
+    const c = drCamp();
+    const r = await api('getBlitzTeamLocations', { campaignId: c ? c.id : '' }, 30000);
+    if (r && r.success) { TRK.data = r; if (DR.view === 'track') drRenderTrack(); return; }
+    if (!TRK.data && DR.view === 'track') $('dr-body').innerHTML = '<div class="card"><div class="muted">' + esc((r && r.message) || 'โหลดไม่สำเร็จ') + '</div></div>';
+  } catch (e) {
+    if (!quiet) toast('โหลดไม่ได้: ' + e.message, 'err');
+    if (!TRK.data && DR.view === 'track') $('dr-body').innerHTML = '<div class="card"><div class="muted">เชื่อมต่อไม่ได้ — ' + esc(e.message) + '</div></div>';
+  } finally { if (!quiet) pressBusy(btn, false); }
+}
+const trkColor = t => TRK_COLORS[(String(t.code || 'A').toUpperCase().charCodeAt(0) - 65 + TRK_COLORS.length * 4) % TRK_COLORS.length];
+function trkPopup(t){
+  const a = trkAge(t.at);
+  return '<b>ทีม ' + esc(t.code) + (t.name && t.name !== 'ทีม ' + t.code ? ' · ' + esc(t.name) : '') + '</b><br>' +
+    (t.seller ? 'ผู้ป้อนบิล: ' + esc(t.seller) + '<br>' : '') +
+    (a ? '<span class="trk-age ' + a.cls + '">' + esc(a.text) + '</span> (' + esc(a.hhmm) + ')<br>' : '') +
+    (t.customer ? esc(t.customer) + ' · ' : '') + esc(t.orderCode) + '<br>' +
+    '<button class="btn btn-primary btn-sm" style="margin-top:6px" onclick="gmNav(' + t.lat + ',' + t.lng + ')">🧭 นำทาง</button>';
+}
+function drRenderTrack(){
+  const d = TRK.data;
+  $('dr-title').textContent = 'ติดตามทีม';
+  $('dr-sub').textContent = d ? d.campaign.name : '-';
+  if (!d) { $('dr-body').innerHTML = tnkWait(160, 'กำลังโหลดตำแหน่งทีม…', 56); return; }
+  if (!$('trk-map')) {
+    $('dr-body').innerHTML = '<div class="note" style="margin-bottom:10px">📍 ตำแหน่ง = <b>พิกัดตอนเปิดบิลใบล่าสุด</b>ของแต่ละทีม (ไม่ใช่ตำแหน่งสด) · ดูเวลากำกับ · รีเฟรชเองทุก 1 นาที</div>' +
+      '<div class="trk-map" id="trk-map"></div><div id="trk-list"></div>';
+    TRK.map = null; TRK.markers = {};
+  }
+  const rows = d.teams.map(t => {
+    const a = trkAge(t.at), has = t.lat != null;
+    const pin = '<div class="pin"><div class="trk-pin" style="background:' + trkColor(t) + '">' + esc(t.code) + '</div></div>';
+    if (!has) {
+      const lb = trkAge(t.lastBillAt);
+      return '<div class="trk-row">' + pin + '<div class="tx"><b>ทีม ' + esc(t.code) + '</b>' + (t.seller ? ' · ' + esc(t.seller) : '') + '<br><span class="muted">' +
+        (lb ? 'มีบิลล่าสุด ' + esc(lb.hhmm) + ' (' + esc(lb.text) + ') แต่ไม่มีพิกัด GPS' : 'ยังไม่มีบิลที่มีพิกัด') + '</span></div></div>';
+    }
+    return '<div class="trk-row">' + pin + '<div class="tx"><b>ทีม ' + esc(t.code) + '</b>' + (t.seller ? ' · ' + esc(t.seller) : '') + '<br>' +
+      '<span class="trk-age ' + a.cls + '">' + esc(a.text) + '</span> <span class="muted">(' + esc(a.hhmm) + ')</span><br>' +
+      '<span class="muted">' + (t.customer ? esc(t.customer) + ' · ' : '') + esc(t.orderCode) + '</span></div>' +
+      '<div class="acts"><button class="btn btn-sm" onclick="trkFocus(\'' + esc(t.id) + '\')">📍 ดูบนแผนที่</button>' +
+      '<button class="btn btn-primary btn-sm" onclick="gmNav(' + t.lat + ',' + t.lng + ')">🧭 นำทาง</button></div></div>';
+  }).join('');
+  $('trk-list').innerHTML = rows + '<div class="muted" style="text-align:center;margin:6px 0 2px">อัปเดต ' + esc(String(d.asOf || '').substring(11, 16)) + '</div>';
+  ensureLeaflet().then(() => trkPaintMap()).catch(e => { const m = $('trk-map'); if (m) m.innerHTML = '<div class="empty" style="padding:30px 12px">โหลดแผนที่ไม่ได้ — ใช้รายการด้านล่างและปุ่ม "นำทาง" แทนได้</div>'; });
+}
+function trkPaintMap(){
+  const d = TRK.data, el = $('trk-map'); if (!d || !el || DR.view !== 'track') return;
+  if (!TRK.map) {
+    TRK.map = L.map(el, { zoomControl: true, attributionControl: true }).setView([13.75, 100.6], 6);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(TRK.map);
+    setTimeout(() => { try { TRK.map.invalidateSize(); } catch (e) {} }, 250);
+  }
+  const seen = {}, pts = [];
+  d.teams.forEach(t => {
+    if (t.lat == null) return;
+    seen[t.id] = 1; pts.push([t.lat, t.lng]);
+    const icon = L.divIcon({ className: '', html: '<div class="trk-pin" style="background:' + trkColor(t) + '">' + esc(t.code) + '</div>', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] });
+    if (TRK.markers[t.id]) { TRK.markers[t.id].setLatLng([t.lat, t.lng]).setIcon(icon).setPopupContent(trkPopup(t)); }
+    else TRK.markers[t.id] = L.marker([t.lat, t.lng], { icon: icon }).addTo(TRK.map).bindPopup(trkPopup(t));
+  });
+  Object.keys(TRK.markers).forEach(k => { if (!seen[k]) { TRK.map.removeLayer(TRK.markers[k]); delete TRK.markers[k]; } });
+  if (!TRK.fitted && pts.length) {     // ปรับมุมมองให้เห็นทุกทีมครั้งแรกเท่านั้น — รีเฟรชอัตโนมัติต้องไม่ดีดแผนที่ที่ผู้อำนวยการกำลังเลื่อนดูอยู่
+    TRK.fitted = true;
+    if (pts.length === 1) TRK.map.setView(pts[0], 15); else TRK.map.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+  }
+}
+function trkFocus(id){
+  const m = TRK.markers[id]; if (!m || !TRK.map) return toast('แผนที่ยังไม่พร้อม', 'err');
+  const mp = $('trk-map'); if (mp) mp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  TRK.map.setView(m.getLatLng(), Math.max(TRK.map.getZoom(), 16)); m.openPopup();
+}
+
 function drRenderTeams(){
   const t = DR.teams; if (!t) return;
   const closed = t.campaign.status !== 'active';
@@ -1993,14 +2122,25 @@ const baseUsed = pid => CART.filter(c => String(c.productId) === String(pid)).re
 
 // รหัสสินค้านำหน้าชื่อ — พนักงานจำสินค้าจากรหัส (ใบราคา/ใบกำกับใช้รหัส) · ค้นหาด้วยรหัสได้เช่นกัน
 const pcode = c => c ? '<span class="mono" style="color:var(--ink-soft);font-weight:600">' + esc(c) + '</span> ' : '';
+/* ★ สินค้าที่ขายในแคมเปญ BLITZ ครั้งนี้ (เจ้าของระบบสั่ง 28 พ.ย. 2026): 5 รหัส ปักไว้บนสุดของหน้าขายสำหรับผู้ป้อนบิลทีม
+   เรียงตามลำดับในลิสต์นี้ · แก้รายการแคมเปญใหม่ = แก้ที่นี่ที่เดียว · ไม่ใช่ทีม BLITZ = ลำดับเดิมทุกอย่าง */
+const BLITZ_PINNED = ['10185', '10188', '10329', '10331', '10504'];
 function renderProducts(){
   const box = $('s-list'), q = $('s-q').value.trim().toLowerCase();
   if (!DATA.products.length) { box.innerHTML = '<div class="empty">ยังไม่มีข้อมูลสินค้า — ไปหน้าแรกกด Sync</div>'; return; }
-  const list = DATA.products.filter(p => !q || String(p.name).toLowerCase().includes(q) || String(p.code || '').toLowerCase().includes(q));
+  let list = DATA.products.filter(p => !q || String(p.name).toLowerCase().includes(q) || String(p.code || '').toLowerCase().includes(q));
   if (!list.length) { box.innerHTML = '<div class="empty">ไม่พบสินค้า</div>'; return; }
-  box.innerHTML = list.slice(0, 80).map(p => {
+  const pinOf = p => BLITZ_PINNED.indexOf(String(p.code || ''));
+  let nPinned = 0;
+  if (isBlitzSeller()) {
+    const pinned = list.filter(p => pinOf(p) >= 0).sort((a, b) => pinOf(a) - pinOf(b));
+    nPinned = pinned.length;
+    list = pinned.concat(list.filter(p => pinOf(p) < 0));
+  }
+  const labelAt = i => !nPinned ? '' : (i === 0 ? '<div class="pin-label">⭐ สินค้าแคมเปญ BLITZ</div>' : (i === nPinned && list.length > nPinned ? '<div class="pin-label" style="margin-top:12px">สินค้าอื่น</div>' : ''));
+  box.innerHTML = list.slice(0, 80).map((p, i) => {
     const pid = esc(p.id);
-    return '<div class="prod" data-pid="'+pid+'"><div class="nm">'+pcode(p.code)+esc(p.name)+'</div>' +
+    return labelAt(i) + '<div class="prod' + (i < nPinned ? ' pinned' : '') + '" data-pid="'+pid+'"><div class="nm">'+pcode(p.code)+esc(p.name)+'</div>' +
       '<div class="sub">'+prodSubHtml(p)+'</div>' +
       '<div class="units">' + unitsSorted(p).map(x => {
         const c = esc(x.unitCode), n = cartQty(p.id, x.unitCode);

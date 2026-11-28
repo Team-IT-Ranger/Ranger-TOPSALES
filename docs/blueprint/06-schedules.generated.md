@@ -12,9 +12,9 @@
 
 | ส่วน | ไฟล์ | บรรทัด |
 |---|---|---|
-| Backend (Apps Script) | 64 ไฟล์ `.gs` | 20,045 |
+| Backend (Apps Script) | 64 ไฟล์ `.gs` | 20,101 |
 | แอดมิน (หน้าเว็บ) | `frontend-admin/` | 13,762 |
-| แอปมือถือ (LIFF) | `frontend-mobile/` | 2,545 |
+| แอปมือถือ (LIFF) | `frontend-mobile/` | 2,733 |
 | ตารางข้อมูล | 72 ชีตกลาง + 14 ชีตต่อตัวแทน |  |
 | Action | 18 มือถือ + 231 แอดมิน |  |
 
@@ -86,7 +86,7 @@
 | `59_dashboard_export.gs` | 434 | ส่งยอดขายออกเป็นไฟล์กลางของ Dashboard บริษัท (CSV ต่อตัวแทน) |
 | `60_sales_facts.gs` | 245 | ยอดขายรายบรรทัด — แหล่งความจริงชุดเดียวของทั้งระบบ |
 | `61_staff_approval.gs` | 564 | อนุมัติผู้ใช้งานแอปมือถือผ่าน LINE (25 พ.ย. 2026) |
-| `62_blitz.gs` | 651 | แคมเปญ BLITZ RANGER (26 พ.ย. 2026) |
+| `62_blitz.gs` | 707 | แคมเปญ BLITZ RANGER (26 พ.ย. 2026) |
 | `99_dev_tools.gs` | 478 | DEV TOOLS (Apps Script Editor เท่านั้น) |
 
 ## C. Action ทั้งหมด (ทางเข้าของระบบ)
@@ -595,7 +595,7 @@
 |---|---|---|
 | `.dev/test-address-refs.js` | หน่วย (ไม่ยิงเน็ต) | 116 |
 | `.dev/test-barcode.js` | หน่วย (ไม่ยิงเน็ต) | 111 |
-| `.dev/test-blitz.js` | หน่วย (ไม่ยิงเน็ต) | 369 |
+| `.dev/test-blitz.js` | หน่วย (ไม่ยิงเน็ต) | 407 |
 | `.dev/test-bot-line.js` | หน่วย (ไม่ยิงเน็ต) | 698 |
 | `.dev/test-cancel-guard.js` | หน่วย (ไม่ยิงเน็ต) | 144 |
 | `.dev/test-customer-bulk.js` | หน่วย (ไม่ยิงเน็ต) | 191 |

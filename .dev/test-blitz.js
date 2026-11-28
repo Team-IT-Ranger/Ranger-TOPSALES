@@ -56,6 +56,7 @@ const ctx = {
   centralSheet: n => ({ __name: n }),
   deleteRowsWhere: (sh, col, val) => { C[sh.__name] = C[sh.__name].filter(r => String(r[col]) !== String(val)); },
   tenantObjectsIfExists: (tid, n) => (T[n] || []).map(r => Object.assign({}, r)),
+  _tailUntil: (tid, tab, n, enough) => { const rows = (T[tab] || []).map(r => Object.assign({}, r)); ctx.__tailEnough = enough(rows); return rows; },
   cacheClear: (k, id) => calls.cleared.push(id), cacheClearUser: () => {},
   // ค่าที่ 62_blitz.gs อ่านจากบิล: ยอดก่อนภาษีใช้ตัวจริงของระบบไม่ได้ (ต้องโหลด 18/่หลายไฟล์) — เก็บไว้ใน subtotal_ex_vat ตรงๆ
   orderExVat: o => Number(o.subtotal_ex_vat) || 0,
@@ -363,6 +364,43 @@ r = ctx.removeBlitzMemberMobile(DIRM, { id: sellerRow.record_id });
 eq('ถอดผู้ป้อนบิลออกจากทีมได้', [r.success, C.blitz_members.some(m => m.record_id === sellerRow.record_id)], [true, false]);
 r = ctx.removeBlitzMemberMobile(OUTSIDER, { id: C.blitz_members.find(m => m.role === 'member').record_id });
 eq('★ คนที่ไม่ใช่ผู้อำนวยการถอดใครไม่ได้', [r.success, r.notViewer], [false, true]);
+
+
+// ═══ ติดตามทีมบนแผนที่ (getBlitzTeamLocations) ═══
+console.log('\n── ติดตามทีมบนแผนที่ ──');
+reset();
+r = ctx.saveBlitzCampaign(session, { tenantId: 'T1', name: 'แผนที่', startDate: '2026-10-01', endDate: '2026-10-05' });
+const lc = String(r.id);
+const lA = C.blitz_teams.find(t => String(t.campaign_id) === lc && t.code === 'A'), lB = C.blitz_teams.find(t => String(t.campaign_id) === lc && t.code === 'B'), lC = C.blitz_teams.find(t => String(t.campaign_id) === lc && t.code === 'C');
+ctx.saveBlitzMember(session, { campaignId: lc, teamId: lA.record_id, lineUserId: 'U2', role: 'seller' });
+ctx.saveBlitzMember(session, { campaignId: lc, role: 'director', lineUserId: DIRM, name: 'ผอ.' });
+C.customers = [{ record_id: 7, name: 'ร้านสุขใจ' }, { record_id: 8, name: 'ร้านเจริญ' }];
+const ord = (id, team, at, lat, lng, extra) => Object.assign({ record_id: id, order_code: 'SO-' + id, campaign_id: lc, team_id: String(team), created_at: at, lat, lng, customer_id: 7, total: 107, status: 'confirmed' }, extra || {});
+T.sales_orders = [
+  ord(1, lA.record_id, '2026-10-02 09:00:00', 13.70, 100.50),                       // ทีม A: พิกัดเก่า
+  ord(2, lA.record_id, '2026-10-02 10:30:00', 13.75, 100.55, { customer_id: 8 }),   // ทีม A: พิกัดล่าสุดที่มี
+  ord(3, lA.record_id, '2026-10-02 11:00:00', '', ''),                              // ทีม A: บิลใหม่กว่าแต่ไม่มี GPS → ยังใช้ใบ 2 แต่ lastBillAt = 11:00
+  ord(4, lB.record_id, '2026-10-02 08:00:00', 14.00, 101.00, { status: 'cancelled' }),   // ทีม B: ยกเลิก ไม่นับ
+  ord(5, lB.record_id, '2026-10-02 08:30:00', 0, 0),                                // ทีม B: 0,0 ไม่ใช่พิกัดจริง
+  ord(6, '', '2026-10-02 09:30:00', 13.0, 100.0),                                   // ไม่ใช่บิลทีม
+  Object.assign(ord(7, lB.record_id, '2026-10-02 09:40:00', 13.9, 100.9), { campaign_id: '999' })   // แคมเปญอื่น
+];
+let loc = ctx.getBlitzTeamLocations(DIRM, {});
+const lt = c => loc.teams.find(t => t.code === c);
+eq('ผู้อำนวยการเปิดได้ · เห็นทุกทีมของแคมเปญ', [loc.success, loc.teams.map(t => t.code)], [true, ['A', 'B', 'C', 'D', 'E']]);
+eq('★ ทีม A = พิกัดของบิลล่าสุด "ที่มีพิกัด" (ใบ 2) ไม่ใช่ใบ 3 ที่ไม่มี GPS', [lt('A').lat, lt('A').lng, lt('A').orderCode, lt('A').at], [13.75, 100.55, 'SO-2', '2026-10-02 10:30:00']);
+eq('  ชื่อร้านและยอดของบิลนั้น · ชื่อผู้ป้อนบิล', [lt('A').customer, lt('A').total, lt('A').seller], ['ร้านเจริญ', 107, 'ผู้ป้อนบิล A']);
+eq('  lastBillAt = บิลใหม่สุดแม้ไม่มีพิกัด (ให้รู้ว่าทีมยังขายอยู่)', lt('A').lastBillAt, '2026-10-02 11:00:00');
+eq('★ ทีม B: บิลยกเลิก/พิกัด 0,0/ของแคมเปญอื่น ไม่นับ → ไม่มีพิกัด (null ไม่ใช่ 0)', [lt('B').lat, lt('B').lng, lt('B').orderCode], [null, null, '']);
+eq('  ทีมที่ยังไม่เปิดบิล → ไม่มีพิกัด', [lt('C').lat, lt('C').at, lt('C').lastBillAt], [null, '', '']);
+eq('  ไม่รวมบิลที่ไม่ใช่ของทีม/ของแคมเปญอื่นใน lastBillAt ของทีม B', lt('B').lastBillAt, '2026-10-02 08:30:00');
+const outsider = ctx.getBlitzTeamLocations(OUTSIDER, {});
+eq('★ คนที่ไม่ใช่ผู้อำนวยการดูไม่ได้ (notViewer)', [outsider.success, outsider.notViewer], [false, true]);
+const seller = ctx.getBlitzTeamLocations('U2', {});
+eq('★ ผู้ป้อนบิลของทีมดูแผนที่รวมไม่ได้ (ไม่ใช่ผู้อำนวยการ)', [seller.success, seller.notViewer], [false, true]);
+eq('action ลงทะเบียนในกลุ่มตัวตน LINE ที่ยืนยันแล้ว (doPost ข้อ 2.6)', ctx.BLITZ_VIEWER_ACTION_MAP.getBlitzTeamLocations, 1);
+const viaCore = ctx._handleBlitzViewerCore(DIRM, 'getBlitzTeamLocations', {});
+eq('เรียกผ่านตัวจัดเส้นทางผู้ดูแล ได้ผลเดียวกัน', [viaCore.success, viaCore.teams.length], [true, 5]);
 
 console.log(failed ? '\n' + failed + ' FAILED' : '\nALL PASSED');
 process.exit(failed ? 1 : 0);

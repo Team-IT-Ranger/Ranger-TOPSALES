@@ -634,14 +634,70 @@ function removeBlitzMemberMobile(lineUserId, payload) {
   if (String(G.camp.status || 'active') !== 'active') return { success: false, message: 'แคมเปญนี้ปิดแล้ว แก้ทีมไม่ได้' };
   return _bzRemoveMemberCore(m);
 }
-var BLITZ_VIEWER_ACTION_MAP = { getBlitzDashboard: 1, getBlitzDirectorHome: 1, getBlitzTeamsMobile: 1, saveBlitzMemberMobile: 1, removeBlitzMemberMobile: 1 };
+/**
+ * ติดตามทีมบนแผนที่ (28 พ.ย. 2026 — เจ้าของระบบสั่ง): ทีมอยู่ตรงไหน = พิกัดของ "บิลล่าสุดที่มีพิกัด" ของทีมนั้น
+ * พิกัดมาจากตอนผู้ป้อนบิลกดบันทึก (recordSale เก็บ lat/lng ลง sales_orders) — ไม่มีการติดตามตัวบุคคลต่อเนื่อง
+ * ★ จึงบอกได้แค่ "ตอนเปิดบิลใบล่าสุดอยู่ตรงนี้ เมื่อกี่นาทีก่อน" ไม่ใช่ตำแหน่งสด · แอปต้องแสดงเวลาของบิลกำกับเสมอ
+ * ★ ทีมที่ยังไม่เปิดบิลที่มีพิกัดเลยจะได้ lat/lng เป็น null (ไม่ใช่ 0,0) · บิลที่ยกเลิก/ปฏิเสธไม่นับ · บิลร่างนับ (เป็นการเปิดบิลหน้างานจริง)
+ * ★ อ่านท้ายตาราง sales_orders ขยายจนทุกทีมเจอพิกัด หรือพ้นวันเริ่มแคมเปญ — ไม่ลากทั้งทะเบียนบิล (ดู _tailUntil)
+ * payload: { campaignId? } · สิทธิ์: ผู้อำนวยการของแคมเปญนั้น (ตัวตน LINE ที่ยืนยันแล้ว)
+ */
+function _bzGeo(o) {
+  var la = parseFloat(o.lat), ln = parseFloat(o.lng);
+  if (!isFinite(la) || !isFinite(ln) || Math.abs(la) > 90 || Math.abs(ln) > 180 || (la === 0 && ln === 0)) return null;
+  return { lat: la, lng: ln };
+}
+function getBlitzTeamLocations(lineUserId, payload) {
+  var G = _bzMobileCamp(lineUserId, (payload || {}).campaignId, false); if (G.err) return G.err;
+  var camp = G.camp, cid = String(camp.record_id), tenantId = String(camp.tenant_id), start = _bzD(camp.start_date);
+  var teams = centralObjects(BZ_TEAMS).filter(function(t) { return String(t.campaign_id) === cid; })
+    .sort(function(a, b) { return String(a.code).localeCompare(String(b.code)); });
+  var members = centralObjects(BZ_MEMBERS).filter(function(m) { return String(m.campaign_id) === cid; });
+  var mine = function(o) {
+    var st = String(o.status || '');
+    return String(o.campaign_id || '') === cid && String(o.team_id || '') !== '' && st !== 'cancelled' && st !== 'rejected';
+  };
+  var teamIds = {}; teams.forEach(function(t) { teamIds[String(t.record_id)] = 1; });
+  var enough = function(rows) {
+    var got = {};
+    rows.forEach(function(o) { if (mine(o) && teamIds[String(o.team_id)] && _bzGeo(o)) got[String(o.team_id)] = 1; });
+    if (Object.keys(got).length >= teams.length) return true;
+    return !!(rows.length && start && _bzD(rows[0].created_at) < start);   // ถึงบิลก่อนแคมเปญเริ่มแล้ว ไม่มีของเก่ากว่านี้ที่เกี่ยว
+  };
+  var rows = _tailUntil(tenantId, 'sales_orders', 300, enough);
+  var lastAny = {}, lastGeo = {};
+  rows.forEach(function(o) {                       // เรียงเก่า → ใหม่ · ตัวหลังทับตัวก่อน = ใบล่าสุด
+    if (!mine(o)) return;
+    var k = String(o.team_id);
+    lastAny[k] = o;
+    if (_bzGeo(o)) lastGeo[k] = o;
+  });
+  var custName = {};
+  var need = {}; Object.keys(lastGeo).forEach(function(k) { need[String(lastGeo[k].customer_id || '')] = 1; });
+  if (Object.keys(need).length) centralObjects('customers').forEach(function(c) { if (need[String(c.record_id)]) custName[String(c.record_id)] = String(c.name || ''); });
+  var out = teams.map(function(t) {
+    var k = String(t.record_id), g = lastGeo[k] ? _bzGeo(lastGeo[k]) : null, o = lastGeo[k] || null;
+    var seller = ''; members.forEach(function(m) { if (String(m.team_id) === k && String(m.role) === 'seller') seller = String(m.name || ''); });
+    return { id: k, code: String(t.code || ''), name: String(t.name || ''), seller: seller,
+      lat: g ? g.lat : null, lng: g ? g.lng : null,
+      at: o ? safeDateStr(o.created_at) : '', orderCode: o ? String(o.order_code || '') : '',
+      customer: o ? (String(o.customer_id || '') && String(o.customer_id) !== '0' ? (custName[String(o.customer_id)] || '') : 'ลูกค้าทั่วไป') : '',
+      total: o ? (parseFloat(o.total) || 0) : 0,
+      lastBillAt: lastAny[k] ? safeDateStr(lastAny[k].created_at) : '' };   // บิลล่าสุดแม้ไม่มีพิกัด — ให้รู้ว่าทีมยังขายอยู่
+  });
+  return { success: true, campaign: _bzCampOut(camp, _todayStr()), campaigns: G.camps.map(function(c) { return { id: String(c.record_id), name: String(c.name || '') }; }),
+    teams: out, asOf: nowStr(),
+    basis: 'ตำแหน่ง = พิกัดตอนเปิดบิลใบล่าสุดของทีม (ไม่ใช่ตำแหน่งสด) — ดูเวลาของบิลกำกับเสมอ' };
+}
+var BLITZ_VIEWER_ACTION_MAP = { getBlitzDashboard: 1, getBlitzDirectorHome: 1, getBlitzTeamsMobile: 1, saveBlitzMemberMobile: 1, removeBlitzMemberMobile: 1, getBlitzTeamLocations: 1 };
 function _handleBlitzViewerCore(lineUserId, action, payload) {
   try {
     if (action === 'getBlitzDashboard') return getBlitzDashboard(lineUserId, payload || {});
     if (action === 'getBlitzDirectorHome') return getBlitzDirectorHome(lineUserId, payload || {});
     if (action === 'getBlitzTeamsMobile') return getBlitzTeamsMobile(lineUserId, payload || {});
     if (action === 'saveBlitzMemberMobile') return saveBlitzMemberMobile(lineUserId, payload || {});
-    if (action === 'removeBlitzMemberMobile') return removeBlitzMemberMobile(lineUserId, payload || {});
+    if (action === 'removeBlitzMemberMobile') return removeBlitzMemberMobile(lineUserId, payload || {});
+    if (action === 'getBlitzTeamLocations') return getBlitzTeamLocations(lineUserId, payload || {});
     return { success: false, message: 'ไม่พบ action: ' + action };
   } catch (e) {
     Logger.log('ERROR [' + action + ']: ' + (e.stack || e.message));
